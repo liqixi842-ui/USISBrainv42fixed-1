@@ -1,6 +1,11 @@
+【第2步｜更新 index.js（多模型测试版）】
+
+1️⃣ 打开 Replit 左边的 index.js 文件。
+2️⃣ 删除旧代码，粘贴下面这一段完整替换版 👇
+
 // ====== USIS Brain · 多模型测试版 ======
 const express = require("express");
-const fetch = require("node-fetch");
+const fetch = require("node-fetch"); // 用于调用外部API
 const app = express();
 app.use(express.json());
 
@@ -86,4 +91,4 @@ app.post("/brain/decide", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => console.log(`🚀 USIS Brain (multi-model) online on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 USIS Brain (multi-model) online on port ${PORT}`));
