@@ -3,6 +3,11 @@ const express = require("express");
 const app = express();
 app.use(express.json());
 
+// 根路径健康检查（Autoscale 要求）
+app.get("/", (req, res) => {
+  res.status(200).send("OK");
+});
+
 // 健康检查
 app.get("/health", (req, res) => {
   res.json({ ok: true, service: "USIS Brain", ts: Date.now() });
