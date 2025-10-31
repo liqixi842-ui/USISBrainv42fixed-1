@@ -1,0 +1,9 @@
+{
+  "name": "usis-brain",
+  "version": "1.0.0",
+  "description": "Minimal USIS Brain API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  }
+}
