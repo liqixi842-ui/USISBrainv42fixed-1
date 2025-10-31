@@ -29,4 +29,4 @@ app.post("/brain/decide", async (req, res) => {
 
 // ！！！Replit 必须用动态端口
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 USIS Brain online on port ${PORT}`));
+app.listen(PORT, "0.0.0.0", () => console.log(`🚀 USIS Brain online on port ${PORT}`));
