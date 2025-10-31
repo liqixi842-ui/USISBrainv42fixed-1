@@ -1,3 +1,7 @@
+【第1步｜替换 index.js 为投票版（USIS v3）】
+
+把下面整段全部复制覆盖到 index.js：
+
 // ====== USIS Brain · v3（多模型 + 投票） ======
 const express = require("express");
 const fetch = require("node-fetch");
@@ -43,7 +47,7 @@ app.post("/brain/decide", async (req, res) => {
           "anthropic-version": "2023-06-01"
         },
         body: JSON.stringify({
-          model: "claude-3-haiku-20240307",
+          model: "claude-3-haiku-20240307", // 更易用的模型
           max_tokens: 220,
           messages: [{ role: "user", content: `请用要点判断市场倾向（BUY/HOLD/SELL）并给出一句理由：${task}` }]
         })
@@ -95,7 +99,7 @@ app.post("/brain/decide", async (req, res) => {
 
   // 置信度：平均模型置信度 × 投票一致度
   const avgConf = results.reduce((s, r) => s + (r.confidence || 0.5), 0) / results.length;
-  const agreement = Math.max(tally.BUY, tally.SELL, tally.HOLD) / results.length;
+  const agreement = Math.max(tally.BUY, tally.SELL, tally.HOLD) / results.length; // 1 或 0.5
   const finalConfidence = Math.min(0.98, Number((avgConf * (0.6 + 0.4 * agreement)).toFixed(2)));
 
   // —— 构造输出（兼容旧字段）
@@ -126,4 +130,4 @@ app.post("/brain/decide", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => console.log(`🚀 USIS Brain v3 online on port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 USIS Brain v3 online on port ${PORT}`));
