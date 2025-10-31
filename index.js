@@ -9,6 +9,18 @@ const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 
 // ---- Health
 app.get("/", (_req, res) => res.status(200).send("OK"));
+
+// ---- Feed Receiver: 接收 n8n 发来的行情+新闻数据
+app.post("/brain/feed", (req, res) => {
+  try {
+    console.log("📥 收到 n8n 数据:", JSON.stringify(req.body, null, 2));
+    res.json({ ok: true, received: req.body });
+  } catch (err) {
+    console.error("❌ feed 错误:", err);
+    res.json({ ok: false, error: err.message });
+  }
+});
+
 app.get("/health", (_req, res) => res.json({ ok: true, service: "USIS Brain", ts: Date.now() }));
 
 // ---- 简单规则投票器：从文本里判定 BUY / HOLD / SELL
