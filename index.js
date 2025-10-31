@@ -147,7 +147,7 @@ app.post("/brain/intent", async (req, res) => {
     const pick = (m) => allow.includes(m) ? m : null;
 
     let mode = null;
-    if (!mode && /(盘前|premarket|\bpre\b)/.test(t)) mode = pick('premarket');
+    if (!mode && /(盘启|盘前|premarket|\bpre\b)/.test(t)) mode = pick('premarket');
     if (!mode && /(盘中|intraday|live)/.test(t)) mode = pick('intraday');
     if (!mode && /(复盘|收盘|postmarket|review|after)/.test(t)) mode = pick('postmarket');
     if (!mode && /(解票|诊股|ticker|symbol)/.test(t)) mode = pick('diagnose');
