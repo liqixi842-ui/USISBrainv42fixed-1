@@ -125,5 +125,54 @@ app.post("/brain/decide", async (req, res) => {
   res.json(payload);
 });
 
+// ---- Intent Router: 意图识别（模式 + 抽票 + 语言）
+app.post("/brain/intent", async (req, res) => {
+  try {
+    const text = (req.body?.text || '').trim();
+    const allow = Array.isArray(req.body?.allow) ? req.body.allow : ['premarket','intraday','postmarket','diagnose','news'];
+    const langHint = (req.body?.lang || '').toLowerCase();
+
+    // 1) 语言判定（轻量规则）
+    let lang = 'zh';
+    if (langHint) {
+      lang = langHint;
+    } else if (/[a-z]/i.test(text) && !/[\u4e00-\u9fa5]/.test(text)) {
+      lang = 'en';
+    } else if (/[áéíóúüñ¡¿]/i.test(text)) {
+      lang = 'es';
+    }
+
+    // 2) 模式识别（关键词 → mode）
+    const t = text.toLowerCase();
+    const pick = (m) => allow.includes(m) ? m : null;
+
+    let mode = null;
+    if (!mode && /(盘前|premarket|\bpre\b)/.test(t)) mode = pick('premarket');
+    if (!mode && /(盘中|intraday|live)/.test(t)) mode = pick('intraday');
+    if (!mode && /(复盘|收盘|postmarket|review|after)/.test(t)) mode = pick('postmarket');
+    if (!mode && /(解票|诊股|ticker|symbol)/.test(t)) mode = pick('diagnose');
+    if (!mode && /(新闻|资讯|news)/.test(t)) mode = pick('news');
+
+    // 3) 抽取股票代码（简单正则，使用原文而非小写版本）
+    const sym = (text.match(/\b[A-Z]{1,5}\b/g) || [])
+      .filter(s => !['US','ES','ETF','ETF?'].includes(s))
+      .slice(0, 10);
+
+    console.log(`🎯 意图: text="${text}" → mode=${mode}, symbols=${sym.join(',')}, lang=${lang}`);
+
+    // 4) 返回结果
+    return res.json({
+      version: 'USIS.v3',
+      mode: mode || null,
+      symbols: sym,
+      lang,
+      echo: text
+    });
+  } catch (e) {
+    console.error('❌ intent error:', e);
+    res.status(500).json({ error: 'intent-failed' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 USIS Brain v3 online on port ${PORT}`));
