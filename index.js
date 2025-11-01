@@ -73,14 +73,14 @@ app.get("/img/health", (_req, res) => {
   res.json({ provider: IMAGE_PROVIDER, ok: true });
 });
 
-// ---- Helper: Poll Replicate prediction
+// ---- Helper: Poll Replicate prediction (only if needed)
 async function pollReplicatePrediction(predictionId, maxAttempts = 30) {
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s
     
     const response = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
       headers: {
-        "Authorization": `Token ${REPLICATE_API_TOKEN}`,
+        "Authorization": `Bearer ${REPLICATE_API_TOKEN}`,
         "Content-Type": "application/json"
       }
     });
@@ -117,32 +117,46 @@ app.post("/img/imagine", async (req, res) => {
         return res.status(500).json({ ok: false, error: "REPLICATE_API_TOKEN 未设置" });
       }
 
-      // Create prediction
-      const createResponse = await fetch("https://api.replicate.com/v1/predictions", {
+      // Create prediction using model name instead of version
+      const createResponse = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
         method: "POST",
         headers: {
-          "Authorization": `Token ${REPLICATE_API_TOKEN}`,
-          "Content-Type": "application/json"
+          "Authorization": `Bearer ${REPLICATE_API_TOKEN}`,
+          "Content-Type": "application/json",
+          "Prefer": "wait"
         },
         body: JSON.stringify({
-          version: "7de2ea26c616d5bf2245ad0d5c96c03f5c7d4f38a266f674c8f2b5a3b8b6d37d",
           input: {
             prompt: prompt,
-            aspect_ratio: ratio
+            aspect_ratio: ratio,
+            num_outputs: 1,
+            num_inference_steps: 4,
+            go_fast: true
           }
         })
       });
 
       const prediction = await createResponse.json();
       
-      if (!prediction.id) {
+      if (prediction.error) {
         console.error("❌ Replicate error:", prediction);
-        return res.status(500).json({ ok: false, error: prediction.detail || "Failed to create prediction" });
+        return res.status(500).json({ ok: false, error: prediction.error || prediction.detail || "Failed to create prediction" });
       }
 
-      console.log(`✅ Prediction created: id=${prediction.id}`);
+      // Check if we got immediate result (Prefer: wait header)
+      if (prediction.status === "succeeded" && prediction.output) {
+        const imageUrl = Array.isArray(prediction.output) ? prediction.output[0] : prediction.output;
+        console.log(`✅ Image generated (immediate): ${imageUrl}`);
+        return res.json({ ok: true, image_url: imageUrl });
+      }
 
-      // Poll for result
+      // Otherwise poll for result
+      if (!prediction.id) {
+        console.error("❌ No prediction ID:", prediction);
+        return res.status(500).json({ ok: false, error: "No prediction ID returned" });
+      }
+
+      console.log(`⏳ Polling prediction: id=${prediction.id}`);
       const result = await pollReplicatePrediction(prediction.id);
       
       if (!result.success) {
