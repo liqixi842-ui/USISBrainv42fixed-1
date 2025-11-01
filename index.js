@@ -8,6 +8,11 @@ const CLAUDE_KEY   = process.env.CLAUDE_API_KEY;
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 const MJAPI_KEY    = process.env.MJAPI_KEY;
 
+// Image generation config
+const IMAGE_PROVIDER = process.env.IMAGE_PROVIDER || "replicate";
+const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
+const MJ_RELAY_URL = process.env.MJ_RELAY_URL;
+
 // ---- Health
 app.get("/", (_req, res) => res.status(200).send("OK"));
 
@@ -62,6 +67,125 @@ app.post("/mj/imagine", async (req, res) => {
 });
 
 app.get("/health", (_req, res) => res.json({ ok: true, service: "USIS Brain", ts: Date.now() }));
+
+// ---- Image Generation Health Check
+app.get("/img/health", (_req, res) => {
+  res.json({ provider: IMAGE_PROVIDER, ok: true });
+});
+
+// ---- Helper: Poll Replicate prediction
+async function pollReplicatePrediction(predictionId, maxAttempts = 30) {
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s
+    
+    const response = await fetch(`https://api.replicate.com/v1/predictions/${predictionId}`, {
+      headers: {
+        "Authorization": `Token ${REPLICATE_API_TOKEN}`,
+        "Content-Type": "application/json"
+      }
+    });
+    
+    const data = await response.json();
+    console.log(`📊 Replicate poll ${i+1}/${maxAttempts}: status=${data.status}`);
+    
+    if (data.status === "succeeded") {
+      return { success: true, output: data.output };
+    }
+    
+    if (data.status === "failed" || data.status === "canceled") {
+      return { success: false, error: data.error || "Prediction failed" };
+    }
+  }
+  
+  return { success: false, error: "Timeout after 60s" };
+}
+
+// ---- Image Generation: Unified endpoint
+app.post("/img/imagine", async (req, res) => {
+  try {
+    const { prompt, ratio = "16:9" } = req.body;
+    
+    if (!prompt) {
+      return res.status(400).json({ ok: false, error: "缺少 prompt 参数" });
+    }
+
+    console.log(`🎨 Image request: provider=${IMAGE_PROVIDER}, prompt="${prompt}", ratio=${ratio}`);
+
+    // Provider: Replicate
+    if (IMAGE_PROVIDER === "replicate") {
+      if (!REPLICATE_API_TOKEN) {
+        return res.status(500).json({ ok: false, error: "REPLICATE_API_TOKEN 未设置" });
+      }
+
+      // Create prediction
+      const createResponse = await fetch("https://api.replicate.com/v1/predictions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Token ${REPLICATE_API_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          version: "7de2ea26c616d5bf2245ad0d5c96c03f5c7d4f38a266f674c8f2b5a3b8b6d37d",
+          input: {
+            prompt: prompt,
+            aspect_ratio: ratio
+          }
+        })
+      });
+
+      const prediction = await createResponse.json();
+      
+      if (!prediction.id) {
+        console.error("❌ Replicate error:", prediction);
+        return res.status(500).json({ ok: false, error: prediction.detail || "Failed to create prediction" });
+      }
+
+      console.log(`✅ Prediction created: id=${prediction.id}`);
+
+      // Poll for result
+      const result = await pollReplicatePrediction(prediction.id);
+      
+      if (!result.success) {
+        return res.status(500).json({ ok: false, error: result.error });
+      }
+
+      const imageUrl = Array.isArray(result.output) ? result.output[0] : result.output;
+      console.log(`✅ Image generated: ${imageUrl}`);
+      
+      return res.json({ ok: true, image_url: imageUrl });
+    }
+
+    // Provider: MJ Relay
+    if (IMAGE_PROVIDER === "mjrelay") {
+      if (!MJ_RELAY_URL) {
+        return res.status(500).json({ ok: false, error: "MJ_RELAY_URL 未设置" });
+      }
+
+      const response = await fetch(MJ_RELAY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, ratio })
+      });
+
+      const data = await response.json();
+      const imageUrl = data.image_url || (Array.isArray(data.images) ? data.images[0] : null);
+
+      if (!imageUrl) {
+        return res.status(500).json({ ok: false, error: "MJ Relay 未返回图像 URL" });
+      }
+
+      console.log(`✅ MJ Relay image: ${imageUrl}`);
+      return res.json({ ok: true, image_url: imageUrl });
+    }
+
+    // Unknown provider
+    return res.status(500).json({ ok: false, error: `未知的 IMAGE_PROVIDER: ${IMAGE_PROVIDER}` });
+
+  } catch (err) {
+    console.error("❌ Image generation error:", err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 // ---- 简单规则投票器：从文本里判定 BUY / HOLD / SELL
 function pickVote(text = "") {
