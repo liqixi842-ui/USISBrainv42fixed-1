@@ -6,6 +6,7 @@ app.use(express.json());
 
 const CLAUDE_KEY   = process.env.CLAUDE_API_KEY;
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
+const MJAPI_KEY    = process.env.MJAPI_KEY;
 
 // ---- Health
 app.get("/", (_req, res) => res.status(200).send("OK"));
@@ -17,6 +18,45 @@ app.post("/brain/feed", (req, res) => {
     res.json({ ok: true, received: req.body });
   } catch (err) {
     console.error("❌ feed 错误:", err);
+    res.json({ ok: false, error: err.message });
+  }
+});
+
+// ---- Midjourney Imagine: 转发 prompt 到 Midjourney API
+app.post("/mj/imagine", async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    
+    if (!prompt) {
+      return res.json({ ok: false, error: "缺少 prompt 参数" });
+    }
+
+    if (!MJAPI_KEY) {
+      return res.json({ ok: false, error: "MJAPI_KEY 环境变量未设置" });
+    }
+
+    console.log("🎨 Midjourney Imagine:", prompt);
+
+    const response = await fetch("https://api.mjapi.pro/v2/imagine", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${MJAPI_KEY}`
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        mode: "fast",
+        ratio: "16:9"
+      })
+    });
+
+    const data = await response.json();
+    
+    console.log("✅ Midjourney 响应:", response.status);
+
+    res.json({ ok: true, data: data });
+  } catch (err) {
+    console.error("❌ Midjourney 错误:", err);
     res.json({ ok: false, error: err.message });
   }
 });
