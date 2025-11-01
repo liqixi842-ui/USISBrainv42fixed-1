@@ -13,6 +13,13 @@ const IMAGE_PROVIDER = process.env.IMAGE_PROVIDER || "replicate";
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 const MJ_RELAY_URL = process.env.MJ_RELAY_URL;
 
+// Log token status on startup
+if (REPLICATE_API_TOKEN) {
+  console.log("✅ Using Replicate token:", REPLICATE_API_TOKEN.substring(0, 10) + "...");
+} else {
+  console.warn("⚠️  REPLICATE_API_TOKEN not found in environment");
+}
+
 // ---- Health
 app.get("/", (_req, res) => res.status(200).send("OK"));
 
@@ -93,31 +100,37 @@ async function pollReplicatePrediction(predictionId, maxAttempts = 30) {
     }
     
     if (data.status === "failed" || data.status === "canceled") {
-      return { success: false, error: data.error || "Prediction failed" };
+      console.error("❌ Replicate polling failed:", JSON.stringify(data, null, 2));
+      return { success: false, error: "REPLICATE_STATUS_FAILED", raw: data };
     }
   }
   
-  return { success: false, error: "Timeout after 60s" };
+  return { success: false, error: "REPLICATE_TIMEOUT" };
 }
 
 // ---- Image Generation: Unified endpoint
 app.post("/img/imagine", async (req, res) => {
   try {
-    const { prompt, ratio = "16:9" } = req.body;
+    // 1️⃣ Check REPLICATE_API_TOKEN first
+    if (!REPLICATE_API_TOKEN) {
+      console.error("❌ REPLICATE_API_TOKEN missing");
+      return res.json({ ok: false, error: "MISSING_TOKEN" });
+    }
+
+    // 2️⃣ Clean prompt - remove line breaks, tabs, and excessive whitespace
+    const rawPrompt = req.body?.prompt || "";
+    const prompt = rawPrompt.replace(/\s+/g, " ").trim();
+    const ratio = req.body?.ratio || "16:9";
     
     if (!prompt) {
-      return res.status(400).json({ ok: false, error: "缺少 prompt 参数" });
+      return res.json({ ok: false, error: "MISSING_PROMPT" });
     }
 
     console.log(`🎨 Image request: provider=${IMAGE_PROVIDER}, prompt="${prompt}", ratio=${ratio}`);
 
     // Provider: Replicate
     if (IMAGE_PROVIDER === "replicate") {
-      if (!REPLICATE_API_TOKEN) {
-        return res.status(500).json({ ok: false, error: "REPLICATE_API_TOKEN 未设置" });
-      }
-
-      // Create prediction using model name instead of version
+      // 3️⃣ Create prediction
       const createResponse = await fetch("https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions", {
         method: "POST",
         headers: {
@@ -138,9 +151,23 @@ app.post("/img/imagine", async (req, res) => {
 
       const prediction = await createResponse.json();
       
-      if (prediction.error) {
-        console.error("❌ Replicate error:", prediction);
-        return res.status(500).json({ ok: false, error: prediction.error || prediction.detail || "Failed to create prediction" });
+      // 3️⃣ Check for errors or missing ID
+      if (createResponse.status !== 201 && createResponse.status !== 200) {
+        console.error("❌ Replicate create failed:", JSON.stringify(prediction, null, 2));
+        return res.json({ 
+          ok: false, 
+          error: "REPLICATE_CREATE_FAILED",
+          raw: prediction
+        });
+      }
+
+      if (!prediction.id) {
+        console.error("❌ No prediction ID:", JSON.stringify(prediction, null, 2));
+        return res.json({ 
+          ok: false, 
+          error: "REPLICATE_CREATE_FAILED",
+          raw: prediction
+        });
       }
 
       // Check if we got immediate result (Prefer: wait header)
@@ -150,19 +177,19 @@ app.post("/img/imagine", async (req, res) => {
         return res.json({ ok: true, image_url: imageUrl });
       }
 
-      // Otherwise poll for result
-      if (!prediction.id) {
-        console.error("❌ No prediction ID:", prediction);
-        return res.status(500).json({ ok: false, error: "No prediction ID returned" });
-      }
-
+      // 4️⃣ Poll for result
       console.log(`⏳ Polling prediction: id=${prediction.id}`);
       const result = await pollReplicatePrediction(prediction.id);
       
       if (!result.success) {
-        return res.status(500).json({ ok: false, error: result.error });
+        return res.json({ 
+          ok: false, 
+          error: result.error,
+          raw: result.raw
+        });
       }
 
+      // 5️⃣ Success - return image URL
       const imageUrl = Array.isArray(result.output) ? result.output[0] : result.output;
       console.log(`✅ Image generated: ${imageUrl}`);
       
@@ -172,7 +199,7 @@ app.post("/img/imagine", async (req, res) => {
     // Provider: MJ Relay
     if (IMAGE_PROVIDER === "mjrelay") {
       if (!MJ_RELAY_URL) {
-        return res.status(500).json({ ok: false, error: "MJ_RELAY_URL 未设置" });
+        return res.json({ ok: false, error: "MJ_RELAY_URL_MISSING" });
       }
 
       const response = await fetch(MJ_RELAY_URL, {
@@ -185,7 +212,7 @@ app.post("/img/imagine", async (req, res) => {
       const imageUrl = data.image_url || (Array.isArray(data.images) ? data.images[0] : null);
 
       if (!imageUrl) {
-        return res.status(500).json({ ok: false, error: "MJ Relay 未返回图像 URL" });
+        return res.json({ ok: false, error: "MJ_RELAY_NO_IMAGE", raw: data });
       }
 
       console.log(`✅ MJ Relay image: ${imageUrl}`);
@@ -193,11 +220,11 @@ app.post("/img/imagine", async (req, res) => {
     }
 
     // Unknown provider
-    return res.status(500).json({ ok: false, error: `未知的 IMAGE_PROVIDER: ${IMAGE_PROVIDER}` });
+    return res.json({ ok: false, error: `UNKNOWN_PROVIDER_${IMAGE_PROVIDER}` });
 
   } catch (err) {
     console.error("❌ Image generation error:", err);
-    return res.status(500).json({ ok: false, error: err.message });
+    return res.json({ ok: false, error: err.message });
   }
 });
 

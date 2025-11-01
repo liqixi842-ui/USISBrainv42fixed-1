@@ -137,7 +137,87 @@ Preferred communication style: Simple, everyday language.
 - `diagnose` - Individual stock diagnosis (解票/诊股)
 - `news` - News and updates (新闻/资讯)
 
+## POST /img/imagine
+**Purpose**: Generate images using Replicate's Flux Schnell model
+
+**Request**:
+```json
+{
+  "prompt": "A cinematic finance poster with charts",
+  "ratio": "16:9"
+}
+```
+
+**Response (Success)**:
+```json
+{
+  "ok": true,
+  "image_url": "https://replicate.delivery/xezq/..."
+}
+```
+
+**Response (Error)**:
+```json
+{
+  "ok": false,
+  "error": "MISSING_TOKEN",
+  "raw": {...}
+}
+```
+
+**Features**:
+- Automatic prompt cleaning (removes line breaks, tabs, excess whitespace)
+- Supports aspect ratios: `16:9`, `1:1`, `9:16`, `4:3`, `3:4`
+- Fast generation (~2-4 seconds)
+- Comprehensive error handling with detailed error messages
+- Environment variable validation on startup
+
+**Error Codes**:
+- `MISSING_TOKEN` - REPLICATE_API_TOKEN not found in environment
+- `MISSING_PROMPT` - No prompt provided in request
+- `REPLICATE_CREATE_FAILED` - Failed to create prediction on Replicate
+- `REPLICATE_STATUS_FAILED` - Prediction failed or was canceled
+- `REPLICATE_TIMEOUT` - Generation timeout (60 seconds)
+
+## GET /img/health
+**Purpose**: Check image generation service status
+
+**Response**:
+```json
+{
+  "provider": "replicate",
+  "ok": true
+}
+```
+
+## POST /brain/feed
+**Purpose**: Receive market data and news from n8n workflows
+
+**Request**:
+```json
+{
+  "data": "any json data"
+}
+```
+
+**Response**:
+```json
+{
+  "ok": true,
+  "received": {...}
+}
+```
+
 # Recent Changes
+
+**November 1, 2025**:
+- Fixed `/img/imagine` endpoint with comprehensive error handling
+- Added environment variable validation on startup (logs token status)
+- Implemented automatic prompt cleaning (removes line breaks, tabs, excess whitespace)
+- Enhanced error responses with detailed error codes and raw response data
+- Updated error handling to return structured responses: `{ok:false, error:"CODE", raw:{...}}`
+- Improved polling mechanism with better error detection and logging
+- All image generation tests passing (16:9, 1:1, 9:16 aspect ratios)
 
 **October 31, 2025**:
 - Upgraded to v3 with multi-model voting system
