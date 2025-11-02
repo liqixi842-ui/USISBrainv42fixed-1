@@ -208,7 +208,65 @@ Preferred communication style: Simple, everyday language.
 }
 ```
 
+## GET /social/twitter/search
+**Purpose**: Search recent tweets and return top 5 by engagement score
+
+**Request Parameters**:
+- `query` (required) - Search query string
+- `max_results` (optional) - Maximum results to fetch from Twitter API (default: 20)
+
+**Example**:
+```
+GET /social/twitter/search?query=bitcoin&max_results=20
+```
+
+**Response (Success)**:
+```json
+{
+  "ok": true,
+  "items": [
+    {
+      "id": "123456789",
+      "text": "Bitcoin hits new high...",
+      "created_at": "2025-11-01T12:34:56.000Z",
+      "score": 1250
+    }
+  ]
+}
+```
+
+**Response (Error)**:
+```json
+{
+  "ok": false,
+  "error": "MISSING_TWITTER_BEARER",
+  "raw": {...}
+}
+```
+
+**Features**:
+- Calls Twitter API v2 `/tweets/search/recent` endpoint
+- Fetches tweet fields: `created_at`, `public_metrics`, `lang`, `author_id`, `source`
+- Calculates engagement score: `retweet_count + like_count`
+- Returns top 5 tweets sorted by score (descending)
+- 60-second timeout for API calls
+- Environment variable validation on startup
+
+**Error Codes**:
+- `MISSING_TWITTER_BEARER` - TWITTER_BEARER not found in environment
+- `MISSING_QUERY_PARAMETER` - No query parameter provided
+- `TWITTER_API_ERROR` - Twitter API returned an error
+- `TWITTER_TIMEOUT` - Request timeout (60 seconds)
+
 # Recent Changes
+
+**November 2, 2025**:
+- Added `GET /social/twitter/search` endpoint for Twitter API integration
+- Implements engagement-based ranking (score = retweet_count + like_count)
+- Returns top 5 tweets sorted by engagement score
+- Environment variable validation for TWITTER_BEARER on startup
+- 60-second timeout protection for Twitter API calls
+- Comprehensive error handling with detailed error codes
 
 **November 1, 2025**:
 - Fixed `/img/imagine` endpoint with comprehensive error handling

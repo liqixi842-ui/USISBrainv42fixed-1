@@ -13,11 +13,20 @@ const IMAGE_PROVIDER = process.env.IMAGE_PROVIDER || "replicate";
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 const MJ_RELAY_URL = process.env.MJ_RELAY_URL;
 
+// Twitter API config
+const TWITTER_BEARER = process.env.TWITTER_BEARER;
+
 // Log token status on startup
 if (REPLICATE_API_TOKEN) {
   console.log("✅ Using Replicate token:", REPLICATE_API_TOKEN.substring(0, 10) + "...");
 } else {
   console.warn("⚠️  REPLICATE_API_TOKEN not found in environment");
+}
+
+if (TWITTER_BEARER) {
+  console.log("✅ Twitter Bearer token configured");
+} else {
+  console.warn("⚠️  TWITTER_BEARER not found in environment");
 }
 
 // ---- Health
@@ -78,6 +87,94 @@ app.get("/health", (_req, res) => res.json({ ok: true, service: "USIS Brain", ts
 // ---- Image Generation Health Check
 app.get("/img/health", (_req, res) => {
   res.json({ provider: IMAGE_PROVIDER, ok: true });
+});
+
+// ---- Twitter Search: 搜索 Twitter 推文
+app.get("/social/twitter/search", async (req, res) => {
+  try {
+    // Check TWITTER_BEARER token
+    if (!TWITTER_BEARER) {
+      return res.json({ ok: false, error: "MISSING_TWITTER_BEARER" });
+    }
+
+    const query = req.query.query;
+    const maxResults = parseInt(req.query.max_results) || 20;
+
+    if (!query) {
+      return res.json({ ok: false, error: "MISSING_QUERY_PARAMETER" });
+    }
+
+    console.log(`🐦 Twitter search: query="${query}", max_results=${maxResults}`);
+
+    // Build Twitter API URL with parameters
+    const tweetFields = "created_at,public_metrics,lang,author_id,source";
+    const apiUrl = `https://api.twitter.com/2/tweets/search/recent?query=${encodeURIComponent(query)}&max_results=${maxResults}&tweet.fields=${tweetFields}`;
+
+    // Call Twitter API with 60s timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
+
+    const response = await fetch(apiUrl, {
+      headers: {
+        "Authorization": `Bearer ${TWITTER_BEARER}`,
+        "Content-Type": "application/json"
+      },
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    const data = await response.json();
+
+    // Check for API errors
+    if (!response.ok || data.errors) {
+      console.error("❌ Twitter API error:", JSON.stringify(data, null, 2));
+      return res.json({
+        ok: false,
+        error: "TWITTER_API_ERROR",
+        raw: data
+      });
+    }
+
+    // Process tweets: calculate score and format
+    const tweets = data.data || [];
+    const processed = tweets.map(tweet => {
+      const metrics = tweet.public_metrics || {};
+      const score = (metrics.retweet_count || 0) + (metrics.like_count || 0);
+      
+      return {
+        id: tweet.id,
+        text: tweet.text,
+        created_at: tweet.created_at,
+        score: score
+      };
+    });
+
+    // Sort by score (descending) and take top 5
+    const topTweets = processed
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    console.log(`✅ Found ${tweets.length} tweets, returning top ${topTweets.length}`);
+
+    return res.json({
+      ok: true,
+      items: topTweets
+    });
+
+  } catch (err) {
+    console.error("❌ Twitter search error:", err);
+    
+    if (err.name === 'AbortError') {
+      return res.json({ ok: false, error: "TWITTER_TIMEOUT" });
+    }
+    
+    return res.json({ 
+      ok: false, 
+      error: err.message,
+      raw: err.toString()
+    });
+  }
 });
 
 // ---- Helper: Poll Replicate prediction (only if needed)
