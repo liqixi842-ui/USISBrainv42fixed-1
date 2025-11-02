@@ -1,0 +1,1725 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "https://finnhub.io/api/v1/quote",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{$json.symbol}}"
+            },
+            {
+              "name": "token",
+              "value": "d40idr1r01qqo3qi7o20d40idr1r01qqo3qi7o2g"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 6000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -22704,
+        7360
+      ],
+      "id": "c14236aa-d999-41a5-b678-10f7464d949e",
+      "name": "Finnhub Quote",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build Table：把 Finnhub Quote 的多条 item 汇总成 1 条\nconst rows = $items().map((it, i) => {\n  // 从“Parse Symbols”的第 i 条输入里拿回符号（pairedItem 保留了对应关系）\n  const s = it.pairedItem && typeof it.pairedItem.item === 'number'\n    ? $items(\"Parse Symbols\")[it.pairedItem.item].json.symbol\n    : it.json.symbol || 'N/A';\n  const d = it.json;\n\n  const price = d?.c ?? null;\n  const pct   = d?.dp ?? null;\n\n  return { symbol: s, price, changePct: pct };\n});\n\nconst priceText = rows.map(r => {\n  const arrow = r.changePct == null ? '⏸️' : (r.changePct > 0 ? '📈' : (r.changePct < 0 ? '📉' : '⏸️'));\n  const pct   = r.changePct == null ? 'N/A' : `${r.changePct.toFixed(2)}%`;\n  const pstr  = r.price == null ? 'N/A' : `$${r.price}`;\n  return `${r.symbol}: ${pstr} ${arrow} ${r.changePct > 0 ? '+' : ''}${pct}`;\n}).join('\\n');\n\nconst priceTable = rows.map(r => {\n  const pstr  = r.price == null ? 'N/A' : `$${(typeof r.price === 'number' ? r.price.toFixed(2) : r.price)}`;\n  const pct   = r.changePct == null ? 'N/A' : `${r.changePct.toFixed(2)}%`;\n  return `${r.symbol}\\t${pstr}\\t${pct}`;\n}).join('\\n');\n\nreturn [{\n  json: {\n    symbols: rows.map(r => r.symbol),\n    priceText,\n    priceTable\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -22256,
+        7432
+      ],
+      "id": "75cf671c-6589-4060-99d7-9bc1964209ef",
+      "name": "Trigger Finnhub Refresh"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Symbols：从消息里提取股票，没写就给默认\nconst msg = $node[\"🟢 「接收指令」\"].json?.message?.text || \"\";\nconst raw = (msg.match(/\\b[A-Za-z]{1,5}\\b/g) || []).map(s => s.toUpperCase());\nconst defaults = [\"SPY\",\"QQQ\",\"AAPL\",\"TSLA\",\"NVDA\",\"MSFT\",\"AMZN\",\"META\"];\nconst symbols = Array.from(new Set([...raw, ...defaults])).slice(0, 10);\nreturn symbols.map(s => ({ json: { symbol: s }}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -22928,
+        7360
+      ],
+      "id": "d4e2be2b-a372-41d4-a7da-890117344aac",
+      "name": "Parse Symbols"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -24944,
+        6136
+      ],
+      "id": "2625290d-8932-4b10-9a1d-059ba2b6f0e6",
+      "name": "🟢 「接收指令」",
+      "webhookId": "c8e1bf5a-a89f-42a7-9771-5685c68f3dcd",
+      "alwaysOutputData": true,
+      "executeOnce": false,
+      "retryOnFail": false,
+      "notesInFlow": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      },
+      "notes": "收到盘前指令 ✅ 正在准备生成报告…\n"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = ($json.message?.text || \"\").trim().toLowerCase();\nlet mode = $node[\"A_IntentRouter\"]?.json?.mode || null;\nlet symbols = $node[\"A_IntentRouter\"]?.json?.symbols || [];\n\nif (!mode) {\n  if (/盘前|premarket|\\bpre\\b/.test(raw)) mode = 'premarket';\n  else if (/盘中|intraday|live/.test(raw)) mode = 'intraday';\n  else if (/复盘|收盘|postmarket|review|after/.test(raw)) mode = 'postmarket';\n  else if (/解票|诊股|ticker|symbol/.test(raw)) mode = 'diagnose';\n  else if (/新闻|资讯|news/.test(raw)) mode = 'news';\n}\n\nif (!mode) {\n  return [{ json: { mode:'help', help:'可用：盘前 / 盘中 / 复盘 / 解票 TSLA / 新闻' } }];\n}\n\nreturn [{ json: { mode, raw_text: raw, symbols } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -23152,
+        7288
+      ],
+      "id": "167214c9-d77e-4e13-bda6-f559d40897bf",
+      "name": "🧭 「任务路由」"
+    },
+    {
+      "parameters": {
+        "url": "https://shot.screenshotapi.net/screenshot",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "FVJZDCY-C4940PS-M43TEH8-DF69HJP"
+            },
+            {
+              "name": "url",
+              "value": "https://www.tradingview.com/heatmap/stock/#%7B%22dataSource%22%3A%22SPX500%22%2C%22blockColor%22%3A%22change%22%2C%22blockSize%22%3A%22market_cap_basic%22%2C%22grouping%22%3A%22sector%22%7D"
+            },
+            {
+              "name": "full_page",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -21808,
+        6088
+      ],
+      "id": "2af65d15-0d36-4687-9e2b-7af1a87885cb",
+      "name": "A_Screenshot"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer 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"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"你是专业的全球股市首席分析师，拥有20年华尔街从业经验。请提供机构级别的深度市场分析报告。\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"请提供【盘前快报】（总字数300-400字），极简版：\\n\\n1. **隔夜全球**（60字）\\n   - 美股/欧股/亚太核心指数涨跌幅\\n   - 最重要的1个事件\\n\\n2. **今日关键**（80字）\\n   - 今天最重要的1-2个数据/事件\\n   - 时间点\\n\\n3. **板块焦点**（80字）\\n   - 最强板块 + 1个代表股票\\n   - 最弱板块 + 1个代表股票\\n\\n4. **技术面**（40字）\\n   - S&P 500支撑位/阻力位\\n\\n5. **必看3股**（60字）\\n   - 3个股票代码 + 一句话理由\\n\\n要求：\\n- 总字数严格控制在300-400字\\n- 每个部分1-2句话\\n- 只说最关键的\\n- 必须有具体数字\\n- 中文 + emoji\"\n    }\n  ],\n  \"max_tokens\": 2000\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -22480,
+        6256
+      ],
+      "id": "7b67b00e-b3c6-4c78-9668-a49172eecd26",
+      "name": "A_OpenAI"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.perplexity.ai/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer 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"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  model: \"sonar-pro\",\n  max_tokens: 900,\n  temperature: 0.3,\n  messages: [\n    {\n      role: \"system\",\n      content: \"你是一位财经分析师，请用中文写出结构化、有洞察力的市场观察，不要写免责声明。\"\n    },\n    {\n      role: \"user\",\n      content:\n        \"【盘前快报提要】\\n\" +\n        \"\\n\\n【实时行情】\\n\" +\n        ($node[\"Trigger Finnhub Refresh\"].json?.priceText || \"N/A\") +\n        \"\\n\\n请给出300-500字的观察要点：\\n\" +\n        \"1) 今日主线与风险；\\n\" +\n        \"2) 两个可验证的触发位（不写买卖指令）；\\n\" +\n        \"3) 一句逆向观点。\"\n    }\n  ]\n}) }}\n",
+        "options": {
+          "timeout": 6000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -22032,
+        5776
+      ],
+      "id": "59f15022-fb1e-4b79-bebd-ff92128f7781",
+      "name": "A_Perplexity"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 5,
+        "options": {
+          "includeUnpaired": false
+        }
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -21584,
+        5992
+      ],
+      "id": "d6d9a25e-341c-48f8-9e07-5a13b98f7013",
+      "name": "A_Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const mode = $('🧭 「任务路由」').first().json?.mode || 'premarket';\nconst brain = $('B_Brain1').first().json?.final_text?.zh\n           || $('B_Brain1').first().json?.final_text\n           || \"(智囊团无返回)\";\nconst vote = $('B_Brain1').first().json?.decision?.vote || \"\";\nconst conf = $('B_Brain1').first().json?.decision?.confidence;\n\nconst HEAD = {\n  premarket:  \"📊 盘前快照\",\n  intraday:   \"⏱ 盘中热点\",\n  postmarket: \"🧾 收盘复盘\",\n  diagnose:   \"🧪 单票诊断\",\n  news:       \"📰 市场资讯\"\n}[mode] || \"📊 市场简报\";\n\nconst price = $('Trigger Finnhub Refresh').first().json?.priceText || \"\";\nconst headline = vote ? `🗳 结论:${vote}${typeof conf === 'number' ? `(信心 ${Math.round(conf*100)}%)` : \"\"}` : \"🧠 智囊团观点\";\n\nconst caption =\n  (mode === 'intraday' || mode === 'news' || mode === 'diagnose')\n  ? `${HEAD}\\n\\n${headline}\\n${brain}`\n  : `${HEAD}\\n${price ? price + \"\\n\\n\" : \"\"}${headline}\\n${brain}`;\n\nconst finalCaption = caption + ($('Build_Debug_Footer').first().json?.debug_footer || '');\n\nreturn [{ json: { caption: finalCaption } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20688,
+        5704
+      ],
+      "id": "7b4d42b4-d143-402b-aece-e1e7b7bf1e5c",
+      "name": "A_CaptionBuilder"
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "={{ $json.chat_id }}",
+        "file": "={{ $json.screenshot }}",
+        "additionalFields": {
+          "caption": "={{ $json.caption }}"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -20240,
+        5704
+      ],
+      "id": "b225592a-45d5-440e-af24-93bd8d954a2b",
+      "name": "A_TelegramSend",
+      "webhookId": "cbf65987-4ee3-42de-9f97-98cc2fb3882e",
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://node-js-liqixi842.replit.app/brain/decide",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"mode\": \"={{$json.mode}}\",\n  \"text\": \"={{$json.raw_text || ''}}\",\n  \"symbols\": ={{$json.symbols && $json.symbols.length ? $json.symbols : ($node[\"Trigger Finnhub Refresh\"].json[\"symbols\"] || [])}}\n}\n",
+        "options": {
+          "timeout": 6000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -21136,
+        5440
+      ],
+      "id": "8a95c1d1-9251-4a09-a0e4-ba5d50cc6747",
+      "name": "B_Brain1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer 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"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"temperature\": 0.35,\n  \"max_tokens\": 900,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"你是一位专业市场研究员和财经专栏作者，擅长把行情数据提炼成独立观点。写作要求：①中文输出，允许少量emoji；②结论犀利、简洁、有立场；③不得出现“无法提供实时数据/不构成投资建议/免责声明”等套话；④若数据缺失，用N/A代替；⑤只给观察与策略框架，不写个股具体买卖指令与止盈止损数值。\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"【盘前快报（提要）】\\n{{($json?.choices?.[0]?.message?.content || '').slice(0,800)}}\\n\\n【实时价格数据】\\nAAPL 当前价: ${{ $node['Finnhub Quote'].json?.c || 'N/A' }}\\n开盘: ${{ $node['Finnhub Quote'].json?.o || 'N/A' }}\\n最高: ${{ $node['Finnhub Quote'].json?.h || 'N/A' }}\\n最低: ${{ $node['Finnhub Quote'].json?.l || 'N/A' }}\\n更新时间: {{ $node['Finnhub Quote'].json?.t ? new Date($node['Finnhub Quote'].json.t * 1000).toLocaleString('zh-CN', { timeZone: 'Europe/Madrid' }) : $now }}\\n\\n—— 请基于上面信息输出【实战点评 400–500字】，严格用以下结构：\\n1) 情绪诊断（≈80字，给出1–10分并说明散户/机构动态与可能的错觉）\\n2) 3个关键信号（≈120字；写出最重要的3个触发点与对应应对思路）\\n3) 策略框架（≈180字；写多空倾向、仓位轻/半/重与风险控制要点，结合当前价给出“相对位阶判断”，避免具体挂单数值）\\n4) 反向思考（≈60字；共识 vs 你的不同点 + 一条黑天鹅警示）\\n5) 一句话（≤20字；今日核心提示）\\n\\n格式用清晰的小标题与项目符号，避免长段落。\"\n    }\n  ]\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -22032,
+        6088
+      ],
+      "id": "f3c1f3d3-3f35-4a8d-877c-0638b7d60a46",
+      "name": "A_RealtimeComment"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [items[0]];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -21360,
+        6040
+      ],
+      "id": "927c46ef-3425-4a75-802c-acd739f33c1e",
+      "name": "A_SingleItem ✅"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://node-js-liqixi842.replit.app/brain/intent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"={{$json.message.text}}\",\n  \"lang\": \"zh\",\n  \"allow\": [\"盘前\", \"盘中\", \"收盘\", \"复盘\", \"解票\", \"诊股\", \"资讯\", \"新闻\", \"行情\"],\n  \"normalize\": true\n}",
+        "options": {
+          "timeout": 6000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -24720,
+        6136
+      ],
+      "id": "38104465-c5f3-410b-8ad8-f1cd2f8d5a7c",
+      "name": "A_IntentRouter"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "premarket",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "254f250c-4503-4019-b203-ac4ddbc85f36"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "6ad9b81c-791d-4dbb-848b-e62b60e82bd6",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "intraday",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "f0bd2f62-6fd8-429d-a847-d63cd64b7cc0",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "postmarket",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "715e927a-6f66-4876-ab98-ec9cb1383a18",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "diagnose",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "c9ef3efe-b359-495c-bcf3-2c7122ddeec7",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "news",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -24944,
+        7656
+      ],
+      "id": "3e94b3ea-6bde-45a5-8f99-a84a0e58ba0d",
+      "name": "A_ModeRouter"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3ab27af-1e38-4551-b9c7-bfdc5e603564",
+              "name": "caption",
+              "value": "={{ $json.caption }}",
+              "type": "string"
+            },
+            {
+              "id": "6214c79c-08a8-4db1-a52b-07df07c49d44",
+              "name": "screenshot",
+              "value": "={{ $node[\"A_Screenshot\"].json.screenshot }}",
+              "type": "string"
+            },
+            {
+              "id": "6d03342d-af74-4a88-8962-4f73403486d5",
+              "name": "chat_id",
+              "value": "={{ $node[\"🟢 「接收指令」\"].json.message.chat.id }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -20464,
+        5704
+      ],
+      "id": "1f1008db-6b08-4b99-9cf2-8a82d74b2a29",
+      "name": "A_Pack"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "out_brain_to_d",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -24944,
+        7976
+      ],
+      "id": "234766c4-1477-45d3-8c67-719304c0cf21",
+      "name": "Out_Brain_to_D",
+      "webhookId": "d3f43e47-4869-43e3-9ffa-36b871516b48"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://qian.app.n8n.cloud/webhook/start_d_from_b",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n  \"Content-Type\": \"application/json; charset=utf-8\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"brain_output\": \"决策: {{ $json.decision || 'N/A' }}；信心: {{ $json.confidence || 'N/A' }}；理由: {{ $json.reason || 'N/A' }}。\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -24720,
+        7976
+      ],
+      "id": "9f1e8a7c-0bf8-4b48-b691-3f5ce352f770",
+      "name": "Trigger_D_Start"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Intent Output with Fallback Keyword Matching\nconst res = $json.result || $json || {};\nconst raw_text = $node[\"🟢 「接收指令」\"]?.json?.message?.text || \"\";\n\n// Extract mode from API response\nlet mode = (res.intent || res.mode || '').toString().trim().toLowerCase();\n\n// If mode is 'help' or empty, apply fallback regex matching\nif (!mode || mode === 'help') {\n  const text = raw_text.toLowerCase();\n  \n  if (/盘前/.test(text)) {\n    mode = 'premarket';\n  } else if (/盘中/.test(text)) {\n    mode = 'intraday';\n  } else if (/收盘|复盘/.test(text)) {\n    mode = 'postmarket';\n  } else if (/解票|诊股/.test(text)) {\n    mode = 'diagnose';\n  } else if (/资讯|新闻|行情/.test(text)) {\n    mode = 'news';\n  } else {\n    mode = 'help';\n  }\n}\n\nreturn [{\n  json: {\n    mode: mode,\n    confidence: typeof res.confidence === 'number' ? res.confidence : null,\n    symbols: [],\n    raw_text: raw_text\n  }\n}];"
+      },
+      "id": "2a15eab3-857b-48b4-ad26-191a5731f480",
+      "name": "Normalize Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -24272,
+        6664
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "id-1",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "premarket",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "id-2",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "intraday",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "id-3",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "postmarket",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "id-4",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "diagnose",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "id-5",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "news",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "289cfec9-82c9-4e44-978d-c3fe985df359",
+      "name": "A_TaskRouter",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -22704,
+        6208
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "chat_id",
+              "value": "={{ $node[\"🟢 「接收指令」\"].json.message.chat.id }}",
+              "type": "number"
+            },
+            {
+              "id": "id-2",
+              "name": "text",
+              "value": "🤖 我没听懂；可以试试：\n· 盘前 / 盘中 / 复盘 / 资讯\n· 解票 TSLA（或公司名）\n若要查看诊断信息，请在消息末尾加 #debug",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6c24b173-5a24-434c-a237-3d23dab20c90",
+      "name": "A_Fallback_Text",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -21136,
+        5200
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {}
+      },
+      "id": "a8b76db0-a41e-4b7b-9fa5-71aa08aeeac3",
+      "name": "A_TelegramText",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -20912,
+        5200
+      ],
+      "webhookId": "78055217-d30d-4723-bb80-3ce5ce2ea09a",
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://finnhub.io/api/v1/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $node['Normalize Intent'].json.raw_text }}"
+            },
+            {
+              "name": "token",
+              "value": "d40idr1r01qqo3qi7o20d40idr1r01qqo3qi7o2g"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 6000
+        }
+      },
+      "id": "80f8b6d7-ffbe-4f2c-8ca8-afeacf3ac9b5",
+      "name": "ResolveSymbols",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -24048,
+        6664
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "0f4ba38b-acda-4916-8f49-faab1b8f586c",
+      "name": "SymMerge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -23600,
+        6544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 统一产出 symbols：regex 捕获 + Finnhub 搜索候选\nconst text = $item(0).$node[\"Normalize Intent\"].json.raw_text || \"\";\nconst api = $item(0).$node[\"ResolveSymbols\"]?.json || {};\nconst list = Array.isArray(api.result) ? api.result : [];\n\n// A. 正则捕获任意可能的ticker（1-5位，含 . 或 - 的也保留）\nconst regexTickers = (text.match(/\\b[A-Za-z][A-Za-z.\\-]{0,4}\\b/g) || [])\n  .map(s => s.toUpperCase());\n\n// B. Finnhub 搜索结果里抽取 symbol（优先美股/ETF/普通股）\nconst apiTickers = list\n  .filter(it => {\n    const sym = (it.symbol || \"\").toUpperCase();\n    // 过滤明显不是代码的\n    if (!sym || sym.length > 6) return false;\n    // 若有类型/交易所字段可进一步筛\n    const t = (it.type || \"\").toLowerCase();\n    return !t || /stock|etf|equity/.test(t);\n  })\n  .slice(0, 10)\n  .map(it => (it.symbol || \"\").toUpperCase());\n\n// C. 合并去重，最多取前5个\nconst symbols = Array.from(new Set([...regexTickers, ...apiTickers])).slice(0, 5);\n\n// D. 输出沿用 Normalize Intent 的 mode\nconst mode = $item(0).$node[\"Normalize Intent\"].json.mode || \"help\";\nreturn [{ json: { mode, symbols, raw_text: text } }];"
+      },
+      "id": "0e37c41e-fe38-4bd0-abcb-cc6f0752f8f7",
+      "name": "Normalize Symbols",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -23376,
+        6544
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.symbols.length }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0c5704d2-793e-4bca-b706-61adde6ff2ce",
+      "name": "Check Symbols Exist",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -21360,
+        5344
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "stage",
+              "value": "={{ $node['Normalize Intent'].json.mode || 'unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "node",
+              "value": "={{ $execution.fromNode }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "message",
+              "value": "={{ $json.message || $json.error || $json.statusMessage || 'unknown error' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "status",
+              "value": "={{ $json.statusCode || $json.code || 'N/A' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "payload",
+              "value": "={{ ($json.body || $json) ? JSON.stringify(($json.body || $json)).slice(0, 400) : '' }}",
+              "type": "string"
+            },
+            {
+              "id": "id-6",
+              "name": "exec_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-7",
+              "name": "ts",
+              "value": "={{ $now }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7f6f794a-accc-4879-89f8-877237acc599",
+      "name": "Err_Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -20688,
+        5488
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $node['🟢 「接收指令」'].json.message.chat.id }}",
+        "text": "=❗USIS错误预警\n执行: {{ $json.exec_id }}\n阶段: {{ $json.stage }}\n节点: {{ $json.node }}\n状态: {{ $json.status }}\n描述: {{ $json.message }}\n载荷: {{ $json.payload }}\n时间: {{ $json.ts }}",
+        "additionalFields": {}
+      },
+      "id": "8f4b0267-5565-4201-abca-ffc09d869083",
+      "name": "A_TelegramText_Admin",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -20464,
+        5488
+      ],
+      "webhookId": "47481738-14cb-435d-a854-0e2681a00459",
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "42ca7f88-1813-488e-824f-ad54cc4099df",
+      "name": "Err_Collect",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -24944,
+        4384
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "41d998ea-2e25-4c59-af97-ba2e848cdfe0",
+      "name": "Err_Filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -24944,
+        4608
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.raw_text && $json.raw_text.toLowerCase().includes('#debug') }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f6bbb1c8-6d34-48c8-995e-46847a028bac",
+      "name": "Check Debug",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -23152,
+        6544
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const mode = $json.mode || \"N/A\";\nconst syms = ($json.symbols || []).join(\",\") || \"N/A\";\nconst exec = $execution.id;\nconst ts = $now;\nreturn [{ json: { debug_footer: `\\n\\n——\\n🛠 debug\\nmode:${mode}\\nsymbols:${syms}\\nexec:${exec}\\ntime:${ts}` } }];"
+      },
+      "id": "d4fa2a58-ca11-4eb2-b34a-918cc91d4279",
+      "name": "Build_Debug_Footer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -22032,
+        6496
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "dc523171-6511-4b17-8be5-5a981c9e1d02",
+      "name": "Merge Debug",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -22928,
+        6472
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ !!$json.error || (!!$json.statusCode && $json.statusCode >= 400) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b1751c24-1d42-403a-9d4c-e3ea0313ea14",
+      "name": "A_IntentRouter Has Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -24496,
+        5056
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ !!$json.error || (!!$json.statusCode && $json.statusCode >= 400) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "26638266-4dd1-42fc-9318-31fb1e97ba7c",
+      "name": "ResolveSymbols Has Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -23824,
+        7096
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ !!$json.error || (!!$json.statusCode && $json.statusCode >= 400) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "65d25262-19bf-4ca0-8b0e-2b377a46e2c3",
+      "name": "Finnhub Quote Has Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -22480,
+        7288
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ !!$json.error || (!!$json.statusCode && $json.statusCode >= 400) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b97d89e1-400b-4855-8197-a23155aa5e3e",
+      "name": "B_Brain1 Has Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -20912,
+        5392
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ !!$json.error || (!!$json.statusCode && $json.statusCode >= 400) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "421ad2b6-50b3-46ec-980d-f26c55501e9a",
+      "name": "A_OpenAI Has Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -22256,
+        6376
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ !!$json.error || (!!$json.statusCode && $json.statusCode >= 400) }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d53089d7-9794-4e44-9241-b7344aa732d5",
+      "name": "A_Perplexity Has Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -21808,
+        5704
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "fdd2766b-f34a-4319-a33f-918d99f7e9ec",
+      "name": "Wait Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -24944,
+        4832
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return new Promise(res => setTimeout(() => res([{json:$json}]), 500));"
+      },
+      "id": "2b979fbb-24db-49e6-9209-ca1677d0c1ac",
+      "name": "Wait_500ms",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -22256,
+        6088
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Finnhub Quote": {
+      "main": [
+        [
+          {
+            "node": "Trigger Finnhub Refresh",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Finnhub Quote Has Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Finnhub Refresh": {
+      "main": [
+        [
+          {
+            "node": "A_Merge",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "A_Perplexity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Symbols": {
+      "main": [
+        [
+          {
+            "node": "Finnhub Quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🟢 「接收指令」": {
+      "main": [
+        [
+          {
+            "node": "A_IntentRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧭 「任务路由」": {
+      "main": [
+        [
+          {
+            "node": "Parse Symbols",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "A_TaskRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_OpenAI": {
+      "main": [
+        [
+          {
+            "node": "A_OpenAI Has Error?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait_500ms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_Perplexity": {
+      "main": [
+        [
+          {
+            "node": "A_Merge",
+            "type": "main",
+            "index": 4
+          },
+          {
+            "node": "A_Perplexity Has Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_Merge": {
+      "main": [
+        [
+          {
+            "node": "A_SingleItem ✅",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_CaptionBuilder": {
+      "main": [
+        [
+          {
+            "node": "A_Pack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B_Brain1": {
+      "main": [
+        [
+          {
+            "node": "A_CaptionBuilder",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "B_Brain1 Has Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_SingleItem ✅": {
+      "main": [
+        [
+          {
+            "node": "B_Brain1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_Pack": {
+      "main": [
+        [
+          {
+            "node": "A_TelegramSend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Out_Brain_to_D": {
+      "main": [
+        [
+          {
+            "node": "Trigger_D_Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_IntentRouter": {
+      "main": [
+        [
+          {
+            "node": "Normalize Intent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "A_IntentRouter Has Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Intent": {
+      "main": [
+        [
+          {
+            "node": "ResolveSymbols",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_TaskRouter": {
+      "main": [
+        [
+          {
+            "node": "A_OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "A_RealtimeComment",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "A_Screenshot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "A_RealtimeComment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Symbols Exist",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "A_Perplexity",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "A_Screenshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_Fallback_Text": {
+      "main": [
+        [
+          {
+            "node": "A_TelegramText",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ResolveSymbols": {
+      "main": [
+        [
+          {
+            "node": "SymMerge",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "SymMerge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "ResolveSymbols Has Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SymMerge": {
+      "main": [
+        [
+          {
+            "node": "Normalize Symbols",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Symbols Exist": {
+      "main": [
+        [
+          {
+            "node": "B_Brain1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "A_Fallback_Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err_Log": {
+      "main": [
+        [
+          {
+            "node": "A_TelegramText_Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Symbols": {
+      "main": [
+        [
+          {
+            "node": "Check Debug",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Debug": {
+      "main": [
+        [
+          {
+            "node": "Build_Debug_Footer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Debug",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build_Debug_Footer": {
+      "main": [
+        [
+          {
+            "node": "Merge Debug",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Debug": {
+      "main": [
+        [
+          {
+            "node": "A_TaskRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_IntentRouter Has Error?": {
+      "main": [
+        [
+          {
+            "node": "Err_Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ResolveSymbols Has Error?": {
+      "main": [
+        [
+          {
+            "node": "Err_Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SymMerge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Finnhub Quote Has Error?": {
+      "main": [
+        [
+          {
+            "node": "Err_Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Trigger Finnhub Refresh",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "B_Brain1 Has Error?": {
+      "main": [
+        [
+          {
+            "node": "Err_Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "A_CaptionBuilder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_OpenAI Has Error?": {
+      "main": [
+        [
+          {
+            "node": "Err_Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "A_Merge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build_Debug_Footer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_Perplexity Has Error?": {
+      "main": [
+        [
+          {
+            "node": "Err_Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "A_Merge",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "A_RealtimeComment": {
+      "main": [
+        [
+          {
+            "node": "A_Screenshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "A_Screenshot": {
+      "main": [
+        [
+          {
+            "node": "A_Merge",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Wait_500ms": {
+      "main": [
+        [
+          {
+            "node": "A_RealtimeComment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "0a5abe5c-a0c0-4f41-9e74-f4d1ed318b7c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e55566bfe54f88b404d502841707ce3b88351798d04a45b88b4e50f6ca391fb1"
+  },
+  "id": "MOxks6pFEW47qN9C",
+  "tags": []
+}
