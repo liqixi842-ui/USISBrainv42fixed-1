@@ -4,6 +4,12 @@ const fetch = require("node-fetch");
 const app = express();
 app.use(express.json());
 
+// 添加请求日志中间件（用于调试Cloud Run健康检查）
+app.use((req, res, next) => {
+  console.log(`📥 ${req.method} ${req.path} from ${req.ip || req.connection.remoteAddress}`);
+  next();
+});
+
 const CLAUDE_KEY   = process.env.CLAUDE_API_KEY;
 const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
 const MJAPI_KEY    = process.env.MJAPI_KEY;
@@ -1861,4 +1867,8 @@ app.get("/brain/memory", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => console.log(`🚀 USIS Brain v3 online on port ${PORT}`));
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 USIS Brain v3 online on port ${PORT}`);
+  console.log(`📍 Listening on 0.0.0.0:${PORT}`);
+  console.log(`🔗 Health check available at http://0.0.0.0:${PORT}/health`);
+});
