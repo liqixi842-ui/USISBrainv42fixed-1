@@ -245,150 +245,103 @@ app.get("/heatmap", async (req, res) => {
   }
 });
 
-// 生成热力图HTML
+// 生成热力图HTML（使用TradingView嵌入Widget）
 function generateHeatmapHTML(stocks, marketName) {
-  const marketTitles = {
-    usa: 'US Stock Market Heatmap',
-    spain: 'Mapa de Calor del Mercado Español',
-    germany: 'Deutsche Börsen-Heatmap',
-    japan: '日本株式市場ヒートマップ',
-    uk: 'UK Stock Market Heatmap',
-    hongkong: '香港股市熱力圖',
-    china: '中国A股热力图',
-    france: 'Carte Thermique du Marché Français',
-    europe: 'European Stock Market Heatmap',
-    world: 'Global Stock Market Heatmap'
+  // TradingView dataSource映射
+  const tradingViewMarkets = {
+    usa: 'SPX500',
+    spain: 'IBEX35',
+    germany: 'DAX',
+    japan: 'NI225',
+    uk: 'FTSE100',
+    hongkong: 'HSI',
+    china: 'SSE50',
+    france: 'CAC40',
+    europe: 'STOXX50E',
+    world: 'WORLD'
   };
 
-  const title = marketTitles[marketName] || 'Stock Market Heatmap';
+  const marketTitles = {
+    usa: 'US Stock Market',
+    spain: 'Spanish Stock Market',
+    germany: 'German Stock Market',
+    japan: 'Japanese Stock Market',
+    uk: 'UK Stock Market',
+    hongkong: 'Hong Kong Stock Market',
+    china: 'China A-Share Market',
+    france: 'French Stock Market',
+    europe: 'European Stock Market',
+    world: 'Global Stock Market'
+  };
 
-  const stocksHTML = stocks.map(stock => {
-    const changeNum = parseFloat(stock.change);
-    const color = changeNum >= 0 ? 
-      `hsl(120, ${Math.min(100, Math.abs(changeNum) * 20)}%, ${50 - Math.min(40, Math.abs(changeNum) * 3)}%)` :  // 绿色
-      `hsl(0, ${Math.min(100, Math.abs(changeNum) * 20)}%, ${50 - Math.min(40, Math.abs(changeNum) * 3)}%)`;      // 红色
-    
-    const size = Math.max(100, Math.min(300, stock.value * 30));  // 根据涨跌幅调整大小
-    
-    return `
-      <div class="stock-card" style="background: ${color}; width: ${size}px; height: ${size}px;">
-        <div class="symbol">${stock.symbol}</div>
-        <div class="change">${changeNum >= 0 ? '+' : ''}${stock.change}%</div>
-        <div class="price">$${stock.price.toFixed(2)}</div>
-      </div>
-    `;
-  }).join('');
+  const dataSource = tradingViewMarkets[marketName] || 'SPX500';
+  const title = marketTitles[marketName] || 'Stock Market';
 
+  // 直接返回嵌入TradingView Widget的HTML
   return `
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
+  <title>${title} Heatmap</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #0a0e27;
+      background: #131722;
       color: white;
-      padding: 20px;
+      overflow: hidden;
+    }
+    .tradingview-widget-container {
+      width: 100%;
+      height: 100vh;
+    }
+    .tradingview-widget-container__widget {
+      width: 100%;
+      height: calc(100vh - 60px);
     }
     .header {
+      background: #1E222D;
+      padding: 15px 20px;
       text-align: center;
-      margin-bottom: 30px;
+      border-bottom: 1px solid #2A2E39;
     }
     .header h1 {
-      font-size: 32px;
-      font-weight: 700;
-      margin-bottom: 10px;
-    }
-    .header .timestamp {
-      color: #888;
-      font-size: 14px;
-    }
-    .heatmap-container {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      justify-content: center;
-      padding: 20px;
-    }
-    .stock-card {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      border-radius: 8px;
-      transition: transform 0.2s;
-      cursor: pointer;
-      padding: 10px;
-    }
-    .stock-card:hover {
-      transform: scale(1.05);
-      box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-    }
-    .symbol {
-      font-size: 18px;
-      font-weight: bold;
-      margin-bottom: 5px;
-    }
-    .change {
       font-size: 24px;
-      font-weight: bold;
-      margin-bottom: 5px;
-    }
-    .price {
-      font-size: 14px;
-      opacity: 0.8;
-    }
-    .legend {
-      display: flex;
-      justify-content: center;
-      gap: 40px;
-      margin-top: 30px;
-      padding: 20px;
-    }
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .legend-color {
-      width: 30px;
-      height: 30px;
-      border-radius: 4px;
+      font-weight: 600;
+      color: #D1D4DC;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>${title}</h1>
-    <div class="timestamp">${new Date().toLocaleString('zh-CN')}</div>
+    <h1>${title} Heatmap</h1>
   </div>
   
-  <div class="heatmap-container">
-    ${stocksHTML}
+  <!-- TradingView Widget BEGIN -->
+  <div class="tradingview-widget-container">
+    <div class="tradingview-widget-container__widget"></div>
+    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js" async>
+    {
+      "exchanges": [],
+      "dataSource": "${dataSource}",
+      "grouping": "sector",
+      "blockSize": "market_cap_basic",
+      "blockColor": "change",
+      "locale": "en",
+      "symbolUrl": "",
+      "colorTheme": "dark",
+      "hasTopBar": true,
+      "isDataSetEnabled": true,
+      "isZoomEnabled": true,
+      "hasSymbolTooltip": true,
+      "width": "100%",
+      "height": "100%"
+    }
+    </script>
   </div>
-
-  <div class="legend">
-    <div class="legend-item">
-      <div class="legend-color" style="background: hsl(120, 80%, 30%);"></div>
-      <span>大涨</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-color" style="background: hsl(120, 50%, 40%);"></div>
-      <span>小涨</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-color" style="background: hsl(0, 50%, 40%);"></div>
-      <span>小跌</span>
-    </div>
-    <div class="legend-item">
-      <div class="legend-color" style="background: hsl(0, 80%, 30%);"></div>
-      <span>大跌</span>
-    </div>
-  </div>
+  <!-- TradingView Widget END -->
 </body>
 </html>
   `;
