@@ -1166,7 +1166,10 @@ function understandIntent(text = "", mode = null) {
   let detectedMode = null;
   let confidence = 0.8;
   
-  if (/(盘前|premarket|\bpre\b|开盘前|早盘)/.test(t)) {
+  // 🎯 Meta模式：关于AI本身的问题
+  if (/(你是谁|你叫什么|你的功能|你能做什么|你会.*吗|可以.*学习|能.*学习|你的能力|what can you do|who are you)/.test(t)) {
+    detectedMode = 'meta';
+  } else if (/(盘前|premarket|\bpre\b|开盘前|早盘)/.test(t)) {
     detectedMode = 'premarket';
   } else if (/(盘中|intraday|live|盘面|实时|当前)/.test(t)) {
     detectedMode = 'intraday';
@@ -1569,14 +1572,24 @@ function buildClaudePrompt(context, scene) {
 股票：${context.symbols}
 用户请求：${context.request}
 
-请从技术分析角度提供${scene.targetLength/3}字左右的分析，包括：
-- 技术指标判断
-- 关键价位分析
-- 短期趋势预测
+🎯 关键要求：
+1. **必须使用实时数据**：上面提供的实时价格、涨跌幅、新闻等数据，必须在分析中直接引用
+   - 示例："NVDA当前价格$120.50，较昨日收盘上涨+2.34%"
+   - 示例："从5日、10日、20日均线来看..."（如果数据中有）
+
+2. **技术面分析要点**（${scene.targetLength/3}字左右）：
+   - 当前价格位置分析（支撑位、压力位）
+   - 短期趋势判断（如MACD、RSI如果有数据）
+   - 成交量变化（如果有数据）
+
+3. **输出格式**：
+   - 第一句必须包含：股票代码 + 当前价格 + 涨跌幅
+   - 然后用2-3个要点说明技术面判断
+   - 最后给出短期趋势预测
 
 要求：
+- 用具体数字说话，不要空洞描述
 - 专业但简洁
-- 突出技术要点
 - 不要免责声明`;
 }
 
@@ -1639,9 +1652,15 @@ function buildGPT4Prompt(context, scene, chatType) {
 
 ${styleGuide}
 
+🎯 数据使用要求：
+- **必须引用实时价格**：开头第一句必须包含当前价格和涨跌幅
+- **必须结合市场情绪**：如果有情绪数据（看多/看空百分比），必须提及
+- **必须参考新闻**：如果有最新新闻，需简要概括关键信息
+
 请提供${scene.targetLength/5}字左右的综合分析，包括：
+- 开头：当前价格 + 涨跌幅（必须有）
 - 整体判断（BUY/HOLD/SELL）
-- 核心理由（2-3点）
+- 核心理由（2-3点，结合技术面+情绪面+新闻面）
 - 具体建议
 
 要求：
@@ -2062,6 +2081,77 @@ app.post("/brain/orchestrate", async (req, res) => {
     // 4. Planning
     const tasks = planTasks(intent, scene, symbols);
     console.log(`📝 任务规划: ${tasks.join(' → ')}`);
+    
+    // 🎯 特殊处理1：Meta问题（关于AI本身）
+    if (intent.mode === 'meta') {
+      console.log(`🤖 检测到Meta问题（关于AI能力），直接回复`);
+      
+      return res.json({
+        ok: true,
+        final_analysis: `你好！我是USIS Brain v3，一个智能市场分析助手。
+
+🧠 **我的核心能力：**
+1. **实时市场分析** - 盘前、盘中、盘后全天候分析
+2. **个股诊断** - 技术面 + 基本面 + 情绪面综合解读
+3. **6模型协同** - Claude、GPT-4、Gemini等6个AI专家团队分析
+4. **可视化热力图** - 支持40+全球指数（美股、欧洲、亚洲等）
+5. **新闻追踪** - 实时抓取市场动态和公司新闻
+
+💡 **使用示例：**
+- "盘前NVDA" - 查看NVDA盘前分析
+- "特斯拉热力图" - 查看特斯拉所在板块热力图
+- "西班牙IBEX35热力图" - 查看西班牙市场
+- "新闻资讯" - 获取最新市场动态
+
+关于学习：我会根据市场实时数据提供分析，但不会记住之前的对话。每次都是基于最新数据给出建议！
+
+有什么市场问题可以随时问我！📈`,
+        actions: [],
+        intent: { mode: 'meta', lang: intent.lang, confidence: 1.0 },
+        scene: { name: 'Meta', depth: 'simple', targetLength: 200 },
+        symbols: [],
+        market_data: null,
+        ai_results: null,
+        synthesis: { success: true, synthesized: false },
+        low_confidence: false,
+        chat_type,
+        user_id,
+        response_time_ms: Date.now() - startTime,
+        debug: { note: 'Meta question - direct response' }
+      });
+    }
+    
+    // 🎯 特殊处理2：纯新闻请求（无需AI分析）
+    if (intent.mode === 'news' && symbols.length === 0 && !/(分析|解读|点评)/.test(text)) {
+      console.log(`📰 检测到纯新闻请求，直接返回新闻列表`);
+      
+      const newsPrompt = intent.actions && intent.actions.length > 0
+        ? `用户需要：${intent.actions.map(a => a.reason).join('、')}`
+        : '市场最新动态';
+      
+      return res.json({
+        ok: true,
+        final_analysis: `📰 新闻资讯\n\n${newsPrompt}\n\n💡 提示：请说"分析XX新闻"或提供股票代码，我可以为您深度解读市场动态。`,
+        actions: [
+          {
+            type: 'fetch_news',
+            tool: 'RSS_News',
+            reason: '用户需要新闻资讯'
+          }
+        ],
+        intent: { mode: 'news', lang: intent.lang, confidence: intent.confidence },
+        scene: { name: scene.name, depth: 'simple', targetLength: 100 },
+        symbols: [],
+        market_data: null,
+        ai_results: null,
+        synthesis: { success: true, synthesized: false },
+        low_confidence: false,
+        chat_type,
+        user_id,
+        response_time_ms: Date.now() - startTime,
+        debug: { note: 'Pure news request - skipped AI analysis' }
+      });
+    }
     
     // 4.5. 数据采集（如果有股票代码）
     let marketData = null;
