@@ -2246,6 +2246,43 @@ app.post("/brain/orchestrate", async (req, res) => {
       });
     }
     
+    // 🎯 特殊处理3：闲聊/非市场请求（避免浪费AI调用）
+    const marketKeywords = ['分析', '走势', '图', 'K线', '趋势', '价格', '股票', '行情', '盘前', '盘中', '盘后', '热力图', '涨', '跌', '买', '卖', 'chart', 'stock', 'market'];
+    const hasMarketKeywords = marketKeywords.some(k => text.toLowerCase().includes(k));
+    const isMarketMode = ['premarket', 'intraday', 'postmarket', 'diagnose', 'news', 'heatmap'].includes(intent.mode);
+    
+    if (!hasMarketKeywords && !isMarketMode && symbols.length === 0) {
+      console.log(`💬 检测到闲聊/非市场请求，直接友好回复`);
+      
+      const casualResponses = [
+        '当然可以 😊 我可以和你正常聊天。不过我的专长是市场分析，你想聊聊今天的市场动态吗？',
+        '你好！我是市场分析助手。虽然可以闲聊，但我更擅长分析股票、市场热点。有什么想了解的吗？',
+        '嗨！我可以帮你分析市场、个股走势、生成热力图等。有具体的股票想了解吗？'
+      ];
+      
+      const chatText = casualResponses[Math.floor(Math.random() * casualResponses.length)];
+      
+      return res.json({
+        status: "ok",
+        ok: true,
+        final_analysis: chatText,
+        final_text: chatText,
+        needs_heatmap: false,
+        actions: [],
+        intent: { mode: 'casual', lang: intent.lang, confidence: 0.9 },
+        scene: { name: 'Casual', depth: 'simple', targetLength: 50 },
+        symbols: [],
+        market_data: null,
+        ai_results: null,
+        synthesis: { success: true, synthesized: false },
+        low_confidence: false,
+        chat_type,
+        user_id,
+        response_time_ms: Date.now() - startTime,
+        debug: { note: 'Casual chat - skipped AI analysis to save cost' }
+      });
+    }
+    
     // 4.5. 数据采集（如果有股票代码）
     let marketData = null;
     if (symbols.length > 0) {
