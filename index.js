@@ -186,13 +186,14 @@ app.get("/heatmap", async (req, res) => {
     // 定义各市场的主要股票（使用美股ticker和ADR）
     const marketStocks = {
       usa: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'JPM', 'V', 'JNJ', 'WMT', 'PG', 'MA', 'HD', 'DIS', 'BAC', 'NFLX', 'ADBE', 'CRM'],
-      spain: ['TEF', 'SAN', 'BBVA', 'IBE', 'ITX', 'REP', 'ACS', 'FER', 'ENG', 'SAB'],  // ADR和西班牙主要公司
+      spain: ['TEF', 'SAN', 'BBVA', 'IBE', 'ITX', 'REP', 'ACS', 'FER', 'ENG', 'SAB'],
       germany: ['SAP', 'SIEGY', 'BASFY', 'BAYRY', 'DDAIF', 'VOW', 'BMWYY', 'ALIZY', 'DHRTY', 'MUV2'],
       japan: ['TM', 'SONY', 'MSBHF', 'HMC', 'SMFG', 'MTU', 'FUJIY', 'NTDOY', 'HTHIY', 'PCRFY'],
       uk: ['BP', 'HSBC', 'AZN', 'SHEL', 'GSK', 'RIO', 'ULVR', 'DGE', 'RELX', 'NG'],
       hongkong: ['BABA', 'TCEHY', '0700.HK', '0005.HK', '0001.HK', '0388.HK', '0939.HK', '2318.HK', '0883.HK', '0016.HK'],
       china: ['BABA', 'JD', 'BIDU', 'PDD', 'NIO', 'XPEV', 'LI', 'TME', 'BILI', 'IQ'],
       france: ['OR', 'BNP', 'SAN', 'AIR', 'AXA', 'DANOY', 'LVMUY', 'PUGOY', 'SAFRY', 'VIVHY'],
+      europe: ['ASML', 'NVO', 'LVMUY', 'SAP', 'NESN', 'OR', 'SIEGY', 'RHHBY', 'AZN', 'NOVN', 'BP', 'SHEL', 'HSBC', 'BNP', 'SAN', 'BAYRY', 'BASFY', 'VOW', 'ITX', 'REP'],
       world: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'BABA', 'TSM', 'V', 'JNJ', 'WMT', 'JPM', 'MA', 'PG', 'LVMUY', 'NVO', 'TM', 'ASML', 'NSRGY', 'SAP']
     };
 
@@ -249,6 +250,7 @@ function generateHeatmapHTML(stocks, marketName) {
     hongkong: '香港股市热力图',
     china: '中国A股热力图',
     france: '法国股市热力图',
+    europe: '欧洲股市热力图',
     world: '全球股市热力图'
   };
 
