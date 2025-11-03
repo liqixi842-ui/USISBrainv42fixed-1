@@ -260,6 +260,27 @@ GET /social/twitter/search?query=bitcoin&max_results=20
 
 # Recent Changes
 
+**November 3, 2025**:
+- 🚀 **Major upgrade: Intelligent AI Orchestrator system** (`POST /brain/orchestrate`)
+- Multi-AI coordination with differentiated roles:
+  - Claude: Technical analysis expert (indicators, price levels, trends)
+  - DeepSeek: Chinese market insights (sentiment, local news)
+  - GPT-4: Comprehensive strategy analyst (synthesis, recommendations)
+- Intelligent synthesis engine: extracts key points, identifies consensus/divergence, generates coherent unified reports (not simple concatenation)
+- Dual output styles automatically switch based on chat.type:
+  - Private chats: Warm teacher style with analogies and conversational tone
+  - Group chats: Professional team commentary with structured format
+- Scene-aware content depth:
+  - Premarket: Brief (~300 words) - quick scanning
+  - Hot news/Intraday: Medium (~500 words) - balanced analysis
+  - Postmarket/Review: Deep (~800 words) - comprehensive insights
+- DST-aware Eastern Time detection using `Intl.DateTimeFormat` for accurate market hours classification
+- Memory layer with user preference application:
+  - `preferred_depth` adjusts content length (brief/medium/deep)
+  - `preferred_tone` affects writing style (casual/professional)
+- Low-confidence intent detection with `low_confidence` flag in response
+- Requires `OPENAI_API_KEY` environment variable (in addition to existing CLAUDE_API_KEY and DEEPSEEK_API_KEY)
+
 **November 2, 2025**:
 - Added `GET /social/twitter/search` endpoint for Twitter API integration
 - Implements engagement-based ranking (score = retweet_count + like_count)
