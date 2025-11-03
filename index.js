@@ -1166,8 +1166,11 @@ function understandIntent(text = "", mode = null) {
   let detectedMode = null;
   let confidence = 0.8;
   
-  // 🎯 Meta模式：关于AI本身的问题
-  if (/(你是谁|你叫什么|你的功能|你能做什么|你会.*吗|可以.*学习|能.*学习|你的能力|what can you do|who are you)/.test(t)) {
+  // 🎯 Meta模式：关于AI本身的问题（严格匹配，避免误判市场分析）
+  const hasMetaKeyword = /(你是谁|你叫什么名字|你的功能|介绍.*自己|what can you do|who are you|your capability|你的能力是|你都能做)/.test(t);
+  const hasStockContext = /([A-Z]{1,5}\b|股票|盘前|盘中|盘后|分析|诊股|热力图|新闻|行情)/.test(text);
+  
+  if (hasMetaKeyword && !hasStockContext) {
     detectedMode = 'meta';
   } else if (/(盘前|premarket|\bpre\b|开盘前|早盘)/.test(t)) {
     detectedMode = 'premarket';
