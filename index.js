@@ -641,6 +641,8 @@ function planTasks(intent, scene, symbols = []) {
 // ========================================
 
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
+const GEMINI_KEY = process.env.GEMINI_API_KEY;
+const PERPLEXITY_KEY = process.env.PERPLEXITY_API_KEY;
 
 // AI Agent Roles - 每个AI的角色定位
 const AI_ROLES = {
@@ -658,6 +660,16 @@ const AI_ROLES = {
     name: 'GPT-4',
     specialty: '综合策略分析师',
     focus: '宏观趋势、风险评估、投资建议'
+  },
+  gemini: {
+    name: 'Gemini',
+    specialty: '实时数据分析',
+    focus: '最新资讯、实时行情、突发事件'
+  },
+  perplexity: {
+    name: 'Perplexity',
+    specialty: '深度研究专家',
+    focus: '行业研究、公司基本面、长期趋势'
   }
 };
 
@@ -736,7 +748,7 @@ async function callGPT4(prompt, maxTokens = 400) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",  // 使用 gpt-4o-mini 更快更便宜
+        model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
         max_tokens: maxTokens,
         temperature: 0.3
@@ -753,9 +765,71 @@ async function callGPT4(prompt, maxTokens = 400) {
   }
 }
 
+// Call Gemini API
+async function callGemini(prompt, maxTokens = 300) {
+  try {
+    if (!GEMINI_KEY) {
+      return { success: false, error: 'GEMINI_KEY missing' };
+    }
+    
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          maxOutputTokens: maxTokens,
+          temperature: 0.3
+        }
+      })
+    });
+    
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    return { success: true, text };
+  } catch (err) {
+    console.error('❌ Gemini error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// Call Perplexity API
+async function callPerplexity(prompt, maxTokens = 300) {
+  try {
+    if (!PERPLEXITY_KEY) {
+      return { success: false, error: 'PERPLEXITY_KEY missing' };
+    }
+    
+    const response = await fetch("https://api.perplexity.ai/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${PERPLEXITY_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-sonar-small-128k-online",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: maxTokens,
+        temperature: 0.3
+      })
+    });
+    
+    const data = await response.json();
+    const text = data?.choices?.[0]?.message?.content || '';
+    
+    return { success: true, text };
+  } catch (err) {
+    console.error('❌ Perplexity error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 // Multi-AI Analysis - 多AI并行分析
 async function multiAIAnalysis({ mode, scene, symbols, text, chatType }) {
-  console.log(`🤖 开始多AI分析...`);
+  console.log(`🤖 开始5个AI并行分析...`);
   
   const context = {
     mode,
@@ -768,24 +842,32 @@ async function multiAIAnalysis({ mode, scene, symbols, text, chatType }) {
   const prompts = {
     claude: buildClaudePrompt(context, scene),
     deepseek: buildDeepSeekPrompt(context, scene),
-    gpt4: buildGPT4Prompt(context, scene, chatType)
+    gpt4: buildGPT4Prompt(context, scene, chatType),
+    gemini: buildGeminiPrompt(context, scene),
+    perplexity: buildPerplexityPrompt(context, scene)
   };
   
-  // 并行调用三个AI
-  const [claudeResult, deepseekResult, gpt4Result] = await Promise.all([
-    callClaude(prompts.claude, scene.targetLength * 0.4),
-    callDeepSeek(prompts.deepseek, scene.targetLength * 0.4),
-    callGPT4(prompts.gpt4, scene.targetLength * 0.5)
+  // 并行调用5个AI
+  const [claudeResult, deepseekResult, gpt4Result, geminiResult, perplexityResult] = await Promise.all([
+    callClaude(prompts.claude, scene.targetLength * 0.3),
+    callDeepSeek(prompts.deepseek, scene.targetLength * 0.3),
+    callGPT4(prompts.gpt4, scene.targetLength * 0.4),
+    callGemini(prompts.gemini, scene.targetLength * 0.3),
+    callPerplexity(prompts.perplexity, scene.targetLength * 0.3)
   ]);
   
   console.log(`  ✅ Claude: ${claudeResult.success ? '成功' : '失败'}`);
   console.log(`  ✅ DeepSeek: ${deepseekResult.success ? '成功' : '失败'}`);
   console.log(`  ✅ GPT-4: ${gpt4Result.success ? '成功' : '失败'}`);
+  console.log(`  ✅ Gemini: ${geminiResult.success ? '成功' : '失败'}`);
+  console.log(`  ✅ Perplexity: ${perplexityResult.success ? '成功' : '失败'}`);
   
   return {
     claude: { ...AI_ROLES.claude, ...claudeResult },
     deepseek: { ...AI_ROLES.deepseek, ...deepseekResult },
-    gpt4: { ...AI_ROLES.gpt4, ...gpt4Result }
+    gpt4: { ...AI_ROLES.gpt4, ...gpt4Result },
+    gemini: { ...AI_ROLES.gemini, ...geminiResult },
+    perplexity: { ...AI_ROLES.perplexity, ...perplexityResult }
   };
 }
 
@@ -829,17 +911,12 @@ function buildDeepSeekPrompt(context, scene) {
 
 // Build GPT-4 Prompt - 综合策略分析师
 function buildGPT4Prompt(context, scene, chatType) {
-  // 基础风格
   let styleGuide = chatType === 'private' 
     ? `风格：像贴心老师一样，用"你看"、"我注意到"等口语化表达，用生活化类比解释专业概念` 
     : `风格：专业团队口吻，使用"老师团队认为"、"我们认为"，结构化输出`;
   
-  // 应用用户偏好语气
-  if (scene.userTone === 'casual') {
-    styleGuide += `\n额外要求：使用更加轻松随意的语气`;
-  } else if (scene.userTone === 'professional') {
-    styleGuide += `\n额外要求：保持专业严谨的语气`;
-  }
+  if (scene.userTone === 'casual') styleGuide += `\n额外要求：使用更加轻松随意的语气`;
+  else if (scene.userTone === 'professional') styleGuide += `\n额外要求：保持专业严谨的语气`;
   
   return `你是一位综合策略分析师，负责整合技术面和情绪面，给出最终建议。
 
@@ -849,7 +926,7 @@ function buildGPT4Prompt(context, scene, chatType) {
 
 ${styleGuide}
 
-请提供${scene.targetLength/2}字左右的综合分析，包括：
+请提供${scene.targetLength/5}字左右的综合分析，包括：
 - 整体判断（BUY/HOLD/SELL）
 - 核心理由（2-3点）
 - 具体建议
@@ -858,6 +935,44 @@ ${styleGuide}
 - ${chatType === 'private' ? '口语化、有温度' : '专业、结构化'}
 - 给出明确观点
 - 不要免责声明`;
+}
+
+// Build Gemini Prompt - 实时数据分析
+function buildGeminiPrompt(context, scene) {
+  return `你是一位实时数据分析专家，专注于最新资讯和实时行情。
+
+场景：${context.scene}
+股票：${context.symbols}
+用户请求：${context.request}
+
+请从实时数据角度提供${scene.targetLength/5}字左右的分析，包括：
+- 最新市场动态
+- 突发新闻影响
+- 当前价格走势
+
+要求：
+- 关注实时性
+- 数据准确
+- 简洁有力`;
+}
+
+// Build Perplexity Prompt - 深度研究
+function buildPerplexityPrompt(context, scene) {
+  return `你是一位深度研究专家，专注于行业研究和公司基本面。
+
+场景：${context.scene}
+股票：${context.symbols}
+用户请求：${context.request}
+
+请从基本面角度提供${scene.targetLength/5}字左右的分析，包括：
+- 公司基本面分析
+- 行业趋势判断
+- 长期投资价值
+
+要求：
+- 深度挖掘
+- 逻辑严谨
+- 不要废话`;
 }
 
 // ========================================
@@ -873,6 +988,8 @@ async function synthesizeAIOutputs(aiResults, { mode, scene, chatType, symbols, 
   if (aiResults.claude.success) validOutputs.push({ name: 'Claude (技术分析)', text: aiResults.claude.text });
   if (aiResults.deepseek.success) validOutputs.push({ name: 'DeepSeek (市场洞察)', text: aiResults.deepseek.text });
   if (aiResults.gpt4.success) validOutputs.push({ name: 'GPT-4 (综合策略)', text: aiResults.gpt4.text });
+  if (aiResults.gemini.success) validOutputs.push({ name: 'Gemini (实时数据)', text: aiResults.gemini.text });
+  if (aiResults.perplexity.success) validOutputs.push({ name: 'Perplexity (深度研究)', text: aiResults.perplexity.text });
   
   if (validOutputs.length === 0) {
     return {
@@ -1086,7 +1203,9 @@ app.post("/brain/orchestrate", async (req, res) => {
         ai_results: {
           claude: aiResults.claude.success,
           deepseek: aiResults.deepseek.success,
-          gpt4: aiResults.gpt4.success
+          gpt4: aiResults.gpt4.success,
+          gemini: aiResults.gemini.success,
+          perplexity: aiResults.perplexity.success
         },
         user_prefs: userPrefs,
         response_time_ms: responseTime
