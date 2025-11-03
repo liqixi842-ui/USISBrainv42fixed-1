@@ -542,11 +542,45 @@ function detectActions(text = "") {
   
   // 视觉需求（截图/热力图）
   if (/热力图|heatmap|截图|screenshot|图表|chart|可视化|visual|带图/.test(t)) {
+    // 检测地区/国家，返回对应的数据源
+    let dataSource = 'SPX500'; // 默认美股
+    let marketName = '美股标普500';
+    
+    if (/西班牙|spain|ibex|马德里/.test(t)) {
+      dataSource = 'IBEX';
+      marketName = '西班牙IBEX35';
+    } else if (/德国|germany|dax|法兰克福/.test(t)) {
+      dataSource = 'DAX';
+      marketName = '德国DAX';
+    } else if (/英国|uk|britain|ftse|伦敦/.test(t)) {
+      dataSource = 'FTSE100';
+      marketName = '英国富时100';
+    } else if (/日本|japan|nikkei|东京/.test(t)) {
+      dataSource = 'NIKKEI225';
+      marketName = '日本日经225';
+    } else if (/法国|france|cac/.test(t)) {
+      dataSource = 'CAC40';
+      marketName = '法国CAC40';
+    } else if (/香港|hk|恒生|hsi/.test(t)) {
+      dataSource = 'HSI';
+      marketName = '香港恒生';
+    } else if (/中国|a股|上证|深证|沪深/.test(t)) {
+      dataSource = 'SSE';
+      marketName = '中国A股';
+    } else if (/纳斯达克|nasdaq|科技股/.test(t)) {
+      dataSource = 'NAS100';
+      marketName = '纳斯达克100';
+    }
+    
+    // 动态生成TradingView热力图URL
+    const heatmapUrl = `https://www.tradingview.com/heatmap/stock/#%7B%22dataSource%22%3A%22${dataSource}%22%2C%22blockColor%22%3A%22change%22%2C%22blockSize%22%3A%22market_cap_basic%22%2C%22grouping%22%3A%22sector%22%7D`;
+    
     actions.push({
       type: 'fetch_heatmap',
       tool: 'A_Screenshot',
-      url: 'https://www.tradingview.com/heatmap/stock/#%7B%22dataSource%22%3A%22SPX500%22%2C%22blockColor%22%3A%22change%22%2C%22blockSize%22%3A%22market_cap_basic%22%2C%22grouping%22%3A%22sector%22%7D',
-      reason: '用户要求热力图'
+      url: heatmapUrl,
+      market: marketName,
+      reason: `用户要求${marketName}热力图`
     });
   }
   
