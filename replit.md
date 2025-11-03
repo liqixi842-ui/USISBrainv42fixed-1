@@ -287,7 +287,24 @@ GET /social/twitter/search?query=bitcoin&max_results=20
 
 # Recent Changes
 
-**November 3, 2025**:
+**November 3, 2025 (v3.1 - 数据帝国修复版)**:
+- 🔧 **Critical Bug Fix: Symbol Auto-Extraction** (index.js L523-539)
+  - Added `extractSymbols()` function to automatically extract ticker symbols from user text
+  - Case-insensitive matching: "tsla" → ["TSLA"]
+  - Extended blacklist to filter false positives (GDP, CPI, PM, AM, etc.)
+  - Fixes market_data=null issue when symbols not explicitly provided
+  - Now "盘前TSLA" automatically triggers real-time data collection
+- 🔧 **News Mode Fix (Partial)** (index.js L976-1024)
+  - Modified `buildGPT4Prompt()` to detect mode === 'news' 
+  - GPT-4 now returns structured news list instead of investment analysis
+  - Other 5 AI models still need adaptation (future work)
+  - Addresses user complaints about getting analysis when asking for news
+- 📝 Created comprehensive documentation:
+  - TESTING_GUIDE.md - Test procedures and expected results
+  - DEPLOYMENT_STATUS.md - Production deployment checklist
+  - FIXES_SUMMARY.md - Detailed bug analysis and remediation
+
+**November 3, 2025 (v3.0 Initial)**:
 - 🚀 **Major upgrade: Intelligent AI Orchestrator system** (`POST /brain/orchestrate`)
 - Multi-AI coordination with differentiated roles:
   - Claude: Technical analysis expert (indicators, price levels, trends)
