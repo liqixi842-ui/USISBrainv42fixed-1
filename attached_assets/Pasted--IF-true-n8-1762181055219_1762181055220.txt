@@ -1,0 +1,88 @@
+① 重复消息（纯文发三遍、图文发两遍）
+
+可能原因：同时命中两个发送分支 / 同一个机器人被多个工作流占用 / 既有手动触发又有定时触发 / IF 判断用字符串 "true" 导致两边都走。
+给 n8n 的 AI：
+
+打开当前工作流，确认 只有这一条工作流是 Active，同一个 Telegram 凭证在别的工作流全部设为 Inactive。
+
+在 IF_Send_Photo 节点把条件改为严格布尔判断：leftValue = {{$json.send_as_photo}}，运算符 = boolean.equals，rightValue = true。False 分支只连接 Send_Text_Only，True 分支只连接 Send_With_Photo，不要让这两个分支互相再连回主干。
+
+在 Pack_Final_Message（Code） 的输出强制只产生一条消息：仅返回 $input.first() 的组合结果，且不要把 final_text 再次广播给上游的任何其他发送节点。
+
+若还有 Schedule Trigger，请确认它没有并联到发送节点（只并联到调用 Brain 的起点）。
+
+保存并测试：发送“西班牙热力图”应只收到一条图文；发送“盘前TSLA”应只收到一条纯文字。
+（工作流当前主干见：Telegram_Trigger → Call_Brain_Orchestrate → Parse_Brain_Response → IF_Needs_Heatmap … → IF_Send_Photo → Send_*。确认只有这一条主链。）
+
+② “新闻资讯/热点”理解不了（还是像工作流）
+
+做法：让 Brain 返回 actions:[{type:"fetch_news_rss", query:"…"}]；n8n 侧新增“新闻器官”分支，只在有该 action 时触发。
+给 n8n 的 AI：
+
+新增一条分支：
+
+在 Parse_Brain_Response 之后添加 IF_Needs_News，条件：{{$json.actions && $json.actions.some(a => a.type === 'fetch_news_rss')}} 为 true。
+
+True 分支连到 RSS Reader（多个源可并联：Reuters、Bloomberg、AP；关键词取 {{$json.actions.find(a=>a.type==='fetch_news_rss').query || ''}}；取最近 60 分钟 Top 3）。
+
+接一个 Code（Format_News）：把 3 条新闻格式化为「🔥 标题 + 简短摘要 + 来源」。输出字段 news_block。
+
+在 Merge_Screenshot 之前，加入 Merge_News（combineByPosition，Include Unpaired=both），把 news_block 合入主流。
+
+在 Pack_Final_Message 里，caption = main.final_text + (news_block ? "\n\n🗞️ 热点速览：\n"+news_block : "")。
+
+保存并测试：发送“新闻资讯”或 Brain 输出带 fetch_news_rss 时，消息应带“🗞️ 热点速览”。
+
+③ 个股分析没有“图 + 实时价格 + 技术面/基本面”
+
+做法：新增两个器官：个股K线截图 + 实时行情/财务，只在有 symbol 时触发。
+
+给 n8n 的 AI：
+
+新增两条 action 处理：
+A. 个股图表
+
+在 Parse_Brain_Response 后加 IF_Needs_SymbolChart：条件 {{$json.symbols && $json.symbols.length>0}}。
+
+True → Screenshot_SymbolChart（HTTP Request 到 ScreenshotAPI）。URL 使用：
+={{ "https://www.tradingview.com/chart/?symbol=" + ($json.symbols[0].includes(":") ? $json.symbols[0] : "NASDAQ:" + $json.symbols[0]) + "&interval=60" }}
+并 full_page=false，确保只截图主画布。
+
+把截图结果送入 Merge_Screenshot（作为第二输入）。
+
+B. 实时行情 & 基础数据（任选你已开通的）
+
+Alpha Vantage（免费）：HTTP → https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={{$json.symbols[0]}}&apikey=YOUR_KEY；解析 price/percent。
+或 Finnhub：https://finnhub.io/api/v1/quote?symbol={{$json.symbols[0]}}&token=YOUR_TOKEN。
+
+Format_Quote（Code）：输出 quote_line 如："现价 ${{price}}（{{chg}}%），日内波动 {{high}}–{{low}}"。
+
+在 Pack_Final_Message：把 caption = quote_line + "\n" + 技术面摘要 + 原始 final_text。
+
+C. 技术面摘要生成（不写代码）
+
+让 Brain 在 final_analysis 内按固定骨架输出「技术面 3 点（趋势/动量/形态）+ 风险位（支撑/阻力）」，n8n 仅拼接不改写。
+
+测试：发送“分析 NVDA 股票”，应得到：图表 + 现价行 + 技术面三条 + 总结。
+
+④ “能学习吗？”——现在像不会学
+
+短线方案：给它可写的记忆（Google Sheets 一张“Memory”），Brain 每次带上“历史三条”再回答；n8n 侧已建过写表节点，复用即可。
+
+给 n8n 的 AI：
+
+复制现有 Log_To_Google_Sheets 节点为 Memory_Write，写入列：timestamp, user_id, user_text, brain_mode, symbols, decision, caption。
+
+在工作流开头（Call_Brain 之前）新增 Memory_Read（Google Sheets → Read Rows）：读取 user_id 最近 3 条，输出为 memories。
+
+Call_Brain_Orchestrate 的 body 增加一个字段：memories = {{$json.memories || []}}。
+
+这样 Brain 就能“带记忆”回答；落地上表现为：它会引用你前几次问题、偏好的市场/语言风格进行自我调整。
+
+在用户问“你能学习吗？”时，由 Brain 返回 final_analysis 的第一行固定答复：“我已接入你的历史偏好记忆（最近3条），会根据你的习惯调整输出，若要清空记忆请说：清空记忆。”
+
+一次性回归测试（发这两条就能验证）
+
+“西班牙热力图 新闻热点” → 只发一条图文，caption 底部有“🗞️ 热点速览”。
+
+“分析 NVDA 股票” → 带个股图，第一行出现“现价…%”，其后有 3 点技术面，再是总评。
