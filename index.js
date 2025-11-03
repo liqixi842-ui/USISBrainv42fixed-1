@@ -542,48 +542,46 @@ function detectActions(text = "") {
   
   // 视觉需求（截图/热力图）
   if (/热力图|heatmap|截图|screenshot|图表|chart|可视化|visual|带图/.test(t)) {
-    // 检测地区/国家，返回对应的FinViz URL参数
-    let mapType = 'sec'; // 默认美股按行业
+    // 检测地区/国家，返回对应的市场
+    let marketPath = 'usa';
     let marketName = '美股市场';
     
     if (/西班牙|spain|ibex|马德里/.test(t)) {
-      mapType = 'world&sec=spain';
+      marketPath = 'spain';
       marketName = '西班牙市场';
     } else if (/德国|germany|dax|法兰克福/.test(t)) {
-      mapType = 'world&sec=germany';
+      marketPath = 'germany';
       marketName = '德国市场';
     } else if (/英国|uk|britain|ftse|伦敦/.test(t)) {
-      mapType = 'world&sec=uk';
+      marketPath = 'uk';
       marketName = '英国市场';
     } else if (/日本|japan|nikkei|东京/.test(t)) {
-      mapType = 'world&sec=japan';
+      marketPath = 'japan';
       marketName = '日本市场';
     } else if (/法国|france|cac/.test(t)) {
-      mapType = 'world&sec=france';
+      marketPath = 'france';
       marketName = '法国市场';
     } else if (/香港|hk|恒生|hsi/.test(t)) {
-      mapType = 'world&sec=hongkong';
+      marketPath = 'hongkong';
       marketName = '香港市场';
     } else if (/中国|a股|上证|深证|沪深/.test(t)) {
-      mapType = 'world&sec=china';
+      marketPath = 'china';
       marketName = '中国市场';
-    } else if (/欧洲|europe|eu/.test(t)) {
-      mapType = 'world&sec=europe';
-      marketName = '欧洲市场';
     } else if (/全球|世界|world/.test(t)) {
-      mapType = 'world';
+      marketPath = 'world';
       marketName = '全球市场';
     }
     
-    // 使用FinViz热力图URL（支持服务器端路由，无需Hash参数）
-    const heatmapUrl = `https://finviz.com/map.ashx?t=${mapType}&st=w1`;
+    // 使用TradingView的市场专用路径（支持直接路由，无需Hash）
+    const heatmapUrl = `https://www.tradingview.com/heatmap/stock/${marketPath}/`;
     
     actions.push({
       type: 'fetch_heatmap',
       tool: 'A_Screenshot',
       url: heatmapUrl,
       market: marketName,
-      reason: `用户要求${marketName}热力图`
+      reason: `用户要求${marketName}热力图`,
+      wait_time: 3000  // 等待3秒让页面加载
     });
   }
   
