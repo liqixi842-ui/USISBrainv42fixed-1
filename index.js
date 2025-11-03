@@ -392,25 +392,26 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
       title = `Error: Unsupported Index`;
     }
   } else {
-    // 没有指定index，根据market参数选择全市场股票
+    // 没有指定index，根据market参数选择最佳指数
+    // 注意：某些市场的"All"系列数据可能不完整，使用主要指数更可靠
     const marketMapping = {
-      usa: 'AllUSA',
-      spain: 'AllES',
-      germany: 'AllDE',
-      uk: 'AllUK',
-      france: 'AllFR',
-      japan: 'AllJP',
-      china: 'AllCN',
-      australia: 'AllAU',
-      hongkong: 'AllCN',
-      belgium: 'AllBE',
-      brazil: 'AllBR',
-      argentina: 'AllAR',
-      canada: 'AllCA',
-      chile: 'AllCL',
-      colombia: 'AllCO',
-      europe: 'AllFR',
-      world: 'SPX500'
+      usa: 'SPX500',        // S&P 500（比AllUSA更可靠）
+      spain: 'IBEX35',      // IBEX 35（西班牙主要蓝筹指数，数据最完整）
+      germany: 'DAX',       // DAX 40（德国主要指数）
+      uk: 'UK100',          // FTSE 100（英国主要指数）
+      france: 'CAC40',      // CAC 40（法国主要指数）
+      japan: 'AllJP',       // 日本全市场
+      china: 'AllCN',       // 中国A股全市场
+      australia: 'AllAU',   // 澳大利亚全市场
+      hongkong: 'AllCN',    // 香港 → 中国A股
+      belgium: 'AllBE',     // 比利时全市场
+      brazil: 'AllBR',      // 巴西全市场
+      argentina: 'AllAR',   // 阿根廷全市场
+      canada: 'AllCA',      // 加拿大全市场
+      chile: 'AllCL',       // 智利全市场
+      colombia: 'AllCO',    // 哥伦比亚全市场
+      europe: 'CAC40',      // 欧洲默认 → 法国CAC40
+      world: 'SPX500'       // 全球 → S&P 500
     };
     
     dataSource = marketMapping[marketName];
