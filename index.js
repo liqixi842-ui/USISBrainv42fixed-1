@@ -346,8 +346,22 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
     'AUSTRALIA': 'ALLAU'
   };
 
+  // 市场到可用指数的映射（用于错误提示）
+  const marketIndices = {
+    spain: ['IBEX35', 'BMEIS', 'BMEINDGRO15', 'BMEINDGROAS', 'BMEICC', 'ALLES'],
+    germany: ['DAX', 'TECDAX', 'MDAX', 'SDAX', 'ALLDE'],
+    uk: ['UK100', 'ALLUK'],
+    france: ['CAC40', 'SBF120', 'ALLFR'],
+    usa: ['SPX500', 'DJDJI', 'NASDAQ100', 'NASDAQCOMPOSITE', 'ALLUSA'],
+    japan: ['ALLJP'],
+    china: ['ALLCN'],
+    australia: ['ALLAU'],
+    brazil: ['ALLBR'],
+    canada: ['ALLCA']
+  };
+
   // 确定最终使用的dataSource
-  let dataSource, title;
+  let dataSource, title, errorMessage = null;
   
   if (indexName) {
     const upperIndex = indexName.toUpperCase();
@@ -362,10 +376,20 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
       dataSource = indexMapping[upperIndex];
       title = allIndices[dataSource];
     }
-    // 3. 未知指数，使用默认
+    // 3. 未知指数，返回错误提示
     else {
-      dataSource = 'SPX500';
-      title = allIndices[dataSource];
+      // 尝试根据index名称猜测市场
+      let guessedMarket = 'usa';
+      if (/spain|ibex|bme|西班牙/i.test(indexName)) guessedMarket = 'spain';
+      else if (/germany|dax|德国/i.test(indexName)) guessedMarket = 'germany';
+      else if (/uk|ftse|英国/i.test(indexName)) guessedMarket = 'uk';
+      else if (/france|cac|法国/i.test(indexName)) guessedMarket = 'france';
+      
+      const availableIndices = marketIndices[guessedMarket] || marketIndices.usa;
+      errorMessage = `当前不支持指数"${indexName}"。\n\n可用指数：\n${availableIndices.map(idx => `• ${idx} - ${allIndices[idx]}`).join('\n')}`;
+      
+      dataSource = availableIndices[0];
+      title = `Error: Unsupported Index`;
     }
   } else {
     // 没有指定index，根据market参数选择全市场股票
@@ -378,19 +402,99 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
       japan: 'ALLJP',
       china: 'ALLCN',
       australia: 'ALLAU',
-      hongkong: 'ALLCN',    // 香港 → 中国A股
+      hongkong: 'ALLCN',
       belgium: 'ALLBE',
       brazil: 'ALLBR',
       argentina: 'ALLAR',
       canada: 'ALLCA',
       chile: 'ALLCL',
       colombia: 'ALLCO',
-      europe: 'ALLFR',      // 欧洲默认 → 法国
-      world: 'SPX500'       // 全球 → S&P 500
+      europe: 'ALLFR',
+      world: 'SPX500'
     };
     
-    dataSource = marketMapping[marketName] || 'SPX500';
-    title = allIndices[dataSource];
+    dataSource = marketMapping[marketName];
+    
+    // 如果market不支持，返回错误提示
+    if (!dataSource) {
+      errorMessage = `当前不支持市场"${marketName}"。\n\n可用市场：\n• 美国 (usa)\n• 西班牙 (spain)\n• 德国 (germany)\n• 英国 (uk)\n• 法国 (france)\n• 日本 (japan)\n• 中国 (china)\n• 澳大利亚 (australia)\n• 巴西 (brazil)\n• 加拿大 (canada)`;
+      dataSource = 'SPX500';
+      title = 'Error: Unsupported Market';
+    } else {
+      title = allIndices[dataSource];
+    }
+  }
+  
+  // 如果有错误，返回错误页面
+  if (errorMessage) {
+    return `
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>错误 - 不支持的市场或指数</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .error-card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+    }
+    h1 {
+      color: #e53e3e;
+      font-size: 28px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .icon {
+      font-size: 36px;
+    }
+    .message {
+      color: #2d3748;
+      font-size: 16px;
+      line-height: 1.8;
+      white-space: pre-line;
+      background: #f7fafc;
+      padding: 20px;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+    }
+    .footer {
+      margin-top: 24px;
+      padding-top: 24px;
+      border-top: 1px solid #e2e8f0;
+      color: #718096;
+      font-size: 14px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="error-card">
+    <h1><span class="icon">⚠️</span> 不支持的市场或指数</h1>
+    <div class="message">${errorMessage}</div>
+    <div class="footer">
+      <p>💡 提示：请核对指数名称后重新发送</p>
+    </div>
+  </div>
+</body>
+</html>
+`;
   }
 
   // 直接返回嵌入TradingView Widget的HTML
