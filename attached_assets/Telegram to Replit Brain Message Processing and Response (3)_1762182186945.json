@@ -1,0 +1,1209 @@
+{
+  "name": "Telegram to Replit Brain Message Processing and Response",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "79915208-53de-46d9-aca8-8512fbcb0a40",
+      "name": "Telegram_Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -26080,
+        1112
+      ],
+      "webhookId": "13bd65b6-5de8-4120-81e0-42e82c679620",
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://node-js-liqixi842.replit.app/brain/orchestrate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $json.message?.text || $json.text || 'default' }}"
+            },
+            {
+              "name": "chat_type",
+              "value": "={{ $json.message?.chat?.type || $json.chat_type || 'group' }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.message?.from?.id || $json.user_id || 'system' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 45000
+        }
+      },
+      "id": "34c89b68-8fd6-4ddd-aff0-7afb09d476a0",
+      "name": "Call_Brain_Orchestrate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -25856,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const brain = $json;\nconst actions = brain.actions || [];\n\nreturn [{\n  json: {\n    final_text: brain.final_analysis || \"未收到分析\",\n    symbols: brain.symbols || [],\n    chat_id: $node[\"Telegram_Trigger\"].json.message.chat.id,\n    \n    needs_heatmap: actions.some(a => a.type === 'fetch_heatmap'),\n    heatmap_url: actions.find(a => a.type === 'fetch_heatmap')?.url || null,\n    \n    actions: actions\n  }\n}];"
+      },
+      "id": "b3abc1d4-a9c2-47a5-bf75-28f23e4a6092",
+      "name": "Parse_Brain_Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -25632,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.needs_heatmap }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b61c0329-2250-4aa3-8d69-d131301dd982",
+      "name": "IF_Needs_Heatmap",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -25184,
+        1352
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://shot.screenshotapi.net/screenshot",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "FVJZDCY-C4940PS-M43TEH8-DF69HJP"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.heatmap_url || 'https://www.tradingview.com/heatmap/stock/' }}"
+            },
+            {
+              "name": "full_page",
+              "value": "true"
+            },
+            {
+              "name": "timeout",
+              "value": "30000"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "27d3d985-0fa1-4c7e-9b10-c626cb8d3ef5",
+      "name": "Screenshot_Heatmap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -24960,
+        1424
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "id": "db1af98a-e84b-4c42-9025-ca74d600e0d2",
+      "name": "Merge_Screenshot",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -24512,
+        1112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const firstItem = $input.first(); const mainData = firstItem; const screenshotData = $input.all().find(item => item.json.screenshot); const newsData = $input.all().find(item => item.json.news_block); const quoteData = $input.all().find(item => item.json.quote_line); let chatId = null; try { chatId = $node['Telegram_Trigger'].json.message.chat.id; } catch (e) { chatId = mainData?.json?.chat_id || null; } const caption = mainData?.json?.final_text || '未收到分析'; const quoteLine = quoteData?.json?.quote_line || ''; const baseCaption = quoteLine ? quoteLine + '\\n\\n' + caption : caption; const newsBlock = newsData?.json?.news_block || ''; const finalCaption = baseCaption + (newsBlock ? '\\n\\n🗞️ 热点速览：\\n' + newsBlock : ''); const screenshot = screenshotData?.json?.screenshot || null; const hasScreenshot = !!screenshot; return [{ json: { chat_id: chatId, caption: finalCaption, screenshot: screenshot, send_as_photo: hasScreenshot } }];"
+      },
+      "id": "67cf2906-6bfd-43f1-b08d-df3b34c82eeb",
+      "name": "Pack_Final_Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -24288,
+        1112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.send_as_photo }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "68f5323e-165c-4c4f-a8b4-283c4aaf51d1",
+      "name": "IF_Send_Photo",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -24064,
+        1208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "={{ $node[\"Pack_Final_Message\"].json.chat_id }}",
+        "file": "={{ $json.screenshot }}",
+        "additionalFields": {
+          "caption": "={{ $json.caption }}"
+        }
+      },
+      "id": "1854ba6c-dd2d-4e55-91f0-b4bf04bec275",
+      "name": "Send_With_Photo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -23840,
+        1064
+      ],
+      "webhookId": "6aa9e3dd-867b-4c63-bbbe-475d026e485f",
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $node[\"Pack_Final_Message\"].json.chat_id }}",
+        "text": "={{ $json.caption }}",
+        "additionalFields": {}
+      },
+      "id": "b17a9dbb-f995-4063-8022-3063fa338c87",
+      "name": "Send_Text_Only",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -23840,
+        1256
+      ],
+      "webhookId": "15ec5527-aaac-4cfd-b695-d45c76b1f536",
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { screenshot: $json.screenshot || $json.screenshotUrl || null } }];"
+      },
+      "id": "fa77b447-0761-4d14-be1f-a4247b668200",
+      "name": "Normalize_Screenshot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -24736,
+        1424
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { chat_id: $node['Telegram_Trigger'].json.message.chat.id, caption: '⚠️ 系统出现临时错误，请稍后再试。' } }];"
+      },
+      "id": "c930897f-a191-488c-a903-134068513fa7",
+      "name": "Error_Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -26304,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.caption }}",
+        "additionalFields": {}
+      },
+      "id": "515856ac-1c80-4693-b97f-6c2671311fb1",
+      "name": "Send_Error_Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -26080,
+        0
+      ],
+      "webhookId": "7e0e769c-4fba-4539-9413-b96a03eec4b8",
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "id": "ed26280f-aedb-4b49-ba0b-6e0be5dc875f",
+      "name": "Schedule_Premarket",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -26304,
+        728
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "id": "b1294582-3415-41a5-aa5f-5330de706b59",
+      "name": "Schedule_Aftermarket",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -26304,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "message",
+              "value": "={ \"text\": \"盘前带热力图\" }",
+              "type": "object"
+            },
+            {
+              "id": "id-2",
+              "name": "chat_type",
+              "value": "group",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "user_id",
+              "value": "scheduled",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e4c7cf68-c516-48c8-8ca3-b7f0083ac0c4",
+      "name": "Set_Premarket_Command",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -26080,
+        728
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "message",
+              "value": "={{ JSON.stringify({ \"text\": \"盘后总结\" }) }}",
+              "type": "object"
+            },
+            {
+              "id": "id-2",
+              "name": "chat_type",
+              "value": "group",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "user_id",
+              "value": "scheduled",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "480f4c40-d5b2-47b8-b577-ee3989cfd5c0",
+      "name": "Set_Aftermarket_Command",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -26080,
+        920
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.actions.some(a => a.type === 'fetch_twitter') }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3b2d8f26-3649-41a6-9372-3808c5076667",
+      "name": "IF_Needs_Twitter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -25408,
+        776
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.actions.some(a => a.type === 'fetch_news_rss') }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5d829c66-6ba2-46e2-b661-4b8da7842d37",
+      "name": "IF_Needs_News",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -25408,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twitter.com/2/tweets/search/recent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "bitcoin lang:en -is:retweet"
+            },
+            {
+              "name": "max_results",
+              "value": "15"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Kh9BmUUhIUAxNHRQ7SuPp0uPc5RVYY5k6HBSupkvKe9IQ"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "309df59e-a3b1-412c-b273-bbc09e00700a",
+      "name": "Fetch_Twitter_Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -25184,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://feeds.reuters.com/reuters/businessNews",
+        "options": {}
+      },
+      "id": "67903ff4-7a41-4a98-8184-3b26efec4ee9",
+      "name": "Fetch_News_RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        -25184,
+        1112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "id": "5e990b57-14d5-4107-bd18-3959a7e291f1",
+      "name": "Merge_Twitter",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -24960,
+        776
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "id": "6fc75bb2-db3c-4afb-9f78-8c4c0f2f2d11",
+      "name": "Merge_News",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -24736,
+        968
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "user_id",
+              "value": "={{ $node['Telegram_Trigger'].json.message.from.id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "symbols",
+              "value": "={{ $node['Parse_Brain_Response'].json.symbols }}",
+              "type": "array"
+            },
+            {
+              "id": "id-4",
+              "name": "actions",
+              "value": "={{ JSON.stringify($node['Parse_Brain_Response'].json.actions) }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "final_text",
+              "value": "={{ $node['Parse_Brain_Response'].json.final_text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3a04510a-6099-403b-9a12-c417aea6bc5c",
+      "name": "Prepare_Log_Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -24064,
+        872
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1z5okdHtVTehghIZYaj78ZwMCO49L-rHPV8cWFgwArAA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "工作表1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1z5okdHtVTehghIZYaj78ZwMCO49L-rHPV8cWFgwArAA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "sentiment_index"
+          ],
+          "schema": [
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sentiment_index",
+              "displayName": "sentiment_index",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4018ddd7-01cd-4d46-8c91-8b85dc7a8438",
+      "name": "Log_To_Google_Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -23840,
+        872
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "6WKi5SVIzdnv6KX3",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the query from Parse_Brain_Response actions\nconst actions = $node['Parse_Brain_Response'].json.actions || [];\nconst newsAction = actions.find(a => a.type === 'fetch_news_rss');\nconst query = newsAction?.query || 'news';\n\n// Get all RSS items\nconst items = $input.all();\n\n// Filter by last 60 minutes and sort by date\nconst now = new Date();\nconst sixtyMinutesAgo = new Date(now.getTime() - 60 * 60 * 1000);\n\nconst recentNews = items\n  .filter(item => {\n    const pubDate = new Date(item.json.pubDate || item.json.isoDate);\n    return pubDate >= sixtyMinutesAgo;\n  })\n  .sort((a, b) => {\n    const dateA = new Date(a.json.pubDate || a.json.isoDate);\n    const dateB = new Date(b.json.pubDate || b.json.isoDate);\n    return dateB - dateA;\n  })\n  .slice(0, 3);\n\n// Format news block\nconst newsBlock = recentNews.map(item => {\n  const title = item.json.title || 'No title';\n  const summary = item.json.contentSnippet || item.json.description || 'No summary';\n  const source = item.json.creator || item.json.author || 'Unknown source';\n  return `🔥 ${title}\\n${summary}\\n📰 ${source}`;\n}).join('\\n\\n');\n\nreturn [{\n  json: {\n    news_block: newsBlock || '暂无最新新闻',\n    query: query,\n    count: recentNews.length\n  }\n}];"
+      },
+      "id": "3265b200-245d-44c8-8ef3-f3dca651b6dc",
+      "name": "Format_News",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -24960,
+        1112
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.symbols && $json.symbols.length > 0 }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "e88eef1b-73c3-4733-a666-53a7b7c3f7f2",
+      "name": "IF_Needs_SymbolChart",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -25408,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://shot.screenshotapi.net/screenshot",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "FVJZDCY-C4940PS-M43TEH8-DF69HJP"
+            },
+            {
+              "name": "url",
+              "value": "={{ \"https://www.tradingview.com/chart/?symbol=\" + ($json.symbols[0].includes(\":\") ? $json.symbols[0] : \"NASDAQ:\" + $json.symbols[0]) + \"&interval=60\" }}"
+            },
+            {
+              "name": "full_page",
+              "value": "false"
+            },
+            {
+              "name": "timeout",
+              "value": "30000"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "dbfe5126-931c-4c40-b902-fb0796e5689d",
+      "name": "Screenshot_SymbolChart",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -25184,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://www.alphavantage.co/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "function",
+              "value": "GLOBAL_QUOTE"
+            },
+            {
+              "name": "symbol",
+              "value": "={{ $json.symbols[0] }}"
+            },
+            {
+              "name": "apikey",
+              "value": "01M0ZKMJW0TIJ6BG"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b9febfe6-a3b0-4335-af2a-9fe90f152975",
+      "name": "Fetch_Quote_Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -25184,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format quote data from Alpha Vantage Global Quote response\nconst quoteData = $json['Global Quote'] || {};\n\nconst price = quoteData['05. price'] || 'N/A';\nconst changePercent = quoteData['10. change percent'] || 'N/A';\nconst high = quoteData['03. high'] || 'N/A';\nconst low = quoteData['04. low'] || 'N/A';\n\n// Remove % sign from change percent if present\nconst cleanChangePercent = typeof changePercent === 'string' ? changePercent.replace('%', '') : changePercent;\n\nconst quoteLine = `现价 $${price} (${cleanChangePercent}%), 日内波动 ${high}-${low}`;\n\nreturn [{\n  json: {\n    quote_line: quoteLine\n  }\n}];"
+      },
+      "id": "644fd7ea-a7a4-497a-ac74-b71760465a6a",
+      "name": "Format_Quote",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -24960,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "id": "cdfa0c96-19ac-4d0b-b688-d4e12f8136ed",
+      "name": "Merge_Quote",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -24736,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { screenshot: $json.screenshot || $json.screenshotUrl || null } }];"
+      },
+      "id": "8c4878c4-8f1a-45ff-be79-34b562856ea4",
+      "name": "Normalize_SymbolChart",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -24960,
+        224
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call_Brain_Orchestrate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call_Brain_Orchestrate": {
+      "main": [
+        [
+          {
+            "node": "Parse_Brain_Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse_Brain_Response": {
+      "main": [
+        [
+          {
+            "node": "IF_Needs_Heatmap",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF_Needs_Twitter",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF_Needs_News",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF_Needs_SymbolChart",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Needs_Heatmap": {
+      "main": [
+        [
+          {
+            "node": "Screenshot_Heatmap",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge_Screenshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge_Screenshot": {
+      "main": [
+        [
+          {
+            "node": "Pack_Final_Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pack_Final_Message": {
+      "main": [
+        [
+          {
+            "node": "IF_Send_Photo",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare_Log_Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Send_Photo": {
+      "main": [
+        [
+          {
+            "node": "Send_With_Photo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send_Text_Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Screenshot_Heatmap": {
+      "main": [
+        [
+          {
+            "node": "Normalize_Screenshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize_Screenshot": {
+      "main": [
+        [
+          {
+            "node": "Merge_Screenshot",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Error_Handler": {
+      "main": [
+        [
+          {
+            "node": "Send_Error_Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule_Premarket": {
+      "main": [
+        [
+          {
+            "node": "Set_Premarket_Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule_Aftermarket": {
+      "main": [
+        [
+          {
+            "node": "Set_Aftermarket_Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_Premarket_Command": {
+      "main": [
+        [
+          {
+            "node": "Call_Brain_Orchestrate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_Aftermarket_Command": {
+      "main": [
+        [
+          {
+            "node": "Call_Brain_Orchestrate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Needs_Twitter": {
+      "main": [
+        [
+          {
+            "node": "Fetch_Twitter_Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge_Twitter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Needs_News": {
+      "main": [
+        [
+          {
+            "node": "Fetch_News_RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge_News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch_Twitter_Data": {
+      "main": [
+        [
+          {
+            "node": "Merge_Twitter",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch_News_RSS": {
+      "main": [
+        [
+          {
+            "node": "Format_News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge_Twitter": {
+      "main": [
+        [
+          {
+            "node": "Merge_News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge_News": {
+      "main": [
+        [
+          {
+            "node": "Merge_Screenshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_Log_Data": {
+      "main": [
+        [
+          {
+            "node": "Log_To_Google_Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format_News": {
+      "main": [
+        [
+          {
+            "node": "Merge_News",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "IF_Needs_SymbolChart": {
+      "main": [
+        [
+          {
+            "node": "Screenshot_SymbolChart",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch_Quote_Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge_Quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Screenshot_SymbolChart": {
+      "main": [
+        [
+          {
+            "node": "Normalize_SymbolChart",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch_Quote_Data": {
+      "main": [
+        [
+          {
+            "node": "Format_Quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize_SymbolChart": {
+      "main": [
+        [
+          {
+            "node": "Merge_Quote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format_Quote": {
+      "main": [
+        [
+          {
+            "node": "Merge_Quote",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge_Quote": {
+      "main": [
+        [
+          {
+            "node": "Merge_Screenshot",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "bf291b85-04c4-4e4a-9d6d-bb7c9a1d9ac6",
+  "meta": {
+    "instanceId": "e55566bfe54f88b404d502841707ce3b88351798d04a45b88b4e50f6ca391fb1"
+  },
+  "id": "Tqt12ym9X6ZlCy7o",
+  "tags": []
+}
