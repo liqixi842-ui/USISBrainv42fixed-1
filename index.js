@@ -259,11 +259,16 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
     'RUSSELL3000': 'Russell 3000',
     'ALLUS': 'All US Companies',
     
-    // 国际指数
+    // 西班牙指数系列
     'IBEX35': 'IBEX 35 (Spain)',
+    'IBEXSMALLCAP': 'IBEX Small Cap (Spain)',
+    'IBEXMEDIUMCAP': 'IBEX Medium Cap (Spain)',
+    
+    // 其他国际指数
     'DAX': 'DAX (Germany)',
     'NI225': 'Nikkei 225 (Japan)',
     'FTSE100': 'FTSE 100 (UK)',
+    'FTSE250': 'FTSE 250 (UK)',
     'HSI': 'Hang Seng (Hong Kong)',
     'SSE50': 'SSE 50 (China)',
     'CAC40': 'CAC 40 (France)',
@@ -762,20 +767,38 @@ function detectActions(text = "") {
       indexName = 'S&P 500';
     }
     
-    // 如果没有指定具体指数，检测地区/国家
+    // 检测市值分类（Small Cap, Mid Cap等）
+    if (!index) {
+      if (/西班牙|spain|ibex|马德里/.test(t)) {
+        if (/small\s*cap|小盘|小型股/.test(t)) {
+          index = 'IBEXSMALLCAP';
+          indexName = 'IBEX Small Cap';
+        } else if (/med(ium)?\s*cap|中盘|中型股/.test(t)) {
+          index = 'IBEXMEDIUMCAP';
+          indexName = 'IBEX Medium Cap';
+        } else {
+          index = 'IBEX35';
+          indexName = 'IBEX 35';
+        }
+      } else if (/英国|uk|britain|ftse|伦敦/.test(t)) {
+        if (/250|mid\s*cap|中盘/.test(t)) {
+          index = 'FTSE250';
+          indexName = 'FTSE 250';
+        } else {
+          index = 'FTSE100';
+          indexName = 'FTSE 100';
+        }
+      }
+    }
+    
+    // 如果还没有指定指数，继续检测地区/国家
     let market = 'usa';
     let marketName = '美股市场';
     
     if (!index) {
-      if (/西班牙|spain|ibex|马德里/.test(t)) {
-        market = 'spain';
-        marketName = '西班牙市场';
-      } else if (/德国|germany|dax|法兰克福/.test(t)) {
+      if (/德国|germany|dax|法兰克福/.test(t)) {
         market = 'germany';
         marketName = '德国市场';
-      } else if (/英国|uk|britain|ftse|伦敦/.test(t)) {
-        market = 'uk';
-        marketName = '英国市场';
       } else if (/日本|japan|nikkei|东京/.test(t)) {
         market = 'japan';
         marketName = '日本市场';
