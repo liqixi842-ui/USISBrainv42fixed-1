@@ -541,12 +541,14 @@ function understandIntent(text = "", mode = null) {
   } else if (/(新闻|资讯|消息|news|热点|头条)/.test(t)) {
     detectedMode = 'news';
   } else {
-    // 默认根据美东时间判断（UTC-5/UTC-4）
-    // 使用 UTC 时间 + 偏移计算美东时间
+    // 默认根据美东时间判断（DST-aware）
     const now = new Date();
-    const utcHour = now.getUTCHours();
-    // 简化：假设 EST (UTC-5)，实际应根据 DST 调整
-    const etHour = (utcHour - 5 + 24) % 24;
+    // 使用 Intl.DateTimeFormat 获取美东时间（自动处理DST）
+    const etHour = parseInt(new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      hour: 'numeric',
+      hour12: false
+    }).format(now));
     
     if (etHour >= 6 && etHour < 9) detectedMode = 'premarket';      // 6am-9am ET
     else if (etHour >= 9 && etHour < 16) detectedMode = 'intraday'; // 9am-4pm ET
@@ -634,6 +636,348 @@ function planTasks(intent, scene, symbols = []) {
   return tasks;
 }
 
+// ========================================
+// Multi-AI Coordination - 多AI协调系统
+// ========================================
+
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
+
+// AI Agent Roles - 每个AI的角色定位
+const AI_ROLES = {
+  claude: {
+    name: 'Claude',
+    specialty: '技术分析专家',
+    focus: '技术指标、图表形态、支撑阻力位'
+  },
+  deepseek: {
+    name: 'DeepSeek',
+    specialty: '中文市场洞察',
+    focus: '中文资讯解读、A股港股联动、本地化分析'
+  },
+  gpt4: {
+    name: 'GPT-4',
+    specialty: '综合策略分析师',
+    focus: '宏观趋势、风险评估、投资建议'
+  }
+};
+
+// Call Claude API
+async function callClaude(prompt, maxTokens = 300) {
+  try {
+    if (!CLAUDE_KEY) {
+      return { success: false, error: 'CLAUDE_KEY missing' };
+    }
+    
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": CLAUDE_KEY,
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-3-haiku-20240307",
+        max_tokens: maxTokens,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    
+    const data = await response.json();
+    const text = data?.content?.[0]?.text || '';
+    
+    return { success: true, text };
+  } catch (err) {
+    console.error('❌ Claude error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// Call DeepSeek API
+async function callDeepSeek(prompt, maxTokens = 300) {
+  try {
+    if (!DEEPSEEK_KEY) {
+      return { success: false, error: 'DEEPSEEK_KEY missing' };
+    }
+    
+    const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${DEEPSEEK_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: maxTokens
+      })
+    });
+    
+    const data = await response.json();
+    const text = data?.choices?.[0]?.message?.content || '';
+    
+    return { success: true, text };
+  } catch (err) {
+    console.error('❌ DeepSeek error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// Call GPT-4 API
+async function callGPT4(prompt, maxTokens = 400) {
+  try {
+    if (!OPENAI_KEY) {
+      return { success: false, error: 'OPENAI_KEY missing' };
+    }
+    
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",  // 使用 gpt-4o-mini 更快更便宜
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: maxTokens,
+        temperature: 0.3
+      })
+    });
+    
+    const data = await response.json();
+    const text = data?.choices?.[0]?.message?.content || '';
+    
+    return { success: true, text };
+  } catch (err) {
+    console.error('❌ GPT-4 error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// Multi-AI Analysis - 多AI并行分析
+async function multiAIAnalysis({ mode, scene, symbols, text, chatType }) {
+  console.log(`🤖 开始多AI分析...`);
+  
+  const context = {
+    mode,
+    scene: scene.name,
+    symbols: symbols.join(', ') || '无特定股票',
+    request: text
+  };
+  
+  // 构建不同AI的prompt
+  const prompts = {
+    claude: buildClaudePrompt(context, scene),
+    deepseek: buildDeepSeekPrompt(context, scene),
+    gpt4: buildGPT4Prompt(context, scene, chatType)
+  };
+  
+  // 并行调用三个AI
+  const [claudeResult, deepseekResult, gpt4Result] = await Promise.all([
+    callClaude(prompts.claude, scene.targetLength * 0.4),
+    callDeepSeek(prompts.deepseek, scene.targetLength * 0.4),
+    callGPT4(prompts.gpt4, scene.targetLength * 0.5)
+  ]);
+  
+  console.log(`  ✅ Claude: ${claudeResult.success ? '成功' : '失败'}`);
+  console.log(`  ✅ DeepSeek: ${deepseekResult.success ? '成功' : '失败'}`);
+  console.log(`  ✅ GPT-4: ${gpt4Result.success ? '成功' : '失败'}`);
+  
+  return {
+    claude: { ...AI_ROLES.claude, ...claudeResult },
+    deepseek: { ...AI_ROLES.deepseek, ...deepseekResult },
+    gpt4: { ...AI_ROLES.gpt4, ...gpt4Result }
+  };
+}
+
+// Build Claude Prompt - 技术分析专家
+function buildClaudePrompt(context, scene) {
+  return `你是一位技术分析专家，专注于${scene.focus.join('、')}。
+
+场景：${context.scene}
+股票：${context.symbols}
+用户请求：${context.request}
+
+请从技术分析角度提供${scene.targetLength/3}字左右的分析，包括：
+- 技术指标判断
+- 关键价位分析
+- 短期趋势预测
+
+要求：
+- 专业但简洁
+- 突出技术要点
+- 不要免责声明`;
+}
+
+// Build DeepSeek Prompt - 中文市场专家
+function buildDeepSeekPrompt(context, scene) {
+  return `你是一位中文市场分析专家，擅长解读中文资讯和本地市场情绪。
+
+场景：${context.scene}
+股票：${context.symbols}
+用户请求：${context.request}
+
+请从市场情绪和资讯角度提供${scene.targetLength/3}字左右的分析，包括：
+- 市场情绪判断
+- 关键资讯解读
+- 风险提示
+
+要求：
+- 中文地道表达
+- 关注情绪面
+- 简洁有力`;
+}
+
+// Build GPT-4 Prompt - 综合策略分析师
+function buildGPT4Prompt(context, scene, chatType) {
+  // 基础风格
+  let styleGuide = chatType === 'private' 
+    ? `风格：像贴心老师一样，用"你看"、"我注意到"等口语化表达，用生活化类比解释专业概念` 
+    : `风格：专业团队口吻，使用"老师团队认为"、"我们认为"，结构化输出`;
+  
+  // 应用用户偏好语气
+  if (scene.userTone === 'casual') {
+    styleGuide += `\n额外要求：使用更加轻松随意的语气`;
+  } else if (scene.userTone === 'professional') {
+    styleGuide += `\n额外要求：保持专业严谨的语气`;
+  }
+  
+  return `你是一位综合策略分析师，负责整合技术面和情绪面，给出最终建议。
+
+场景：${context.scene}
+股票：${context.symbols}
+用户请求：${context.request}
+
+${styleGuide}
+
+请提供${scene.targetLength/2}字左右的综合分析，包括：
+- 整体判断（BUY/HOLD/SELL）
+- 核心理由（2-3点）
+- 具体建议
+
+要求：
+- ${chatType === 'private' ? '口语化、有温度' : '专业、结构化'}
+- 给出明确观点
+- 不要免责声明`;
+}
+
+// ========================================
+// Intelligent Synthesis - 智能合成系统
+// ========================================
+
+// Synthesize Multi-AI Outputs - 智能合成多个AI的输出
+async function synthesizeAIOutputs(aiResults, { mode, scene, chatType, symbols, text }) {
+  console.log(`🔮 开始智能合成...`);
+  
+  // 提取成功的AI输出
+  const validOutputs = [];
+  if (aiResults.claude.success) validOutputs.push({ name: 'Claude (技术分析)', text: aiResults.claude.text });
+  if (aiResults.deepseek.success) validOutputs.push({ name: 'DeepSeek (市场洞察)', text: aiResults.deepseek.text });
+  if (aiResults.gpt4.success) validOutputs.push({ name: 'GPT-4 (综合策略)', text: aiResults.gpt4.text });
+  
+  if (validOutputs.length === 0) {
+    return {
+      success: false,
+      text: '抱歉，暂时无法获取分析结果，请稍后重试。'
+    };
+  }
+  
+  // 如果只有一个AI成功，直接返回
+  if (validOutputs.length === 1) {
+    return {
+      success: true,
+      text: formatSingleOutput(validOutputs[0], chatType, scene)
+    };
+  }
+  
+  // 多个AI成功：调用 GPT-4 进行智能合成
+  const synthesisPrompt = buildSynthesisPrompt(validOutputs, { mode, scene, chatType, symbols, text });
+  
+  const synthesisResult = await callGPT4(synthesisPrompt, scene.targetLength);
+  
+  if (!synthesisResult.success) {
+    // 合成失败，返回简单拼接
+    return {
+      success: true,
+      text: formatMultipleOutputs(validOutputs, chatType, scene),
+      fallback: true
+    };
+  }
+  
+  console.log(`✨ 合成完成`);
+  
+  return {
+    success: true,
+    text: synthesisResult.text,
+    synthesized: true
+  };
+}
+
+// Build Synthesis Prompt - 合成指令
+function buildSynthesisPrompt(aiOutputs, { mode, scene, chatType, symbols, text }) {
+  const styleGuide = chatType === 'private' 
+    ? `写作风格：
+- 像老师给学生讲解，用"你看"、"我注意到"等口语
+- 用生活化类比解释复杂概念（如"就像菜市场抢菜，价格虚高"）
+- 温和但坚定，鼓励性话语
+- 适度emoji（📊💡⚠️✅等）`
+    : `写作风格：
+- 专业团队口吻，用"老师团队认为"、"我们认为"
+- 结构化输出：标题 + 数据 + 点评 + 展望
+- 正式但不僵硬
+- 明确的观点和建议`;
+  
+  const outputsSummary = aiOutputs.map(o => `【${o.name}】\n${o.text}`).join('\n\n');
+  
+  return `你是USIS智能合成系统，负责整合多位专家的分析，生成连贯、专业的最终报告。
+
+场景：${scene.name}
+股票：${symbols.join(', ') || '无特定股票'}
+用户请求：${text}
+
+${styleGuide}
+
+以下是三位专家的独立分析：
+
+${outputsSummary}
+
+请基于以上分析，生成一份${scene.targetLength}字左右的最终报告，要求：
+
+1. **不是简单拼接**：提炼关键观点，识别共识和分歧
+2. **连贯叙述**：像一个人在说话，不要分段罗列
+3. **突出重点**：
+   - ${scene.depth === 'brief' ? '快速扫描关键信息' : scene.depth === 'medium' ? '中等深度分析' : '深度剖析趋势和策略'}
+   - 明确的判断（BUY/HOLD/SELL）
+   - 2-3个核心理由
+4. **风格一致**：${chatType === 'private' ? '口语化、有温度' : '专业、结构化'}
+
+不要：
+- 不要说"根据以上分析"、"综合来看"等套话
+- 不要免责声明
+- 不要机械重复专家观点
+
+直接输出最终报告：`;
+}
+
+// Format Single Output - 单个AI输出格式化
+function formatSingleOutput(output, chatType, scene) {
+  if (chatType === 'private') {
+    return `${output.text}\n\n💡 以上分析来自 ${output.name}`;
+  } else {
+    return `【${scene.name}】\n\n${output.text}\n\n━━━━━━━━━━━━━━━\n📊 ${output.name}`;
+  }
+}
+
+// Format Multiple Outputs - 多个AI输出简单格式化（兜底方案）
+function formatMultipleOutputs(outputs, chatType, scene) {
+  if (chatType === 'private') {
+    const sections = outputs.map(o => `${o.text}`).join('\n\n━━━\n\n');
+    return `${sections}\n\n💡 综合了 ${outputs.length} 位专家的观点`;
+  } else {
+    const sections = outputs.map(o => `【${o.name}】\n${o.text}`).join('\n\n');
+    return `【${scene.name}】\n\n${sections}`;
+  }
+}
+
 // Main Orchestrator Endpoint
 app.post("/brain/orchestrate", async (req, res) => {
   try {
@@ -666,6 +1010,18 @@ app.post("/brain/orchestrate", async (req, res) => {
     // 3. Scene Awareness (考虑置信度和用户偏好)
     const scene = analyzeScene(intent.mode, symbols);
     
+    // 应用用户偏好调整场景
+    if (userPrefs.preferred_depth) {
+      const depthMultipliers = { brief: 0.7, medium: 1.0, deep: 1.3 };
+      scene.targetLength = Math.round(scene.targetLength * (depthMultipliers[userPrefs.preferred_depth] || 1.0));
+      console.log(`💾 应用用户偏好深度: ${userPrefs.preferred_depth}`);
+    }
+    
+    if (userPrefs.preferred_tone) {
+      scene.userTone = userPrefs.preferred_tone; // casual | professional
+      console.log(`💾 应用用户偏好语气: ${userPrefs.preferred_tone}`);
+    }
+    
     // 如果置信度低，添加警告
     if (intent.confidence < 0.7) {
       scene.lowConfidence = true;
@@ -678,34 +1034,48 @@ app.post("/brain/orchestrate", async (req, res) => {
     const tasks = planTasks(intent, scene, symbols);
     console.log(`📝 任务规划: ${tasks.join(' → ')}`);
     
-    // 5. Execute (目前返回基础结构)
-    const responseText = `【测试阶段】
-场景: ${scene.name}
-意图: ${intent.mode}
-风格: ${chat_type === 'private' ? '私聊（贴心老师）' : '群组（专业团队）'}
-目标长度: ${scene.targetLength}字
-任务: ${tasks.length}个
-
-下一步将实现真正的多AI协调和智能合成...`;
+    // 5. Execute Multi-AI Analysis
+    const aiResults = await multiAIAnalysis({
+      mode: intent.mode,
+      scene,
+      symbols,
+      text,
+      chatType: chat_type
+    });
     
-    // 6. Save to Memory
+    // 6. Intelligent Synthesis
+    const synthesis = await synthesizeAIOutputs(aiResults, {
+      mode: intent.mode,
+      scene,
+      chatType: chat_type,
+      symbols,
+      text
+    });
+    
+    const responseText = synthesis.text;
+    const imageUrl = null; // TODO: 后续添加图表生成
+    
+    // 7. Save to Memory
     Memory.save({
       user_id,
       intent: intent.mode,
       chat_type,
       symbols,
+      success: synthesis.success,
+      synthesized: synthesis.synthesized,
       ok: true
     });
     
     const responseTime = Date.now() - startTime;
     console.log(`✅ 响应完成 (${responseTime}ms)\n`);
     
-    // 7. Response
+    // 8. Response
     return res.json({
       ok: true,
       text: responseText,
-      image_url: null,
+      image_url: imageUrl,
       low_confidence: intent.confidence < 0.7,  // 暴露低置信度标志
+      synthesized: synthesis.synthesized || false,
       debug: {
         intent: intent.mode,
         intent_confidence: intent.confidence,
@@ -713,6 +1083,11 @@ app.post("/brain/orchestrate", async (req, res) => {
         style: chat_type === 'private' ? 'teacher_personal' : 'team_professional',
         target_length: scene.targetLength,
         tasks,
+        ai_results: {
+          claude: aiResults.claude.success,
+          deepseek: aiResults.deepseek.success,
+          gpt4: aiResults.gpt4.success
+        },
         user_prefs: userPrefs,
         response_time_ms: responseTime
       }
