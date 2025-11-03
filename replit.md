@@ -1,6 +1,6 @@
 # Overview
 
-USIS Brain v3 is a minimal multi-model AI decision-making API service that integrates Claude (Anthropic) and DeepSeek models to provide market analysis with voting-based consensus. The service processes natural language requests and returns structured decisions (BUY/HOLD/SELL) with confidence scores, intent recognition, and multilingual support (Chinese, Spanish, English). Designed for deployment on Replit's platform with minimal dependencies.
+USIS Brain v3 is an intelligent AI market analysis orchestration system featuring 6-model collaboration (Claude, DeepSeek, GPT-4, Gemini, Perplexity, Mistral), real-time market data integration (Finnhub, Alpha Vantage), and intelligent synthesis. The system understands natural language intent (premarket/intraday/postmarket/diagnose/news), coordinates specialized AI agents with differentiated roles, provides scene-aware content depth, and delivers dual output styles: warm conversational tone for private chats and professional team commentary for groups. Designed for deployment on Replit's Autoscale platform with minimal dependencies.
 
 # User Preferences
 
@@ -28,17 +28,30 @@ Preferred communication style: Simple, everyday language.
 - **Host**: Binds to `0.0.0.0` for external accessibility
 - **Rationale**: Replit requires dynamic port binding from environment variables; `0.0.0.0` binding allows external HTTP access through Replit's proxy system
 
-## Current Implementation (v3)
-- **Status**: Production-ready with real AI model integration
-- **Decision Logic**: Parallel execution of Claude Haiku and DeepSeek models with voting-based consensus
-- **Voting Mechanism**: 
-  - Each model analyzes the task and votes BUY/HOLD/SELL
-  - Final decision uses majority voting (ties default to HOLD)
-  - Confidence score calculated from model agreement and individual confidence levels
-- **Intent Recognition**: Keyword-based NLP to extract mode (premarket/intraday/postmarket/diagnose/news), stock symbols, and language from natural text
-- **Models**:
-  - Claude 3 Haiku (claude-3-haiku-20240307) - Fast, cost-effective analysis
-  - DeepSeek Chat (deepseek-chat) - Chinese language optimization
+## Current Implementation (v3 Orchestrator)
+- **Status**: Production-ready with 6-AI orchestration and real-time data integration
+- **Orchestration Pipeline**: Intent → Scene → Data Collection → Multi-AI Analysis → Intelligent Synthesis
+- **AI Models** (6 specialized agents):
+  - **Claude 3.5 Sonnet**: Technical analysis expert (indicators, price levels, trends)
+  - **DeepSeek Chat**: Chinese market insights (sentiment, local news, A-share analysis)
+  - **GPT-4**: Comprehensive strategy analyst (synthesis, risk assessment, recommendations)
+  - **Gemini Pro**: Real-time data integration specialist (breaking news, market events)
+  - **Perplexity**: Deep research and context analysis (industry trends, competitive landscape)
+  - **Mistral Large**: Sentiment analysis and risk modeling (market psychology, volatility)
+- **Data Empire** (Real-time market intelligence):
+  - **Finnhub API**: Real-time stock quotes, company news, market sentiment analysis
+  - **Alpha Vantage API**: Technical indicators, news sentiment, fundamentals
+  - Parallel data collection with automatic enrichment of AI prompts
+- **Intelligent Synthesis**:
+  - Key point extraction from all 6 AI outputs
+  - Consensus/divergence identification
+  - Coherent unified report generation (not simple concatenation)
+  - Dual output styles: warm teacher (private) vs professional team (group)
+- **Scene-Aware Content**:
+  - Premarket: Brief (~300 words) - quick scanning
+  - Hot news/Intraday: Medium (~500 words) - balanced analysis
+  - Postmarket/Review: Deep (~800 words) - comprehensive insights
+- **Memory Layer**: User preferences for depth and tone adjustment
 
 ## Internationalization
 - **Approach**: Built-in multilingual responses (Chinese `zh`, Spanish `es`, English `en`)
@@ -54,23 +67,37 @@ Preferred communication style: Simple, everyday language.
 
 ## Runtime Dependencies
 - **express**: ^5.1.0 - Web application framework providing routing, middleware, and HTTP utilities
-- **node-fetch**: ^2.x - HTTP client for API calls to Claude and DeepSeek (v2 for CommonJS compatibility)
+- **node-fetch**: ^2.x - HTTP client for API calls (v2 for CommonJS compatibility)
 
-## API Integrations
-- **Claude API** (Anthropic): Requires `CLAUDE_API_KEY` environment variable
-  - Endpoint: https://api.anthropic.com/v1/messages
-  - Model: claude-3-haiku-20240307
-  - Used for market analysis and decision recommendations
-- **DeepSeek API**: Requires `DEEPSEEK_API_KEY` environment variable
-  - Endpoint: https://api.deepseek.com/v1/chat/completions
+## API Integrations (6 AI Models + 2 Data Sources)
+- **Claude API** (Anthropic): `CLAUDE_API_KEY` - Technical analysis expert
+  - Model: claude-3-5-sonnet-20241022
+  - Role: Price levels, technical indicators, trend analysis
+- **DeepSeek API**: `DEEPSEEK_API_KEY` - Chinese market specialist
   - Model: deepseek-chat
-  - Optimized for Chinese language analysis
+  - Role: A-share sentiment, local news, Chinese market insights
+- **OpenAI API**: `OPENAI_API_KEY` - Comprehensive strategist
+  - Model: gpt-4
+  - Role: Risk assessment, synthesis, strategic recommendations
+- **Google Gemini API**: `GEMINI_API_KEY` - Real-time data integrator
+  - Model: gemini-1.5-pro
+  - Role: Breaking news, market events, real-time context
+- **Perplexity API**: `PERPLEXITY_API_KEY` - Deep research analyst
+  - Model: llama-3.1-sonar-large-128k-online
+  - Role: Industry trends, competitive landscape, context analysis
+- **Mistral API**: `MISTRAL_API_KEY` - Sentiment & risk modeler
+  - Model: mistral-large-latest
+  - Role: Market psychology, volatility analysis, risk modeling
+- **Finnhub API**: `FINNHUB_API_KEY` - Real-time market data
+  - Provides: Stock quotes, company news, sentiment analysis
+- **Alpha Vantage API**: `ALPHA_VANTAGE_API_KEY` - Technical data
+  - Provides: Technical indicators, news sentiment, fundamentals
 
 ## Deployment Environment
 - **Platform**: Replit
 - **Constraints**: Must use dynamic port allocation and CommonJS module system
 - **Network**: Relies on Replit's built-in HTTPS proxy for external access
-- **Environment Variables**: CLAUDE_API_KEY and DEEPSEEK_API_KEY must be configured in Replit Secrets
+- **Environment Variables**: All 8 API keys must be configured in Replit Secrets
 
 # API Endpoints Detail
 
@@ -264,8 +291,11 @@ GET /social/twitter/search?query=bitcoin&max_results=20
 - 🚀 **Major upgrade: Intelligent AI Orchestrator system** (`POST /brain/orchestrate`)
 - Multi-AI coordination with differentiated roles:
   - Claude: Technical analysis expert (indicators, price levels, trends)
-  - DeepSeek: Chinese market insights (sentiment, local news)
+  - DeepSeek: Chinese market insights (sentiment, local news, A-share analysis)
   - GPT-4: Comprehensive strategy analyst (synthesis, recommendations)
+  - Gemini: Real-time data integration specialist (breaking news, market events)
+  - Perplexity: Deep research and context analysis (industry trends, competitive landscape)
+  - Mistral: Sentiment analysis and risk modeling (market psychology, volatility)
 - Intelligent synthesis engine: extracts key points, identifies consensus/divergence, generates coherent unified reports (not simple concatenation)
 - Dual output styles automatically switch based on chat.type:
   - Private chats: Warm teacher style with analogies and conversational tone
@@ -279,7 +309,11 @@ GET /social/twitter/search?query=bitcoin&max_results=20
   - `preferred_depth` adjusts content length (brief/medium/deep)
   - `preferred_tone` affects writing style (casual/professional)
 - Low-confidence intent detection with `low_confidence` flag in response
-- Requires `OPENAI_API_KEY` environment variable (in addition to existing CLAUDE_API_KEY and DEEPSEEK_API_KEY)
+- **Data Empire Integration**: Real-time market data collection (Finnhub + Alpha Vantage)
+  - Automatic data enrichment when stock symbols detected
+  - Parallel data fetching: quotes, news, sentiment analysis
+  - AI prompts automatically enriched with real-time market context
+- Requires `OPENAI_API_KEY`, `GEMINI_API_KEY`, `PERPLEXITY_API_KEY`, `MISTRAL_API_KEY`, `FINNHUB_API_KEY`, `ALPHA_VANTAGE_API_KEY` (in addition to existing CLAUDE_API_KEY and DEEPSEEK_API_KEY)
 
 **November 2, 2025**:
 - Added `GET /social/twitter/search` endpoint for Twitter API integration
