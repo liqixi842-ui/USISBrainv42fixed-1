@@ -2246,41 +2246,74 @@ app.post("/brain/orchestrate", async (req, res) => {
       });
     }
     
-    // 🎯 特殊处理3：闲聊/非市场请求（避免浪费AI调用）
-    const marketKeywords = ['分析', '走势', '图', 'K线', '趋势', '价格', '股票', '行情', '盘前', '盘中', '盘后', '热力图', '涨', '跌', '买', '卖', 'chart', 'stock', 'market'];
+    // 🎯 特殊处理3：闲聊模式检测（用简短AI回复，不调用6模型）
+    const marketKeywords = ['分析', '走势', '图', 'K线', '趋势', '价格', '股票', '行情', '盘前', '盘中', '盘后', '热力图', '涨', '跌', '买', '卖', '买点', '卖点', '止损', '止盈', '复盘', '板块', 'chart', 'stock', 'market'];
     const hasMarketKeywords = marketKeywords.some(k => text.toLowerCase().includes(k));
     const isMarketMode = ['premarket', 'intraday', 'postmarket', 'diagnose', 'news', 'heatmap'].includes(intent.mode);
+    const isCasualChat = !hasMarketKeywords && !isMarketMode && symbols.length === 0;
     
-    if (!hasMarketKeywords && !isMarketMode && symbols.length === 0) {
-      console.log(`💬 检测到闲聊/非市场请求，直接友好回复`);
+    if (isCasualChat) {
+      console.log(`💬 检测到闲聊模式，使用简短AI回复`);
       
-      const casualResponses = [
-        '当然可以 😊 我可以和你正常聊天。不过我的专长是市场分析，你想聊聊今天的市场动态吗？',
-        '你好！我是市场分析助手。虽然可以闲聊，但我更擅长分析股票、市场热点。有什么想了解的吗？',
-        '嗨！我可以帮你分析市场、个股走势、生成热力图等。有具体的股票想了解吗？'
-      ];
+      // 闲聊模式：只调用GPT-4，用简短prompt
+      const casualPrompt = `你是一个友好、简洁的聊天助手。只用中文回答。每次回复控制在1~3句，最多120字。避免行情/技术分析。
+
+用户说：${text}
+
+请简短友好地回复，如果合适可以引导用户尝试市场分析功能。`;
       
-      const chatText = casualResponses[Math.floor(Math.random() * casualResponses.length)];
-      
-      return res.json({
-        status: "ok",
-        ok: true,
-        final_analysis: chatText,
-        final_text: chatText,
-        needs_heatmap: false,
-        actions: [],
-        intent: { mode: 'casual', lang: intent.lang, confidence: 0.9 },
-        scene: { name: 'Casual', depth: 'simple', targetLength: 50 },
-        symbols: [],
-        market_data: null,
-        ai_results: null,
-        synthesis: { success: true, synthesized: false },
-        low_confidence: false,
-        chat_type,
-        user_id,
-        response_time_ms: Date.now() - startTime,
-        debug: { note: 'Casual chat - skipped AI analysis to save cost' }
-      });
+      try {
+        const gptResult = await callGPT4(casualPrompt, 60); // 最多60 tokens，约120字
+        
+        let chatText = gptResult.success ? gptResult.text : '你好！我是市场分析助手，可以帮你分析股票、查看热力图等。有什么想了解的吗？';
+        
+        // 限制长度：最多240字符（约120汉字）
+        if (chatText.length > 240) {
+          chatText = chatText.slice(0, 240) + '...';
+        }
+        
+        return res.json({
+          status: "ok",
+          ok: true,
+          final_analysis: chatText,
+          final_text: chatText,
+          needs_heatmap: false,
+          actions: [],
+          intent: { mode: 'casual', lang: intent.lang, confidence: 0.9 },
+          scene: { name: 'Casual', depth: 'simple', targetLength: 50 },
+          symbols: [],
+          market_data: null,
+          ai_results: { gpt4: gptResult },
+          synthesis: { success: true, synthesized: false },
+          low_confidence: false,
+          chat_type,
+          user_id,
+          response_time_ms: Date.now() - startTime,
+          debug: { note: 'Casual chat - used lightweight GPT-4 response' }
+        });
+      } catch (error) {
+        console.error('❌ 闲聊模式GPT-4调用失败:', error.message);
+        // 降级到预设回复
+        return res.json({
+          status: "ok",
+          ok: true,
+          final_analysis: '你好！我是市场分析助手，可以帮你分析股票、查看热力图等。有什么想了解的吗？',
+          final_text: '你好！我是市场分析助手，可以帮你分析股票、查看热力图等。有什么想了解的吗？',
+          needs_heatmap: false,
+          actions: [],
+          intent: { mode: 'casual', lang: intent.lang, confidence: 0.9 },
+          scene: { name: 'Casual', depth: 'simple', targetLength: 50 },
+          symbols: [],
+          market_data: null,
+          ai_results: null,
+          synthesis: { success: true, synthesized: false },
+          low_confidence: false,
+          chat_type,
+          user_id,
+          response_time_ms: Date.now() - startTime,
+          debug: { note: 'Casual chat - fallback to preset response' }
+        });
+      }
     }
     
     // 4.5. 数据采集（如果有股票代码）

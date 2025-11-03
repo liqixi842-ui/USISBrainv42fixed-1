@@ -163,7 +163,8 @@ N8N workflow automatically detects `fetch_heatmap` action and generates screensh
 - `postmarket`: After-hours review
 - `diagnose`: Individual stock deep-dive
 - `news`: Market news aggregation
-- **`meta`** (new): Questions about AI capabilities
+- **`meta`**: Questions about AI capabilities
+- **`casual`** (new): Casual chat mode - uses lightweight GPT-4 response (1-3 sentences, max 120 chars) to avoid 6-AI orchestration cost
 
 ---
 
