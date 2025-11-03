@@ -259,23 +259,23 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
     'NASDAQ100': 'Nasdaq 100',
     'NASDAQCOMPOSITE': 'Nasdaq Composite',
     'NASDAQBKX': 'Nasdaq Bank',
-    'ALLUSA': 'All US Stocks',
+    'AllUSA': 'All US Stocks',
     
     // 🇬🇧 英国
     'UK100': 'FTSE 100',
-    'ALLUK': 'All UK Stocks',
+    'AllUK': 'All UK Stocks',
     
     // 🇩🇪 德国
     'DAX': 'DAX 40',
     'TECDAX': 'TecDAX',
     'MDAX': 'MDAX',
     'SDAX': 'SDAX',
-    'ALLDE': 'All Germany Stocks',
+    'AllDE': 'All Germany Stocks',
     
     // 🇫🇷 法国
     'CAC40': 'CAC 40',
     'SBF120': 'SBF 120',
-    'ALLFR': 'All France Stocks',
+    'AllFR': 'All France Stocks',
     
     // 🇪🇸 西班牙
     'IBEX35': 'IBEX 35',
@@ -283,26 +283,26 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
     'BMEINDGRO15': 'BME Industry Growth 15',
     'BMEINDGROAS': 'BME Industry Growth AS',
     'BMEICC': 'BME Consumer',
-    'ALLES': 'All Spain Stocks',
+    'AllES': 'All Spain Stocks',
     
     // 🇧🇪 比利时
-    'ALLBE': 'All Belgium Stocks',
+    'AllBE': 'All Belgium Stocks',
     
     // 🇯🇵 日本
-    'ALLJP': 'All Japan Stocks',
+    'AllJP': 'All Japan Stocks',
     
     // 🇨🇳 中国
-    'ALLCN': 'All China A Stocks',
+    'AllCN': 'All China A Stocks',
     
     // 🇦🇺 澳大利亚
-    'ALLAU': 'All Australia Stocks',
+    'AllAU': 'All Australia Stocks',
     
     // 🌎 美洲其他
-    'ALLBR': 'All Brazil Stocks',
-    'ALLAR': 'All Argentina Stocks',
-    'ALLCA': 'All Canada Stocks',
-    'ALLCL': 'All Chile Stocks',
-    'ALLCO': 'All Colombia Stocks',
+    'AllBR': 'All Brazil Stocks',
+    'AllAR': 'All Argentina Stocks',
+    'AllCA': 'All Canada Stocks',
+    'AllCL': 'All Chile Stocks',
+    'AllCO': 'All Colombia Stocks',
     
     // 🏭 行业指数
     'TVCRUI': 'Cruise Industry',
@@ -322,9 +322,9 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
     'SP500': 'SPX500',
     'NASDAQ': 'NASDAQCOMPOSITE',
     'NDX': 'NASDAQ100',
-    'RUSSELL2000': 'ALLUSA',
-    'RUSSELL1000': 'ALLUSA',
-    'RUSSELL3000': 'ALLUSA',
+    'RUSSELL2000': 'AllUSA',
+    'RUSSELL1000': 'AllUSA',
+    'RUSSELL3000': 'AllUSA',
     
     // 英国替代名称
     'FTSE100': 'UK100',
@@ -336,28 +336,28 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
     'IBEXMEDIUMCAP': 'IBEX35',
     
     // 其他通用映射
-    'USA': 'ALLUSA',
-    'UK': 'ALLUK',
-    'GERMANY': 'ALLDE',
-    'FRANCE': 'ALLFR',
-    'SPAIN': 'ALLES',
-    'JAPAN': 'ALLJP',
-    'CHINA': 'ALLCN',
-    'AUSTRALIA': 'ALLAU'
+    'USA': 'AllUSA',
+    'UK': 'AllUK',
+    'GERMANY': 'AllDE',
+    'FRANCE': 'AllFR',
+    'SPAIN': 'AllES',
+    'JAPAN': 'AllJP',
+    'CHINA': 'AllCN',
+    'AUSTRALIA': 'AllAU'
   };
 
   // 市场到可用指数的映射（用于错误提示）
   const marketIndices = {
-    spain: ['IBEX35', 'BMEIS', 'BMEINDGRO15', 'BMEINDGROAS', 'BMEICC', 'ALLES'],
-    germany: ['DAX', 'TECDAX', 'MDAX', 'SDAX', 'ALLDE'],
-    uk: ['UK100', 'ALLUK'],
-    france: ['CAC40', 'SBF120', 'ALLFR'],
-    usa: ['SPX500', 'DJDJI', 'NASDAQ100', 'NASDAQCOMPOSITE', 'ALLUSA'],
-    japan: ['ALLJP'],
-    china: ['ALLCN'],
-    australia: ['ALLAU'],
-    brazil: ['ALLBR'],
-    canada: ['ALLCA']
+    spain: ['IBEX35', 'BMEIS', 'BMEINDGRO15', 'BMEINDGROAS', 'BMEICC', 'AllES'],
+    germany: ['DAX', 'TECDAX', 'MDAX', 'SDAX', 'AllDE'],
+    uk: ['UK100', 'AllUK'],
+    france: ['CAC40', 'SBF120', 'AllFR'],
+    usa: ['SPX500', 'DJDJI', 'NASDAQ100', 'NASDAQCOMPOSITE', 'AllUSA'],
+    japan: ['AllJP'],
+    china: ['AllCN'],
+    australia: ['AllAU'],
+    brazil: ['AllBR'],
+    canada: ['AllCA']
   };
 
   // 确定最终使用的dataSource
@@ -394,22 +394,22 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
   } else {
     // 没有指定index，根据market参数选择全市场股票
     const marketMapping = {
-      usa: 'ALLUSA',
-      spain: 'ALLES',
-      germany: 'ALLDE',
-      uk: 'ALLUK',
-      france: 'ALLFR',
-      japan: 'ALLJP',
-      china: 'ALLCN',
-      australia: 'ALLAU',
-      hongkong: 'ALLCN',
-      belgium: 'ALLBE',
-      brazil: 'ALLBR',
-      argentina: 'ALLAR',
-      canada: 'ALLCA',
-      chile: 'ALLCL',
-      colombia: 'ALLCO',
-      europe: 'ALLFR',
+      usa: 'AllUSA',
+      spain: 'AllES',
+      germany: 'AllDE',
+      uk: 'AllUK',
+      france: 'AllFR',
+      japan: 'AllJP',
+      china: 'AllCN',
+      australia: 'AllAU',
+      hongkong: 'AllCN',
+      belgium: 'AllBE',
+      brazil: 'AllBR',
+      argentina: 'AllAR',
+      canada: 'AllCA',
+      chile: 'AllCL',
+      colombia: 'AllCO',
+      europe: 'AllFR',
       world: 'SPX500'
     };
     
