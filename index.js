@@ -1432,27 +1432,48 @@ app.post("/brain/orchestrate", async (req, res) => {
     // 8. Response
     return res.json({
       ok: true,
-      text: responseText,
+      final_analysis: responseText,  // 主要字段：最终综合分析
       image_url: imageUrl,
-      low_confidence: intent.confidence < 0.7,  // 暴露低置信度标志
-      synthesized: synthesis.synthesized || false,
+      
+      // 核心元数据
+      intent: {
+        mode: intent.mode,
+        lang: intent.lang,
+        confidence: intent.confidence
+      },
+      scene: {
+        name: scene.name,
+        depth: scene.depth,
+        targetLength: scene.targetLength
+      },
+      symbols,
+      
+      // 数据采集结果
+      market_data: marketData ? {
+        collected: marketData.collected,
+        summary: marketData.summary
+      } : null,
+      
+      // AI分析结果
+      ai_results: aiResults,
+      
+      // 综合信息
+      synthesis: {
+        success: synthesis.success,
+        synthesized: synthesis.synthesized
+      },
+      
+      // 系统信息
+      low_confidence: intent.confidence < 0.7,
+      chat_type,
+      user_id,
+      response_time_ms: responseTime,
+      
+      // Debug信息
       debug: {
-        intent: intent.mode,
-        intent_confidence: intent.confidence,
-        scene: scene.name,
         style: chat_type === 'private' ? 'teacher_personal' : 'team_professional',
-        target_length: scene.targetLength,
         tasks,
-        ai_results: {
-          claude: aiResults.claude.success,
-          deepseek: aiResults.deepseek.success,
-          gpt4: aiResults.gpt4.success,
-          gemini: aiResults.gemini.success,
-          perplexity: aiResults.perplexity.success,
-          mistral: aiResults.mistral.success
-        },
-        user_prefs: userPrefs,
-        response_time_ms: responseTime
+        user_prefs: userPrefs
       }
     });
     
