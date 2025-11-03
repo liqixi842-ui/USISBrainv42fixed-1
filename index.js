@@ -787,7 +787,8 @@ function detectActions(text = "") {
     }
     
     // 使用自建热力图（快速、稳定、支持所有市场）
-    const baseUrl = process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'https://node-js-tiqxi842.replit.app';
+    // 使用生产域名确保外部服务可访问
+    const baseUrl = 'https://node-js-tiqxi842.replit.app';
     const heatmapUrl = `${baseUrl}/heatmap?market=${market}`;
     
     actions.push({
