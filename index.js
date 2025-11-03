@@ -535,13 +535,63 @@ function extractSymbols(text = "") {
   return filtered;
 }
 
-// Intent Understanding - 深度意图理解
+// Detect Actions - 检测用户需要的"器官"操作（Brain给N8N下指令）
+function detectActions(text = "") {
+  const t = text.toLowerCase();
+  const actions = [];
+  
+  // 视觉需求（截图/热力图）
+  if (/热力图|heatmap|截图|screenshot|图表|chart|可视化|visual|带图/.test(t)) {
+    actions.push({
+      type: 'fetch_heatmap',
+      tool: 'A_Screenshot',
+      url: 'https://www.tradingview.com/heatmap/stock/#%7B%22dataSource%22%3A%22SPX500%22%2C%22blockColor%22%3A%22change%22%2C%22blockSize%22%3A%22market_cap_basic%22%2C%22grouping%22%3A%22sector%22%7D',
+      reason: '用户要求热力图'
+    });
+  }
+  
+  // 深度新闻需求（RSS爬取）
+  if (/深度新闻|详细资讯|news detail|爬取/.test(t)) {
+    actions.push({
+      type: 'fetch_news_rss',
+      tool: 'C_RSS_News',
+      reason: '用户需要深度新闻爬取'
+    });
+  }
+  
+  // Twitter情绪需求
+  if (/推特|twitter|社交|sentiment|情绪|x\.com/.test(t)) {
+    actions.push({
+      type: 'fetch_twitter',
+      tool: 'Twitter_Search',
+      reason: '用户需要社交媒体情绪'
+    });
+  }
+  
+  // 图片生成需求
+  if (/生成图|画图|generate image|create chart|ai.*图/.test(t)) {
+    actions.push({
+      type: 'generate_image',
+      tool: '/img/imagine',
+      reason: '用户需要AI生成图片'
+    });
+  }
+  
+  return actions;
+}
+
+// Intent Understanding - 深度意图理解 + Action Detection
 function understandIntent(text = "", mode = null) {
   const t = text.toLowerCase();
   
   // 如果已经指定 mode，直接使用
   if (mode && ['premarket', 'intraday', 'postmarket', 'diagnose', 'news'].includes(mode)) {
-    return { mode, confidence: 1.0, lang: 'zh' };
+    return { 
+      mode, 
+      confidence: 1.0, 
+      lang: 'zh',
+      actions: detectActions(text) // 新增：检测需要执行的动作
+    };
   }
   
   // 关键词匹配
@@ -575,7 +625,12 @@ function understandIntent(text = "", mode = null) {
     confidence = 0.5; // 低置信度
   }
   
-  return { mode: detectedMode, confidence, lang: 'zh' };
+  return { 
+    mode: detectedMode, 
+    confidence, 
+    lang: 'zh',
+    actions: detectActions(text) // 新增：检测需要执行的动作
+  };
 }
 
 // Scene Awareness - 场景感知（判断内容长度和深度）
@@ -1401,6 +1456,14 @@ app.post("/brain/orchestrate", async (req, res) => {
     const intent = understandIntent(text, mode);
     console.log(`🎯 意图识别: ${intent.mode} (置信度: ${intent.confidence})`);
     
+    // 2.6. 检测到的Action指令
+    if (intent.actions && intent.actions.length > 0) {
+      console.log(`🎬 检测到动作指令: ${intent.actions.map(a => a.type).join(', ')}`);
+      intent.actions.forEach(action => {
+        console.log(`   → ${action.tool}: ${action.reason}`);
+      });
+    }
+    
     // 2.5. 从 Memory 读取用户偏好
     const userPrefs = user_id ? Memory.userPrefs[user_id] || {} : {};
     console.log(`💾 用户偏好:`, Object.keys(userPrefs).length ? userPrefs : '无');
@@ -1480,6 +1543,9 @@ app.post("/brain/orchestrate", async (req, res) => {
       final_analysis: responseText,  // 主要字段：最终综合分析
       image_url: imageUrl,
       
+      // 🎯 新增：Action指令集（给N8N的器官指令）
+      actions: intent.actions || [],  // Brain告诉N8N该执行哪些操作
+      
       // 核心元数据
       intent: {
         mode: intent.mode,
@@ -1496,7 +1562,8 @@ app.post("/brain/orchestrate", async (req, res) => {
       // 数据采集结果
       market_data: marketData ? {
         collected: marketData.collected,
-        summary: marketData.summary
+        summary: marketData.summary,
+        data: marketData.data  // 包含完整数据供N8N使用
       } : null,
       
       // AI分析结果
