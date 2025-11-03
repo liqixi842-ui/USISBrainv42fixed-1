@@ -1900,6 +1900,114 @@ app.get("/brain/memory", (req, res) => {
   });
 });
 
+// 测试端点 - 用于测试不同的TradingView dataSource值
+app.get("/heatmap/test", (req, res) => {
+  const testSource = req.query.source || 'SPX500';
+  
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TradingView DataSource Tester</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #131722;
+      color: white;
+    }
+    .controls {
+      background: #1E222D;
+      padding: 20px;
+      border-bottom: 2px solid #2A2E39;
+    }
+    .controls h1 {
+      font-size: 20px;
+      margin-bottom: 15px;
+      color: #D1D4DC;
+    }
+    .controls input {
+      width: 300px;
+      padding: 10px;
+      font-size: 16px;
+      border: 1px solid #2A2E39;
+      background: #131722;
+      color: white;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+    .controls button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #2962FF;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .controls button:hover {
+      background: #1E53E5;
+    }
+    .current-value {
+      margin-top: 10px;
+      color: #787B86;
+      font-size: 14px;
+    }
+    .tradingview-widget-container {
+      width: 100%;
+      height: calc(100vh - 150px);
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <h1>🔬 TradingView DataSource Tester</h1>
+    <input type="text" id="sourceInput" value="${testSource}" placeholder="输入dataSource值 (例如: SPX500, NDX, DJI)">
+    <button onclick="testSource()">测试</button>
+    <div class="current-value">当前测试值: <strong>${testSource}</strong></div>
+  </div>
+  
+  <div class="tradingview-widget-container">
+    <div class="tradingview-widget-container__widget"></div>
+    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js" async>
+    {
+      "exchanges": [],
+      "dataSource": "${testSource}",
+      "grouping": "sector",
+      "blockSize": "market_cap_basic",
+      "blockColor": "change",
+      "locale": "en",
+      "symbolUrl": "",
+      "colorTheme": "dark",
+      "hasTopBar": false,
+      "isDataSetEnabled": true,
+      "isZoomEnabled": true,
+      "hasSymbolTooltip": true,
+      "width": "100%",
+      "height": "100%"
+    }
+    </script>
+  </div>
+  
+  <script>
+    function testSource() {
+      const value = document.getElementById('sourceInput').value.trim();
+      window.location.href = '/heatmap/test?source=' + encodeURIComponent(value);
+    }
+    
+    document.getElementById('sourceInput').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        testSource();
+      }
+    });
+  </script>
+</body>
+</html>
+  `);
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 USIS Brain v3 online on port ${PORT}`);
