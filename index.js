@@ -248,19 +248,19 @@ app.get("/heatmap", async (req, res) => {
 // 生成热力图HTML
 function generateHeatmapHTML(stocks, marketName) {
   const marketTitles = {
-    usa: '美国股市热力图',
-    spain: '西班牙股市热力图',
-    germany: '德国股市热力图',
-    japan: '日本股市热力图',
-    uk: '英国股市热力图',
-    hongkong: '香港股市热力图',
+    usa: 'US Stock Market Heatmap',
+    spain: 'Mapa de Calor del Mercado Español',
+    germany: 'Deutsche Börsen-Heatmap',
+    japan: '日本株式市場ヒートマップ',
+    uk: 'UK Stock Market Heatmap',
+    hongkong: '香港股市熱力圖',
     china: '中国A股热力图',
-    france: '法国股市热力图',
-    europe: '欧洲股市热力图',
-    world: '全球股市热力图'
+    france: 'Carte Thermique du Marché Français',
+    europe: 'European Stock Market Heatmap',
+    world: 'Global Stock Market Heatmap'
   };
 
-  const title = marketTitles[marketName] || '股市热力图';
+  const title = marketTitles[marketName] || 'Stock Market Heatmap';
 
   const stocksHTML = stocks.map(stock => {
     const changeNum = parseFloat(stock.change);
