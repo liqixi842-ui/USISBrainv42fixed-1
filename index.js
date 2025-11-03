@@ -643,8 +643,9 @@ function planTasks(intent, scene, symbols = []) {
 const OPENAI_KEY = process.env.OPENAI_API_KEY;
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const PERPLEXITY_KEY = process.env.PERPLEXITY_API_KEY;
+const MISTRAL_KEY = process.env.MISTRAL_API_KEY;
 
-// AI Agent Roles - 每个AI的角色定位
+// AI Agent Roles - 每个AI的角色定位（6个分析AI）
 const AI_ROLES = {
   claude: {
     name: 'Claude',
@@ -670,6 +671,11 @@ const AI_ROLES = {
     name: 'Perplexity',
     specialty: '深度研究专家',
     focus: '行业研究、公司基本面、长期趋势'
+  },
+  mistral: {
+    name: 'Mistral',
+    specialty: '市场情绪与风险评估',
+    focus: '情绪指标、恐慌贪婪、风险预警'
   }
 };
 
@@ -827,9 +833,40 @@ async function callPerplexity(prompt, maxTokens = 300) {
   }
 }
 
-// Multi-AI Analysis - 多AI并行分析
+// Call Mistral API
+async function callMistral(prompt, maxTokens = 300) {
+  try {
+    if (!MISTRAL_KEY) {
+      return { success: false, error: 'MISTRAL_KEY missing' };
+    }
+    
+    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${MISTRAL_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "mistral-large-latest",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: maxTokens,
+        temperature: 0.3
+      })
+    });
+    
+    const data = await response.json();
+    const text = data?.choices?.[0]?.message?.content || '';
+    
+    return { success: true, text };
+  } catch (err) {
+    console.error('❌ Mistral error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// Multi-AI Analysis - 多AI并行分析（6个AI全面协同）
 async function multiAIAnalysis({ mode, scene, symbols, text, chatType }) {
-  console.log(`🤖 开始5个AI并行分析...`);
+  console.log(`🤖 开始6个AI并行分析...`);
   
   const context = {
     mode,
@@ -844,16 +881,18 @@ async function multiAIAnalysis({ mode, scene, symbols, text, chatType }) {
     deepseek: buildDeepSeekPrompt(context, scene),
     gpt4: buildGPT4Prompt(context, scene, chatType),
     gemini: buildGeminiPrompt(context, scene),
-    perplexity: buildPerplexityPrompt(context, scene)
+    perplexity: buildPerplexityPrompt(context, scene),
+    mistral: buildMistralPrompt(context, scene)
   };
   
-  // 并行调用5个AI
-  const [claudeResult, deepseekResult, gpt4Result, geminiResult, perplexityResult] = await Promise.all([
-    callClaude(prompts.claude, scene.targetLength * 0.3),
-    callDeepSeek(prompts.deepseek, scene.targetLength * 0.3),
-    callGPT4(prompts.gpt4, scene.targetLength * 0.4),
-    callGemini(prompts.gemini, scene.targetLength * 0.3),
-    callPerplexity(prompts.perplexity, scene.targetLength * 0.3)
+  // 并行调用6个AI
+  const [claudeResult, deepseekResult, gpt4Result, geminiResult, perplexityResult, mistralResult] = await Promise.all([
+    callClaude(prompts.claude, scene.targetLength * 0.25),
+    callDeepSeek(prompts.deepseek, scene.targetLength * 0.25),
+    callGPT4(prompts.gpt4, scene.targetLength * 0.3),
+    callGemini(prompts.gemini, scene.targetLength * 0.25),
+    callPerplexity(prompts.perplexity, scene.targetLength * 0.25),
+    callMistral(prompts.mistral, scene.targetLength * 0.25)
   ]);
   
   console.log(`  ✅ Claude: ${claudeResult.success ? '成功' : '失败'}`);
@@ -861,13 +900,15 @@ async function multiAIAnalysis({ mode, scene, symbols, text, chatType }) {
   console.log(`  ✅ GPT-4: ${gpt4Result.success ? '成功' : '失败'}`);
   console.log(`  ✅ Gemini: ${geminiResult.success ? '成功' : '失败'}`);
   console.log(`  ✅ Perplexity: ${perplexityResult.success ? '成功' : '失败'}`);
+  console.log(`  ✅ Mistral: ${mistralResult.success ? '成功' : '失败'}`);
   
   return {
     claude: { ...AI_ROLES.claude, ...claudeResult },
     deepseek: { ...AI_ROLES.deepseek, ...deepseekResult },
     gpt4: { ...AI_ROLES.gpt4, ...gpt4Result },
     gemini: { ...AI_ROLES.gemini, ...geminiResult },
-    perplexity: { ...AI_ROLES.perplexity, ...perplexityResult }
+    perplexity: { ...AI_ROLES.perplexity, ...perplexityResult },
+    mistral: { ...AI_ROLES.mistral, ...mistralResult }
   };
 }
 
@@ -964,7 +1005,7 @@ function buildPerplexityPrompt(context, scene) {
 股票：${context.symbols}
 用户请求：${context.request}
 
-请从基本面角度提供${scene.targetLength/5}字左右的分析，包括：
+请从基本面角度提供${scene.targetLength/6}字左右的分析，包括：
 - 公司基本面分析
 - 行业趋势判断
 - 长期投资价值
@@ -975,6 +1016,25 @@ function buildPerplexityPrompt(context, scene) {
 - 不要废话`;
 }
 
+// Build Mistral Prompt - 市场情绪与风险评估
+function buildMistralPrompt(context, scene) {
+  return `你是一位市场情绪和风险评估专家，专注于识别市场恐慌与贪婪。
+
+场景：${context.scene}
+股票：${context.symbols}
+用户请求：${context.request}
+
+请从情绪和风险角度提供${scene.targetLength/6}字左右的分析，包括：
+- 当前市场情绪判断（恐慌/中性/贪婪）
+- 主要风险因素识别
+- 风险等级评估
+
+要求：
+- 敏锐捕捉情绪
+- 风险提示明确
+- 简洁有力`;
+}
+
 // ========================================
 // Intelligent Synthesis - 智能合成系统
 // ========================================
@@ -983,13 +1043,14 @@ function buildPerplexityPrompt(context, scene) {
 async function synthesizeAIOutputs(aiResults, { mode, scene, chatType, symbols, text }) {
   console.log(`🔮 开始智能合成...`);
   
-  // 提取成功的AI输出
+  // 提取成功的AI输出（6个AI）
   const validOutputs = [];
   if (aiResults.claude.success) validOutputs.push({ name: 'Claude (技术分析)', text: aiResults.claude.text });
   if (aiResults.deepseek.success) validOutputs.push({ name: 'DeepSeek (市场洞察)', text: aiResults.deepseek.text });
   if (aiResults.gpt4.success) validOutputs.push({ name: 'GPT-4 (综合策略)', text: aiResults.gpt4.text });
   if (aiResults.gemini.success) validOutputs.push({ name: 'Gemini (实时数据)', text: aiResults.gemini.text });
   if (aiResults.perplexity.success) validOutputs.push({ name: 'Perplexity (深度研究)', text: aiResults.perplexity.text });
+  if (aiResults.mistral.success) validOutputs.push({ name: 'Mistral (情绪风险)', text: aiResults.mistral.text });
   
   if (validOutputs.length === 0) {
     return {
@@ -1205,7 +1266,8 @@ app.post("/brain/orchestrate", async (req, res) => {
           deepseek: aiResults.deepseek.success,
           gpt4: aiResults.gpt4.success,
           gemini: aiResults.gemini.success,
-          perplexity: aiResults.perplexity.success
+          perplexity: aiResults.perplexity.success,
+          mistral: aiResults.mistral.success
         },
         user_prefs: userPrefs,
         response_time_ms: responseTime
