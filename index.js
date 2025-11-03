@@ -517,13 +517,31 @@ const Memory = {
   }
 };
 
+// Symbol Extraction - 从文本中提取股票代码
+function extractSymbols(text = "") {
+  // 大小写不敏感匹配（转大写处理）
+  const upperText = text.toUpperCase();
+  const matches = upperText.match(/\b[A-Z]{1,5}\b/g) || [];
+  
+  // 去重并过滤常见非股票词（扩展黑名单）
+  const blacklist = [
+    'US', 'USD', 'PM', 'AM', 'ET', 'PT', 'NY', 'LA', 'SF', 
+    'AI', 'EV', 'IPO', 'CEO', 'CFO', 'CTO', 'API', 'URL', 'HTML',
+    'GDP', 'CPI', 'PPI', 'PMI', 'FED', 'SEC', 'DOW', 'FX', 'VIX',
+    'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HAS', 'HAD', 'HER', 'WAS', 'ONE', 'OUR', 'OUT', 'DAY'
+  ];
+  
+  const filtered = [...new Set(matches)].filter(s => !blacklist.includes(s));
+  return filtered;
+}
+
 // Intent Understanding - 深度意图理解
 function understandIntent(text = "", mode = null) {
   const t = text.toLowerCase();
   
   // 如果已经指定 mode，直接使用
   if (mode && ['premarket', 'intraday', 'postmarket', 'diagnose', 'news'].includes(mode)) {
-    return { mode, confidence: 1.0 };
+    return { mode, confidence: 1.0, lang: 'zh' };
   }
   
   // 关键词匹配
@@ -557,7 +575,7 @@ function understandIntent(text = "", mode = null) {
     confidence = 0.5; // 低置信度
   }
   
-  return { mode: detectedMode, confidence };
+  return { mode: detectedMode, confidence, lang: 'zh' };
 }
 
 // Scene Awareness - 场景感知（判断内容长度和深度）
@@ -960,6 +978,29 @@ function buildDeepSeekPrompt(context, scene) {
 
 // Build GPT-4 Prompt - 综合策略分析师
 function buildGPT4Prompt(context, scene, chatType) {
+  // 新闻模式：返回新闻摘要而非投资分析
+  if (context.mode === 'news') {
+    return `你是一位财经新闻编辑，负责整理最新市场资讯。
+
+股票：${context.symbols || '全市场'}
+用户请求：${context.request}
+
+请以新闻摘要形式输出，格式：
+1. 【标题】新闻标题
+   摘要：简短说明（20-30字）
+   
+2. 【标题】第二条新闻
+   摘要：简短说明
+
+要求：
+- 列出3-5条最重要的新闻
+- 每条新闻包含标题和简短摘要
+- 优先报道重大事件、财报、政策变化
+- 不要分析和建议，只报道事实
+- ${chatType === 'private' ? '口语化表达' : '专业新闻语气'}`;
+  }
+  
+  // 常规模式：投资分析
   let styleGuide = chatType === 'private' 
     ? `风格：像贴心老师一样，用"你看"、"我注意到"等口语化表达，用生活化类比解释专业概念` 
     : `风格：专业团队口吻，使用"老师团队认为"、"我们认为"，结构化输出`;
@@ -1341,16 +1382,20 @@ app.post("/brain/orchestrate", async (req, res) => {
       text = "",
       chat_type = "private",  // private | group
       mode = null,            // premarket | intraday | postmarket | diagnose | news
-      symbols = [],           // 股票代码
+      symbols: providedSymbols = [],  // 股票代码（如果提供）
       user_id = null,
       lang = "zh"
     } = req.body || {};
+    
+    // 1.5. 自动提取symbols（如果未提供）
+    const extractedSymbols = extractSymbols(text);
+    const symbols = providedSymbols.length > 0 ? providedSymbols : extractedSymbols;
     
     console.log(`\n🧠 Orchestrator 收到请求:`);
     console.log(`   文本: "${text}"`);
     console.log(`   场景: ${chat_type}`);
     console.log(`   模式: ${mode || '自动检测'}`);
-    console.log(`   股票: ${symbols.join(', ') || '无'}`);
+    console.log(`   股票: ${symbols.join(', ') || '无'}${extractedSymbols.length > 0 ? ' (自动提取)' : ''}`);
     
     // 2. Intent Understanding
     const intent = understandIntent(text, mode);
