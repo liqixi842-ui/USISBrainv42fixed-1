@@ -164,3 +164,82 @@ N8N workflow automatically detects `fetch_heatmap` action and generates screensh
 - `diagnose`: Individual stock deep-dive
 - `news`: Market news aggregation
 - **`meta`** (new): Questions about AI capabilities
+
+---
+
+# PostgreSQL Memory System (2025-11-03)
+
+## Architecture Decision
+**Memory is managed 100% by Brain (Replit), not N8N.**
+
+### Rationale
+- Brain is the thinking center, memory should be part of its core capability
+- Single source of truth: PostgreSQL database persists across Replit restarts
+- N8N remains a pure executor organ, only forwards `user_id` without managing memory
+- No data synchronization issues between Brain internal state and external systems
+
+## Implementation
+
+### Database Schema
+```sql
+CREATE TABLE user_memory (
+  id SERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  timestamp TIMESTAMPTZ DEFAULT NOW(),
+  request_text TEXT,
+  mode TEXT,
+  symbols TEXT[],
+  response_text TEXT,
+  chat_type TEXT
+);
+CREATE INDEX idx_user_memory_user_id ON user_memory(user_id);
+CREATE INDEX idx_user_memory_timestamp ON user_memory(timestamp DESC);
+```
+
+### API Endpoints
+- **POST /brain/orchestrate**: Automatically reads last 3 user memories before AI analysis, saves new conversation after response
+- **POST /brain/memory/clear**: Clears all history for a specific user_id
+- **GET /brain/memory**: Views system memory (legacy internal state)
+
+### Memory Flow
+```
+User Request (with user_id)
+    ↓
+Brain reads last 3 conversations from PostgreSQL
+    ↓
+AI analysis (with historical context)
+    ↓
+Brain saves new conversation to PostgreSQL
+    ↓
+Response to user
+```
+
+### N8N Integration
+N8N only needs to pass `user_id` in the request body:
+```json
+{
+  "text": "user's message",
+  "chat_type": "private|group",
+  "user_id": "telegram_user_id"
+}
+```
+
+N8N can trigger memory clearing:
+```
+POST /brain/memory/clear
+{
+  "user_id": "telegram_user_id"
+}
+```
+
+## User Experience
+- **Learning**: Brain remembers last 3 conversations per user
+- **Personalization**: Adjusts analysis style based on user history
+- **Privacy**: Users can say "清空记忆" to clear their history
+- **Persistence**: Memory survives Replit restarts (PostgreSQL backed)
+
+## Technical Notes
+- Database connection uses `pg` driver with connection pooling
+- All queries use parameterized statements (SQL injection safe)
+- Graceful degradation: If database query fails, continues with empty history
+- DATABASE_URL environment variable required for persistence
