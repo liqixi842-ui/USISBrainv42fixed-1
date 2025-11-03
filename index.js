@@ -177,6 +177,215 @@ app.get("/social/twitter/search", async (req, res) => {
   }
 });
 
+// ---- Heatmap Generator: 自建热力图
+app.get("/heatmap", async (req, res) => {
+  try {
+    const market = req.query.market || 'usa';
+    console.log(`📊 生成热力图: market=${market}`);
+
+    // 定义各市场的主要股票（使用美股ticker和ADR）
+    const marketStocks = {
+      usa: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'JPM', 'V', 'JNJ', 'WMT', 'PG', 'MA', 'HD', 'DIS', 'BAC', 'NFLX', 'ADBE', 'CRM'],
+      spain: ['TEF', 'SAN', 'BBVA', 'IBE', 'ITX', 'REP', 'ACS', 'FER', 'ENG', 'SAB'],  // ADR和西班牙主要公司
+      germany: ['SAP', 'SIEGY', 'BASFY', 'BAYRY', 'DDAIF', 'VOW', 'BMWYY', 'ALIZY', 'DHRTY', 'MUV2'],
+      japan: ['TM', 'SONY', 'MSBHF', 'HMC', 'SMFG', 'MTU', 'FUJIY', 'NTDOY', 'HTHIY', 'PCRFY'],
+      uk: ['BP', 'HSBC', 'AZN', 'SHEL', 'GSK', 'RIO', 'ULVR', 'DGE', 'RELX', 'NG'],
+      hongkong: ['BABA', 'TCEHY', '0700.HK', '0005.HK', '0001.HK', '0388.HK', '0939.HK', '2318.HK', '0883.HK', '0016.HK'],
+      china: ['BABA', 'JD', 'BIDU', 'PDD', 'NIO', 'XPEV', 'LI', 'TME', 'BILI', 'IQ'],
+      france: ['OR', 'BNP', 'SAN', 'AIR', 'AXA', 'DANOY', 'LVMUY', 'PUGOY', 'SAFRY', 'VIVHY'],
+      world: ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'BABA', 'TSM', 'V', 'JNJ', 'WMT', 'JPM', 'MA', 'PG', 'LVMUY', 'NVO', 'TM', 'ASML', 'NSRGY', 'SAP']
+    };
+
+    const stocks = marketStocks[market] || marketStocks.usa;
+    const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
+
+    if (!FINNHUB_KEY) {
+      return res.send('<h1>FINNHUB_API_KEY not configured</h1>');
+    }
+
+    // 并行获取所有股票的实时数据
+    const promises = stocks.map(async (symbol) => {
+      try {
+        const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`);
+        const data = await response.json();
+        
+        if (data.c && data.pc) {  // c=当前价格, pc=前收盘价
+          const change = ((data.c - data.pc) / data.pc) * 100;
+          return {
+            symbol,
+            price: data.c,
+            change: change.toFixed(2),
+            value: Math.abs(change)  // 用于调整方块大小
+          };
+        }
+        return null;
+      } catch (err) {
+        console.error(`获取${symbol}数据失败:`, err.message);
+        return null;
+      }
+    });
+
+    const results = await Promise.all(promises);
+    const validStocks = results.filter(item => item !== null);
+
+    // 生成HTML热力图
+    const html = generateHeatmapHTML(validStocks, market);
+    res.send(html);
+
+  } catch (err) {
+    console.error("❌ 热力图生成错误:", err);
+    res.send(`<h1>Error: ${err.message}</h1>`);
+  }
+});
+
+// 生成热力图HTML
+function generateHeatmapHTML(stocks, marketName) {
+  const marketTitles = {
+    usa: '美国股市热力图',
+    spain: '西班牙股市热力图',
+    germany: '德国股市热力图',
+    japan: '日本股市热力图',
+    uk: '英国股市热力图',
+    hongkong: '香港股市热力图',
+    china: '中国A股热力图',
+    france: '法国股市热力图',
+    world: '全球股市热力图'
+  };
+
+  const title = marketTitles[marketName] || '股市热力图';
+
+  const stocksHTML = stocks.map(stock => {
+    const changeNum = parseFloat(stock.change);
+    const color = changeNum >= 0 ? 
+      `hsl(120, ${Math.min(100, Math.abs(changeNum) * 20)}%, ${50 - Math.min(40, Math.abs(changeNum) * 3)}%)` :  // 绿色
+      `hsl(0, ${Math.min(100, Math.abs(changeNum) * 20)}%, ${50 - Math.min(40, Math.abs(changeNum) * 3)}%)`;      // 红色
+    
+    const size = Math.max(100, Math.min(300, stock.value * 30));  // 根据涨跌幅调整大小
+    
+    return `
+      <div class="stock-card" style="background: ${color}; width: ${size}px; height: ${size}px;">
+        <div class="symbol">${stock.symbol}</div>
+        <div class="change">${changeNum >= 0 ? '+' : ''}${stock.change}%</div>
+        <div class="price">$${stock.price.toFixed(2)}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0e27;
+      color: white;
+      padding: 20px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .header h1 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .header .timestamp {
+      color: #888;
+      font-size: 14px;
+    }
+    .heatmap-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      justify-content: center;
+      padding: 20px;
+    }
+    .stock-card {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      border-radius: 8px;
+      transition: transform 0.2s;
+      cursor: pointer;
+      padding: 10px;
+    }
+    .stock-card:hover {
+      transform: scale(1.05);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+    }
+    .symbol {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .change {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .price {
+      font-size: 14px;
+      opacity: 0.8;
+    }
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin-top: 30px;
+      padding: 20px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .legend-color {
+      width: 30px;
+      height: 30px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>${title}</h1>
+    <div class="timestamp">${new Date().toLocaleString('zh-CN')}</div>
+  </div>
+  
+  <div class="heatmap-container">
+    ${stocksHTML}
+  </div>
+
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-color" style="background: hsl(120, 80%, 30%);"></div>
+      <span>大涨</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: hsl(120, 50%, 40%);"></div>
+      <span>小涨</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: hsl(0, 50%, 40%);"></div>
+      <span>小跌</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-color" style="background: hsl(0, 80%, 30%);"></div>
+      <span>大跌</span>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}
+
 // ---- Helper: Poll Replicate prediction (only if needed)
 async function pollReplicatePrediction(predictionId, maxAttempts = 30) {
   for (let i = 0; i < maxAttempts; i++) {
@@ -542,49 +751,49 @@ function detectActions(text = "") {
   
   // 视觉需求（截图/热力图）
   if (/热力图|heatmap|截图|screenshot|图表|chart|可视化|visual|带图/.test(t)) {
-    // 检测地区/国家，返回对应的FinViz参数
-    let mapType = 'sec';  // 默认美股按行业
+    // 检测地区/国家，返回对应的市场参数
+    let market = 'usa';
     let marketName = '美股市场';
     
     if (/西班牙|spain|ibex|马德里/.test(t)) {
-      mapType = 'world&sec=spain';
+      market = 'spain';
       marketName = '西班牙市场';
     } else if (/德国|germany|dax|法兰克福/.test(t)) {
-      mapType = 'world&sec=germany';
+      market = 'germany';
       marketName = '德国市场';
     } else if (/英国|uk|britain|ftse|伦敦/.test(t)) {
-      mapType = 'world&sec=uk';
+      market = 'uk';
       marketName = '英国市场';
     } else if (/日本|japan|nikkei|东京/.test(t)) {
-      mapType = 'world&sec=japan';
+      market = 'japan';
       marketName = '日本市场';
     } else if (/法国|france|cac/.test(t)) {
-      mapType = 'world&sec=france';
+      market = 'france';
       marketName = '法国市场';
     } else if (/香港|hk|恒生|hsi/.test(t)) {
-      mapType = 'world&sec=hongkong';
+      market = 'hongkong';
       marketName = '香港市场';
     } else if (/中国|a股|上证|深证|沪深/.test(t)) {
-      mapType = 'world&sec=china';
+      market = 'china';
       marketName = '中国市场';
     } else if (/欧洲|europe|eu/.test(t)) {
-      mapType = 'world&sec=europe';
+      market = 'europe';
       marketName = '欧洲市场';
     } else if (/全球|世界|world/.test(t)) {
-      mapType = 'world';
+      market = 'world';
       marketName = '全球市场';
     }
     
-    // FinViz热力图（支持服务器端参数，需要较长加载时间）
-    const heatmapUrl = `https://finviz.com/map.ashx?t=${mapType}&st=w1`;
+    // 使用自建热力图（快速、稳定、支持所有市场）
+    const baseUrl = process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'https://node-js-tiqxi842.replit.app';
+    const heatmapUrl = `${baseUrl}/heatmap?market=${market}`;
     
     actions.push({
       type: 'fetch_heatmap',
       tool: 'A_Screenshot',
       url: heatmapUrl,
       market: marketName,
-      reason: `用户要求${marketName}热力图`,
-      timeout: 30000  // 30秒超时
+      reason: `用户要求${marketName}热力图`
     });
   }
   
