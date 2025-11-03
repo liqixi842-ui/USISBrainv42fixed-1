@@ -6,6 +6,10 @@ const app = express();
 app.use(express.json());
 
 // PostgreSQL Database Connection
+if (!process.env.DATABASE_URL) {
+  console.error("⚠️  DATABASE_URL not found - memory persistence disabled");
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
