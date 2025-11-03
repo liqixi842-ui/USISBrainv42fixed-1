@@ -969,12 +969,34 @@ function extractSymbols(text = "") {
 }
 
 // Detect Actions - 检测用户需要的"器官"操作（Brain给N8N下指令）
-function detectActions(text = "") {
+function detectActions(text = "", symbols = []) {
   const t = text.toLowerCase();
   const actions = [];
   
-  // 视觉需求（截图/热力图）
-  if (/热力图|heatmap|截图|screenshot|图表|chart|可视化|visual|带图/.test(t)) {
+  // 🎯 优先判断：个股K线图 vs 市场热力图
+  const hasSymbols = symbols && symbols.length > 0;
+  const explicitHeatmap = /热力图|heatmap|市场图|板块图|sector/.test(t);
+  const needsChart = /图|chart|走势|k线|k-line|candlestick|图表|可视化|visual/.test(t);
+  
+  // 🔍 决策逻辑：
+  // 1. 如果有symbols + 需要图表 + 不是明确说"热力图" → 个股K线图
+  // 2. 如果明确说"热力图" → 市场热力图
+  // 3. 如果没有symbols + 需要图表 → 市场热力图
+  
+  if (hasSymbols && needsChart && !explicitHeatmap) {
+    // 个股K线图优先
+    actions.push({
+      type: 'fetch_symbol_chart',
+      tool: 'TradingView_SymbolChart',
+      symbols: symbols,
+      reason: `用户要求查看${symbols.join(', ')}的K线走势图`
+    });
+    console.log(`📈 检测到个股图表需求: ${symbols.join(', ')}`);
+    return actions;  // 直接返回，不再检测热力图
+  }
+  
+  // 视觉需求（市场热力图/截图）
+  if (explicitHeatmap || (/截图|screenshot/.test(t) && !hasSymbols)) {
     // 智能检测具体指数（优先级高于地区检测）
     let index = '';
     let indexName = '';
@@ -1186,7 +1208,7 @@ function detectActions(text = "") {
 }
 
 // Intent Understanding - 深度意图理解 + Action Detection
-function understandIntent(text = "", mode = null) {
+function understandIntent(text = "", mode = null, symbols = []) {
   const t = text.toLowerCase();
   
   // 如果已经指定 mode，直接使用
@@ -1195,7 +1217,7 @@ function understandIntent(text = "", mode = null) {
       mode, 
       confidence: 1.0, 
       lang: 'zh',
-      actions: detectActions(text) // 新增：检测需要执行的动作
+      actions: detectActions(text, symbols) // 新增：检测需要执行的动作
     };
   }
   
@@ -1240,7 +1262,7 @@ function understandIntent(text = "", mode = null) {
     mode: detectedMode, 
     confidence, 
     lang: 'zh',
-    actions: detectActions(text) // 新增：检测需要执行的动作
+    actions: detectActions(text, symbols) // 新增：检测需要执行的动作
   };
 }
 
@@ -2079,8 +2101,8 @@ app.post("/brain/orchestrate", async (req, res) => {
     console.log(`   模式: ${mode || '自动检测'}`);
     console.log(`   股票: ${symbols.join(', ') || '无'}${extractedSymbols.length > 0 ? ' (自动提取)' : ''}`);
     
-    // 2. Intent Understanding
-    const intent = understandIntent(text, mode);
+    // 2. Intent Understanding (传入symbols用于智能判断图表类型)
+    const intent = understandIntent(text, mode, symbols);
     console.log(`🎯 意图识别: ${intent.mode} (置信度: ${intent.confidence})`);
     
     // 2.6. 检测到的Action指令
