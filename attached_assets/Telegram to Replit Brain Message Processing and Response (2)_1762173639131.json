@@ -1,0 +1,959 @@
+{
+  "name": "Telegram to Replit Brain Message Processing and Response",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "79915208-53de-46d9-aca8-8512fbcb0a40",
+      "name": "Telegram_Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -23600,
+        1448
+      ],
+      "webhookId": "13bd65b6-5de8-4120-81e0-42e82c679620",
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://node-js-liqixi842.replit.app/brain/orchestrate",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $json.message?.text || $json.text || 'default' }}"
+            },
+            {
+              "name": "chat_type",
+              "value": "={{ $json.message?.chat?.type || $json.chat_type || 'group' }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.message?.from?.id || $json.user_id || 'system' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 45000
+        }
+      },
+      "id": "34c89b68-8fd6-4ddd-aff0-7afb09d476a0",
+      "name": "Call_Brain_Orchestrate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -23376,
+        1256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const brain = $json;\nconst actions = brain.actions || [];\n\nreturn [{\n  json: {\n    final_text: brain.final_analysis || \"未收到分析\",\n    symbols: brain.symbols || [],\n    chat_id: $node[\"Telegram_Trigger\"].json.message.chat.id,\n    \n    needs_heatmap: actions.some(a => a.type === 'fetch_heatmap'),\n    heatmap_url: actions.find(a => a.type === 'fetch_heatmap')?.url || null,\n    \n    actions: actions\n  }\n}];"
+      },
+      "id": "b3abc1d4-a9c2-47a5-bf75-28f23e4a6092",
+      "name": "Parse_Brain_Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -23152,
+        1256
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.needs_heatmap }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b61c0329-2250-4aa3-8d69-d131301dd982",
+      "name": "IF_Needs_Heatmap",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -22704,
+        1544
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://shot.screenshotapi.net/screenshot",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "FVJZDCY-C4940PS-M43TEH8-DF69HJP"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.heatmap_url || 'https://www.tradingview.com/heatmap/stock/' }}"
+            },
+            {
+              "name": "full_page",
+              "value": "true"
+            },
+            {
+              "name": "timeout",
+              "value": "30000"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "27d3d985-0fa1-4c7e-9b10-c626cb8d3ef5",
+      "name": "Screenshot_Heatmap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -22480,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "id": "db1af98a-e84b-4c42-9025-ca74d600e0d2",
+      "name": "Merge_Screenshot",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -22032,
+        1448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all input items\nconst allItems = $input.all();\n\n// Find the main data (from Parse_Brain_Response)\nconst mainData = allItems.find(item => item.json.final_text) || allItems[0];\n\n// Find screenshot data (from Normalize_Screenshot)\nconst screenshotData = allItems.find(item => item.json.screenshot);\n\n// Robust chat_id retrieval with multiple fallback options\nlet chatId = null;\n\n// Try to get chat_id from mainData\nif (mainData && mainData.json.chat_id) {\n  chatId = mainData.json.chat_id;\n}\n\n// Fallback: Try to get from original Telegram trigger data\nif (!chatId) {\n  try {\n    const telegramData = $node[\"Telegram_Trigger\"].json;\n    if (telegramData && telegramData.message && telegramData.message.chat) {\n      chatId = telegramData.message.chat.id;\n    }\n  } catch (e) {\n    console.log('Could not retrieve chat_id from Telegram_Trigger:', e.message);\n  }\n}\n\n// Fallback: Search all items for chat_id\nif (!chatId) {\n  for (const item of allItems) {\n    if (item.json.chat_id) {\n      chatId = item.json.chat_id;\n      break;\n    }\n  }\n}\n\n// Get caption text with fallback\nconst caption = (mainData && mainData.json.final_text) || \"未收到分析\";\n\n// Get screenshot with proper validation\nconst screenshot = (screenshotData && screenshotData.json.screenshot) || null;\nconst hasScreenshot = !!screenshot;\n\n// Log for debugging\nconsole.log('Pack_Final_Message Debug:', {\n  chatId,\n  captionLength: caption.length,\n  hasScreenshot,\n  itemsCount: allItems.length\n});\n\n// Return packed message\nreturn [{\n  json: {\n    chat_id: chatId,\n    caption: caption,\n    screenshot: screenshot,\n    send_as_photo: hasScreenshot\n  }\n}];"
+      },
+      "id": "67cf2906-6bfd-43f1-b08d-df3b34c82eeb",
+      "name": "Pack_Final_Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -21808,
+        1448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.send_as_photo }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "68f5323e-165c-4c4f-a8b4-283c4aaf51d1",
+      "name": "IF_Send_Photo",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -21584,
+        1448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "={{ $node[\"Pack_Final_Message\"].json.chat_id }}",
+        "file": "={{ $json.screenshot }}",
+        "additionalFields": {
+          "caption": "={{ $json.caption }}"
+        }
+      },
+      "id": "1854ba6c-dd2d-4e55-91f0-b4bf04bec275",
+      "name": "Send_With_Photo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -21360,
+        1256
+      ],
+      "webhookId": "6aa9e3dd-867b-4c63-bbbe-475d026e485f",
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $node[\"Pack_Final_Message\"].json.chat_id }}",
+        "text": "={{ $json.caption }}",
+        "additionalFields": {}
+      },
+      "id": "b17a9dbb-f995-4063-8022-3063fa338c87",
+      "name": "Send_Text_Only",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -21360,
+        1448
+      ],
+      "webhookId": "15ec5527-aaac-4cfd-b695-d45c76b1f536",
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { screenshot: $json.screenshot || $json.screenshotUrl || null } }];"
+      },
+      "id": "fa77b447-0761-4d14-be1f-a4247b668200",
+      "name": "Normalize_Screenshot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -22256,
+        1616
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { chat_id: $node['Telegram_Trigger'].json.message.chat.id, caption: '⚠️ 系统出现临时错误，请稍后再试。' } }];"
+      },
+      "id": "c930897f-a191-488c-a903-134068513fa7",
+      "name": "Error_Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -23824,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.caption }}",
+        "additionalFields": {}
+      },
+      "id": "515856ac-1c80-4693-b97f-6c2671311fb1",
+      "name": "Send_Error_Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -23600,
+        672
+      ],
+      "webhookId": "7e0e769c-4fba-4539-9413-b96a03eec4b8",
+      "credentials": {
+        "telegramApi": {
+          "id": "q4nKZXgSOL95srYI",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "id": "ed26280f-aedb-4b49-ba0b-6e0be5dc875f",
+      "name": "Schedule_Premarket",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -23824,
+        1064
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "id": "b1294582-3415-41a5-aa5f-5330de706b59",
+      "name": "Schedule_Aftermarket",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -23824,
+        1256
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "message",
+              "value": "={ \"text\": \"盘前带热力图\" }",
+              "type": "object"
+            },
+            {
+              "id": "id-2",
+              "name": "chat_type",
+              "value": "group",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "user_id",
+              "value": "scheduled",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e4c7cf68-c516-48c8-8ca3-b7f0083ac0c4",
+      "name": "Set_Premarket_Command",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -23600,
+        1064
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "message",
+              "value": "={{ JSON.stringify({ \"text\": \"盘后总结\" }) }}",
+              "type": "object"
+            },
+            {
+              "id": "id-2",
+              "name": "chat_type",
+              "value": "group",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "user_id",
+              "value": "scheduled",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "480f4c40-d5b2-47b8-b577-ee3989cfd5c0",
+      "name": "Set_Aftermarket_Command",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -23600,
+        1256
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.actions.some(a => a.type === 'fetch_twitter') }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3b2d8f26-3649-41a6-9372-3808c5076667",
+      "name": "IF_Needs_Twitter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -22928,
+        968
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.actions.some(a => a.type === 'fetch_news_rss') }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5d829c66-6ba2-46e2-b661-4b8da7842d37",
+      "name": "IF_Needs_News",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -22704,
+        1256
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twitter.com/2/tweets/search/recent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "bitcoin lang:en -is:retweet"
+            },
+            {
+              "name": "max_results",
+              "value": "15"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Kh9BmUUhIUAxNHRQ7SuPp0uPc5RVYY5k6HBSupkvKe9IQ"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "309df59e-a3b1-412c-b273-bbc09e00700a",
+      "name": "Fetch_Twitter_Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -22704,
+        896
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.twitter.com/2/tweets/search/recent",
+        "options": {}
+      },
+      "id": "67903ff4-7a41-4a98-8184-3b26efec4ee9",
+      "name": "Fetch_News_RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        -22480,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "id": "5e990b57-14d5-4107-bd18-3959a7e291f1",
+      "name": "Merge_Twitter",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -22480,
+        968
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "id": "6fc75bb2-db3c-4afb-9f78-8c4c0f2f2d11",
+      "name": "Merge_News",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -22256,
+        1160
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "user_id",
+              "value": "={{ $node['Telegram_Trigger'].json.message.from.id }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "symbols",
+              "value": "={{ $node['Parse_Brain_Response'].json.symbols }}",
+              "type": "array"
+            },
+            {
+              "id": "id-4",
+              "name": "actions",
+              "value": "={{ JSON.stringify($node['Parse_Brain_Response'].json.actions) }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "final_text",
+              "value": "={{ $node['Parse_Brain_Response'].json.final_text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3a04510a-6099-403b-9a12-c417aea6bc5c",
+      "name": "Prepare_Log_Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -21584,
+        1064
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1z5okdHtVTehghIZYaj78ZwMCO49L-rHPV8cWFgwArAA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "工作表1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1z5okdHtVTehghIZYaj78ZwMCO49L-rHPV8cWFgwArAA/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "sentiment_index"
+          ],
+          "schema": [
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "sentiment_index",
+              "displayName": "sentiment_index",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4018ddd7-01cd-4d46-8c91-8b85dc7a8438",
+      "name": "Log_To_Google_Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -21360,
+        1064
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "6WKi5SVIzdnv6KX3",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram_Trigger": {
+      "main": [
+        [
+          {
+            "node": "Call_Brain_Orchestrate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call_Brain_Orchestrate": {
+      "main": [
+        [
+          {
+            "node": "Parse_Brain_Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse_Brain_Response": {
+      "main": [
+        [
+          {
+            "node": "IF_Needs_Heatmap",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF_Needs_Twitter",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF_Needs_News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Needs_Heatmap": {
+      "main": [
+        [
+          {
+            "node": "Screenshot_Heatmap",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge_Screenshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge_Screenshot": {
+      "main": [
+        [
+          {
+            "node": "Pack_Final_Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pack_Final_Message": {
+      "main": [
+        [
+          {
+            "node": "IF_Send_Photo",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare_Log_Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Send_Photo": {
+      "main": [
+        [
+          {
+            "node": "Send_With_Photo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send_Text_Only",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Screenshot_Heatmap": {
+      "main": [
+        [
+          {
+            "node": "Normalize_Screenshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize_Screenshot": {
+      "main": [
+        [
+          {
+            "node": "Merge_Screenshot",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Error_Handler": {
+      "main": [
+        [
+          {
+            "node": "Send_Error_Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule_Premarket": {
+      "main": [
+        [
+          {
+            "node": "Set_Premarket_Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule_Aftermarket": {
+      "main": [
+        [
+          {
+            "node": "Set_Aftermarket_Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_Premarket_Command": {
+      "main": [
+        [
+          {
+            "node": "Call_Brain_Orchestrate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_Aftermarket_Command": {
+      "main": [
+        [
+          {
+            "node": "Call_Brain_Orchestrate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Needs_Twitter": {
+      "main": [
+        [
+          {
+            "node": "Fetch_Twitter_Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge_Twitter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF_Needs_News": {
+      "main": [
+        [
+          {
+            "node": "Fetch_News_RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge_News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch_Twitter_Data": {
+      "main": [
+        [
+          {
+            "node": "Merge_Twitter",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Fetch_News_RSS": {
+      "main": [
+        [
+          {
+            "node": "Merge_News",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge_Twitter": {
+      "main": [
+        [
+          {
+            "node": "Merge_News",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge_News": {
+      "main": [
+        [
+          {
+            "node": "Merge_Screenshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare_Log_Data": {
+      "main": [
+        [
+          {
+            "node": "Log_To_Google_Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "cdcbb2e6-0806-4643-9b41-61b4686f22d1",
+  "meta": {
+    "instanceId": "e55566bfe54f88b404d502841707ce3b88351798d04a45b88b4e50f6ca391fb1"
+  },
+  "id": "Tqt12ym9X6ZlCy7o",
+  "tags": []
+}
