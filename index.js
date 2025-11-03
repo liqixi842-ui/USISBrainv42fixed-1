@@ -287,30 +287,35 @@ function generateHeatmapHTML(stocks, marketName) {
   <title>${title} Heatmap</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
+    html, body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #131722;
       color: white;
       overflow: hidden;
-    }
-    .tradingview-widget-container {
       width: 100%;
-      height: 100vh;
-    }
-    .tradingview-widget-container__widget {
-      width: 100%;
-      height: calc(100vh - 60px);
+      height: 100%;
     }
     .header {
       background: #1E222D;
       padding: 15px 20px;
       text-align: center;
       border-bottom: 1px solid #2A2E39;
+      height: 60px;
     }
     .header h1 {
       font-size: 24px;
       font-weight: 600;
       color: #D1D4DC;
+      margin: 0;
+      line-height: 30px;
+    }
+    .tradingview-widget-container {
+      width: 100%;
+      height: calc(100% - 60px);
+    }
+    .tradingview-widget-container__widget {
+      width: 100%;
+      height: 100%;
     }
   </style>
 </head>
@@ -337,7 +342,7 @@ function generateHeatmapHTML(stocks, marketName) {
       "isZoomEnabled": true,
       "hasSymbolTooltip": true,
       "width": "100%",
-      "height": "100%"
+      "height": 800
     }
     </script>
   </div>
