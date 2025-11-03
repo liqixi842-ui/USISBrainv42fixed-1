@@ -248,59 +248,92 @@ app.get("/heatmap", async (req, res) => {
 
 // 生成热力图HTML（使用TradingView嵌入Widget）
 function generateHeatmapHTML(stocks, marketName, indexName = '') {
-  // TradingView支持的所有指数（扩展列表）
+  // TradingView Widget 实际支持的dataSource值（经过批量测试验证）
+  // ✅ 只包含已验证有效的值，无效值会统一映射到这些
   const allIndices = {
-    // 美国主要指数
+    // 美国主要指数（已验证）
     'SPX500': 'S&P 500',
-    'NASDAQ100': 'Nasdaq 100',
     'DJI': 'Dow Jones Industrial',
-    'RUSSELL1000': 'Russell 1000',
-    'RUSSELL2000': 'Russell 2000', 
-    'RUSSELL3000': 'Russell 3000',
-    'ALLUS': 'All US Companies',
     
-    // 西班牙指数系列
+    // 西班牙（已验证）
     'IBEX35': 'IBEX 35 (Spain)',
-    'IBEXSMALLCAP': 'IBEX Small Cap (Spain)',
-    'IBEXMEDIUMCAP': 'IBEX Medium Cap (Spain)',
     
-    // 其他国际指数
+    // 德国（已验证）
     'DAX': 'DAX (Germany)',
-    'NI225': 'Nikkei 225 (Japan)',
-    'FTSE100': 'FTSE 100 (UK)',
-    'FTSE250': 'FTSE 250 (UK)',
-    'HSI': 'Hang Seng (Hong Kong)',
-    'SSE50': 'SSE 50 (China)',
-    'CAC40': 'CAC 40 (France)',
-    'STOXX50E': 'EURO STOXX 50',
-    'ASX200': 'ASX 200 (Australia)',
-    'TSX': 'S&P/TSX (Canada)',
-    'WORLD': 'Global Market'
+    
+    // 澳大利亚（已验证）
+    'ASX200': 'ASX 200 (Australia)'
+  };
+  
+  // 将不支持的指数映射到最接近的有效值
+  const indexMapping = {
+    // 美国系列 → SPX500 或 DJI
+    'NASDAQ100': 'SPX500',
+    'RUSSELL1000': 'SPX500',
+    'RUSSELL2000': 'SPX500',
+    'RUSSELL3000': 'SPX500',
+    'ALLUS': 'SPX500',
+    
+    // 西班牙系列 → IBEX35
+    'IBEX': 'IBEX35',
+    'IBEXSMALLCAP': 'IBEX35',
+    'IBEXMEDIUMCAP': 'IBEX35',
+    
+    // 欧洲其他 → 最接近的市场
+    'FTSE100': 'SPX500',
+    'FTSE250': 'SPX500',
+    'CAC40': 'IBEX35',
+    'STOXX50E': 'IBEX35',
+    
+    // 亚洲系列 → ASX200 (最接近)
+    'NI225': 'ASX200',
+    'HSI': 'ASX200',
+    'SSE50': 'ASX200',
+    
+    // 其他
+    'TSX': 'SPX500',
+    'WORLD': 'SPX500'
   };
 
-  // 如果指定了index参数，直接使用
+  // 确定最终使用的dataSource
   let dataSource, title;
   
-  if (indexName && allIndices[indexName.toUpperCase()]) {
-    dataSource = indexName.toUpperCase();
-    title = allIndices[dataSource];
+  if (indexName) {
+    const upperIndex = indexName.toUpperCase();
+    
+    // 1. 检查是否是直接支持的值
+    if (allIndices[upperIndex]) {
+      dataSource = upperIndex;
+      title = allIndices[dataSource];
+    }
+    // 2. 检查是否需要映射
+    else if (indexMapping[upperIndex]) {
+      dataSource = indexMapping[upperIndex];
+      title = allIndices[dataSource] + ` (显示${indexName}相关市场)`;
+    }
+    // 3. 未知指数，使用默认
+    else {
+      dataSource = 'SPX500';
+      title = allIndices[dataSource];
+    }
   } else {
-    // 否则使用默认的市场映射
-    const tradingViewMarkets = {
+    // 没有指定index，根据market参数选择
+    const marketMapping = {
       usa: 'SPX500',
       spain: 'IBEX35',
       germany: 'DAX',
-      japan: 'NI225',
-      uk: 'FTSE100',
-      hongkong: 'HSI',
-      china: 'SSE50',
-      france: 'CAC40',
-      europe: 'STOXX50E',
-      world: 'WORLD'
+      australia: 'ASX200',
+      japan: 'ASX200',      // 日本 → 澳洲（最接近的亚太市场）
+      uk: 'SPX500',         // 英国 → S&P 500
+      hongkong: 'ASX200',   // 香港 → 澳洲
+      china: 'ASX200',      // 中国 → 澳洲
+      france: 'IBEX35',     // 法国 → IBEX（欧洲）
+      europe: 'IBEX35',     // 欧洲 → IBEX
+      world: 'SPX500'       // 全球 → S&P 500
     };
     
-    dataSource = tradingViewMarkets[marketName] || 'SPX500';
-    title = allIndices[dataSource] || 'Stock Market';
+    dataSource = marketMapping[marketName] || 'SPX500';
+    title = allIndices[dataSource];
   }
 
   // 直接返回嵌入TradingView Widget的HTML
