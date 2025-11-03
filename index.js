@@ -752,7 +752,7 @@ function detectActions(text = "") {
     
     // 使用自建热力图（快速、稳定、支持所有市场）
     // 使用生产域名确保外部服务可访问
-    const baseUrl = 'https://node-js-tiqxi842.replit.app';
+    const baseUrl = 'https://node-js-liqixi842.replit.app';
     const heatmapUrl = `${baseUrl}/heatmap?market=${market}`;
     
     actions.push({
