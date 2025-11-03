@@ -248,51 +248,102 @@ app.get("/heatmap", async (req, res) => {
 
 // 生成热力图HTML（使用TradingView嵌入Widget）
 function generateHeatmapHTML(stocks, marketName, indexName = '') {
-  // TradingView Widget 实际支持的dataSource值（经过批量测试验证）
-  // ✅ 只包含已验证有效的值，无效值会统一映射到这些
+  // TradingView 官方支持的 dataSource 完整列表
   const allIndices = {
-    // 美国主要指数（已验证）
+    // 🇺🇸 美国
     'SPX500': 'S&P 500',
-    'DJI': 'Dow Jones Industrial',
+    'DJDJI': 'Dow Jones Industrial',
+    'DJDJU': 'Dow Jones Utilities',
+    'DJDJT': 'Dow Jones Transportation',
+    'DJCA': 'Dow Jones Composite',
+    'NASDAQ100': 'Nasdaq 100',
+    'NASDAQCOMPOSITE': 'Nasdaq Composite',
+    'NASDAQBKX': 'Nasdaq Bank',
+    'ALLUSA': 'All US Stocks',
     
-    // 西班牙（已验证）
-    'IBEX35': 'IBEX 35 (Spain)',
+    // 🇬🇧 英国
+    'UK100': 'FTSE 100',
+    'ALLUK': 'All UK Stocks',
     
-    // 德国（已验证）
-    'DAX': 'DAX (Germany)',
+    // 🇩🇪 德国
+    'DAX': 'DAX 40',
+    'TECDAX': 'TecDAX',
+    'MDAX': 'MDAX',
+    'SDAX': 'SDAX',
+    'ALLDE': 'All Germany Stocks',
     
-    // 澳大利亚（已验证）
-    'ASX200': 'ASX 200 (Australia)'
+    // 🇫🇷 法国
+    'CAC40': 'CAC 40',
+    'SBF120': 'SBF 120',
+    'ALLFR': 'All France Stocks',
+    
+    // 🇪🇸 西班牙
+    'IBEX35': 'IBEX 35',
+    'BMEIS': 'BME Small Cap',
+    'BMEINDGRO15': 'BME Industry Growth 15',
+    'BMEINDGROAS': 'BME Industry Growth AS',
+    'BMEICC': 'BME Consumer',
+    'ALLES': 'All Spain Stocks',
+    
+    // 🇧🇪 比利时
+    'ALLBE': 'All Belgium Stocks',
+    
+    // 🇯🇵 日本
+    'ALLJP': 'All Japan Stocks',
+    
+    // 🇨🇳 中国
+    'ALLCN': 'All China A Stocks',
+    
+    // 🇦🇺 澳大利亚
+    'ALLAU': 'All Australia Stocks',
+    
+    // 🌎 美洲其他
+    'ALLBR': 'All Brazil Stocks',
+    'ALLAR': 'All Argentina Stocks',
+    'ALLCA': 'All Canada Stocks',
+    'ALLCL': 'All Chile Stocks',
+    'ALLCO': 'All Colombia Stocks',
+    
+    // 🏭 行业指数
+    'TVCRUI': 'Cruise Industry',
+    'TVCRUA': 'Airlines & Cruise',
+    'TVCRUT': 'Transport & Travel',
+    
+    // 💰 加密货币
+    'CRYPTO': 'Cryptocurrency'
   };
   
-  // 将不支持的指数映射到最接近的有效值
+  // 智能映射：将用户请求的指数映射到最佳的 TradingView dataSource
   const indexMapping = {
-    // 美国系列 → SPX500 或 DJI
-    'NASDAQ100': 'SPX500',
-    'RUSSELL1000': 'SPX500',
-    'RUSSELL2000': 'SPX500',
-    'RUSSELL3000': 'SPX500',
-    'ALLUS': 'SPX500',
+    // 美国替代名称
+    'DJI': 'DJDJI',
+    'DOW': 'DJDJI',
+    'DOWJONES': 'DJDJI',
+    'SP500': 'SPX500',
+    'NASDAQ': 'NASDAQCOMPOSITE',
+    'NDX': 'NASDAQ100',
+    'RUSSELL2000': 'ALLUSA',
+    'RUSSELL1000': 'ALLUSA',
+    'RUSSELL3000': 'ALLUSA',
     
-    // 西班牙系列 → IBEX35
+    // 英国替代名称
+    'FTSE100': 'UK100',
+    'FTSE': 'UK100',
+    
+    // 西班牙替代名称
     'IBEX': 'IBEX35',
-    'IBEXSMALLCAP': 'IBEX35',
+    'IBEXSMALLCAP': 'BMEIS',
     'IBEXMEDIUMCAP': 'IBEX35',
     
-    // 欧洲其他 → 最接近的市场
-    'FTSE100': 'SPX500',
-    'FTSE250': 'SPX500',
-    'CAC40': 'IBEX35',
-    'STOXX50E': 'IBEX35',
-    
-    // 亚洲系列 → ASX200 (最接近)
-    'NI225': 'ASX200',
-    'HSI': 'ASX200',
-    'SSE50': 'ASX200',
-    
-    // 其他
-    'TSX': 'SPX500',
-    'WORLD': 'SPX500'
+    // 其他通用映射
+    'USA': 'ALLUSA',
+    'UK': 'ALLUK',
+    'GERMANY': 'ALLDE',
+    'FRANCE': 'ALLFR',
+    'SPAIN': 'ALLES',
+    'JAPAN': 'ALLJP',
+    'CHINA': 'ALLCN',
+    'AUSTRALIA': 'ALLAU'
   };
 
   // 确定最终使用的dataSource
@@ -309,7 +360,7 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
     // 2. 检查是否需要映射
     else if (indexMapping[upperIndex]) {
       dataSource = indexMapping[upperIndex];
-      title = allIndices[dataSource] + ` (显示${indexName}相关市场)`;
+      title = allIndices[dataSource];
     }
     // 3. 未知指数，使用默认
     else {
@@ -317,18 +368,24 @@ function generateHeatmapHTML(stocks, marketName, indexName = '') {
       title = allIndices[dataSource];
     }
   } else {
-    // 没有指定index，根据market参数选择
+    // 没有指定index，根据market参数选择全市场股票
     const marketMapping = {
-      usa: 'SPX500',
-      spain: 'IBEX35',
-      germany: 'DAX',
-      australia: 'ASX200',
-      japan: 'ASX200',      // 日本 → 澳洲（最接近的亚太市场）
-      uk: 'SPX500',         // 英国 → S&P 500
-      hongkong: 'ASX200',   // 香港 → 澳洲
-      china: 'ASX200',      // 中国 → 澳洲
-      france: 'IBEX35',     // 法国 → IBEX（欧洲）
-      europe: 'IBEX35',     // 欧洲 → IBEX
+      usa: 'ALLUSA',
+      spain: 'ALLES',
+      germany: 'ALLDE',
+      uk: 'ALLUK',
+      france: 'ALLFR',
+      japan: 'ALLJP',
+      china: 'ALLCN',
+      australia: 'ALLAU',
+      hongkong: 'ALLCN',    // 香港 → 中国A股
+      belgium: 'ALLBE',
+      brazil: 'ALLBR',
+      argentina: 'ALLAR',
+      canada: 'ALLCA',
+      chile: 'ALLCL',
+      colombia: 'ALLCO',
+      europe: 'ALLFR',      // 欧洲默认 → 法国
       world: 'SPX500'       // 全球 → S&P 500
     };
     
@@ -776,23 +833,39 @@ function detectActions(text = "") {
   
   // 视觉需求（截图/热力图）
   if (/热力图|heatmap|截图|screenshot|图表|chart|可视化|visual|带图/.test(t)) {
-    // 检测具体指数（优先级高于地区检测）
+    // 智能检测具体指数（优先级高于地区检测）
     let index = '';
     let indexName = '';
     
+    // 🇺🇸 美国指数
     if (/纳斯达克100|nasdaq\s*100|nasdaq100|ndx/.test(t)) {
       index = 'NASDAQ100';
       indexName = 'Nasdaq 100';
-    } else if (/道琼斯工业|道指|dow\s*jones|djia?|dji/.test(t)) {
-      index = 'DJI';
+    } else if (/纳斯达克综合|nasdaq\s*composite|nasdaqcomposite/.test(t)) {
+      index = 'NASDAQCOMPOSITE';
+      indexName = 'Nasdaq Composite';
+    } else if (/纳斯达克银行|nasdaq\s*bank/.test(t)) {
+      index = 'NASDAQBKX';
+      indexName = 'Nasdaq Bank';
+    } else if (/道琼斯工业|道指|dow\s*jones\s*industrial|djdji|dji/.test(t)) {
+      index = 'DJDJI';
       indexName = '道琼斯工业指数';
-    } else if (/罗素1000|russell\s*1000|russell1000/.test(t)) {
+    } else if (/道琼斯公用|dow\s*utilities|djdju/.test(t)) {
+      index = 'DJDJU';
+      indexName = '道琼斯公用事业';
+    } else if (/道琼斯运输|dow\s*transport|djdjt/.test(t)) {
+      index = 'DJDJT';
+      indexName = '道琼斯运输';
+    } else if (/道琼斯综合|dow\s*composite|djca/.test(t)) {
+      index = 'DJCA';
+      indexName = '道琼斯综合';
+    } else if (/罗素1000|russell\s*1000/.test(t)) {
       index = 'RUSSELL1000';
       indexName = 'Russell 1000';
-    } else if (/罗素2000|russell\s*2000|russell2000/.test(t)) {
+    } else if (/罗素2000|russell\s*2000/.test(t)) {
       index = 'RUSSELL2000';
       indexName = 'Russell 2000';
-    } else if (/罗素3000|russell\s*3000|russell3000/.test(t)) {
+    } else if (/罗素3000|russell\s*3000/.test(t)) {
       index = 'RUSSELL3000';
       indexName = 'Russell 3000';
     } else if (/标普500|s&p\s*500|spx|sp500/.test(t)) {
@@ -800,28 +873,80 @@ function detectActions(text = "") {
       indexName = 'S&P 500';
     }
     
-    // 检测市值分类（Small Cap, Mid Cap等）
-    if (!index) {
-      if (/西班牙|spain|ibex|马德里/.test(t)) {
-        if (/small\s*cap|小盘|小型股/.test(t)) {
-          index = 'IBEXSMALLCAP';
-          indexName = 'IBEX Small Cap';
-        } else if (/med(ium)?\s*cap|中盘|中型股/.test(t)) {
-          index = 'IBEXMEDIUMCAP';
-          indexName = 'IBEX Medium Cap';
-        } else {
-          index = 'IBEX35';
-          indexName = 'IBEX 35';
-        }
-      } else if (/英国|uk|britain|ftse|伦敦/.test(t)) {
-        if (/250|mid\s*cap|中盘/.test(t)) {
-          index = 'FTSE250';
-          indexName = 'FTSE 250';
-        } else {
-          index = 'FTSE100';
-          indexName = 'FTSE 100';
-        }
+    // 🇪🇸 西班牙指数
+    if (!index && /西班牙|spain|ibex|马德里|bme/.test(t)) {
+      if (/small\s*cap|小盘|小型股|bmeis/.test(t)) {
+        index = 'BMEIS';
+        indexName = 'BME Small Cap';
+      } else if (/消费|consumer|bmeicc/.test(t)) {
+        index = 'BMEICC';
+        indexName = 'BME Consumer';
+      } else if (/industry.*growth.*15|bmeindgro15/.test(t)) {
+        index = 'BMEINDGRO15';
+        indexName = 'BME Industry Growth 15';
+      } else if (/industry.*growth|bmeindgroas/.test(t)) {
+        index = 'BMEINDGROAS';
+        indexName = 'BME Industry Growth AS';
+      } else if (/ibex\s*35|ibex35/.test(t)) {
+        index = 'IBEX35';
+        indexName = 'IBEX 35';
       }
+    }
+    
+    // 🇬🇧 英国指数
+    if (!index && /英国|uk|britain|ftse|伦敦/.test(t)) {
+      if (/ftse\s*100|uk100/.test(t)) {
+        index = 'UK100';
+        indexName = 'FTSE 100';
+      }
+    }
+    
+    // 🇩🇪 德国指数
+    if (!index && /德国|germany|法兰克福/.test(t)) {
+      if (/tecdax|科技/.test(t)) {
+        index = 'TECDAX';
+        indexName = 'TecDAX';
+      } else if (/mdax|中盘/.test(t)) {
+        index = 'MDAX';
+        indexName = 'MDAX';
+      } else if (/sdax|小盘/.test(t)) {
+        index = 'SDAX';
+        indexName = 'SDAX';
+      } else if (/dax/.test(t)) {
+        index = 'DAX';
+        indexName = 'DAX 40';
+      }
+    }
+    
+    // 🇫🇷 法国指数
+    if (!index && /法国|france|巴黎/.test(t)) {
+      if (/sbf\s*120/.test(t)) {
+        index = 'SBF120';
+        indexName = 'SBF 120';
+      } else if (/cac\s*40|cac40/.test(t)) {
+        index = 'CAC40';
+        indexName = 'CAC 40';
+      }
+    }
+    
+    // 🏭 行业指数
+    if (!index) {
+      if (/邮轮|游轮|cruise/.test(t)) {
+        index = 'TVCRUI';
+        indexName = 'Cruise Industry';
+      } else if (/航空.*邮轮|airline.*cruise/.test(t)) {
+        index = 'TVCRUA';
+        indexName = 'Airlines & Cruise';
+      } else if (/运输.*旅游|transport.*travel/.test(t)) {
+        index = 'TVCRUT';
+        indexName = 'Transport & Travel';
+      }
+    }
+    
+    // 💰 加密货币
+    if (!index && /加密|crypto|比特币|btc|以太坊|eth/.test(t)) {
+      index = 'CRYPTO';
+      indexName = 'Cryptocurrency';
     }
     
     // 如果还没有指定指数，继续检测地区/国家

@@ -18,11 +18,14 @@ Preferred communication style: Simple, everyday language.
 - **Endpoints**:
   - `GET /` & `GET /health`: Health checks
   - `POST /brain/decide`: Multi-model voting decision endpoint
-  - `POST /brain/intent`: Natural language intent recognition
+  - `POST /brain/intent`: Natural language intent recognition with intelligent heatmap detection
   - `POST /img/imagine`: Image generation
   - `GET /img/health`: Image service health check
   - `POST /brain/feed`: Market data and news ingestion
   - `GET /social/twitter/search`: Twitter search for trending topics
+  - `GET /heatmap`: TradingView widget-based stock heatmap generator supporting 40+ global indices
+  - `GET /heatmap/test`: Interactive dataSource parameter testing tool
+  - `GET /heatmap/test-all`: Batch testing tool for multiple dataSource values
 - **Response Structure**: Standardized format with versioning (`USIS.v3`), multilingual output, model voting details, confidence scores, and semantic tagging.
 
 ## Server Configuration
@@ -72,3 +75,51 @@ Preferred communication style: Simple, everyday language.
 ## Deployment Environment
 - **Platform**: Replit.
 - **Environment Variables**: All API keys must be configured in Replit Secrets.
+
+# Heatmap System
+
+## TradingView Widget Integration
+The system uses official TradingView stock heatmap widgets for professional market visualization.
+
+## Supported DataSource Values (Official)
+### 🇺🇸 United States
+- `SPX500`, `DJDJI`, `DJDJU`, `DJDJT`, `DJCA`
+- `NASDAQ100`, `NASDAQCOMPOSITE`, `NASDAQBKX`
+- `ALLUSA` (All US Stocks)
+
+### 🇪🇺 Europe
+- UK: `UK100`, `ALLUK`
+- Germany: `DAX`, `TECDAX`, `MDAX`, `SDAX`, `ALLDE`
+- France: `CAC40`, `SBF120`, `ALLFR`
+- Spain: `IBEX35`, `BMEIS`, `BMEINDGRO15`, `BMEINDGROAS`, `BMEICC`, `ALLES`
+- Belgium: `ALLBE`
+
+### 🌏 Asia-Pacific
+- Japan: `ALLJP`
+- China: `ALLCN`
+- Australia: `ALLAU`
+
+### 🌎 Americas (Other)
+- Brazil: `ALLBR`
+- Argentina: `ALLAR`
+- Canada: `ALLCA`
+- Chile: `ALLCL`
+- Colombia: `ALLCO`
+
+### 🏭 Industry Indices
+- `TVCRUI` (Cruise Industry)
+- `TVCRUA` (Airlines & Cruise)
+- `TVCRUT` (Transport & Travel)
+
+### 💰 Cryptocurrency
+- `CRYPTO` (Cryptocurrency heatmap)
+
+## Intelligent Mapping
+The system automatically maps user requests to valid dataSource values:
+- User says "纳斯达克100" → `NASDAQ100`
+- User says "西班牙小盘股" → `BMEIS` (BME Small Cap)
+- User says "德国科技股" → `TECDAX`
+- User says "加密货币" → `CRYPTO`
+
+## N8N Integration
+N8N workflow automatically detects `fetch_heatmap` action and generates screenshots without requiring manual configuration.
