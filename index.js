@@ -2008,7 +2008,7 @@ app.get("/heatmap/test", (req, res) => {
   `);
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 USIS Brain v3 online on port ${PORT}`);
   console.log(`📍 Listening on 0.0.0.0:${PORT}`);
