@@ -2166,9 +2166,7 @@ app.post("/brain/orchestrate", async (req, res) => {
     if (intent.mode === 'meta') {
       console.log(`🤖 检测到Meta问题（关于AI能力），直接回复`);
       
-      return res.json({
-        ok: true,
-        final_analysis: `你好！我是USIS Brain v3，一个智能市场分析助手。
+      const metaText = `你好！我是USIS Brain v3，一个智能市场分析助手。
 
 🧠 **我的核心能力：**
 1. **实时市场分析** - 盘前、盘中、盘后全天候分析
@@ -2188,7 +2186,14 @@ app.post("/brain/orchestrate", async (req, res) => {
 我会记住你最近的对话历史（最近3条），根据你的偏好和习惯调整分析风格。
 想清空记忆？说"清空记忆"即可重新开始！
 
-有什么市场问题可以随时问我！📈`,
+有什么市场问题可以随时问我！📈`;
+      
+      return res.json({
+        status: "ok",
+        ok: true,
+        final_analysis: metaText,
+        final_text: metaText,
+        needs_heatmap: false,
         actions: [],
         intent: { mode: 'meta', lang: intent.lang, confidence: 1.0 },
         scene: { name: 'Meta', depth: 'simple', targetLength: 200 },
@@ -2212,9 +2217,14 @@ app.post("/brain/orchestrate", async (req, res) => {
         ? `用户需要：${intent.actions.map(a => a.reason).join('、')}`
         : '市场最新动态';
       
+      const newsText = `📰 新闻资讯\n\n${newsPrompt}\n\n💡 提示：请说"分析XX新闻"或提供股票代码，我可以为您深度解读市场动态。`;
+      
       return res.json({
+        status: "ok",
         ok: true,
-        final_analysis: `📰 新闻资讯\n\n${newsPrompt}\n\n💡 提示：请说"分析XX新闻"或提供股票代码，我可以为您深度解读市场动态。`,
+        final_analysis: newsText,
+        final_text: newsText,
+        needs_heatmap: false,
         actions: [
           {
             type: 'fetch_news',
