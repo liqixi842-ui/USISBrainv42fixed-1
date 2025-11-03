@@ -187,7 +187,8 @@ app.get("/social/twitter/search", async (req, res) => {
 app.get("/heatmap", async (req, res) => {
   try {
     const market = req.query.market || 'usa';
-    console.log(`📊 生成热力图: market=${market}`);
+    const index = req.query.index || '';  // 新增：支持指定具体指数
+    console.log(`📊 生成热力图: market=${market}, index=${index}`);
 
     // 定义各市场的主要股票（使用美股ticker和ADR）
     const marketStocks = {
@@ -236,7 +237,7 @@ app.get("/heatmap", async (req, res) => {
     const validStocks = results.filter(item => item !== null);
 
     // 生成HTML热力图
-    const html = generateHeatmapHTML(validStocks, market);
+    const html = generateHeatmapHTML(validStocks, market, index);
     res.send(html);
 
   } catch (err) {
@@ -246,36 +247,56 @@ app.get("/heatmap", async (req, res) => {
 });
 
 // 生成热力图HTML（使用TradingView嵌入Widget）
-function generateHeatmapHTML(stocks, marketName) {
-  // TradingView dataSource映射
-  const tradingViewMarkets = {
-    usa: 'SPX500',
-    spain: 'IBEX35',
-    germany: 'DAX',
-    japan: 'NI225',
-    uk: 'FTSE100',
-    hongkong: 'HSI',
-    china: 'SSE50',
-    france: 'CAC40',
-    europe: 'STOXX50E',
-    world: 'WORLD'
+function generateHeatmapHTML(stocks, marketName, indexName = '') {
+  // TradingView支持的所有指数（扩展列表）
+  const allIndices = {
+    // 美国主要指数
+    'SPX500': 'S&P 500',
+    'NASDAQ100': 'Nasdaq 100',
+    'DJI': 'Dow Jones Industrial',
+    'RUSSELL1000': 'Russell 1000',
+    'RUSSELL2000': 'Russell 2000', 
+    'RUSSELL3000': 'Russell 3000',
+    'ALLUS': 'All US Companies',
+    
+    // 国际指数
+    'IBEX35': 'IBEX 35 (Spain)',
+    'DAX': 'DAX (Germany)',
+    'NI225': 'Nikkei 225 (Japan)',
+    'FTSE100': 'FTSE 100 (UK)',
+    'HSI': 'Hang Seng (Hong Kong)',
+    'SSE50': 'SSE 50 (China)',
+    'CAC40': 'CAC 40 (France)',
+    'STOXX50E': 'EURO STOXX 50',
+    'ASX200': 'ASX 200 (Australia)',
+    'TSX': 'S&P/TSX (Canada)',
+    'WORLD': 'Global Market'
   };
 
-  const marketTitles = {
-    usa: 'US Stock Market',
-    spain: 'Spanish Stock Market',
-    germany: 'German Stock Market',
-    japan: 'Japanese Stock Market',
-    uk: 'UK Stock Market',
-    hongkong: 'Hong Kong Stock Market',
-    china: 'China A-Share Market',
-    france: 'French Stock Market',
-    europe: 'European Stock Market',
-    world: 'Global Stock Market'
-  };
-
-  const dataSource = tradingViewMarkets[marketName] || 'SPX500';
-  const title = marketTitles[marketName] || 'Stock Market';
+  // 如果指定了index参数，直接使用
+  let dataSource, title;
+  
+  if (indexName && allIndices[indexName.toUpperCase()]) {
+    dataSource = indexName.toUpperCase();
+    title = allIndices[dataSource];
+  } else {
+    // 否则使用默认的市场映射
+    const tradingViewMarkets = {
+      usa: 'SPX500',
+      spain: 'IBEX35',
+      germany: 'DAX',
+      japan: 'NI225',
+      uk: 'FTSE100',
+      hongkong: 'HSI',
+      china: 'SSE50',
+      france: 'CAC40',
+      europe: 'STOXX50E',
+      world: 'WORLD'
+    };
+    
+    dataSource = tradingViewMarkets[marketName] || 'SPX500';
+    title = allIndices[dataSource] || 'Stock Market';
+  }
 
   // 直接返回嵌入TradingView Widget的HTML
   return `
@@ -717,43 +738,75 @@ function detectActions(text = "") {
   
   // 视觉需求（截图/热力图）
   if (/热力图|heatmap|截图|screenshot|图表|chart|可视化|visual|带图/.test(t)) {
-    // 检测地区/国家，返回对应的市场参数
+    // 检测具体指数（优先级高于地区检测）
+    let index = '';
+    let indexName = '';
+    
+    if (/纳斯达克100|nasdaq\s*100|nasdaq100|ndx/.test(t)) {
+      index = 'NASDAQ100';
+      indexName = 'Nasdaq 100';
+    } else if (/道琼斯工业|道指|dow\s*jones|djia?|dji/.test(t)) {
+      index = 'DJI';
+      indexName = '道琼斯工业指数';
+    } else if (/罗素1000|russell\s*1000|russell1000/.test(t)) {
+      index = 'RUSSELL1000';
+      indexName = 'Russell 1000';
+    } else if (/罗素2000|russell\s*2000|russell2000/.test(t)) {
+      index = 'RUSSELL2000';
+      indexName = 'Russell 2000';
+    } else if (/罗素3000|russell\s*3000|russell3000/.test(t)) {
+      index = 'RUSSELL3000';
+      indexName = 'Russell 3000';
+    } else if (/标普500|s&p\s*500|spx|sp500/.test(t)) {
+      index = 'SPX500';
+      indexName = 'S&P 500';
+    }
+    
+    // 如果没有指定具体指数，检测地区/国家
     let market = 'usa';
     let marketName = '美股市场';
     
-    if (/西班牙|spain|ibex|马德里/.test(t)) {
-      market = 'spain';
-      marketName = '西班牙市场';
-    } else if (/德国|germany|dax|法兰克福/.test(t)) {
-      market = 'germany';
-      marketName = '德国市场';
-    } else if (/英国|uk|britain|ftse|伦敦/.test(t)) {
-      market = 'uk';
-      marketName = '英国市场';
-    } else if (/日本|japan|nikkei|东京/.test(t)) {
-      market = 'japan';
-      marketName = '日本市场';
-    } else if (/法国|france|cac/.test(t)) {
-      market = 'france';
-      marketName = '法国市场';
-    } else if (/香港|hk|恒生|hsi/.test(t)) {
-      market = 'hongkong';
-      marketName = '香港市场';
-    } else if (/中国|a股|上证|深证|沪深/.test(t)) {
-      market = 'china';
-      marketName = '中国市场';
-    } else if (/欧洲|europe|eu/.test(t)) {
-      market = 'europe';
-      marketName = '欧洲市场';
-    } else if (/全球|世界|world/.test(t)) {
-      market = 'world';
-      marketName = '全球市场';
+    if (!index) {
+      if (/西班牙|spain|ibex|马德里/.test(t)) {
+        market = 'spain';
+        marketName = '西班牙市场';
+      } else if (/德国|germany|dax|法兰克福/.test(t)) {
+        market = 'germany';
+        marketName = '德国市场';
+      } else if (/英国|uk|britain|ftse|伦敦/.test(t)) {
+        market = 'uk';
+        marketName = '英国市场';
+      } else if (/日本|japan|nikkei|东京/.test(t)) {
+        market = 'japan';
+        marketName = '日本市场';
+      } else if (/法国|france|cac/.test(t)) {
+        market = 'france';
+        marketName = '法国市场';
+      } else if (/香港|hk|恒生|hsi/.test(t)) {
+        market = 'hongkong';
+        marketName = '香港市场';
+      } else if (/中国|a股|上证|深证|沪深/.test(t)) {
+        market = 'china';
+        marketName = '中国市场';
+      } else if (/欧洲|europe|eu/.test(t)) {
+        market = 'europe';
+        marketName = '欧洲市场';
+      } else if (/全球|世界|world/.test(t)) {
+        market = 'world';
+        marketName = '全球市场';
+      }
     }
     
-    // 使用自建热力图（快速、稳定、支持所有市场）
+    // 使用自建热力图（快速、稳定、支持所有市场和指数）
     // 使用生产域名确保外部服务可访问
     const baseUrl = 'https://node-js-liqixi842.replit.app';
-    const heatmapUrl = `${baseUrl}/heatmap?market=${market}`;
+    let heatmapUrl = `${baseUrl}/heatmap?market=${market}`;
+    
+    // 如果指定了具体指数，添加index参数
+    if (index) {
+      heatmapUrl += `&index=${index}`;
+      marketName = indexName;
+    }
     
     actions.push({
       type: 'fetch_heatmap',
