@@ -488,5 +488,256 @@ app.post("/brain/intent", async (req, res) => {
   }
 });
 
+// ========================================
+// 🧠 AI ORCHESTRATOR - 智能协调系统
+// ========================================
+
+// Memory Layer - 简单内存存储（后续可替换为 Redis/DB）
+const Memory = {
+  logs: [],
+  userPrefs: {},
+  
+  save(entry) {
+    this.logs.push({ ...entry, ts: new Date().toISOString() });
+    // 只保留最近 1000 条
+    if (this.logs.length > 1000) this.logs = this.logs.slice(-1000);
+  },
+  
+  recent(n = 10) {
+    return this.logs.slice(-n);
+  },
+  
+  setUserPref(userId, key, value) {
+    if (!this.userPrefs[userId]) this.userPrefs[userId] = {};
+    this.userPrefs[userId][key] = value;
+  },
+  
+  getUserPref(userId, key) {
+    return this.userPrefs[userId]?.[key];
+  }
+};
+
+// Intent Understanding - 深度意图理解
+function understandIntent(text = "", mode = null) {
+  const t = text.toLowerCase();
+  
+  // 如果已经指定 mode，直接使用
+  if (mode && ['premarket', 'intraday', 'postmarket', 'diagnose', 'news'].includes(mode)) {
+    return { mode, confidence: 1.0 };
+  }
+  
+  // 关键词匹配
+  let detectedMode = null;
+  let confidence = 0.8;
+  
+  if (/(盘前|premarket|\bpre\b|开盘前|早盘)/.test(t)) {
+    detectedMode = 'premarket';
+  } else if (/(盘中|intraday|live|盘面|实时|当前)/.test(t)) {
+    detectedMode = 'intraday';
+  } else if (/(复盘|收盘|postmarket|review|after|晚间|收市)/.test(t)) {
+    detectedMode = 'postmarket';
+  } else if (/(解票|诊股|ticker|symbol|分析.*股|看.*股)/.test(t)) {
+    detectedMode = 'diagnose';
+  } else if (/(新闻|资讯|消息|news|热点|头条)/.test(t)) {
+    detectedMode = 'news';
+  } else {
+    // 默认根据美东时间判断（UTC-5/UTC-4）
+    // 使用 UTC 时间 + 偏移计算美东时间
+    const now = new Date();
+    const utcHour = now.getUTCHours();
+    // 简化：假设 EST (UTC-5)，实际应根据 DST 调整
+    const etHour = (utcHour - 5 + 24) % 24;
+    
+    if (etHour >= 6 && etHour < 9) detectedMode = 'premarket';      // 6am-9am ET
+    else if (etHour >= 9 && etHour < 16) detectedMode = 'intraday'; // 9am-4pm ET
+    else if (etHour >= 16 && etHour < 22) detectedMode = 'postmarket'; // 4pm-10pm ET
+    else detectedMode = 'news';
+    confidence = 0.5; // 低置信度
+  }
+  
+  return { mode: detectedMode, confidence };
+}
+
+// Scene Awareness - 场景感知（判断内容长度和深度）
+function analyzeScene(mode, symbols = []) {
+  const scenes = {
+    premarket: {
+      name: '盘前资讯',
+      targetLength: 300,  // 短内容
+      depth: 'brief',     // 简要
+      style: 'quick',     // 快速扫描
+      focus: ['sentiment', 'key_news', 'major_events']
+    },
+    intraday: {
+      name: '盘中热点',
+      targetLength: 500,  // 中等长度
+      depth: 'medium',    // 中等深度
+      style: 'alert',     // 警觉关注
+      focus: ['price_action', 'volume', 'breaking_news']
+    },
+    postmarket: {
+      name: '晚间复盘',
+      targetLength: 800,  // 长内容
+      depth: 'deep',      // 深度分析
+      style: 'analytical',// 分析总结
+      focus: ['full_day_review', 'trend_analysis', 'strategy']
+    },
+    diagnose: {
+      name: '个股诊断',
+      targetLength: 600,  // 中长内容
+      depth: 'deep',      // 深度
+      style: 'focused',   // 聚焦
+      focus: ['technical', 'fundamental', 'sentiment']
+    },
+    news: {
+      name: '市场资讯',
+      targetLength: 500,  // 中等
+      depth: 'medium',    // 中等
+      style: 'informative', // 信息性
+      focus: ['events', 'impact', 'context']
+    }
+  };
+  
+  return scenes[mode] || scenes.news;
+}
+
+// Planner - 任务规划器
+function planTasks(intent, scene, symbols = []) {
+  const tasks = [];
+  
+  // 基础任务：总是需要
+  tasks.push('understand_context');
+  
+  // 根据场景添加任务
+  if (scene.focus.includes('sentiment') || scene.focus.includes('trend_analysis')) {
+    tasks.push('fetch_sentiment');
+  }
+  
+  if (scene.focus.includes('key_news') || scene.focus.includes('breaking_news') || scene.focus.includes('events')) {
+    tasks.push('fetch_news');
+  }
+  
+  if (symbols.length > 0) {
+    tasks.push('fetch_quotes');
+    
+    if (scene.focus.includes('technical')) {
+      tasks.push('technical_analysis');
+    }
+  }
+  
+  // 多 AI 分析（核心任务）
+  tasks.push('multi_ai_analysis');
+  
+  // 智能合成
+  tasks.push('synthesize');
+  
+  return tasks;
+}
+
+// Main Orchestrator Endpoint
+app.post("/brain/orchestrate", async (req, res) => {
+  try {
+    const startTime = Date.now();
+    
+    // 1. 解析输入
+    const {
+      text = "",
+      chat_type = "private",  // private | group
+      mode = null,            // premarket | intraday | postmarket | diagnose | news
+      symbols = [],           // 股票代码
+      user_id = null,
+      lang = "zh"
+    } = req.body || {};
+    
+    console.log(`\n🧠 Orchestrator 收到请求:`);
+    console.log(`   文本: "${text}"`);
+    console.log(`   场景: ${chat_type}`);
+    console.log(`   模式: ${mode || '自动检测'}`);
+    console.log(`   股票: ${symbols.join(', ') || '无'}`);
+    
+    // 2. Intent Understanding
+    const intent = understandIntent(text, mode);
+    console.log(`🎯 意图识别: ${intent.mode} (置信度: ${intent.confidence})`);
+    
+    // 2.5. 从 Memory 读取用户偏好
+    const userPrefs = user_id ? Memory.userPrefs[user_id] || {} : {};
+    console.log(`💾 用户偏好:`, Object.keys(userPrefs).length ? userPrefs : '无');
+    
+    // 3. Scene Awareness (考虑置信度和用户偏好)
+    const scene = analyzeScene(intent.mode, symbols);
+    
+    // 如果置信度低，添加警告
+    if (intent.confidence < 0.7) {
+      scene.lowConfidence = true;
+      console.log(`⚠️  低置信度检测，可能需要用户确认`);
+    }
+    
+    console.log(`📋 场景分析: ${scene.name} | 目标长度: ${scene.targetLength}字 | 深度: ${scene.depth}`);
+    
+    // 4. Planning
+    const tasks = planTasks(intent, scene, symbols);
+    console.log(`📝 任务规划: ${tasks.join(' → ')}`);
+    
+    // 5. Execute (目前返回基础结构)
+    const responseText = `【测试阶段】
+场景: ${scene.name}
+意图: ${intent.mode}
+风格: ${chat_type === 'private' ? '私聊（贴心老师）' : '群组（专业团队）'}
+目标长度: ${scene.targetLength}字
+任务: ${tasks.length}个
+
+下一步将实现真正的多AI协调和智能合成...`;
+    
+    // 6. Save to Memory
+    Memory.save({
+      user_id,
+      intent: intent.mode,
+      chat_type,
+      symbols,
+      ok: true
+    });
+    
+    const responseTime = Date.now() - startTime;
+    console.log(`✅ 响应完成 (${responseTime}ms)\n`);
+    
+    // 7. Response
+    return res.json({
+      ok: true,
+      text: responseText,
+      image_url: null,
+      low_confidence: intent.confidence < 0.7,  // 暴露低置信度标志
+      debug: {
+        intent: intent.mode,
+        intent_confidence: intent.confidence,
+        scene: scene.name,
+        style: chat_type === 'private' ? 'teacher_personal' : 'team_professional',
+        target_length: scene.targetLength,
+        tasks,
+        user_prefs: userPrefs,
+        response_time_ms: responseTime
+      }
+    });
+    
+  } catch (err) {
+    console.error("❌ Orchestrator 错误:", err);
+    Memory.save({ error: String(err), ok: false });
+    
+    return res.status(500).json({
+      ok: false,
+      error: "orchestrator_failed",
+      detail: String(err)
+    });
+  }
+});
+
+// Memory API - 查看系统记忆
+app.get("/brain/memory", (req, res) => {
+  const limit = parseInt(req.query.limit) || 20;
+  return res.json({
+    recent_logs: Memory.recent(limit),
+    user_prefs: Memory.userPrefs
+  });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => console.log(`🚀 USIS Brain v3 online on port ${PORT}`));
