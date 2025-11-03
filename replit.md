@@ -123,3 +123,44 @@ The system automatically maps user requests to valid dataSource values:
 
 ## N8N Integration
 N8N workflow automatically detects `fetch_heatmap` action and generates screenshots without requiring manual configuration.
+
+# Recent Fixes (2025-11-03)
+
+## Critical Issues Resolved
+
+### 1. News Intent Recognition Enhancement
+**Problem**: Users requesting "新闻资讯" received lengthy AI analysis instead of news list.
+**Fix**: Added fast-path response for pure news requests without stock symbols. System now returns concise news prompt and skips 6-AI orchestration for efficiency.
+- Location: `index.js` line 2127-2157
+- Trigger: `mode='news'` + no symbols + no analysis keywords
+
+### 2. Individual Stock Analysis Data Enhancement
+**Problem**: Stock analysis responses lacked concrete data (prices, percentages, news).
+**Fix**: Enhanced AI prompts to mandate usage of real-time market data:
+- **Claude Prompt** (line 1567-1594): Requires explicit price + change% in first sentence, technical indicators with numbers
+- **GPT-4 Prompt** (line 1615-1670): Requires real-time price, sentiment percentages, news integration
+- **Data Flow**: `collectMarketData()` → `generateDataSummary()` → enriched AI prompts → data-driven analysis
+
+### 3. Meta Intent Detection (AI Self-Awareness)
+**Problem**: Users asking "你可以学习吗" received market analysis instead of capability information.
+**Fix**: Added `meta` intent mode with strict detection logic:
+- Detects self-referential questions: "你是谁", "你的功能", "what can you do"
+- **Critical safeguard**: Excludes if stock symbols or market keywords present (prevents hijacking "你能分析NVDA吗")
+- Location: `index.js` line 1172-1177 (detection), line 2088-2125 (fast-path response)
+- Returns friendly capability overview without triggering AI orchestration
+
+### 4. Message Duplication Issue (N8N-side)
+**Problem**: Users reported duplicate messages (3x text, 2x text+image).
+**Diagnosis**: Brain API returns single `final_analysis` correctly. Issue is in N8N workflow configuration.
+**Action Required**: Check N8N workflow:
+- Verify `IF_Send_Photo` logic is mutually exclusive
+- Ensure `Send_With_Photo` and `Send_Text_Only` nodes don't both trigger
+- Look for duplicate Telegram send nodes in workflow
+
+## Intent Modes Supported
+- `premarket`: Morning pre-market analysis
+- `intraday`: Live market tracking
+- `postmarket`: After-hours review
+- `diagnose`: Individual stock deep-dive
+- `news`: Market news aggregation
+- **`meta`** (new): Questions about AI capabilities
