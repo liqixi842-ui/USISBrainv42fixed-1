@@ -1,8 +1,41 @@
 // ====== USIS Brain · v3（多模型 + 投票） ======
 const express = require("express");
 const fetch = require("node-fetch");
+const { Pool } = require("pg");
 const app = express();
 app.use(express.json());
+
+// PostgreSQL Database Connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+// Initialize database table
+async function initDatabase() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_memory (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        timestamp TIMESTAMPTZ DEFAULT NOW(),
+        request_text TEXT,
+        mode TEXT,
+        symbols TEXT[],
+        response_text TEXT,
+        chat_type TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_memory_user_id ON user_memory(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_memory_timestamp ON user_memory(timestamp DESC);
+    `);
+    console.log("✅ Database initialized: user_memory table ready");
+  } catch (error) {
+    console.error("❌ Database initialization error:", error.message);
+  }
+}
+
+// Initialize database on startup
+initDatabase();
 
 // 添加请求日志中间件（用于调试Cloud Run健康检查）
 app.use((req, res, next) => {
@@ -2054,8 +2087,26 @@ app.post("/brain/orchestrate", async (req, res) => {
       });
     }
     
-    // 2.5. 从 Memory 读取用户偏好
-    const userPrefs = user_id ? Memory.userPrefs[user_id] || {} : {};
+    // 2.5. 从 PostgreSQL 读取用户历史记忆（最近3条）
+    let userHistory = [];
+    let userPrefs = {};
+    if (user_id) {
+      try {
+        const historyResult = await pool.query(
+          'SELECT request_text, mode, symbols, response_text, timestamp FROM user_memory WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 3',
+          [user_id]
+        );
+        userHistory = historyResult.rows;
+        console.log(`💾 用户历史记忆: 找到${userHistory.length}条记录`);
+        
+        // 从内存中读取用户偏好（旧逻辑保留兼容）
+        userPrefs = Memory.userPrefs[user_id] || {};
+      } catch (error) {
+        console.error(`❌ 读取用户历史失败:`, error.message);
+        userHistory = [];
+        userPrefs = Memory.userPrefs[user_id] || {};
+      }
+    }
     console.log(`💾 用户偏好:`, Object.keys(userPrefs).length ? userPrefs : '无');
     
     // 3. Scene Awareness (考虑置信度和用户偏好)
@@ -2099,6 +2150,7 @@ app.post("/brain/orchestrate", async (req, res) => {
 3. **6模型协同** - Claude、GPT-4、Gemini等6个AI专家团队分析
 4. **可视化热力图** - 支持40+全球指数（美股、欧洲、亚洲等）
 5. **新闻追踪** - 实时抓取市场动态和公司新闻
+6. **记忆学习** - 记住你的历史对话和偏好，提供个性化分析
 
 💡 **使用示例：**
 - "盘前NVDA" - 查看NVDA盘前分析
@@ -2106,7 +2158,9 @@ app.post("/brain/orchestrate", async (req, res) => {
 - "西班牙IBEX35热力图" - 查看西班牙市场
 - "新闻资讯" - 获取最新市场动态
 
-关于学习：我会根据市场实时数据提供分析，但不会记住之前的对话。每次都是基于最新数据给出建议！
+💾 **关于学习：**
+我会记住你最近的对话历史（最近3条），根据你的偏好和习惯调整分析风格。
+想清空记忆？说"清空记忆"即可重新开始！
 
 有什么市场问题可以随时问我！📈`,
         actions: [],
@@ -2184,7 +2238,20 @@ app.post("/brain/orchestrate", async (req, res) => {
     const responseText = synthesis.text;
     const imageUrl = null; // TODO: 后续添加图表生成
     
-    // 7. Save to Memory
+    // 7. Save to PostgreSQL Memory
+    if (user_id) {
+      try {
+        await pool.query(
+          'INSERT INTO user_memory (user_id, request_text, mode, symbols, response_text, chat_type) VALUES ($1, $2, $3, $4, $5, $6)',
+          [user_id, text, intent.mode, symbols, responseText, chat_type]
+        );
+        console.log(`💾 保存用户记忆: user_id=${user_id}, mode=${intent.mode}`);
+      } catch (error) {
+        console.error(`❌ 保存用户记忆失败:`, error.message);
+      }
+    }
+    
+    // 同时保存到旧Memory系统（兼容性）
     Memory.save({
       user_id,
       intent: intent.mode,
@@ -2269,6 +2336,47 @@ app.get("/brain/memory", (req, res) => {
     recent_logs: Memory.recent(limit),
     user_prefs: Memory.userPrefs
   });
+});
+
+// Memory Clear API - 清空用户历史记忆
+app.post("/brain/memory/clear", async (req, res) => {
+  try {
+    const { user_id } = req.body;
+    
+    if (!user_id) {
+      return res.status(400).json({
+        ok: false,
+        error: "user_id is required"
+      });
+    }
+    
+    // 从PostgreSQL删除用户历史
+    const result = await pool.query(
+      'DELETE FROM user_memory WHERE user_id = $1',
+      [user_id]
+    );
+    
+    console.log(`🗑️  清空用户记忆: user_id=${user_id}, 删除${result.rowCount}条记录`);
+    
+    // 同时清空内存中的用户偏好（兼容性）
+    if (Memory.userPrefs[user_id]) {
+      delete Memory.userPrefs[user_id];
+    }
+    
+    return res.json({
+      ok: true,
+      message: `已清空用户 ${user_id} 的历史记忆`,
+      deleted_count: result.rowCount
+    });
+    
+  } catch (error) {
+    console.error(`❌ 清空记忆失败:`, error.message);
+    return res.status(500).json({
+      ok: false,
+      error: "clear_memory_failed",
+      detail: error.message
+    });
+  }
 });
 
 // 批量测试端点 - 同时显示多个dataSource
