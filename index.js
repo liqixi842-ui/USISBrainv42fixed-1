@@ -2293,9 +2293,12 @@ app.post("/brain/orchestrate", async (req, res) => {
     
     // 8. Response
     return res.json({
+      status: "ok",  // N8N workflow需要此字段
       ok: true,
       final_analysis: responseText,  // 主要字段：最终综合分析
+      final_text: responseText,  // N8N兼容字段
       image_url: imageUrl,
+      needs_heatmap: intent.actions ? intent.actions.some(a => a.type === 'fetch_heatmap') : false,  // N8N需要
       
       // 🎯 新增：Action指令集（给N8N的器官指令）
       actions: intent.actions || [],  // Brain告诉N8N该执行哪些操作
