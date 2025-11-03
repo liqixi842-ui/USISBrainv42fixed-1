@@ -954,21 +954,36 @@ function detectActions(text = "") {
     let marketName = '美股市场';
     
     if (!index) {
-      if (/德国|germany|dax|法兰克福/.test(t)) {
+      if (/西班牙|spain|西班牙市场|马德里/.test(t)) {
+        market = 'spain';
+        marketName = '西班牙市场';
+      } else if (/德国|germany|法兰克福/.test(t)) {
         market = 'germany';
         marketName = '德国市场';
+      } else if (/英国|uk|britain|伦敦/.test(t)) {
+        market = 'uk';
+        marketName = '英国市场';
+      } else if (/法国|france|巴黎/.test(t)) {
+        market = 'france';
+        marketName = '法国市场';
       } else if (/日本|japan|nikkei|东京/.test(t)) {
         market = 'japan';
         marketName = '日本市场';
-      } else if (/法国|france|cac/.test(t)) {
-        market = 'france';
-        marketName = '法国市场';
-      } else if (/香港|hk|恒生|hsi/.test(t)) {
-        market = 'hongkong';
-        marketName = '香港市场';
       } else if (/中国|a股|上证|深证|沪深/.test(t)) {
         market = 'china';
         marketName = '中国市场';
+      } else if (/香港|hk|恒生/.test(t)) {
+        market = 'hongkong';
+        marketName = '香港市场';
+      } else if (/澳大利亚|澳洲|australia/.test(t)) {
+        market = 'australia';
+        marketName = '澳大利亚市场';
+      } else if (/巴西|brazil/.test(t)) {
+        market = 'brazil';
+        marketName = '巴西市场';
+      } else if (/加拿大|canada/.test(t)) {
+        market = 'canada';
+        marketName = '加拿大市场';
       } else if (/欧洲|europe|eu/.test(t)) {
         market = 'europe';
         marketName = '欧洲市场';
