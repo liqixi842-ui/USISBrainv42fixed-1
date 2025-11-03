@@ -644,6 +644,8 @@ const OPENAI_KEY = process.env.OPENAI_API_KEY;
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const PERPLEXITY_KEY = process.env.PERPLEXITY_API_KEY;
 const MISTRAL_KEY = process.env.MISTRAL_API_KEY;
+const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
+const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_API_KEY;
 
 // AI Agent Roles - 每个AI的角色定位（6个分析AI）
 const AI_ROLES = {
@@ -865,14 +867,20 @@ async function callMistral(prompt, maxTokens = 300) {
 }
 
 // Multi-AI Analysis - 多AI并行分析（6个AI全面协同）
-async function multiAIAnalysis({ mode, scene, symbols, text, chatType }) {
+async function multiAIAnalysis({ mode, scene, symbols, text, chatType, marketData }) {
   console.log(`🤖 开始6个AI并行分析...`);
+  
+  // 准备上下文（包含实时数据）
+  let dataContext = '';
+  if (marketData && marketData.collected) {
+    dataContext = `\n\n【实时数据】\n${marketData.summary}`;
+  }
   
   const context = {
     mode,
     scene: scene.name,
     symbols: symbols.join(', ') || '无特定股票',
-    request: text
+    request: text + dataContext
   };
   
   // 构建不同AI的prompt
@@ -1033,6 +1041,173 @@ function buildMistralPrompt(context, scene) {
 - 敏锐捕捉情绪
 - 风险提示明确
 - 简洁有力`;
+}
+
+// ========================================
+// Data Empire - 数据帝国层
+// ========================================
+
+// Finnhub - 实时行情+新闻+情绪
+async function fetchFinnhubQuote(symbol) {
+  try {
+    if (!FINNHUB_KEY) {
+      return { success: false, error: 'FINNHUB_KEY missing' };
+    }
+    
+    const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`);
+    const data = await response.json();
+    
+    if (data.error || !data.c) {
+      return { success: false, error: data.error || 'No data' };
+    }
+    
+    return {
+      success: true,
+      symbol,
+      current: data.c,
+      high: data.h,
+      low: data.l,
+      open: data.o,
+      previousClose: data.pc,
+      change: data.d,
+      changePercent: data.dp,
+      timestamp: data.t
+    };
+  } catch (err) {
+    console.error(`❌ Finnhub quote error (${symbol}):`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+async function fetchFinnhubNews(symbol, limit = 5) {
+  try {
+    if (!FINNHUB_KEY) {
+      return { success: false, error: 'FINNHUB_KEY missing' };
+    }
+    
+    const to = Math.floor(Date.now() / 1000);
+    const from = to - 86400 * 3; // 最近3天
+    
+    const response = await fetch(
+      `https://finnhub.io/api/v1/company-news?symbol=${symbol}&from=${from}&to=${to}&token=${FINNHUB_KEY}`
+    );
+    const data = await response.json();
+    
+    if (!Array.isArray(data)) {
+      return { success: false, error: 'Invalid response' };
+    }
+    
+    const news = data.slice(0, limit).map(item => ({
+      headline: item.headline,
+      summary: item.summary,
+      source: item.source,
+      url: item.url,
+      datetime: item.datetime
+    }));
+    
+    return { success: true, symbol, news };
+  } catch (err) {
+    console.error(`❌ Finnhub news error (${symbol}):`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+async function fetchFinnhubSentiment(symbol) {
+  try {
+    if (!FINNHUB_KEY) {
+      return { success: false, error: 'FINNHUB_KEY missing' };
+    }
+    
+    const response = await fetch(
+      `https://finnhub.io/api/v1/news-sentiment?symbol=${symbol}&token=${FINNHUB_KEY}`
+    );
+    const data = await response.json();
+    
+    if (data.error) {
+      return { success: false, error: data.error };
+    }
+    
+    return {
+      success: true,
+      symbol,
+      sentiment: {
+        buzz: data.buzz?.articlesInLastWeek || 0,
+        positive: data.sentiment?.bullishPercent || 0,
+        negative: data.sentiment?.bearishPercent || 0,
+        score: data.companyNewsScore || 0
+      }
+    };
+  } catch (err) {
+    console.error(`❌ Finnhub sentiment error (${symbol}):`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// 智能数据采集器 - 根据symbols自动采集多源数据
+async function collectMarketData(symbols = []) {
+  if (symbols.length === 0) {
+    return { collected: false, reason: 'No symbols provided' };
+  }
+  
+  console.log(`📊 开始采集数据: ${symbols.join(', ')}`);
+  
+  const results = {
+    quotes: {},
+    news: {},
+    sentiment: {}
+  };
+  
+  // 并行采集所有symbol的数据
+  await Promise.all(
+    symbols.map(async (symbol) => {
+      const [quote, news, sentiment] = await Promise.all([
+        fetchFinnhubQuote(symbol),
+        fetchFinnhubNews(symbol, 3),
+        fetchFinnhubSentiment(symbol)
+      ]);
+      
+      if (quote.success) results.quotes[symbol] = quote;
+      if (news.success) results.news[symbol] = news;
+      if (sentiment.success) results.sentiment[symbol] = sentiment;
+    })
+  );
+  
+  console.log(`✅ 数据采集完成: quotes=${Object.keys(results.quotes).length}, news=${Object.keys(results.news).length}, sentiment=${Object.keys(results.sentiment).length}`);
+  
+  return {
+    collected: true,
+    data: results,
+    summary: generateDataSummary(results)
+  };
+}
+
+// 生成数据摘要（给AI使用）
+function generateDataSummary(results) {
+  const parts = [];
+  
+  // 行情数据
+  Object.values(results.quotes).forEach(q => {
+    if (q.success) {
+      parts.push(`${q.symbol}: 当前$${q.current}, 涨跌${q.changePercent >= 0 ? '+' : ''}${q.changePercent.toFixed(2)}%`);
+    }
+  });
+  
+  // 新闻标题
+  Object.values(results.news).forEach(n => {
+    if (n.success && n.news.length > 0) {
+      const headlines = n.news.slice(0, 2).map(item => item.headline).join('; ');
+      parts.push(`${n.symbol}新闻: ${headlines}`);
+    }
+  });
+  
+  // 情绪数据
+  Object.values(results.sentiment).forEach(s => {
+    if (s.success) {
+      parts.push(`${s.symbol}情绪: ${s.sentiment.positive}%看多, ${s.sentiment.negative}%看空`);
+    }
+  });
+  
+  return parts.join('\n');
 }
 
 // ========================================
@@ -1212,13 +1387,20 @@ app.post("/brain/orchestrate", async (req, res) => {
     const tasks = planTasks(intent, scene, symbols);
     console.log(`📝 任务规划: ${tasks.join(' → ')}`);
     
+    // 4.5. 数据采集（如果有股票代码）
+    let marketData = null;
+    if (symbols.length > 0) {
+      marketData = await collectMarketData(symbols);
+    }
+    
     // 5. Execute Multi-AI Analysis
     const aiResults = await multiAIAnalysis({
       mode: intent.mode,
       scene,
       symbols,
       text,
-      chatType: chat_type
+      chatType: chat_type,
+      marketData
     });
     
     // 6. Intelligent Synthesis
