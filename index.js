@@ -34,6 +34,7 @@ async function initDatabase() {
       
       CREATE TABLE IF NOT EXISTS cost_tracking (
         id SERIAL PRIMARY KEY,
+        request_id TEXT,
         user_id TEXT,
         timestamp TIMESTAMPTZ DEFAULT NOW(),
         mode TEXT,
@@ -42,7 +43,20 @@ async function initDatabase() {
         actual_cost DECIMAL(10,4),
         response_time_ms INTEGER
       );
+      
+      -- 迁移：为现有表添加request_id列（如果不存在）
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name='cost_tracking' AND column_name='request_id'
+        ) THEN
+          ALTER TABLE cost_tracking ADD COLUMN request_id TEXT;
+        END IF;
+      END $$;
+      
       CREATE INDEX IF NOT EXISTS idx_cost_tracking_user ON cost_tracking(user_id);
+      CREATE INDEX IF NOT EXISTS idx_cost_tracking_request ON cost_tracking(request_id);
       CREATE INDEX IF NOT EXISTS idx_cost_tracking_time ON cost_tracking(timestamp DESC);
     `);
     console.log("✅ Database initialized: user_memory and cost_tracking tables ready");
@@ -1473,15 +1487,15 @@ function selectOptimalModels(complexity, mode, symbols = [], budget = 'medium') 
 }
 
 // L3: 成本追踪器 - 记录每次分析的成本
-async function trackCost(user_id, mode, models, actualCost, responseTime) {
+async function trackCost(request_id, user_id, mode, models, actualCost, responseTime) {
   try {
     // 插入成本记录 (表已在initDatabase中创建)
     await pool.query(
-      'INSERT INTO cost_tracking (user_id, mode, models, estimated_cost, actual_cost, response_time_ms) VALUES ($1, $2, $3, $4, $5, $6)',
-      [user_id || 'anonymous', mode, JSON.stringify(models), actualCost, actualCost, responseTime]
+      'INSERT INTO cost_tracking (request_id, user_id, mode, models, estimated_cost, actual_cost, response_time_ms) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [request_id, user_id || 'anonymous', mode, JSON.stringify(models), actualCost, actualCost, responseTime]
     );
     
-    console.log(`💰 成本追踪: $${actualCost.toFixed(4)} (${responseTime}ms)`);
+    console.log(`💰 成本追踪 [${request_id}]: $${actualCost.toFixed(4)} (${responseTime}ms)`);
   } catch (error) {
     console.error('❌ 成本追踪失败:', error.message);
   }
@@ -1490,9 +1504,12 @@ async function trackCost(user_id, mode, models, actualCost, responseTime) {
 // L3: 获取总成本 - 从数据库汇总特定请求的总成本
 async function getTotalCostFromDB(requestId) {
   try {
-    // 由于我们目前使用user_id作为主键，这里返回null
-    // 后续可扩展为按requestId追踪
-    return null;
+    const { rows } = await pool.query(
+      'SELECT COALESCE(SUM(actual_cost), 0) AS total FROM cost_tracking WHERE request_id = $1',
+      [requestId]
+    );
+    const total = Number(rows?.[0]?.total ?? 0);
+    return total;
   } catch (error) {
     console.error('❌ 获取成本失败:', error.message);
     return null;
@@ -2814,6 +2831,20 @@ app.post("/brain/orchestrate", async (req, res) => {
       : [];
     const l3_reason = l3_triggered ? complexity.reasoning : null;
 
+    // 🚀 三级Orchestrator: 成本追踪（同步，确保数据库有记录）
+    try {
+      await trackCost(
+        reqId,
+        user_id, 
+        intent.mode, 
+        modelSelection.models, 
+        modelSelection.estimatedCost, 
+        responseTime
+      );
+    } catch (err) {
+      console.error('成本追踪失败:', err.message);
+    }
+
     // Cost
     const estCost = modelSelection.estimatedCost;
     let totalCost = null;
@@ -2897,15 +2928,6 @@ app.post("/brain/orchestrate", async (req, res) => {
         }
       }
     };
-
-    // 🚀 三级Orchestrator: 成本追踪（异步，不阻塞响应）
-    trackCost(
-      user_id, 
-      intent.mode, 
-      modelSelection.models, 
-      modelSelection.estimatedCost, 
-      responseTime
-    ).catch(err => console.error('成本追踪失败:', err.message));
     
     // 8. Response
     return res.json(responseV2);
