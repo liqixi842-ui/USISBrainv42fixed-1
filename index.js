@@ -2159,16 +2159,25 @@ app.post('/brain/permission', async (req, res) => {
     });
   }
 
-  // 未授权
-  console.log(`🚫 用户 ${uid} 无权限`);
+  // 🚨 临时开放：所有人都放行（用于调试）
+  console.log(`🔓 临时放行用户 ${uid}（权限检查已禁用）`);
   return res.json({ 
     ok: true,
-    allowed: Boolean(false),
-    role: null,
-    chat_id,
-    message: '未授权用户，请先发送 /auth 申请。',
-    tip: '管理员可用 /auth <user_id> 授权；/listauth 查看白名单。'
+    allowed: Boolean(true),  // 临时改成 true
+    role: 'temp_access',
+    chat_id
   });
+  
+  // 未授权（已注释）
+  // console.log(`🚫 用户 ${uid} 无权限`);
+  // return res.json({ 
+  //   ok: true,
+  //   allowed: Boolean(false),
+  //   role: null,
+  //   chat_id,
+  //   message: '未授权用户，请先发送 /auth 申请。',
+  //   tip: '管理员可用 /auth <user_id> 授权；/listauth 查看白名单。'
+  // });
 });
 
 // 🧪 PERMISSION TEST ENDPOINT (便于远程验证)
