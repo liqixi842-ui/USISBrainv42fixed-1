@@ -1516,6 +1516,49 @@ async function getTotalCostFromDB(requestId) {
   }
 }
 
+// --- plan step friendly mapper (i18n-ready) ---
+function mapPlanSteps(rawPlan = [], lang = 'zh') {
+  const L = (lang || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+
+  /** 内部步骤标识 → 友好文案 */
+  const dict = {
+    zh: {
+      understand_context: '理解上下文与意图',
+      fetch_sentiment: '拉取情绪/社交数据',
+      fetch_quotes: '抓取行情/财务数据',
+      technical_analysis: '技术指标与形态判断',
+      multi_ai_analysis: '多模型协同分析',
+      synthesize: '综合结论与生成报告',
+      fetch_sec_fin: 'SEC 财报检索与提取',
+      fetch_macro_fred: 'FRED 宏观数据拉取',
+      fetch_reddit_wsb: 'Reddit/WSB 热度分析',
+      risk_assessment: '风险点与不确定性评估'
+    },
+    en: {
+      understand_context: 'Understand context & intent',
+      fetch_sentiment: 'Pull sentiment / social signals',
+      fetch_quotes: 'Fetch quotes / fundamentals',
+      technical_analysis: 'Technical indicators & patterns',
+      multi_ai_analysis: 'Multi-model collaborative analysis',
+      synthesize: 'Synthesize findings & draft report',
+      fetch_sec_fin: 'SEC filings retrieval & parsing',
+      fetch_macro_fred: 'FRED macro data ingestion',
+      fetch_reddit_wsb: 'Reddit/WSB trend analysis',
+      risk_assessment: 'Risk & uncertainty assessment'
+    }
+  };
+
+  const mapOne = (k) => dict[L][k] || (typeof k === 'string' ? k : JSON.stringify(k));
+  // 去重 + 保序
+  const seen = new Set();
+  const out = [];
+  for (const step of rawPlan) {
+    const label = mapOne(step);
+    if (!seen.has(label)) { seen.add(label); out.push(label); }
+  }
+  return out;
+}
+
 // Planner - 任务规划器
 function planTasks(intent, scene, symbols = []) {
   const tasks = [];
@@ -2820,7 +2863,9 @@ app.post("/brain/orchestrate", async (req, res) => {
     const l1_score = complexity.score;
 
     // L2
-    const l2_plan = tasks;  // 任务分解
+    const l2_plan = tasks;  // 任务分解（内部标识）
+    const userLang = intent.lang || 'zh';
+    const l2_plan_friendly = mapPlanSteps(l2_plan, userLang);  // 友好文案
     const l2_models = modelSelection.models;
     const l2_budget = modelSelection.budgetConfig;
 
@@ -2868,7 +2913,7 @@ app.post("/brain/orchestrate", async (req, res) => {
       requestId: reqId,
       levels: {
         l1: { intent: l1_intent, score: l1_score, router: 'gpt-4o-mini' },
-        l2: { plan: l2_plan, modelsSelected: l2_models, budget: l2_budget },
+        l2: { plan: l2_plan_friendly, modelsSelected: l2_models, budget: l2_budget },
         l3: { triggered: l3_triggered, models: l3_models, reason: l3_reason }
       },
       cost: {

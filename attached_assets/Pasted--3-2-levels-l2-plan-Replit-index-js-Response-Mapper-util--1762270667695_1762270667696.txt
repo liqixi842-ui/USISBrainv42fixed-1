@@ -1,0 +1,93 @@
+【第3步-2｜友好化 levels.l2.plan 文案（最小补丁）】
+
+发给 Replit，粘到 index.js（Response Mapper 上方或同文件任意 util 区域）：
+
+// --- plan step friendly mapper (i18n-ready) ---
+function mapPlanSteps(rawPlan = [], lang = 'zh') {
+  const L = (lang || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+
+  /** 内部步骤标识 → 友好文案 */
+  const dict = {
+    zh: {
+      understand_context: '理解上下文与意图',
+      fetch_sentiment: '拉取情绪/社交数据',
+      fetch_quotes: '抓取行情/财务数据',
+      technical_analysis: '技术指标与形态判断',
+      multi_ai_analysis: '多模型协同分析',
+      synthesize: '综合结论与生成报告',
+      fetch_sec_fin: 'SEC 财报检索与提取',
+      fetch_macro_fred: 'FRED 宏观数据拉取',
+      fetch_reddit_wsb: 'Reddit/WSB 热度分析',
+      risk_assessment: '风险点与不确定性评估'
+    },
+    en: {
+      understand_context: 'Understand context & intent',
+      fetch_sentiment: 'Pull sentiment / social signals',
+      fetch_quotes: 'Fetch quotes / fundamentals',
+      technical_analysis: 'Technical indicators & patterns',
+      multi_ai_analysis: 'Multi-model collaborative analysis',
+      synthesize: 'Synthesize findings & draft report',
+      fetch_sec_fin: 'SEC filings retrieval & parsing',
+      fetch_macro_fred: 'FRED macro data ingestion',
+      fetch_reddit_wsb: 'Reddit/WSB trend analysis',
+      risk_assessment: 'Risk & uncertainty assessment'
+    }
+  };
+
+  const mapOne = (k) => dict[L][k] || (typeof k === 'string' ? k : JSON.stringify(k));
+  // 去重 + 保序
+  const seen = new Set();
+  const out = [];
+  for (const step of rawPlan) {
+    const label = mapOne(step);
+    if (!seen.has(label)) { seen.add(label); out.push(label); }
+  }
+  return out;
+}
+
+
+然后在你的 Response Mapper (v2) 里，把 levels.l2.plan 的赋值替换为：
+
+const userLang = (levels?.l1?.intent?.lang) || intentLang || 'zh';
+const l2_plan_friendly = mapPlanSteps(l2_plan, userLang);
+
+const responseV2 = {
+  ok: true,
+  requestId: reqId,
+  levels: {
+    l1: { intent: l1_intent, score: l1_score, router: 'gpt-4o-mini' },
+    l2: { plan: l2_plan_friendly, modelsSelected: l2_models, budget: l2_budget },
+    l3: { triggered: !!l3_triggered, models: l3_models, reason: l3_reason }
+  },
+  cost: { estimated: estCost, total: totalCost },
+  market_data: { sec_financials },
+  summary: finalSummary,
+  caption: caption || finalSummary,
+  actions: actions_v2,
+  debug
+};
+
+
+说明：
+
+mapPlanSteps 只做出口映射，你的内部 rawPlan 保持不变；
+
+自动按 levels.l1.intent.lang 选择 中文/英文；未知语言默认中文；
+
+去重保序，避免重复步骤；
+
+你已有的自定义步骤（例如未来 fetch_news_benzinga）若未在字典中，会原样透传，不会报错。
+
+自测（仍用你上一条 curl）
+
+期望 levels.l2.plan 从：
+
+["understand_context","fetch_sentiment","fetch_quotes","technical_analysis","multi_ai_analysis","synthesize"]
+
+
+变为（中文示例）：
+
+["理解上下文与意图","拉取情绪/社交数据","抓取行情/财务数据","技术指标与形态判断","多模型协同分析","综合结论与生成报告"]
+
+
+跑完把响应片段贴我。若 OK，我给你阶段 I 收尾 checklist（含 FRED/Reddit 最小接入模板与健康度指标埋点），一口气齐活。
