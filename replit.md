@@ -124,6 +124,76 @@ The system automatically maps user requests to valid dataSource values:
 ## N8N Integration
 N8N workflow automatically detects `fetch_heatmap` action and generates screenshots without requiring manual configuration.
 
+# Permission System (2025-11-04)
+
+## Architecture Decision
+**权限管理由Brain API统一处理，N8N不做权限判断。**
+
+### Rationale
+- Brain是决策中心，权限应该是核心能力的一部分
+- N8N数据流复杂（6-8个节点），变量传递不可靠，导致 "chat not found" 等错误
+- 集中式权限管理便于审计、黑名单、限流等扩展
+
+## API Endpoint
+
+### POST /brain/permission
+检查用户权限并处理管理员命令。
+
+**Request:**
+```json
+{
+  "text": "用户消息",
+  "user_id": "telegram_user_id",
+  "chat_id": "telegram_chat_id"
+}
+```
+
+**Response (允许):**
+```json
+{
+  "allowed": true,
+  "role": "admin|whitelist"
+}
+```
+
+**Response (拒绝):**
+```json
+{
+  "allowed": false,
+  "role": "none",
+  "message": "⚠️ 抱歉，你没有使用权限。请联系管理员。"
+}
+```
+
+**Response (管理命令):**
+```json
+{
+  "allowed": true,
+  "role": "admin",
+  "tip": "✅ 已授权用户：123456\n\n当前白名单人数：5"
+}
+```
+
+## Admin Commands
+- `/auth <user_id>` - 授权用户（管理员专用）
+- `/unauth <user_id>` - 取消授权（管理员专用）
+- `/listauth` - 查看白名单（管理员专用）
+
+## N8N Integration
+N8N工作流简化为：
+1. `Telegram_Trigger` - 接收消息
+2. `HTTP Request` - POST /brain/permission
+3. `IF (allowed)` - 判断权限
+   - True → 调用 /brain/orchestrate 执行业务逻辑
+   - False → 发送 message 字段给用户
+
+## Implementation
+- 白名单存储：`global.__WL__` (内存Set，重启丢失)
+- 管理员ID：`7561303850`（硬编码）
+- 未来可迁移到PostgreSQL持久化
+
+---
+
 # Recent Fixes (2025-11-03)
 
 ## Critical Issues Resolved

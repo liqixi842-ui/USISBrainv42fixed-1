@@ -2076,6 +2076,80 @@ function formatMultipleOutputs(outputs, chatType, scene) {
   }
 }
 
+// ========================================
+// 🔒 PERMISSION CHECK ENDPOINT
+// ========================================
+app.post('/brain/permission', async (req, res) => {
+  const { text = '', user_id = '', chat_id = '' } = req.body || {};
+  const ADMIN_ID = '7561303850';
+
+  // 白名单存储（内存版，可替换为DB/Sheet）
+  global.__WL__ = global.__WL__ || new Set([ADMIN_ID]); // 管理员默认在白名单
+
+  const msg = String(text).trim();
+  const uid = String(user_id);
+  const isAdmin = uid === ADMIN_ID;
+  const isWhitelist = isAdmin || global.__WL__.has(uid);
+
+  console.log(`🔒 权限检查: user_id=${uid}, text="${msg}"`);
+
+  // 管理命令（仅管理员）
+  if (isAdmin && /^\/auth(\s+.+)?/i.test(msg)) {
+    const target = (msg.split(/\s+/)[1] || uid).trim();
+    global.__WL__.add(String(target));
+    console.log(`✅ 管理员授权: ${target}`);
+    return res.json({ 
+      allowed: true, 
+      role: 'admin', 
+      tip: `✅ 已授权用户：${target}\n\n当前白名单人数：${global.__WL__.size}` 
+    });
+  }
+  
+  if (isAdmin && /^\/unauth(\s+.+)?/i.test(msg)) {
+    const target = (msg.split(/\s+/)[1] || uid).trim();
+    if (target === ADMIN_ID) {
+      return res.json({ 
+        allowed: true, 
+        role: 'admin', 
+        tip: '⚠️ 无法取消管理员自己的授权' 
+      });
+    }
+    global.__WL__.delete(String(target));
+    console.log(`🧹 管理员取消授权: ${target}`);
+    return res.json({ 
+      allowed: true, 
+      role: 'admin', 
+      tip: `🧹 已取消授权：${target}\n\n当前白名单人数：${global.__WL__.size}` 
+    });
+  }
+  
+  if (isAdmin && /^\/listauth/i.test(msg)) {
+    const list = [...global.__WL__].join('\n') || '(空)';
+    console.log(`📋 管理员查看白名单`);
+    return res.json({ 
+      allowed: true, 
+      role: 'admin', 
+      tip: `📋 当前授权用户（共${global.__WL__.size}人）：\n\n${list}` 
+    });
+  }
+
+  // 普通判定
+  if (isWhitelist) {
+    console.log(`✅ 用户 ${uid} 有权限 (${isAdmin ? 'admin' : 'whitelist'})`);
+    return res.json({ 
+      allowed: true, 
+      role: isAdmin ? 'admin' : 'whitelist' 
+    });
+  }
+
+  console.log(`🚫 用户 ${uid} 无权限`);
+  return res.json({ 
+    allowed: false, 
+    role: 'none', 
+    message: '⚠️ 抱歉，你没有使用权限。请联系管理员。' 
+  });
+});
+
 // Main Orchestrator Endpoint
 app.post("/brain/orchestrate", async (req, res) => {
   try {
@@ -2090,25 +2164,6 @@ app.post("/brain/orchestrate", async (req, res) => {
       user_id = null,
       lang = "zh"
     } = req.body || {};
-    
-    // 🔒 权限检查（简化版）
-    const ADMIN_ID = "7561303850";
-    const WHITELIST = ["7561303850"]; // 管理员默认在白名单
-    
-    // 如果不在白名单且不是管理员，拒绝访问
-    if (user_id && !WHITELIST.includes(String(user_id))) {
-      console.log(`🚫 用户 ${user_id} 无权限访问`);
-      return res.json({
-        status: "ok",
-        ok: true,
-        final_analysis: "⚠️ 抱歉,你没有使用权限。请联系管理员。",
-        final_text: "⚠️ 抱歉,你没有使用权限。请联系管理员。",
-        needs_heatmap: false,
-        actions: [],
-        symbols: [],
-        no_permission: true
-      });
-    }
     
     // 1.5. 自动提取symbols（如果未提供）
     const extractedSymbols = extractSymbols(text);
