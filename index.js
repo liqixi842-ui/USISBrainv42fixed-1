@@ -2066,23 +2066,204 @@ async function fetchFinnhubSentiment(symbol) {
   }
 }
 
+// ========================================
+// SEC EDGAR API Integration (阶段I新增)
+// ========================================
+
+// SEC EDGAR: 查找公司CIK (Central Index Key)
+let SEC_TICKER_MAP = null;  // 缓存ticker到CIK的映射
+async function fetchSECCIK(ticker) {
+  try {
+    // 第一次调用时加载映射表
+    if (!SEC_TICKER_MAP) {
+      console.log('📥 下载SEC ticker映射表...');
+      const response = await fetch('https://www.sec.gov/files/company_tickers.json', {
+        headers: {
+          'User-Agent': 'USIS Brain v3.1 replit-agent@example.com'
+        }
+      });
+      const data = await response.json();
+      
+      // 转换为ticker -> CIK映射
+      SEC_TICKER_MAP = {};
+      Object.values(data).forEach(company => {
+        SEC_TICKER_MAP[company.ticker.toUpperCase()] = String(company.cik_str).padStart(10, '0');
+      });
+      console.log(`✅ SEC映射表加载完成: ${Object.keys(SEC_TICKER_MAP).length} 家公司`);
+    }
+    
+    const cik = SEC_TICKER_MAP[ticker.toUpperCase()];
+    if (!cik) {
+      return { success: false, error: 'CIK not found' };
+    }
+    
+    return { success: true, ticker, cik };
+  } catch (err) {
+    console.error(`❌ SEC CIK查找失败 (${ticker}):`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// SEC EDGAR: 获取公司最新财报列表
+async function fetchSECFilings(ticker, limit = 5) {
+  try {
+    const cikResult = await fetchSECCIK(ticker);
+    if (!cikResult.success) {
+      return { success: false, error: cikResult.error };
+    }
+    
+    const { cik } = cikResult;
+    const response = await fetch(`https://data.sec.gov/submissions/CIK${cik}.json`, {
+      headers: {
+        'User-Agent': 'USIS Brain v3.1 replit-agent@example.com'
+      }
+    });
+    
+    const data = await response.json();
+    const recentFilings = data.filings?.recent;
+    
+    if (!recentFilings) {
+      return { success: false, error: 'No filings found' };
+    }
+    
+    // 提取最近的10-K和10-Q财报
+    const filings = [];
+    for (let i = 0; i < recentFilings.form.length && filings.length < limit; i++) {
+      const formType = recentFilings.form[i];
+      if (formType === '10-K' || formType === '10-Q') {
+        filings.push({
+          form: formType,
+          filingDate: recentFilings.filingDate[i],
+          reportDate: recentFilings.reportDate[i],
+          accessionNumber: recentFilings.accessionNumber[i]
+        });
+      }
+    }
+    
+    return {
+      success: true,
+      ticker,
+      company: data.name,
+      cik,
+      filings
+    };
+  } catch (err) {
+    console.error(`❌ SEC财报获取失败 (${ticker}):`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// SEC EDGAR: 获取公司财务数据（简化版）
+async function fetchSECFinancials(ticker) {
+  try {
+    const cikResult = await fetchSECCIK(ticker);
+    if (!cikResult.success) {
+      return { success: false, error: cikResult.error };
+    }
+    
+    const { cik } = cikResult;
+    const response = await fetch(`https://data.sec.gov/api/xbrl/companyfacts/CIK${cik}.json`, {
+      headers: {
+        'User-Agent': 'USIS Brain v3.1 replit-agent@example.com'
+      }
+    });
+    
+    const data = await response.json();
+    const facts = data.facts?.['us-gaap'];
+    
+    if (!facts) {
+      return { success: false, error: 'No financial facts found' };
+    }
+    
+    // 提取关键财务指标（最近一期）
+    const getLatestValue = (conceptNames) => {
+      try {
+        // 支持多个concept名称，按优先级尝试
+        const concepts = Array.isArray(conceptNames) ? conceptNames : [conceptNames];
+        
+        for (const concept of concepts) {
+          const usdData = facts[concept]?.units?.USD;
+          if (!usdData || usdData.length === 0) continue;
+          
+          // 按日期排序，优先获取10-K，其次10-Q
+          const sortedData = usdData
+            .filter(d => d.form === '10-K' || d.form === '10-Q')
+            .sort((a, b) => {
+              // 优先10-K，然后按日期
+              if (a.form !== b.form) {
+                return a.form === '10-K' ? -1 : 1;
+              }
+              return new Date(b.end) - new Date(a.end);
+            });
+          
+          if (sortedData.length > 0) {
+            return {
+              value: sortedData[0].val,
+              period: sortedData[0].end,
+              form: sortedData[0].form
+            };
+          }
+        }
+        
+        return null;
+      } catch (err) {
+        console.error(`❌ getLatestValue error for ${conceptNames}:`, err.message);
+        return null;
+      }
+    };
+    
+    // 尝试多种可能的concept名称（SEC公司使用不同的会计术语）
+    const financials = {
+      revenue: getLatestValue(['Revenues', 'RevenueFromContractWithCustomerExcludingAssessedTax', 'SalesRevenueNet']),
+      netIncome: getLatestValue(['NetIncomeLoss', 'ProfitLoss']),
+      assets: getLatestValue(['Assets']),
+      equity: getLatestValue(['StockholdersEquity', 'StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest'])
+    };
+    
+    // 检查是否至少有一个有效数据（检查value属性是否存在且非null）
+    const hasData = Object.values(financials).some(entry => entry?.value != null);
+    if (!hasData) {
+      console.log(`⚠️  ${ticker}: 未找到有效财务数据`);
+      return { success: false, error: 'No valid financial metrics found' };
+    }
+    
+    return {
+      success: true,
+      ticker,
+      cik,
+      financials
+    };
+  } catch (err) {
+    console.error(`❌ SEC财务数据获取失败 (${ticker}):`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
 // 智能数据采集器 - 根据symbols自动采集多源数据
-async function collectMarketData(symbols = []) {
+async function collectMarketData(symbols = [], options = {}) {
   if (symbols.length === 0) {
     return { collected: false, reason: 'No symbols provided' };
   }
   
-  console.log(`📊 开始采集数据: ${symbols.join(', ')}`);
+  // 决定是否获取SEC财报数据（仅在深度分析场景下）
+  const includeSEC = options.includeSEC || 
+                      options.mode === 'diagnose' || 
+                      options.mode === 'postmarket' ||
+                      (options.text && /(财报|基本面|10-k|10-q|营收|利润|fundamental)/i.test(options.text));
+  
+  console.log(`📊 开始采集数据: ${symbols.join(', ')}${includeSEC ? ' (含SEC财报)' : ''}`);
   
   const results = {
     quotes: {},
     news: {},
-    sentiment: {}
+    sentiment: {},
+    ...(includeSEC && { sec_filings: {}, sec_financials: {} })
   };
   
   // 并行采集所有symbol的数据
   await Promise.all(
     symbols.map(async (symbol) => {
+      // 基础数据：总是获取
       const [quote, news, sentiment] = await Promise.all([
         fetchFinnhubQuote(symbol),
         fetchFinnhubNews(symbol, 3),
@@ -2092,10 +2273,25 @@ async function collectMarketData(symbols = []) {
       if (quote.success) results.quotes[symbol] = quote;
       if (news.success) results.news[symbol] = news;
       if (sentiment.success) results.sentiment[symbol] = sentiment;
+      
+      // SEC数据：仅在需要时获取
+      if (includeSEC) {
+        const [secFilings, secFinancials] = await Promise.all([
+          fetchSECFilings(symbol, 3),
+          fetchSECFinancials(symbol)
+        ]);
+        
+        if (secFilings.success) results.sec_filings[symbol] = secFilings;
+        if (secFinancials.success) results.sec_financials[symbol] = secFinancials;
+      }
     })
   );
   
-  console.log(`✅ 数据采集完成: quotes=${Object.keys(results.quotes).length}, news=${Object.keys(results.news).length}, sentiment=${Object.keys(results.sentiment).length}`);
+  const dataSourcesCount = includeSEC ? 
+    `quotes=${Object.keys(results.quotes).length}, news=${Object.keys(results.news).length}, sentiment=${Object.keys(results.sentiment).length}, SEC财报=${Object.keys(results.sec_filings || {}).length}` :
+    `quotes=${Object.keys(results.quotes).length}, news=${Object.keys(results.news).length}, sentiment=${Object.keys(results.sentiment).length}`;
+  
+  console.log(`✅ 数据采集完成: ${dataSourcesCount}`);
   
   return {
     collected: true,
@@ -2129,6 +2325,30 @@ function generateDataSummary(results) {
       parts.push(`${s.symbol}情绪: ${s.sentiment.positive}%看多, ${s.sentiment.negative}%看空`);
     }
   });
+  
+  // SEC财报数据（新增）
+  if (results.sec_filings) {
+    Object.values(results.sec_filings).forEach(f => {
+      if (f.success && f.filings.length > 0) {
+        const latest = f.filings[0];
+        parts.push(`${f.ticker}最新财报: ${latest.form} (${latest.reportDate})`);
+      }
+    });
+  }
+  
+  // SEC财务数据（新增）
+  if (results.sec_financials) {
+    Object.values(results.sec_financials).forEach(f => {
+      if (f.success && f.financials) {
+        const { revenue, netIncome } = f.financials;
+        const revenueStr = revenue ? `营收$${(revenue.value / 1e9).toFixed(2)}B` : '';
+        const incomeStr = netIncome ? `净利润$${(netIncome.value / 1e9).toFixed(2)}B` : '';
+        if (revenueStr || incomeStr) {
+          parts.push(`${f.ticker}财务数据: ${[revenueStr, incomeStr].filter(Boolean).join(', ')} (${revenue?.period || netIncome?.period})`);
+        }
+      }
+    });
+  }
   
   return parts.join('\n');
 }
@@ -2508,7 +2728,10 @@ app.post("/brain/orchestrate", async (req, res) => {
     // 4.5. 数据采集（如果有股票代码）
     let marketData = null;
     if (symbols.length > 0) {
-      marketData = await collectMarketData(symbols);
+      marketData = await collectMarketData(symbols, {
+        mode: intent.mode,
+        text: text
+      });
     }
     
     // 5. Execute Multi-AI Analysis
