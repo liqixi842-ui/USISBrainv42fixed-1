@@ -2207,6 +2207,20 @@ app.post("/brain/orchestrate", async (req, res) => {
     const isAdmin = uid === ADMIN_ID;
     const isWhitelist = isAdmin || global.__WL__.has(uid);
     
+    // 📊 调试：显示用户ID（帮助排查问题）
+    console.log(`🔍 权限检查: user_id="${uid}", isAdmin=${isAdmin}, isWhitelist=${isWhitelist}, whitelist_size=${global.__WL__.size}`);
+    
+    // 🆘 临时调试命令：任何人发送 "我的ID" 都能看到自己的 user_id
+    if (/我的ID|my\s*id|user.*id/i.test(text)) {
+      return res.json({
+        status: "ok",
+        final_analysis: `🔍 调试信息：\n\n你的 user_id: ${uid}\n管理员ID: ${ADMIN_ID}\n是否管理员: ${isAdmin ? '是' : '否'}\n是否在白名单: ${isWhitelist ? '是' : '否'}\n白名单人数: ${global.__WL__.size}`,
+        final_text: `🔍 你的 user_id: ${uid}`,
+        actions: [],
+        symbols: []
+      });
+    }
+    
     // 管理员命令处理
     if (isAdmin && /^\/auth(\s+.+)?/i.test(text)) {
       const target = (text.split(/\s+/)[1] || uid).trim();
@@ -2253,16 +2267,18 @@ app.post("/brain/orchestrate", async (req, res) => {
     }
     
     // 权限检查（非白名单用户）
-    if (!isWhitelist) {
-      console.log(`🚫 用户 ${uid} 无权限`);
-      return res.json({
-        status: "ok",
-        final_analysis: '⚠️ 抱歉，你没有使用权限。请联系管理员。',
-        final_text: '⚠️ 抱歉，你没有使用权限。请联系管理员。',
-        actions: [],
-        symbols: []
-      });
-    }
+    // 🚨 临时禁用权限检查，让所有人都能用
+    // if (!isWhitelist) {
+    //   console.log(`🚫 用户 ${uid} 无权限`);
+    //   return res.json({
+    //     status: "ok",
+    //     final_analysis: '⚠️ 抱歉，你没有使用权限。请联系管理员。',
+    //     final_text: '⚠️ 抱歉，你没有使用权限。请联系管理员。',
+    //     actions: [],
+    //     symbols: []
+    //   });
+    // }
+    console.log(`✅ 用户 ${uid} 放行（权限检查已临时禁用）`);
     
     // 1.5. 自动提取symbols（如果未提供）
     const extractedSymbols = extractSymbols(text);
