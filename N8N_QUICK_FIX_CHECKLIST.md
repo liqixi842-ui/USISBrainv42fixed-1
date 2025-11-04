@@ -32,30 +32,8 @@
 
 **完整代码**（直接复制粘贴）：
 ```javascript
-const data = $json || {};
 
-return [{
-  json: {
-    final_text: data.final_analysis || data.final_text || data.answer || "未收到分析结果",
-    symbols: data.symbols || [],
-    chat_id: (() => {
-      try {
-        return $node["Telegram_Trigger"].json.message.chat.id;
-      } catch (e) {
-        return data.chat_id || null;
-      }
-    })(),
-    needs_heatmap: Array.isArray(data.actions) && data.actions.some(a => a.type === 'fetch_heatmap'),
-    heatmap_url: Array.isArray(data.actions)
-      ? (data.actions.find(a => a.type === 'fetch_heatmap')?.url || null)
-      : null,
-    needs_charts: Array.isArray(data.actions) && data.actions.some(a => a.type === 'send_chart'),
-    charts: Array.isArray(data.actions) 
-      ? data.actions.filter(a => a.type === 'send_chart')
-      : [],
-    actions: data.actions || []
-  }
-}];
+.
 ```
 
 **检查**：代码中应该包含 `needs_charts` 和 `charts` 字段
