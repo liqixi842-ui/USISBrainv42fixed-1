@@ -2091,6 +2091,25 @@ app.post("/brain/orchestrate", async (req, res) => {
       lang = "zh"
     } = req.body || {};
     
+    // 🔒 权限检查（简化版）
+    const ADMIN_ID = "7561303850";
+    const WHITELIST = ["7561303850"]; // 管理员默认在白名单
+    
+    // 如果不在白名单且不是管理员，拒绝访问
+    if (user_id && !WHITELIST.includes(String(user_id))) {
+      console.log(`🚫 用户 ${user_id} 无权限访问`);
+      return res.json({
+        status: "ok",
+        ok: true,
+        final_analysis: "⚠️ 抱歉,你没有使用权限。请联系管理员。",
+        final_text: "⚠️ 抱歉,你没有使用权限。请联系管理员。",
+        needs_heatmap: false,
+        actions: [],
+        symbols: [],
+        no_permission: true
+      });
+    }
+    
     // 1.5. 自动提取symbols（如果未提供）
     const extractedSymbols = extractSymbols(text);
     const symbols = providedSymbols.length > 0 ? providedSymbols : extractedSymbols;
