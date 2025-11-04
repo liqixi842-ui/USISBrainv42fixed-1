@@ -1,6 +1,6 @@
 # Overview
 
-USIS Brain v3.1 is an intelligent AI market analysis orchestration system with a **three-tier architecture** designed for real-time market data integration and intelligent synthesis. The system features an advanced orchestrator that evaluates request complexity and dynamically selects optimal AI model combinations for cost efficiency. It leverages up to 9 AI models (including 6-model collaboration: Claude, DeepSeek, GPT-4, Gemini, Perplexity, Mistral, plus optional Claude Opus and OpenAI o1 for complex scenarios) to understand natural language intent (premarket, intraday, postmarket, diagnose, news, meta, casual) and coordinate specialized AI agents. The system provides scene-aware content depth, intelligent cost tracking, and delivers dual output styles: a warm conversational tone for private chats and professional team commentary for groups. It is built for deployment on Replit's Autoscale platform with minimal dependencies.
+USIS Brain v3.1 is an intelligent AI market analysis orchestration system with a three-tier architecture for real-time market data integration and synthesis. It features an advanced orchestrator that evaluates request complexity and dynamically selects optimal AI model combinations for cost efficiency, leveraging up to 9 AI models. The system understands natural language intent (premarket, intraday, postmarket, diagnose, news, meta, casual) and coordinates specialized AI agents, providing scene-aware content depth, intelligent cost tracking, and delivering dual output styles: a warm conversational tone for private chats and professional team commentary for groups. It is designed for deployment on Replit's Autoscale platform.
 
 # User Preferences
 
@@ -9,82 +9,46 @@ Preferred communication style: Simple, everyday language.
 # System Architecture
 
 ## Application Framework
-- **Technology**: Node.js with Express.js (v5.1.0)
+- **Technology**: Node.js with Express.js
 - **Module System**: CommonJS
-- **Rationale**: Ensures compatibility with Replit's runtime and traditional Node.js tooling.
+- **API Design**: RESTful JSON API with standardized responses, versioning (`USIS.v3`), multilingual output, model voting details, confidence scores, and semantic tagging.
 
-## API Design
-- **Pattern**: RESTful JSON API
-- **Endpoints**:
-  - `GET /` & `GET /health`: Health checks
-  - `POST /brain/decide`: Multi-model voting decision endpoint
-  - `POST /brain/intent`: Natural language intent recognition with intelligent heatmap detection
-  - `POST /img/imagine`: Image generation
-  - `GET /img/health`: Image service health check
-  - `POST /brain/feed`: Market data and news ingestion
-  - `GET /social/twitter/search`: Twitter search for trending topics
-  - `GET /heatmap`: TradingView widget-based stock heatmap generator supporting 40+ global indices
-  - `GET /heatmap/test`: Interactive dataSource parameter testing tool
-  - `GET /heatmap/test-all`: Batch testing tool for multiple dataSource values
-- **Response Structure**: Standardized format with versioning (`USIS.v3`), multilingual output, model voting details, confidence scores, and semantic tagging.
+## Core Architecture (v3.1 Three-Tier Orchestrator)
 
-## Server Configuration
-- **Port Binding**: Dynamic allocation via `process.env.PORT || 3000`
-- **Host**: Binds to `0.0.0.0` for external accessibility.
+### L1: Complexity Scorer & Intent Router
+- Evaluates request complexity (0-10 scale) based on mode, symbols count, text complexity, question type, and user history.
+- Routes simple requests to lightweight AI models for rapid responses.
 
-## Current Implementation (v3.1 Three-Tier Orchestrator)
+### L2: Intelligent Model Selector
+- Dynamically selects optimal AI model combinations based on request complexity and budget constraints.
+- Supports various budget modes (low, medium, high, unlimited) and scenario-based model selection.
 
-### 🚀 Three-Tier Architecture (Phase I - 2025-01-04)
+### L3: Cost Tracker & Performance Monitor
+- Tracks user, models used, estimated/actual cost, and response time in a PostgreSQL database for cost analysis and optimization.
 
-**L1: Complexity Scorer & Intent Router**
-- Evaluates request complexity (0-10 scale) based on mode, symbols count, text complexity, question type, and user history
-- Routes simple requests (meta, casual) to GPT-4o-mini for instant response (<500ms)
-- Complexity factors: mode base score, stock count, complex keywords (strategy, hedge, backtest, why), question patterns
-- Tier assignment: L1 (0-3), L2 (4-7), L3 (8-10)
+## Orchestration Pipeline
+Intent → Complexity Scoring → Model Selection → Scene → Data Collection → Multi-AI Analysis → Intelligent Synthesis → Cost Tracking
 
-**L2: Intelligent Model Selector**
-- Dynamically selects optimal AI model combinations based on complexity and budget
-- Budget modes: low ($0.05/2 models), medium ($0.15/4 models), high ($0.30/6 models), unlimited ($1.00/9 models)
-- Model cost tracking: GPT-4o-mini ($0.0003), Claude ($0.015), DeepSeek ($0.0014), GPT-4 ($0.03), Gemini ($0.001), Perplexity ($0.005), Mistral ($0.007), Claude Opus ($0.075), o1 ($0.30)
-- Scenario-based model selection: News/Intraday (Gemini+Perplexity), Postmarket/Diagnose (Mistral), Complex (all 6 + Opus/o1)
+## AI Models
+The system dynamically selects from up to 9 AI models including GPT-4o-mini, Claude 3.5 Sonnet, DeepSeek Chat, GPT-4, Gemini Pro, Perplexity Sonar, Mistral Large, Claude Opus, and OpenAI o1, based on complexity and cost.
 
-**L3: Cost Tracker & Performance Monitor**
-- PostgreSQL `cost_tracking` table: tracks user_id, mode, models used, estimated/actual cost, response time
-- Async tracking (non-blocking): logs every request for cost analysis and optimization
-- Enables budget management and ROI analysis
+## Data Sources
+Integrates with Finnhub API, Alpha Vantage API, SEC EDGAR API, and FRED API for real-time quotes, news, market sentiment, technical indicators, financial filings, and macroeconomic data.
 
-### 📊 Orchestration Pipeline
-Intent → **Complexity Scoring** → **Model Selection** → Scene → Data Collection → Multi-AI Analysis → Intelligent Synthesis → **Cost Tracking**
-
-### 🤖 AI Models (9 available, 2-9 dynamically selected)
-- **GPT-4o-mini**: Quick responder (L1 tier, $0.0003/call)
-- **Claude 3.5 Sonnet**: Technical analysis expert ($0.015/call)
-- **DeepSeek Chat**: Chinese market insights ($0.0014/call)
-- **GPT-4**: Comprehensive strategy analyst ($0.03/call)
-- **Gemini Pro**: Real-time data integration specialist ($0.001/call)
-- **Perplexity Sonar**: Deep research and context analysis ($0.005/call)
-- **Mistral Large**: Sentiment analysis and risk modeling ($0.007/call)
-- **Claude Opus** (L3 only): Top-tier analysis for complex scenarios ($0.075/call)
-- **OpenAI o1** (L3 only): Deep reasoning for strategic planning ($0.30/call)
-
-### 📊 Data Sources (Phase I: 2 active, Phase II planned: +3 free sources)
-- **Finnhub API**: Real-time quotes, news, market sentiment
-- **Alpha Vantage API**: Technical indicators, news sentiment, fundamentals
-- *Planned*: SEC EDGAR (filings), FRED (economic data), Reddit (sentiment)
-
-### 🧠 Intelligence Features
-- **Intelligent Synthesis**: Key point extraction, consensus/divergence identification, coherent unified report generation
-- **Dual Output Styles**: Warm teacher tone (private) vs. professional team commentary (groups)
-- **Scene-Aware Content**: Varied depth based on context (Premarket: brief, Intraday: medium, Postmarket: deep)
-- **Memory Layer**: PostgreSQL-backed user history (last 3 conversations), adjusts tone and depth
+## Intelligence Features
+- **Intelligent Synthesis**: Extracts key points, identifies consensus/divergence, and generates unified reports.
+- **Dual Output Styles**: Offers a warm conversational tone for private chats and professional commentary for groups.
+- **Scene-Aware Content**: Adjusts content depth based on context (e.g., brief for premarket, deep for postmarket).
+- **Memory Layer**: Utilizes a PostgreSQL-backed system to store user history (last 3 conversations) for personalized interactions, allowing the AI to adjust tone and depth based on past interactions. Users can clear their memory.
 
 ## Internationalization
-- **Approach**: Built-in multilingual responses (Chinese `zh`, Spanish `es`, English `en`).
-- **Auto-detection**: Intent endpoint automatically detects language.
+Supports built-in multilingual responses (Chinese `zh`, Spanish `es`, English `en`) with automatic language detection.
 
 ## Observability
-- **Logging**: Console-based request logging with emoji markers.
-- **Metrics**: Responses include confidence scores, model voting details, and timestamps.
+Provides console-based request logging with emoji markers and includes confidence scores, model voting details, and timestamps in responses.
+
+## Heatmap System
+Integrates official TradingView stock heatmap widgets, supporting numerous global indices and cryptocurrencies. It intelligently maps user requests to appropriate data sources.
 
 # External Dependencies
 
@@ -93,221 +57,21 @@ Intent → **Complexity Scoring** → **Model Selection** → Scene → Data Col
 - **node-fetch**: HTTP client for API calls.
 
 ## API Integrations
-- **Claude API** (Anthropic): Technical analysis.
-- **DeepSeek API**: Chinese market insights.
-- **OpenAI API**: Comprehensive strategy analysis.
-- **Google Gemini API**: Real-time data integration.
-- **Perplexity API**: Deep research and context analysis.
-- **Mistral API**: Sentiment and risk modeling.
-- **Finnhub API**: Real-time stock quotes, news, market sentiment.
-- **Alpha Vantage API**: Technical indicators, news sentiment, fundamentals.
-- **Replicate API**: For image generation (used by `/img/imagine` endpoint).
-- **Twitter API v2**: For searching recent tweets (used by `/social/twitter/search` endpoint).
+- **Claude API** (Anthropic)
+- **DeepSeek API**
+- **OpenAI API**
+- **Google Gemini API**
+- **Perplexity API**
+- **Mistral API**
+- **Finnhub API**
+- **Alpha Vantage API**
+- **FRED API** ✅: Federal Reserve Economic Data (CPI, unemployment, GDP, interest rates).
+- **SEC EDGAR API** ✅: Company financial filings (10-K, 10-Q).
+- **Replicate API**: For image generation.
+- **Twitter API v2**: For searching recent tweets.
+
+## Database
+- **PostgreSQL**: Used for memory management (user conversation history) and cost tracking.
 
 ## Deployment Environment
-- **Platform**: Replit.
-- **Environment Variables**: All API keys must be configured in Replit Secrets.
-
-# Heatmap System
-
-## TradingView Widget Integration
-The system uses official TradingView stock heatmap widgets for professional market visualization.
-
-## Supported DataSource Values (Official)
-### 🇺🇸 United States
-- `SPX500`, `DJDJI`, `DJDJU`, `DJDJT`, `DJCA`
-- `NASDAQ100`, `NASDAQCOMPOSITE`, `NASDAQBKX`
-- `ALLUSA` (All US Stocks)
-
-### 🇪🇺 Europe
-- UK: `UK100`, `ALLUK`
-- Germany: `DAX`, `TECDAX`, `MDAX`, `SDAX`, `ALLDE`
-- France: `CAC40`, `SBF120`, `ALLFR`
-- Spain: `IBEX35`, `BMEIS`, `BMEINDGRO15`, `BMEINDGROAS`, `BMEICC`, `ALLES`
-- Belgium: `ALLBE`
-
-### 🌏 Asia-Pacific
-- Japan: `ALLJP`
-- China: `ALLCN`
-- Australia: `ALLAU`
-
-### 🌎 Americas (Other)
-- Brazil: `ALLBR`
-- Argentina: `ALLAR`
-- Canada: `ALLCA`
-- Chile: `ALLCL`
-- Colombia: `ALLCO`
-
-### 🏭 Industry Indices
-- `TVCRUI` (Cruise Industry)
-- `TVCRUA` (Airlines & Cruise)
-- `TVCRUT` (Transport & Travel)
-
-### 💰 Cryptocurrency
-- `CRYPTO` (Cryptocurrency heatmap)
-
-## Intelligent Mapping
-The system automatically maps user requests to valid dataSource values:
-- User says "纳斯达克100" → `NASDAQ100`
-- User says "西班牙小盘股" → `BMEIS` (BME Small Cap)
-- User says "德国科技股" → `TECDAX`
-- User says "加密货币" → `CRYPTO`
-
-## N8N Integration
-N8N workflow automatically detects `fetch_heatmap` action and generates screenshots without requiring manual configuration.
-
-# Permission System - REMOVED (2025-01-04)
-
-## Architecture Decision
-**权限系统已完全移除，系统恢复到无权限限制的简单架构。**
-
-### Rationale for Removal
-- 权限系统导致N8N工作流复杂度显著增加（6-8个额外节点）
-- N8N数据流调试困难，经常出现"chat not found"等变量传递问题
-- 用户体验明显下降，系统不如之前智能流畅
-- 对于个人使用场景，权限管理非必需功能
-- 复杂度与收益不成正比
-
-### What Was Removed
-- ❌ `/brain/permission` API端点
-- ❌ `/brain/orchestrate` 内的权限检查逻辑
-- ❌ 管理员命令处理（`/auth`, `/unauth`, `/listauth`）
-- ❌ 白名单管理（`global.__WL__`）
-- ❌ N8N权限检查节点（`Set_Context`, `Call_Permission`, `IF_Permission_Allowed`等）
-
-### Current State
-**任何人都可以直接使用机器人，无需授权。**
-
-N8N工作流已简化为：
-```
-Telegram_Trigger → Call_Brain_Orchestrate → Parse_Brain_Response → ...
-```
-
-### Future Considerations
-如果未来确实需要访问控制，建议使用：
-- Telegram群组管理功能（限制使用群组）
-- Replit部署环境的IP白名单
-- **不建议**在应用代码或N8N工作流层面实现权限系统
-
----
-
-# Recent Fixes (2025-11-03)
-
-## Critical Issues Resolved
-
-### 1. News Intent Recognition Enhancement
-**Problem**: Users requesting "新闻资讯" received lengthy AI analysis instead of news list.
-**Fix**: Added fast-path response for pure news requests without stock symbols. System now returns concise news prompt and skips 6-AI orchestration for efficiency.
-- Location: `index.js` line 2127-2157
-- Trigger: `mode='news'` + no symbols + no analysis keywords
-
-### 2. Individual Stock Analysis Data Enhancement
-**Problem**: Stock analysis responses lacked concrete data (prices, percentages, news).
-**Fix**: Enhanced AI prompts to mandate usage of real-time market data:
-- **Claude Prompt** (line 1567-1594): Requires explicit price + change% in first sentence, technical indicators with numbers
-- **GPT-4 Prompt** (line 1615-1670): Requires real-time price, sentiment percentages, news integration
-- **Data Flow**: `collectMarketData()` → `generateDataSummary()` → enriched AI prompts → data-driven analysis
-
-### 3. Meta Intent Detection (AI Self-Awareness)
-**Problem**: Users asking "你可以学习吗" received market analysis instead of capability information.
-**Fix**: Added `meta` intent mode with strict detection logic:
-- Detects self-referential questions: "你是谁", "你的功能", "what can you do"
-- **Critical safeguard**: Excludes if stock symbols or market keywords present (prevents hijacking "你能分析NVDA吗")
-- Location: `index.js` line 1172-1177 (detection), line 2088-2125 (fast-path response)
-- Returns friendly capability overview without triggering AI orchestration
-
-### 4. Message Duplication Issue (N8N-side)
-**Problem**: Users reported duplicate messages (3x text, 2x text+image).
-**Diagnosis**: Brain API returns single `final_analysis` correctly. Issue is in N8N workflow configuration.
-**Action Required**: Check N8N workflow:
-- Verify `IF_Send_Photo` logic is mutually exclusive
-- Ensure `Send_With_Photo` and `Send_Text_Only` nodes don't both trigger
-- Look for duplicate Telegram send nodes in workflow
-
-## Intent Modes Supported
-- `premarket`: Morning pre-market analysis
-- `intraday`: Live market tracking
-- `postmarket`: After-hours review
-- `diagnose`: Individual stock deep-dive
-- `news`: Market news aggregation
-- **`meta`**: Questions about AI capabilities
-- **`casual`** (new): Casual chat mode - uses lightweight GPT-4 response (1-3 sentences, max 120 chars) to avoid 6-AI orchestration cost
-
----
-
-# PostgreSQL Memory System (2025-11-03)
-
-## Architecture Decision
-**Memory is managed 100% by Brain (Replit), not N8N.**
-
-### Rationale
-- Brain is the thinking center, memory should be part of its core capability
-- Single source of truth: PostgreSQL database persists across Replit restarts
-- N8N remains a pure executor organ, only forwards `user_id` without managing memory
-- No data synchronization issues between Brain internal state and external systems
-
-## Implementation
-
-### Database Schema
-```sql
-CREATE TABLE user_memory (
-  id SERIAL PRIMARY KEY,
-  user_id TEXT NOT NULL,
-  timestamp TIMESTAMPTZ DEFAULT NOW(),
-  request_text TEXT,
-  mode TEXT,
-  symbols TEXT[],
-  response_text TEXT,
-  chat_type TEXT
-);
-CREATE INDEX idx_user_memory_user_id ON user_memory(user_id);
-CREATE INDEX idx_user_memory_timestamp ON user_memory(timestamp DESC);
-```
-
-### API Endpoints
-- **POST /brain/orchestrate**: Automatically reads last 3 user memories before AI analysis, saves new conversation after response
-- **POST /brain/memory/clear**: Clears all history for a specific user_id
-- **GET /brain/memory**: Views system memory (legacy internal state)
-
-### Memory Flow
-```
-User Request (with user_id)
-    ↓
-Brain reads last 3 conversations from PostgreSQL
-    ↓
-AI analysis (with historical context)
-    ↓
-Brain saves new conversation to PostgreSQL
-    ↓
-Response to user
-```
-
-### N8N Integration
-N8N only needs to pass `user_id` in the request body:
-```json
-{
-  "text": "user's message",
-  "chat_type": "private|group",
-  "user_id": "telegram_user_id"
-}
-```
-
-N8N can trigger memory clearing:
-```
-POST /brain/memory/clear
-{
-  "user_id": "telegram_user_id"
-}
-```
-
-## User Experience
-- **Learning**: Brain remembers last 3 conversations per user
-- **Personalization**: Adjusts analysis style based on user history
-- **Privacy**: Users can say "清空记忆" to clear their history
-- **Persistence**: Memory survives Replit restarts (PostgreSQL backed)
-
-## Technical Notes
-- Database connection uses `pg` driver with connection pooling
-- All queries use parameterized statements (SQL injection safe)
-- Graceful degradation: If database query fails, continues with empty history
-- DATABASE_URL environment variable required for persistence
+- **Replit**: Platform for deployment.
