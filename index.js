@@ -31,8 +31,21 @@ async function initDatabase() {
       );
       CREATE INDEX IF NOT EXISTS idx_user_memory_user_id ON user_memory(user_id);
       CREATE INDEX IF NOT EXISTS idx_user_memory_timestamp ON user_memory(timestamp DESC);
+      
+      CREATE TABLE IF NOT EXISTS cost_tracking (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT,
+        timestamp TIMESTAMPTZ DEFAULT NOW(),
+        mode TEXT,
+        models JSONB,
+        estimated_cost DECIMAL(10,4),
+        actual_cost DECIMAL(10,4),
+        response_time_ms INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_cost_tracking_user ON cost_tracking(user_id);
+      CREATE INDEX IF NOT EXISTS idx_cost_tracking_time ON cost_tracking(timestamp DESC);
     `);
-    console.log("✅ Database initialized: user_memory table ready");
+    console.log("✅ Database initialized: user_memory and cost_tracking tables ready");
   } catch (error) {
     console.error("❌ Database initialization error:", error.message);
   }
@@ -1309,6 +1322,171 @@ function analyzeScene(mode, symbols = []) {
   return scenes[mode] || scenes.news;
 }
 
+// ========================================
+// 🚀 三级Orchestrator架构 (阶段I新增)
+// ========================================
+
+// L1: 复杂度评分器 - 评估请求的复杂度，决定使用哪个层级处理
+function calculateComplexityScore(text = "", mode = "", symbols = [], userHistory = []) {
+  let complexityScore = 0;
+  
+  // 1. 基于模式的基础分数
+  const modeScores = {
+    'meta': 0,        // 最简单，直接回复
+    'casual': 1,      // 闲聊，轻量AI
+    'news': 2,        // 新闻，中等
+    'premarket': 3,   // 盘前简报
+    'intraday': 4,    // 盘中分析
+    'diagnose': 6,    // 个股诊断，需要深度
+    'postmarket': 7   // 复盘总结，最深度
+  };
+  complexityScore += (modeScores[mode] || 3);
+  
+  // 2. 股票数量影响
+  if (symbols.length >= 5) complexityScore += 3;  // 多股票对比
+  else if (symbols.length >= 2) complexityScore += 2;  // 2-4只股票
+  else if (symbols.length === 1) complexityScore += 1;  // 单股
+  
+  // 3. 文本复杂度
+  const textLower = text.toLowerCase();
+  const complexKeywords = [
+    '策略', '对冲', '套利', '组合', 'strategy', 'hedge', 'portfolio',
+    '回测', 'backtest', '量化', 'quant',
+    '风险', 'risk', '波动', 'volatility',
+    '为什么', 'why', '原因', 'reason', '深度', 'deep'
+  ];
+  const complexKeywordCount = complexKeywords.filter(k => textLower.includes(k)).length;
+  complexityScore += complexKeywordCount * 2;
+  
+  // 4. 问题类型
+  if (/如何|怎么|怎样|为什么|why|how/.test(textLower)) complexityScore += 2;  // 需要推理
+  if (/对比|比较|vs|versus/.test(textLower)) complexityScore += 3;  // 需要对比分析
+  
+  // 5. 历史上下文依赖
+  if (userHistory && userHistory.length > 0) {
+    const recentModes = userHistory.map(h => h.mode);
+    if (recentModes.includes('diagnose') || recentModes.includes('postmarket')) {
+      complexityScore += 1;  // 用户偏好深度分析
+    }
+  }
+  
+  // 归一化到0-10
+  complexityScore = Math.min(10, Math.max(0, complexityScore));
+  
+  // 决定层级
+  let tier = 'L1';  // L1: 快速路由（GPT-4o-mini）
+  if (complexityScore >= 8) tier = 'L3';  // L3: 深度推理（o1/Claude Opus）
+  else if (complexityScore >= 4) tier = 'L2';  // L2: 标准分析（现有6-AI）
+  
+  return {
+    score: complexityScore,
+    tier,
+    reasoning: `模式:${mode}(${modeScores[mode] || 0}分) + 股票:${symbols.length}只 + 关键词:${complexKeywordCount}个`
+  };
+}
+
+// L2: 智能模型选择器 - 根据场景选择最优AI模型组合
+function selectOptimalModels(complexity, mode, symbols = [], budget = 'medium') {
+  // 预算配置（每次分析的目标成本）
+  const budgetConfigs = {
+    'low': { maxCost: 0.05, maxModels: 2 },      // $0.05 - 2个模型
+    'medium': { maxCost: 0.15, maxModels: 4 },   // $0.15 - 4个模型
+    'high': { maxCost: 0.30, maxModels: 6 },     // $0.30 - 6个模型
+    'unlimited': { maxCost: 1.0, maxModels: 9 }  // $1.00 - 9个模型（包括o1）
+  };
+  
+  const budgetConfig = budgetConfigs[budget] || budgetConfigs['medium'];
+  
+  // 模型成本估算（每次调用约1000 tokens）
+  const modelCosts = {
+    'gpt4o-mini': 0.0003,    // 最便宜，快速路由用
+    'claude': 0.015,         // Claude 3.5 Sonnet
+    'deepseek': 0.0014,      // DeepSeek Chat
+    'gpt4': 0.03,            // GPT-4
+    'gemini': 0.001,         // Gemini Pro (免费tier)
+    'perplexity': 0.005,     // Perplexity Sonar
+    'mistral': 0.007,        // Mistral Large
+    'claude-opus': 0.075,    // Claude Opus (顶级)
+    'o1': 0.300              // OpenAI o1 (深度推理)
+  };
+  
+  const selectedModels = [];
+  let estimatedCost = 0;
+  
+  // L1层：使用GPT-4o-mini快速路由（meta、casual场景）
+  if (complexity.tier === 'L1') {
+    selectedModels.push({ name: 'gpt4o-mini', role: 'quick_responder', cost: modelCosts['gpt4o-mini'] });
+    estimatedCost += modelCosts['gpt4o-mini'];
+  }
+  
+  // L2层：标准6-AI协同（大部分场景）
+  else if (complexity.tier === 'L2') {
+    // 核心模型（总是使用）
+    const coreModels = ['claude', 'gpt4', 'deepseek'];
+    coreModels.forEach(model => {
+      selectedModels.push({ name: model, role: AI_ROLES[model]?.specialty || '分析师', cost: modelCosts[model] });
+      estimatedCost += modelCosts[model];
+    });
+    
+    // 根据场景添加专业模型
+    if (mode === 'news' || mode === 'intraday') {
+      selectedModels.push({ name: 'gemini', role: AI_ROLES.gemini.specialty, cost: modelCosts.gemini });
+      selectedModels.push({ name: 'perplexity', role: AI_ROLES.perplexity.specialty, cost: modelCosts.perplexity });
+      estimatedCost += modelCosts.gemini + modelCosts.perplexity;
+    }
+    
+    if (mode === 'postmarket' || mode === 'diagnose') {
+      selectedModels.push({ name: 'mistral', role: AI_ROLES.mistral.specialty, cost: modelCosts.mistral });
+      estimatedCost += modelCosts.mistral;
+    }
+  }
+  
+  // L3层：深度推理（复杂场景）
+  else if (complexity.tier === 'L3') {
+    // 使用所有6个标准模型
+    ['claude', 'deepseek', 'gpt4', 'gemini', 'perplexity', 'mistral'].forEach(model => {
+      selectedModels.push({ name: model, role: AI_ROLES[model]?.specialty || '分析师', cost: modelCosts[model] });
+      estimatedCost += modelCosts[model];
+    });
+    
+    // 如果预算允许，添加深度推理模型
+    if (budgetConfig.maxCost >= 0.3) {
+      // 优先选择Claude Opus（性价比高）
+      selectedModels.push({ name: 'claude-opus', role: '顶级分析师·深度推理', cost: modelCosts['claude-opus'] });
+      estimatedCost += modelCosts['claude-opus'];
+      
+      // 如果预算充足且场景极其复杂，考虑o1
+      if (budgetConfig.maxCost >= 1.0 && complexity.score >= 9) {
+        selectedModels.push({ name: 'o1', role: '超级大脑·战略推理', cost: modelCosts['o1'] });
+        estimatedCost += modelCosts['o1'];
+      }
+    }
+  }
+  
+  return {
+    models: selectedModels,
+    estimatedCost: parseFloat(estimatedCost.toFixed(4)),
+    tier: complexity.tier,
+    budgetConfig: budgetConfig.maxCost,
+    withinBudget: estimatedCost <= budgetConfig.maxCost
+  };
+}
+
+// L3: 成本追踪器 - 记录每次分析的成本
+async function trackCost(user_id, mode, models, actualCost, responseTime) {
+  try {
+    // 插入成本记录 (表已在initDatabase中创建)
+    await pool.query(
+      'INSERT INTO cost_tracking (user_id, mode, models, estimated_cost, actual_cost, response_time_ms) VALUES ($1, $2, $3, $4, $5, $6)',
+      [user_id || 'anonymous', mode, JSON.stringify(models), actualCost, actualCost, responseTime]
+    );
+    
+    console.log(`💰 成本追踪: $${actualCost.toFixed(4)} (${responseTime}ms)`);
+  } catch (error) {
+    console.error('❌ 成本追踪失败:', error.message);
+  }
+}
+
 // Planner - 任务规划器
 function planTasks(intent, scene, symbols = []) {
   const tasks = [];
@@ -2158,6 +2336,17 @@ app.post("/brain/orchestrate", async (req, res) => {
     
     console.log(`📋 场景分析: ${scene.name} | 目标长度: ${scene.targetLength}字 | 深度: ${scene.depth}`);
     
+    // 🚀 三级Orchestrator: 复杂度评分 & 模型选择
+    const complexity = calculateComplexityScore(text, intent.mode, symbols, userHistory);
+    console.log(`🎯 复杂度评分: ${complexity.score}/10 | 层级: ${complexity.tier}`);
+    console.log(`   推理: ${complexity.reasoning}`);
+    
+    // 智能模型选择（默认medium预算）
+    const budget = process.env.AI_BUDGET || 'medium';  // 可通过环境变量配置
+    const modelSelection = selectOptimalModels(complexity, intent.mode, symbols, budget);
+    console.log(`🤖 模型选择: ${modelSelection.models.map(m => m.name).join(', ')}`);
+    console.log(`💰 预估成本: $${modelSelection.estimatedCost} (预算: $${modelSelection.budgetConfig})`);
+    
     // 4. Planning
     const tasks = planTasks(intent, scene, symbols);
     console.log(`📝 任务规划: ${tasks.join(' → ')}`);
@@ -2422,9 +2611,29 @@ app.post("/brain/orchestrate", async (req, res) => {
       debug: {
         style: chat_type === 'private' ? 'teacher_personal' : 'team_professional',
         tasks,
-        user_prefs: userPrefs
+        user_prefs: userPrefs,
+        // 三级Orchestrator信息
+        complexity: {
+          score: complexity.score,
+          tier: complexity.tier,
+          reasoning: complexity.reasoning
+        },
+        model_selection: {
+          models: modelSelection.models.map(m => ({ name: m.name, role: m.role })),
+          estimated_cost: modelSelection.estimatedCost,
+          tier: modelSelection.tier
+        }
       }
     });
+    
+    // 🚀 三级Orchestrator: 成本追踪（异步，不阻塞响应）
+    trackCost(
+      user_id, 
+      intent.mode, 
+      modelSelection.models, 
+      modelSelection.estimatedCost, 
+      responseTime
+    ).catch(err => console.error('成本追踪失败:', err.message));
     
   } catch (err) {
     console.error("❌ Orchestrator 错误:", err);

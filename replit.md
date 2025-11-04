@@ -1,6 +1,6 @@
 # Overview
 
-USIS Brain v3 is an intelligent AI market analysis orchestration system designed for real-time market data integration and intelligent synthesis. It leverages a 6-model collaboration (Claude, DeepSeek, GPT-4, Gemini, Perplexity, Mistral) to understand natural language intent (premarket, intraday, postmarket, diagnose, news) and coordinate specialized AI agents. The system provides scene-aware content depth and delivers dual output styles: a warm conversational tone for private chats and professional team commentary for groups. It is built for deployment on Replit's Autoscale platform with minimal dependencies.
+USIS Brain v3.1 is an intelligent AI market analysis orchestration system with a **three-tier architecture** designed for real-time market data integration and intelligent synthesis. The system features an advanced orchestrator that evaluates request complexity and dynamically selects optimal AI model combinations for cost efficiency. It leverages up to 9 AI models (including 6-model collaboration: Claude, DeepSeek, GPT-4, Gemini, Perplexity, Mistral, plus optional Claude Opus and OpenAI o1 for complex scenarios) to understand natural language intent (premarket, intraday, postmarket, diagnose, news, meta, casual) and coordinate specialized AI agents. The system provides scene-aware content depth, intelligent cost tracking, and delivers dual output styles: a warm conversational tone for private chats and professional team commentary for groups. It is built for deployment on Replit's Autoscale platform with minimal dependencies.
 
 # User Preferences
 
@@ -32,19 +32,51 @@ Preferred communication style: Simple, everyday language.
 - **Port Binding**: Dynamic allocation via `process.env.PORT || 3000`
 - **Host**: Binds to `0.0.0.0` for external accessibility.
 
-## Current Implementation (v3 Orchestrator)
-- **Orchestration Pipeline**: Intent → Scene → Data Collection → Multi-AI Analysis → Intelligent Synthesis.
-- **AI Models** (6 specialized agents):
-  - **Claude 3.5 Sonnet**: Technical analysis expert.
-  - **DeepSeek Chat**: Chinese market insights.
-  - **GPT-4**: Comprehensive strategy analyst.
-  - **Gemini Pro**: Real-time data integration specialist.
-  - **Perplexity**: Deep research and context analysis.
-  - **Mistral Large**: Sentiment analysis and risk modeling.
-- **Data Empire**: Real-time market intelligence from Finnhub and Alpha Vantage APIs, with parallel data collection and automatic prompt enrichment.
-- **Intelligent Synthesis**: Key point extraction, consensus/divergence identification, coherent unified report generation, and dual output styles (warm teacher vs. professional team).
-- **Scene-Aware Content**: Varied content depth based on market context (Premarket: brief, Hot news/Intraday: medium, Postmarket/Review: deep).
-- **Memory Layer**: Adjusts content depth and tone based on user preferences.
+## Current Implementation (v3.1 Three-Tier Orchestrator)
+
+### 🚀 Three-Tier Architecture (Phase I - 2025-01-04)
+
+**L1: Complexity Scorer & Intent Router**
+- Evaluates request complexity (0-10 scale) based on mode, symbols count, text complexity, question type, and user history
+- Routes simple requests (meta, casual) to GPT-4o-mini for instant response (<500ms)
+- Complexity factors: mode base score, stock count, complex keywords (strategy, hedge, backtest, why), question patterns
+- Tier assignment: L1 (0-3), L2 (4-7), L3 (8-10)
+
+**L2: Intelligent Model Selector**
+- Dynamically selects optimal AI model combinations based on complexity and budget
+- Budget modes: low ($0.05/2 models), medium ($0.15/4 models), high ($0.30/6 models), unlimited ($1.00/9 models)
+- Model cost tracking: GPT-4o-mini ($0.0003), Claude ($0.015), DeepSeek ($0.0014), GPT-4 ($0.03), Gemini ($0.001), Perplexity ($0.005), Mistral ($0.007), Claude Opus ($0.075), o1 ($0.30)
+- Scenario-based model selection: News/Intraday (Gemini+Perplexity), Postmarket/Diagnose (Mistral), Complex (all 6 + Opus/o1)
+
+**L3: Cost Tracker & Performance Monitor**
+- PostgreSQL `cost_tracking` table: tracks user_id, mode, models used, estimated/actual cost, response time
+- Async tracking (non-blocking): logs every request for cost analysis and optimization
+- Enables budget management and ROI analysis
+
+### 📊 Orchestration Pipeline
+Intent → **Complexity Scoring** → **Model Selection** → Scene → Data Collection → Multi-AI Analysis → Intelligent Synthesis → **Cost Tracking**
+
+### 🤖 AI Models (9 available, 2-9 dynamically selected)
+- **GPT-4o-mini**: Quick responder (L1 tier, $0.0003/call)
+- **Claude 3.5 Sonnet**: Technical analysis expert ($0.015/call)
+- **DeepSeek Chat**: Chinese market insights ($0.0014/call)
+- **GPT-4**: Comprehensive strategy analyst ($0.03/call)
+- **Gemini Pro**: Real-time data integration specialist ($0.001/call)
+- **Perplexity Sonar**: Deep research and context analysis ($0.005/call)
+- **Mistral Large**: Sentiment analysis and risk modeling ($0.007/call)
+- **Claude Opus** (L3 only): Top-tier analysis for complex scenarios ($0.075/call)
+- **OpenAI o1** (L3 only): Deep reasoning for strategic planning ($0.30/call)
+
+### 📊 Data Sources (Phase I: 2 active, Phase II planned: +3 free sources)
+- **Finnhub API**: Real-time quotes, news, market sentiment
+- **Alpha Vantage API**: Technical indicators, news sentiment, fundamentals
+- *Planned*: SEC EDGAR (filings), FRED (economic data), Reddit (sentiment)
+
+### 🧠 Intelligence Features
+- **Intelligent Synthesis**: Key point extraction, consensus/divergence identification, coherent unified report generation
+- **Dual Output Styles**: Warm teacher tone (private) vs. professional team commentary (groups)
+- **Scene-Aware Content**: Varied depth based on context (Premarket: brief, Intraday: medium, Postmarket: deep)
+- **Memory Layer**: PostgreSQL-backed user history (last 3 conversations), adjusts tone and depth
 
 ## Internationalization
 - **Approach**: Built-in multilingual responses (Chinese `zh`, Spanish `es`, English `en`).
