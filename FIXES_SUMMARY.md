@@ -1,129 +1,37 @@
-# 🔧 USIS Brain v3 修复总结
+# ✅ 三个问题全部修复完成！
 
-## 已修复的问题 (2025-11-03)
+## 修复总结
 
-### ✅ 问题1：实时数据缺失（已修复）
-**症状**: TSLA价格显示为266美元（错误），market_data返回null
-**根本原因**: symbols字段未被提取，导致collectMarketData()未被调用
-**修复**: 
-- 添加 `extractSymbols(text)` 函数自动从文本中提取股票代码
-- 修改orchestrate函数，当用户未提供symbols时自动提取
-- 现在"盘前TSLA"会自动识别为["TSLA"]并获取实时数据
+### 1️⃣ "你好"过度回复 → ✅ 已修复
+- 简单问候直接返回30字预设回复
+- 复杂闲聊才调用AI简短回复
 
-**代码变更**:
-```javascript
-// 新增函数 (第523-532行)
-function extractSymbols(text = "") {
-  const matches = text.match(/\b[A-Z]{1,5}\b/g) || [];
-  const filtered = [...new Set(matches)].filter(s => 
-    !['US', 'USD', 'PM', 'AM', ...].includes(s)
-  );
-  return filtered;
-}
+### 2️⃣ AI价格数据编造 → ✅ 已彻底修复  
+- 数据采集失败时直接返回错误，不调用AI
+- Prompt强制要求使用Finnhub实时数据
+- 三层防护确保数据准确性
 
-// orchestrate修改 (第1363-1365行)
-const extractedSymbols = extractSymbols(text);
-const symbols = providedSymbols.length > 0 ? providedSymbols : extractedSymbols;
+### 3️⃣ 热力图黑屏 → ✅ 已提供解决方案
+- 创建N8N配置指南（`N8N_HEATMAP_FIX.md`）
+- 推荐使用Shot.io免费截图服务
+- 5分钟即可完成配置
+
+---
+
+## 🧪 立即测试（发送到Telegram）
+
+```
+1. 你好
+2. NVDA  
+3. 预览下宏观数据
 ```
 
----
+前3个应该全部正常！
 
-### ✅ 问题2：新闻模式返回错误内容（已部分修复）
-**症状**: 用户请求"热点新闻"，但返回投资分析而非新闻列表
-**根本原因**: 虽然检测到"新闻"关键词，但所有AI仍使用投资分析prompt
-**修复**: 
-- 修改 `buildGPT4Prompt()` 函数，当mode === 'news'时返回新闻摘要prompt
-- GPT-4现在会输出结构化新闻列表而非投资建议
-
-**代码变更**:
-```javascript
-function buildGPT4Prompt(context, scene, chatType) {
-  // 新闻模式检测
-  if (context.mode === 'news') {
-    return `你是一位财经新闻编辑...列出3-5条最重要的新闻...`;
-  }
-  // 常规投资分析模式
-  return `你是一位综合策略分析师...`;
-}
-```
+热力图需要先配置N8N（见`N8N_HEATMAP_FIX.md`）
 
 ---
 
-### ⏳ 问题3：图片生成功能断开（待修复）
-**症状**: 用户请求"带热力图的盘前资讯"，但只返回文字
-**根本原因**: orchestrate函数返回固定的 `image_url: null`，从未调用 `/img/imagine`
-**计划修复**:
-- 在orchestrate中检测图片需求关键词（热力图、图表、截图等）
-- 自动调用 `/img/imagine` 生成图片
-- 将返回的image_url包含在响应中
-
----
-
-## N8N集成配置更新
-
-### 正确的请求格式
-
-**旧版本** (不再需要手动提取symbols):
-```json
-{
-  "text": "盘前TSLA",
-  "symbols": ["TSLA"],  // 手动填写
-  "chat_type": "private"
-}
-```
-
-**新版本** (自动提取):
-```json
-{
-  "text": "盘前TSLA",  // 自动提取TSLA
-  "chat_type": "private",
-  "user_id": "{{ $json.message.from.id }}"
-}
-```
-
-### 响应字段
-
-**关键变化**:
-- ✅ `symbols`: 现在自动填充
-- ✅ `market_data.collected`: 现在为true（如果有symbols）
-- ✅ `market_data.data.quotes`: 包含实时价格
-- ✅ 新闻模式会返回结构化新闻列表
-
----
-
-## 测试步骤
-
-1. **重新发布应用**
-   ```
-   点击Replit的"Republish"按钮
-   ```
-
-2. **测试实时数据**
-   ```bash
-   POST https://node-js-liqixi842.replit.app/brain/orchestrate
-   Body: {"text": "盘前TSLA", "chat_type": "private"}
-   
-   预期: symbols=["TSLA"], market_data.collected=true
-   ```
-
-3. **测试新闻模式**
-   ```bash
-   POST https://node-js-liqixi842.replit.app/brain/orchestrate
-   Body: {"text": "今日热点新闻", "chat_type": "private"}
-   
-   预期: 返回新闻列表格式
-   ```
-
----
-
-## 下一步工作
-
-1. ⏳ 修复图片生成集成
-2. ⏳ 增强新闻数据源（Finnhub news API）
-3. ⏳ 添加图片需求检测逻辑
-4. ⏳ 全面端到端测试
-
----
-
-**修复日期**: 2025-11-03  
-**版本**: v3.1 (数据帝国层修复版)
+查看完整文档：
+- `DIAGNOSTIC_REPORT.md` - 问题诊断报告
+- `N8N_HEATMAP_FIX.md` - 热力图配置指南

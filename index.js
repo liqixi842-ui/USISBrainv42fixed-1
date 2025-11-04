@@ -1837,18 +1837,30 @@ async function multiAIAnalysis({ mode, scene, symbols, text, chatType, marketDat
   
   // 准备上下文（包含实时数据）
   let dataContext = '';
-  if (marketData && marketData.collected) {
-    dataContext = `\n\n【实时数据】\n${marketData.summary}`;
+  let hasRealData = false;
+  
+  if (marketData && marketData.collected && marketData.summary) {
+    dataContext = `【⚠️ 必须使用以下Finnhub实时数据，禁止编造】\n${marketData.summary}\n\n用户请求：`;
+    hasRealData = true;
     console.log(`✅ 实时数据已注入AI prompt (${marketData.summary.length}字)`);
+  } else if (symbols.length > 0) {
+    // 有股票代码但数据采集失败 - 直接报错，不让AI编造
+    console.error(`❌ 严重错误：有股票代码但marketData为空！`);
+    console.error(`   marketData存在: ${!!marketData}`);
+    console.error(`   collected: ${marketData?.collected}`);
+    console.error(`   summary: ${marketData?.summary}`);
+    dataContext = `【数据采集失败，以下分析基于历史知识，可能不准确】\n\n用户请求：`;
   } else {
-    console.warn(`⚠️  实时数据未注入！marketData=${!!marketData}, collected=${marketData?.collected}`);
+    console.log(`ℹ️  无股票代码，跳过实时数据注入`);
+    dataContext = '';
   }
   
   const context = {
     mode,
     scene: scene.name,
     symbols: symbols.join(', ') || '无特定股票',
-    request: text + dataContext
+    request: dataContext + text,
+    hasRealData  // 标记是否有真实数据
   };
   
   // 构建不同AI的prompt
@@ -1890,31 +1902,25 @@ async function multiAIAnalysis({ mode, scene, symbols, text, chatType, marketDat
 
 // Build Claude Prompt - 技术分析专家
 function buildClaudePrompt(context, scene) {
+  const dataWarning = context.hasRealData 
+    ? '✅ 上方已提供Finnhub实时数据，第一句必须引用真实价格和涨跌幅！' 
+    : '⚠️ 未提供实时数据，请基于历史知识分析并说明数据可能过时';
+  
   return `你是一位技术分析专家，专注于${scene.focus.join('、')}。
 
-场景：${context.scene}
-股票：${context.symbols}
-用户请求：${context.request}
+${context.request}
 
-🎯 关键要求：
-1. **必须使用实时数据**：上面提供的实时价格、涨跌幅、新闻等数据，必须在分析中直接引用
-   - 示例："NVDA当前价格$120.50，较昨日收盘上涨+2.34%"
-   - 示例："从5日、10日、20日均线来看..."（如果数据中有）
+🎯 ${dataWarning}
 
-2. **技术面分析要点**（${scene.targetLength/3}字左右）：
-   - 当前价格位置分析（支撑位、压力位）
-   - 短期趋势判断（如MACD、RSI如果有数据）
-   - 成交量变化（如果有数据）
+输出要求（${scene.targetLength/3}字左右）：
+1. **开头第一句**：必须包含股票代码、当前价格、涨跌幅（从上方实时数据获取）
+2. **技术面分析**：价格位置、趋势判断、成交量（2-3个要点）
+3. **结论**：短期趋势预测
 
-3. **输出格式**：
-   - 第一句必须包含：股票代码 + 当前价格 + 涨跌幅
-   - 然后用2-3个要点说明技术面判断
-   - 最后给出短期趋势预测
-
-要求：
-- 用具体数字说话，不要空洞描述
-- 专业但简洁
-- 不要免责声明`;
+注意：
+- 禁止编造价格数据！必须使用上方提供的真实数据
+- 如果没有实时数据，必须明确说明"基于历史数据"
+- 专业简洁，不要免责声明`;
 }
 
 // Build DeepSeek Prompt - 中文市场专家
@@ -2889,14 +2895,39 @@ app.post("/brain/orchestrate", async (req, res) => {
     const isCasualChat = !hasMarketKeywords && !isMarketMode && symbols.length === 0;
     
     if (isCasualChat) {
-      console.log(`💬 检测到闲聊模式，使用简短AI回复`);
+      console.log(`💬 检测到闲聊模式`);
       
-      // 闲聊模式：只调用GPT-4，用简短prompt
-      const casualPrompt = `你是一个友好、简洁的聊天助手。只用中文回答。每次回复控制在1~3句，最多120字。避免行情/技术分析。
+      // 🔹 简单问候语：直接返回预设回复，不调用AI
+      const simpleGreetings = /^(你好|hi|hello|嗨|hey|您好|早上好|晚上好|中午好|在吗|在不在)[\s!！?？。.]*$/i;
+      if (simpleGreetings.test(text.trim())) {
+        console.log(`👋 检测到简单问候，直接返回预设回复`);
+        return res.json({
+          status: "ok",
+          ok: true,
+          final_analysis: '你好！我是USIS Brain，可以帮你分析股票、查看市场热力图。试试发送"AAPL"或"美股热力图"吧！📈',
+          final_text: '你好！我是USIS Brain，可以帮你分析股票、查看市场热力图。试试发送"AAPL"或"美股热力图"吧！📈',
+          needs_heatmap: false,
+          actions: [],
+          intent: { mode: 'casual', lang: intent.lang, confidence: 1.0 },
+          scene: { name: 'Greeting', depth: 'simple', targetLength: 30 },
+          symbols: [],
+          market_data: null,
+          ai_results: null,
+          synthesis: { success: true, synthesized: false },
+          low_confidence: false,
+          chat_type,
+          user_id,
+          response_time_ms: Date.now() - startTime,
+          debug: { note: 'Simple greeting - preset response' }
+        });
+      }
+      
+      // 🔹 复杂闲聊：调用GPT-4简短回复
+      const casualPrompt = `你是USIS Brain市场分析助手。用户正在闲聊，请用1句话简短友好回复（不超过30字）。
 
 用户说：${text}
 
-请简短友好地回复，如果合适可以引导用户尝试市场分析功能。`;
+简短回复：`;
       
       try {
         const gptResult = await callGPT4(casualPrompt, 60); // 最多60 tokens，约120字
@@ -2974,6 +3005,35 @@ app.post("/brain/orchestrate", async (req, res) => {
         }
       } else {
         console.warn(`⚠️  警告：marketData为null！`);
+      }
+      
+      // 🚨 严格数据验证：如果有股票代码但数据采集失败，返回明确错误
+      if (!marketData || !marketData.collected || !marketData.summary) {
+        console.error(`❌ 数据采集失败，中止AI分析以防编造数据`);
+        return res.json({
+          status: "error",
+          ok: false,
+          final_analysis: `⚠️ 抱歉，无法获取${symbols.join('、')}的实时行情数据。\n\n可能原因：\n1. Finnhub API暂时不可用\n2. 股票代码错误\n3. 系统繁忙\n\n请稍后重试或检查股票代码是否正确。`,
+          final_text: `⚠️ 数据采集失败，无法分析${symbols.join('、')}`,
+          needs_heatmap: false,
+          actions: [],
+          intent: { mode: intent.mode, lang: intent.lang, confidence: 0 },
+          scene: { name: 'Error', depth: 'simple', targetLength: 0 },
+          symbols,
+          market_data: { error: '数据采集失败' },
+          ai_results: null,
+          synthesis: { success: false, synthesized: false },
+          low_confidence: true,
+          chat_type,
+          user_id,
+          response_time_ms: Date.now() - startTime,
+          debug: { 
+            note: 'Data collection failed - aborted to prevent AI hallucination',
+            marketData_exists: !!marketData,
+            collected: marketData?.collected,
+            summary_exists: !!marketData?.summary
+          }
+        });
       }
     } else {
       console.log(`ℹ️  无股票代码，跳过市场数据采集`);
