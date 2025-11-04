@@ -2685,17 +2685,22 @@ app.post("/brain/orchestrate", async (req, res) => {
       mode = null,            // premarket | intraday | postmarket | diagnose | news
       symbols: providedSymbols = [],  // 股票代码（如果提供）
       user_id = null,
-      lang = "zh"
+      lang = "zh",
+      budget = null           // 🆕 预算控制：low | medium | high | unlimited（N8N传入或环境变量）
     } = req.body || {};
     
-    // 1.5. 自动提取symbols（如果未提供）
+    // 1.5. 生成请求ID（用于日志追踪和成本关联）
+    const reqId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    
+    // 1.6. 自动提取symbols（如果未提供）
     const extractedSymbols = extractSymbols(text);
     const symbols = providedSymbols.length > 0 ? providedSymbols : extractedSymbols;
     
-    console.log(`\n🧠 Orchestrator 收到请求:`);
+    console.log(`\n🧠 [${reqId}] Orchestrator 收到请求:`);
     console.log(`   文本: "${text}"`);
     console.log(`   场景: ${chat_type}`);
     console.log(`   模式: ${mode || '自动检测'}`);
+    console.log(`   预算: ${budget || '未指定（使用默认）'}`);
     console.log(`   股票: ${symbols.join(', ') || '无'}${extractedSymbols.length > 0 ? ' (自动提取)' : ''}`);
     
     // 2. Intent Understanding (传入symbols用于智能判断图表类型)
@@ -2755,16 +2760,32 @@ app.post("/brain/orchestrate", async (req, res) => {
     
     console.log(`📋 场景分析: ${scene.name} | 目标长度: ${scene.targetLength}字 | 深度: ${scene.depth}`);
     
-    // 🚀 三级Orchestrator: 复杂度评分 & 模型选择
+    // 🚀 三级Orchestrator: L1 复杂度评分
     const complexity = calculateComplexityScore(text, intent.mode, symbols, userHistory);
-    console.log(`🎯 复杂度评分: ${complexity.score}/10 | 层级: ${complexity.tier}`);
+    console.log(`\n[L1][${reqId}] 复杂度评分:`);
+    console.log(`   分数: ${complexity.score}/10`);
+    console.log(`   层级: ${complexity.tier}`);
     console.log(`   推理: ${complexity.reasoning}`);
     
-    // 智能模型选择（默认medium预算）
-    const budget = process.env.AI_BUDGET || 'medium';  // 可通过环境变量配置
-    const modelSelection = selectOptimalModels(complexity, intent.mode, symbols, budget);
-    console.log(`🤖 模型选择: ${modelSelection.models.map(m => m.name).join(', ')}`);
-    console.log(`💰 预估成本: $${modelSelection.estimatedCost} (预算: $${modelSelection.budgetConfig})`);
+    // 🚀 三级Orchestrator: L2 智能模型选择
+    // 优先级：req.body.budget > 环境变量 > 默认值(medium)
+    const finalBudget = budget || process.env.AI_BUDGET || 'medium';
+    const modelSelection = selectOptimalModels(complexity, intent.mode, symbols, finalBudget);
+    console.log(`\n[L2][${reqId}] 模型选择:`);
+    console.log(`   预算模式: ${finalBudget}`);
+    console.log(`   选中模型: ${modelSelection.models.map(m => m.name).join(', ')}`);
+    console.log(`   预估成本: $${modelSelection.estimatedCost.toFixed(4)}`);
+    console.log(`   预算上限: $${modelSelection.budgetConfig}`);
+    
+    // 🚀 三级Orchestrator: L3 深度推理检测
+    const enableDeepReasoning = complexity.tier === 'L3';
+    if (enableDeepReasoning) {
+      const deepModels = modelSelection.models.filter(m => m.name === 'o1' || m.name === 'claude-opus');
+      console.log(`\n[L3][${reqId}] 深度推理已启用:`);
+      console.log(`   触发原因: ${complexity.reasoning}`);
+      console.log(`   深度模型: ${deepModels.map(m => m.name).join(', ') || '无（预算限制）'}`);
+      console.log(`   推理路径: ${deepModels.length > 0 ? 'o1/Claude Opus' : '标准6-AI（预算不足启用L3）'}`);
+    }
     
     // 4. Planning
     const tasks = planTasks(intent, scene, symbols);
@@ -3021,7 +3042,7 @@ app.post("/brain/orchestrate", async (req, res) => {
     }
     
     // --- Response Mapper (v2): standardize orchestrator output ---
-    const reqId = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+    // 注：reqId已在函数开始时定义
 
     // L1
     const l1_intent = intent;
@@ -3145,20 +3166,33 @@ app.post("/brain/orchestrate", async (req, res) => {
       user_id,
       response_time_ms: responseTime,
       
-      // Debug信息
+      // Debug信息（三层架构可视化）
       debug: {
+        requestId: reqId,
         style: chat_type === 'private' ? 'teacher_personal' : 'team_professional',
         tasks,
         user_prefs: userPrefs,
-        complexity: {
+        // L1层：复杂度评分
+        l1_complexity: {
           score: complexity.score,
           tier: complexity.tier,
           reasoning: complexity.reasoning
         },
-        model_selection: {
-          models: modelSelection.models.map(m => ({ name: m.name, role: m.role })),
+        // L2层：模型选择
+        l2_model_selection: {
+          budget: finalBudget,
+          budget_limit: modelSelection.budgetConfig,
+          models_chosen: modelSelection.models.map(m => ({ name: m.name, role: m.role })),
           estimated_cost: modelSelection.estimatedCost,
           tier: modelSelection.tier
+        },
+        // L3层：深度推理
+        l3_deep_reasoning: {
+          enabled: enableDeepReasoning,
+          reason: enableDeepReasoning ? complexity.reasoning : null,
+          deep_models: enableDeepReasoning 
+            ? modelSelection.models.filter(m => m.name === 'o1' || m.name === 'claude-opus').map(m => m.name)
+            : []
         }
       }
     };
