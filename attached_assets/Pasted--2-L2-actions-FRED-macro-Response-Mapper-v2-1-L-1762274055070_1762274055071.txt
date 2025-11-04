@@ -1,0 +1,105 @@
+第2步｜在 L2 出口接入可视化决策 + 生成单图 + 写入 actions】
+
+位置：完成 FRED 宏观数据 macro 拉取之后、Response Mapper(v2) 之前。
+
+1) 读取 L1 意图与文本，做最小判定
+// L2: decide minimal visualization (single only)
+const l1Intent = levels?.l1?.intent || { mode: intent?.mode, lang: intent?.lang };
+const visualIntent = detectVisualizationNeedSimple(l1Intent, text);
+
+2) 如需要图表：生成单图 URL
+let chartUrls = [];
+if (visualIntent.needChart && visualIntent.style === 'single' && visualIntent.metrics?.length === 1) {
+  const metric = visualIntent.metrics[0];      // 'CPIAUCSL' | 'UNRATE' | 'GDPC1' | 'FEDFUNDS'
+  try {
+    const url = await generateSmartChartSingle(macro, metric);
+    if (url) chartUrls.push({ metric, url });
+  } catch (e) {
+    console.error('[viz-single] fail:', e.message);
+  }
+}
+
+3) 将可视化计划写入计划与动作（供 n8n 迭代发送）
+// 写入 L2 计划（友好化映射会在 Response Mapper 中处理）
+if (chartUrls.length > 0) {
+  l2_plan.push('viz_single');  // 让友好映射把它变成“单指标图表”
+}
+
+// 写入 actions 供 n8n 消费（脑-体分离：Brain不直接发图）
+if (!Array.isArray(actions_v2)) actions_v2 = [];
+for (const { metric, url } of chartUrls) {
+  actions_v2.push({
+    type: 'send_chart',
+    metric,                   // 'CPIAUCSL' / 'UNRATE' / 'GDPC1' / 'FEDFUNDS'
+    url,
+    caption: `📈 ${metric} 最近走势（自动生成）`  // 可后续接入更聪明的AI短评
+  });
+}
+
+// 可选：把决策暴露到 levels，便于调试与埋点
+levels = levels || {};
+levels.l2 = { ...(levels.l2 || {}), visualIntent };
+
+
+说明：
+
+这不会阻塞你的主逻辑；只在需要时生成一张图。
+
+后续若扩展 comparison/grid，只在这一块拓展，不改其它处。
+
+4) Response Mapper(v2) 小补充（若尚未注入）
+
+确保把 actions_v2 和 visualIntent 带到响应里（如果你按我之前的 Mapper 写法，已包含；若没有就加上这两行）：
+
+responseV2.levels.l2.visualIntent = visualIntent;
+responseV2.actions = actions_v2;        // n8n 遍历发送
+responseV2.media = { charts: chartUrls }; // （可选）兼容字段
+
+🔎 自测（Telegram 三句话）
+
+服务器重启后，在 Telegram 里依次发：
+
+单指标场景（应收到 1 张图 + 文本）
+
+CPI 最近趋势
+
+
+纯文字场景（不发图）
+
+预览下宏观数据
+
+
+另一个单指标（失业率）
+
+失业率上升了吗？
+
+
+期望：
+
+第1、第3条：消息后跟一张图（n8n 需迭代 actions 发送，见下）。
+
+第2条：只有文字总结，无图表。
+
+（先收藏）n8n 侧“迭代发送”最小代码（等你验证 Brain 输出后再接）
+
+在 Parse_Brain_Response 之后加一个 Code 节点（Emit_Chart_Actions），把 actions 展平成多条：
+
+const acts = $json.actions || [];
+const out = [];
+for (const a of acts) {
+  if (a.type === 'send_chart' && a.url) {
+    out.push({ json: { chat_id: $node["Telegram_Trigger"].json.message.chat.id, url: a.url, caption: a.caption || '' }});
+  }
+}
+return out.length ? out : [{ json: { skip: true }}];
+
+
+再接一个 Telegram → Send Photo：
+
+Chat ID: ={{ $json.chat_id }}
+
+Photo: ={{ $json.url }}
+
+Caption: ={{ $json.caption }}
+
+这段等你确认 Brain 响应里 actions 已经包含 send_chart 后，再让我带你接入。

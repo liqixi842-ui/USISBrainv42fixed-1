@@ -1533,7 +1533,9 @@ function mapPlanSteps(rawPlan = [], lang = 'zh') {
       fetch_sec_fin: 'SEC 财报检索与提取',
       fetch_macro_fred: 'FRED 宏观数据拉取',
       fetch_reddit_wsb: 'Reddit/WSB 热度分析',
-      risk_assessment: '风险点与不确定性评估'
+      risk_assessment: '风险点与不确定性评估',
+      viz_single: '单指标图表智能生成',
+      fetch_news: '拉取最新资讯'
     },
     en: {
       understand_context: 'Understand context & intent',
@@ -1545,7 +1547,9 @@ function mapPlanSteps(rawPlan = [], lang = 'zh') {
       fetch_sec_fin: 'SEC filings retrieval & parsing',
       fetch_macro_fred: 'FRED macro data ingestion',
       fetch_reddit_wsb: 'Reddit/WSB trend analysis',
-      risk_assessment: 'Risk & uncertainty assessment'
+      risk_assessment: 'Risk & uncertainty assessment',
+      viz_single: 'Smart single-metric chart generation',
+      fetch_news: 'Fetch latest news'
     }
   };
 
@@ -2993,6 +2997,29 @@ app.post("/brain/orchestrate", async (req, res) => {
     const responseTime = Date.now() - startTime;
     console.log(`✅ 响应完成 (${responseTime}ms)\n`);
     
+    // --- L2: 智能可视化决策（最小版本）---
+    const l1IntentForViz = { mode: intent.mode, lang: intent.lang };
+    const visualIntent = detectVisualizationNeedSimple(l1IntentForViz, text);
+    
+    let chartUrls = [];
+    if (visualIntent.needChart && visualIntent.style === 'single' && visualIntent.metrics?.length === 1) {
+      const metric = visualIntent.metrics[0];
+      console.log(`📊 生成单指标图表: ${metric}`);
+      try {
+        const url = await generateSmartChartSingle(macroData, metric);
+        if (url) {
+          chartUrls.push({ metric, url });
+          console.log(`✅ 图表生成成功: ${url.slice(0, 60)}...`);
+        }
+      } catch (e) {
+        console.error(`❌ 图表生成失败 (${metric}):`, e.message);
+      }
+    } else if (visualIntent.needChart) {
+      console.log(`ℹ️ 可视化意图检测到但暂不支持: style=${visualIntent.style}`);
+    } else {
+      console.log(`ℹ️ 无需图表 (reason: ${visualIntent.reason})`);
+    }
+    
     // --- Response Mapper (v2): standardize orchestrator output ---
     const reqId = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
 
@@ -3001,7 +3028,12 @@ app.post("/brain/orchestrate", async (req, res) => {
     const l1_score = complexity.score;
 
     // L2
-    const l2_plan = tasks;  // 任务分解（内部标识）
+    let l2_plan = tasks;  // 任务分解（内部标识）
+    
+    // 将可视化计划写入L2 plan
+    if (chartUrls.length > 0) {
+      l2_plan.push('viz_single');
+    }
     const userLang = intent.lang || 'zh';
     const l2_plan_friendly = mapPlanSteps(l2_plan, userLang);  // 友好文案
     const l2_models = modelSelection.models;
@@ -3043,6 +3075,16 @@ app.post("/brain/orchestrate", async (req, res) => {
 
     // 归一化 actions
     const actions_v2 = intent.actions || [];
+    
+    // 将图表动作写入actions（供N8N消费 - 脑体分离）
+    for (const { metric, url } of chartUrls) {
+      actions_v2.push({
+        type: 'send_chart',
+        metric,
+        url,
+        caption: `📈 ${metric} 最近走势（智能生成）`
+      });
+    }
 
     // v2 标准响应
     const responseV2 = {
@@ -3051,7 +3093,12 @@ app.post("/brain/orchestrate", async (req, res) => {
       requestId: reqId,
       levels: {
         l1: { intent: l1_intent, score: l1_score, router: 'gpt-4o-mini' },
-        l2: { plan: l2_plan_friendly, modelsSelected: l2_models, budget: l2_budget },
+        l2: { 
+          plan: l2_plan_friendly, 
+          modelsSelected: l2_models, 
+          budget: l2_budget,
+          visualIntent  // 可视化意图（调试用）
+        },
         l3: { triggered: l3_triggered, models: l3_models, reason: l3_reason }
       },
       cost: {
@@ -3068,6 +3115,9 @@ app.post("/brain/orchestrate", async (req, res) => {
       summary: finalSummary,
       caption: finalSummary,
       actions: actions_v2,
+      media: {
+        charts: chartUrls  // 图表URL列表（可选兼容字段）
+      },
       
       // 兼容老字段
       final_analysis: responseText,
