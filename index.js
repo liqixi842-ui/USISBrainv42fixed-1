@@ -2199,6 +2199,71 @@ app.post("/brain/orchestrate", async (req, res) => {
       lang = "zh"
     } = req.body || {};
     
+    // 🔒 内置权限检查（N8N零改动方案）
+    const ADMIN_ID = '7561303850';
+    global.__WL__ = global.__WL__ || new Set([ADMIN_ID]);
+    
+    const uid = String(user_id || 'anonymous');
+    const isAdmin = uid === ADMIN_ID;
+    const isWhitelist = isAdmin || global.__WL__.has(uid);
+    
+    // 管理员命令处理
+    if (isAdmin && /^\/auth(\s+.+)?/i.test(text)) {
+      const target = (text.split(/\s+/)[1] || uid).trim();
+      global.__WL__.add(String(target));
+      return res.json({
+        status: "ok",
+        final_analysis: `✅ 已授权用户：${target}\n\n当前白名单人数：${global.__WL__.size}`,
+        final_text: `✅ 已授权用户：${target}\n\n当前白名单人数：${global.__WL__.size}`,
+        actions: [],
+        symbols: []
+      });
+    }
+    
+    if (isAdmin && /^\/unauth(\s+.+)?/i.test(text)) {
+      const target = (text.split(/\s+/)[1] || uid).trim();
+      if (target === ADMIN_ID) {
+        return res.json({
+          status: "ok",
+          final_analysis: '⚠️ 无法取消管理员自己的授权',
+          final_text: '⚠️ 无法取消管理员自己的授权',
+          actions: [],
+          symbols: []
+        });
+      }
+      global.__WL__.delete(String(target));
+      return res.json({
+        status: "ok",
+        final_analysis: `🧹 已取消授权：${target}\n\n当前白名单人数：${global.__WL__.size}`,
+        final_text: `🧹 已取消授权：${target}\n\n当前白名单人数：${global.__WL__.size}`,
+        actions: [],
+        symbols: []
+      });
+    }
+    
+    if (isAdmin && /^\/listauth/i.test(text)) {
+      const list = [...global.__WL__].join('\n') || '(空)';
+      return res.json({
+        status: "ok",
+        final_analysis: `📋 当前授权用户（共${global.__WL__.size}人）：\n\n${list}`,
+        final_text: `📋 当前授权用户（共${global.__WL__.size}人）：\n\n${list}`,
+        actions: [],
+        symbols: []
+      });
+    }
+    
+    // 权限检查（非白名单用户）
+    if (!isWhitelist) {
+      console.log(`🚫 用户 ${uid} 无权限`);
+      return res.json({
+        status: "ok",
+        final_analysis: '⚠️ 抱歉，你没有使用权限。请联系管理员。',
+        final_text: '⚠️ 抱歉，你没有使用权限。请联系管理员。',
+        actions: [],
+        symbols: []
+      });
+    }
+    
     // 1.5. 自动提取symbols（如果未提供）
     const extractedSymbols = extractSymbols(text);
     const symbols = providedSymbols.length > 0 ? providedSymbols : extractedSymbols;
