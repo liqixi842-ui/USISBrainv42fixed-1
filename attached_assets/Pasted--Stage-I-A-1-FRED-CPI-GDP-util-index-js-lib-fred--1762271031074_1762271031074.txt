@@ -1,0 +1,214 @@
+✅ Stage I 收尾清单（可直接落地）
+A) 免费数据源最小接入模板
+1) FRED（宏观：CPI/失业率/GDP 等）
+
+新增 util：（放在 index.js 顶部附近或 lib/fred.js）
+
+const FRED_BASE = 'https://api.stlouisfed.org/fred';
+const FRED_KEY  = process.env.FRED_API_KEY || ''; // 可先留空，部分公共系列可匿名访问
+
+async function fetchFREDSeries(seriesId, { limit = 12 } = {}) {
+  const url = new URL(`${FRED_BASE}/series/observations`);
+  url.searchParams.set('series_id', seriesId);
+  if (FRED_KEY) url.searchParams.set('api_key', FRED_KEY);
+  url.searchParams.set('file_type', 'json');
+  url.searchParams.set('sort_order', 'desc');
+  url.searchParams.set('limit', String(limit));
+  const r = await fetch(url, { timeout: 12000 });
+  if (!r.ok) throw new Error(`FRED ${seriesId} HTTP ${r.status}`);
+  const j = await r.json();
+  const obs = (j.observations || [])
+    .map(o => ({ date: o.date, value: Number(o.value || 'NaN') }))
+    .filter(o => Number.isFinite(o.value));
+  return { seriesId, latest: obs[0] || null, observations: obs.reverse() }; // 从旧到新
+}
+
+
+在数据收集流程挂钩：
+
+async function collectMacroData({ needMacro = false } = {}) {
+  if (!needMacro) return null;
+  const seriesWanted = [
+    'CPIAUCSL',       // CPI
+    'UNRATE',         // 失业率
+    'GDPC1',          // 实际GDP
+    'FEDFUNDS',       // 联邦基金利率
+  ];
+  const out = {};
+  for (const id of seriesWanted) {
+    try { out[id] = await fetchFREDSeries(id, { limit: 12 }); }
+    catch (e) { out[id] = { seriesId: id, error: e.message }; }
+  }
+  return out;
+}
+
+
+在 orchestrate 里按场景触发（示例）：
+
+const needMacro = (levels?.l1?.intent?.mode === 'premarket') || /宏观|CPI|失业|GDP/.test(text || '');
+const macro = await collectMacroData({ needMacro });
+
+
+映射到 v2 响应：
+
+market_data.macro = macro || null;
+if (macro) l2_plan.push('fetch_macro_fred');
+
+2) Reddit / WallStreetBets（免费 tier：热度 + 简易情绪）
+
+最小实现（无需 OAuth，公共 JSON）：
+
+async function fetchRedditWSBHot({ limit = 10 } = {}) {
+  const url = `https://www.reddit.com/r/wallstreetbets/hot.json?limit=${limit}`;
+  const r = await fetch(url, { headers: { 'User-Agent': 'USIS/1.0 (+reddit)' }, timeout: 12000 });
+  if (!r.ok) throw new Error(`Reddit HTTP ${r.status}`);
+  const j = await r.json();
+  const posts = (j.data?.children || []).map(c => c.data).map(p => ({
+    id: p.id,
+    title: p.title,
+    ups: p.ups || 0,
+    num_comments: p.num_comments || 0,
+    created_utc: p.created_utc,
+    selftext: p.selftext || '',
+  }));
+  // 简易情绪(极简词典/表情)：正向词 +1，负向词 -1
+  const pos = [/call/i, /bull/i, /to the moon/i, /🚀/];
+  const neg = [/put/i, /bear/i, /dump/i, /⚠️|🔻/];
+  function score(t) {
+    let s = 0;
+    for (const r of pos) if (r.test(t)) s++;
+    for (const r of neg) if (r.test(t)) s--;
+    return s;
+  }
+  const scored = posts.map(p => ({ ...p, sentiment: score(`${p.title} ${p.selftext}`) }));
+  const sentimentIndex = scored.reduce((a,b)=>a+b.sentiment,0) / Math.max(scored.length,1);
+  return { posts: scored.slice(0, limit), sentimentIndex };
+}
+
+
+在 orchestrate 中按需触发：
+
+const needWSB = /情绪|WSB|reddit|散户|社交/.test(text || '') || (levels?.l1?.intent?.mode === 'insight' /* 你定义的资讯场景 */);
+let wsb = null;
+try {
+  if (needWSB) { wsb = await fetchRedditWSBHot({ limit: 15 }); l2_plan.push('fetch_reddit_wsb'); }
+} catch(e) {
+  wsb = { error: e.message };
+}
+
+
+映射到 v2 响应：
+
+market_data.social = { reddit_wsb: wsb };
+
+B) 健康度指标埋点（最小可用）
+
+建议表：orchestrator_metrics
+
+CREATE TABLE IF NOT EXISTS orchestrator_metrics (
+  id SERIAL PRIMARY KEY,
+  request_id TEXT NOT NULL,
+  intent_mode TEXT,
+  l1_ms INTEGER,
+  l2_ms INTEGER,
+  l3_ms INTEGER,
+  total_ms INTEGER,
+  models_used JSONB,
+  cost_estimated NUMERIC(18,6),
+  cost_total NUMERIC(18,6),
+  l3_triggered BOOLEAN,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+
+Node 端埋点（退出前写入）：
+
+const t0 = performance.now();
+// ... L1/L2/L3 各处记录 tL1, tL2, tL3 结束点
+const total_ms = Math.round(performance.now() - t0);
+
+try {
+  await db.query(
+    `CREATE TABLE IF NOT EXISTS orchestrator_metrics (
+      id SERIAL PRIMARY KEY,
+      request_id TEXT NOT NULL,
+      intent_mode TEXT,
+      l1_ms INTEGER, l2_ms INTEGER, l3_ms INTEGER, total_ms INTEGER,
+      models_used JSONB,
+      cost_estimated NUMERIC(18,6),
+      cost_total NUMERIC(18,6),
+      l3_triggered BOOLEAN,
+      created_at TIMESTAMP DEFAULT NOW()
+    );`
+  );
+  await db.query(
+    `INSERT INTO orchestrator_metrics
+      (request_id, intent_mode, l1_ms, l2_ms, l3_ms, total_ms, models_used, cost_estimated, cost_total, l3_triggered)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [
+      requestId,
+      (levels?.l1?.intent?.mode || null),
+      Math.round((tL1_end - t0) || 0),
+      Math.round((tL2_end - tL1_end) || 0),
+      Math.round((tL3_end - tL2_end) || 0),
+      total_ms,
+      JSON.stringify(l2_models || []),
+      Number(estCost ?? 0),
+      Number(totalCost ?? 0),
+      !!l3_triggered
+    ]
+  );
+} catch (e) {
+  console.error('[metrics]', e.message);
+}
+
+
+关键 KPI（后面用于面板）：
+
+p50/p95 响应时间（total_ms）
+
+L3 触发率（复杂场景占比）
+
+成本：estimated vs total（差值）
+
+数据源命中率 & 错误率（SEC/FRED/WSB）
+
+模型使用分布（l2_models）
+
+C) 验收自测用例（3 条）
+
+宏观触发
+
+curl -sX POST http://localhost:5000/brain/orchestrate \
+ -H 'Content-Type: application/json' \
+ -d '{"text": "预览下宏观：CPI与失业率走势", "mode":"premarket", "user_id":"u1", "budget":"low"}' | jq '.levels,.market_data.macro'
+
+
+WSB 情绪触发
+
+curl -sX POST http://localhost:5000/brain/orchestrate \
+ -H 'Content-Type: application/json' \
+ -d '{"text": "看看WSB散户情绪", "mode":"insight", "user_id":"u2"}' | jq '.levels,.market_data.social.reddit_wsb.sentimentIndex'
+
+
+账本/指标检查
+
+SELECT COUNT(*) sec_ok FROM orchestrate_logs WHERE sec_financials IS NOT NULL; -- 若有
+SELECT * FROM orchestrator_metrics ORDER BY id DESC LIMIT 5;
+
+▶️ 只给一个下一步（一步一确认）
+
+【下一步】 先把 FRED 最小接入落进 orchestrate：
+
+加 fetchFREDSeries & collectMacroData 两段；
+
+在 orchestrate 判定 needMacro 并调用；
+
+把 market_data.macro = macro；
+
+l2_plan.push('fetch_macro_fred')；
+
+跑“宏观触发”那条 curl，看响应里 market_data.macro 是否出现 CPI/UNRATE/GDPC1/FEDFUNDS 的 latest 值。
+
+完成后回我：“FRED OK（附一行 CPI latest 值）”。
+我再给你 Reddit/WSB 的最小联调检查要点（以及 3 条常见超时/429 的容错补丁）。

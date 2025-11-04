@@ -2139,6 +2139,60 @@ async function fetchFinnhubSentiment(symbol) {
 }
 
 // ========================================
+// FRED API - 宏观经济数据
+// ========================================
+const FRED_BASE = 'https://api.stlouisfed.org/fred';
+const FRED_KEY = process.env.FRED_API_KEY || ''; // 可先留空，部分公共系列可匿名访问
+
+async function fetchFREDSeries(seriesId, { limit = 12 } = {}) {
+  const url = new URL(`${FRED_BASE}/series/observations`);
+  url.searchParams.set('series_id', seriesId);
+  if (FRED_KEY) url.searchParams.set('api_key', FRED_KEY);
+  url.searchParams.set('file_type', 'json');
+  url.searchParams.set('sort_order', 'desc');
+  url.searchParams.set('limit', String(limit));
+  
+  try {
+    const r = await fetch(url.toString(), { timeout: 12000 });
+    if (!r.ok) throw new Error(`FRED ${seriesId} HTTP ${r.status}`);
+    const j = await r.json();
+    const obs = (j.observations || [])
+      .map(o => ({ date: o.date, value: Number(o.value || 'NaN') }))
+      .filter(o => Number.isFinite(o.value));
+    return { seriesId, latest: obs[0] || null, observations: obs.reverse() }; // 从旧到新
+  } catch (e) {
+    console.error(`❌ FRED ${seriesId} error:`, e.message);
+    throw e;
+  }
+}
+
+async function collectMacroData({ needMacro = false } = {}) {
+  if (!needMacro) return null;
+  
+  console.log('📊 开始采集FRED宏观数据...');
+  
+  const seriesWanted = [
+    'CPIAUCSL',       // CPI
+    'UNRATE',         // 失业率
+    'GDPC1',          // 实际GDP
+    'FEDFUNDS',       // 联邦基金利率
+  ];
+  
+  const out = {};
+  for (const id of seriesWanted) {
+    try {
+      out[id] = await fetchFREDSeries(id, { limit: 12 });
+      console.log(`  ✓ ${id}: ${out[id].latest?.value || 'N/A'}`);
+    } catch (e) {
+      out[id] = { seriesId: id, error: e.message };
+      console.log(`  ✗ ${id}: ${e.message}`);
+    }
+  }
+  
+  return out;
+}
+
+// ========================================
 // SEC EDGAR API Integration (阶段I新增)
 // ========================================
 
@@ -2806,6 +2860,21 @@ app.post("/brain/orchestrate", async (req, res) => {
       });
     }
     
+    // 4.6. 宏观数据采集（FRED）
+    const needMacro = (intent.mode === 'premarket') || /宏观|CPI|失业|GDP|利率|FRED|经济/i.test(text || '');
+    let macroData = null;
+    if (needMacro) {
+      try {
+        macroData = await collectMacroData({ needMacro: true });
+        if (macroData) {
+          tasks.push('fetch_macro_fred');
+        }
+      } catch (error) {
+        console.error('❌ FRED宏观数据采集失败:', error.message);
+        macroData = { error: error.message };
+      }
+    }
+    
     // 5. Execute Multi-AI Analysis
     const aiResults = await multiAIAnalysis({
       mode: intent.mode,
@@ -2922,6 +2991,7 @@ app.post("/brain/orchestrate", async (req, res) => {
       },
       market_data: {
         sec_financials,
+        macro: macroData,
         collected: marketData?.collected,
         summary: marketData?.summary,
         data: marketData?.data
