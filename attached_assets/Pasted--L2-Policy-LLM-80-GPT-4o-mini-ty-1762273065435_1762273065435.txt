@@ -1,0 +1,176 @@
+核心设计（落在 L2 层）
+
+Policy = 规则 + 轻量 LLM 判断：先用规则快速命中 80%（关键词+意图），不确定再用 GPT-4o-mini 低成本判定。
+
+可视化策略返回结构：
+
+type VisualIntent = {
+  needChart: boolean,                  // 是否需要图表
+  metrics: Array<'CPIAUCSL'|'UNRATE'|'GDPC1'|'FEDFUNDS'>,  // 需要的指标
+  style: 'single'|'comparison'|'grid'|'none',              // 单图/对比/四宫格/无图
+  reason?: string,                     // 决策解释（写入 debug/metrics）
+};
+
+① 智能可视化判定（detectVisualizationNeed）
+
+放在 index.js 的 L2 区域；先规则再 LLM（不确定时）。
+
+function ruleHeuristicsForViz(text) {
+  const t = (text || '').toLowerCase();
+  const has = (kw) => t.includes(kw);
+  // 直觉命中
+  if (/(^|\s)cpi(\s|$)|通胀|物价/.test(t)) return { metrics: ['CPIAUCSL'], style:'single' };
+  if (/失业|就业|unemployment|unrate/.test(t)) return { metrics: ['UNRATE'], style:'single' };
+  if (/gdp/.test(t)) return { metrics: ['GDPC1'], style:'single' };
+  if (/利率|fed|联邦基金|fedfunds|加息|降息/.test(t)) return { metrics: ['FEDFUNDS'], style:'single' };
+  if (/相关性|关系|对比|比较/.test(t) && /(通胀|cpi).*?(失业|unrate)|unrate.*?cpi/.test(t))
+    return { metrics:['CPIAUCSL','UNRATE'], style:'comparison' };
+  if (/宏观|全局|总览|overview|premarket/.test(t))
+    return { metrics:['CPIAUCSL','UNRATE','GDPC1','FEDFUNDS'], style:'grid' };
+  return null;
+}
+
+async function detectVisualizationNeed(text, macroData, intentMode, llmPick) {
+  // 1) 规则优先
+  const rule = ruleHeuristicsForViz(text);
+  if (rule) return { needChart:true, ...rule, reason:'rule' };
+
+  // 2) 若 L1 识别为 diagnose/insight 且宏观数据齐备，可考虑图表；否则默认纯文
+  const macroReady = !!(macroData && macroData.CPIAUCSL && macroData.UNRATE && macroData.GDPC1 && macroData.FEDFUNDS);
+  if (!macroReady) return { needChart:false, metrics:[], style:'none', reason:'no_macro' };
+
+  // 3) 低成本 LLM 判定（仅当文本含“看/图/走势/趋势/关系”等模糊意图）
+  if (/[图|走势|趋势|关系|对比|看一下]/.test(text || '')) {
+    // llmPick = 调你已有 gpt-4o-mini 轻问答
+    const q = `用户问题: ${text}\n给出可视化建议: 指标集合 in {CPIAUCSL, UNRATE, GDPC1, FEDFUNDS}, 风格 in {single,comparison,grid,none}. 只输出JSON: {"needChart":bool,"metrics":[...],"style":"..."}`;
+    try {
+      const res = await llmPick(q);               // 你已有的小模型调用
+      const j = JSON.parse(res);
+      if (j && Array.isArray(j.metrics)) return { ...j, reason:'llm' };
+    } catch (_) {}
+  }
+  return { needChart:false, metrics:[], style:'none', reason:'default_text_only' };
+}
+
+② 智能图表生成器（generateSmartChart）
+
+复用你已有的 QuickChart；支持三种样式：single（单指标）、comparison（双轴对比）、grid（四宫格）。
+
+const QuickChart = require('quickchart-js');
+
+function toSeries(obs) {               // [{date,value}] → {labels, data}
+  const labels = obs.map(o => o.date.slice(0,7));
+  const data   = obs.map(o => o.value);
+  return { labels, data };
+}
+
+async function generateSmartChart(macro, metrics, style) {
+  const pick = (id) => toSeries((macro[id]?.observations)||[]);
+  if (style === 'single' && metrics.length === 1) {
+    const id = metrics[0]; const s = pick(id);
+    const qc = new QuickChart();
+    qc.setConfig({ type:'line', data:{ labels:s.labels, datasets:[{ label:id, data:s.data, fill:false }]},
+      options:{ plugins:{ legend:{display:false} } }});
+    return [ await qc.getShortUrl() ];
+  }
+
+  if (style === 'comparison' && metrics.length === 2) {
+    const [a,b] = metrics;
+    const sa = pick(a), sb = pick(b);
+    const qc = new QuickChart();
+    qc.setConfig({
+      type:'line',
+      data:{ labels:sa.labels, datasets:[
+        { label:a, data:sa.data, yAxisID:'y'  },
+        { label:b, data:sb.data, yAxisID:'y1' }
+      ]},
+      options:{ scales:{ y:{ type:'linear', position:'left' }, y1:{ type:'linear', position:'right', grid:{drawOnChartArea:false}}}}
+    });
+    return [ await qc.getShortUrl() ];
+  }
+
+  // grid：四宫格拼图（最小实现 = 生成4张单图 + 逐条发；若你要一张图四子图，后续可切换合成服务）
+  if (style === 'grid') {
+    const order = metrics.length ? metrics : ['CPIAUCSL','UNRATE','GDPC1','FEDFUNDS'];
+    const urls = [];
+    for (const id of order) {
+      const s = pick(id);
+      const qc = new QuickChart();
+      qc.setConfig({ type:'line', data:{ labels:s.labels, datasets:[{ label:id, data:s.data, fill:false }]}, options:{ plugins:{ legend:{display:false} } }});
+      urls.push(await qc.getShortUrl());
+    }
+    return urls;  // 4 张
+  }
+
+  return []; // none
+}
+
+③ 与 Orchestrator 对接（只改出口，不改主流程）
+
+在 L2 完成数据收集后、Response Mapper 前插入以下逻辑。
+产物：visualIntent + chartUrls；并把它写进 levels.l2.plan 和 actions 里，n8n/Telegram 根据 actions 决定发几条消息。
+
+// L2: decide visualization
+const visualIntent = await detectVisualizationNeed(text, macro /* market_data.macro */, levels?.l1?.intent?.mode, llmPickMini);
+let chartUrls = [];
+if (visualIntent.needChart) {
+  chartUrls = await generateSmartChart(macro, visualIntent.metrics, visualIntent.style);
+  // 记录到计划与动作中
+  l2_plan.push( visualIntent.style === 'single' ? 'viz_single' :
+                visualIntent.style === 'comparison' ? 'viz_dual' :
+                visualIntent.style === 'grid' ? 'viz_grid' : 'viz_none');
+  // actions 由 n8n 发多段消息（不在 Node 里直接发，保持“脑-体分离”）
+  actions_v2.push({
+    type: 'send_charts',
+    style: visualIntent.style,
+    metrics: visualIntent.metrics,
+    urls: chartUrls
+  });
+}
+
+
+Response v2 中追加：
+
+responseV2.levels.l2.visualIntent = visualIntent;
+responseV2.media = { charts: chartUrls }; // 可选兼容字段
+
+④ n8n 输出层（多段消息且“仅当需要”）
+
+IF：{{$json.actions && $json.actions.some(a => a.type==='send_charts')}}
+
+Code：拆出 actions.find(a=>a.type==='send_charts').urls → 循环发送
+
+Send Photo：逐条 url + caption（caption 来自你已有的 AI summary 子段或每指标短评）
+
+不触发图表时完全不进这条支线，保留纯文字最佳路径。
+
+⑤ 成本与体验控制
+
+不确定再问 LLM：只有规则不命中且文本有“看/图/走势/关系”时，用 mini 模型判定，成本极低。
+
+速率/失败回退：QuickChart 失败则退回纯文，不阻塞主链。
+
+缓存：(metric, last12m) 的图可按 hash 缓存 30 分钟，重复请求直接复用 URL。
+
+✅ 验收示例（四种问法 → 四种输出）
+
+“CPI怎么样？” → single(CPI) 一张图 + 文本
+
+“通胀和失业的关系？” → comparison(CPI, UNRATE) 双轴图 + 相关性解读
+
+“经济好吗？” → 纯文字（无图）
+
+“预览下宏观数据” → grid 四张图（或一张四宫格，后续再做合成）
+
+【只做一件事 · 下一步】
+
+把 ③ 对接代码（detectVisualizationNeed 调用 + generateSmartChart + actions_v2.push）粘到你 orchestrate 的 L2 出口、Response Mapper 之前。
+完成后在 Telegram 依次发三句做 A/B 验证：
+
+「CPI 最近趋势」→ 只 1 张图；
+
+「通胀和失业的关系？」→ 1 张双轴图；
+
+「经济好吗？」→ 纯文字，无图。
+
+把三条返回的截图发我；我再给你 n8n 侧循环发送的小代码（10 行以内）和图表缓存补丁。
