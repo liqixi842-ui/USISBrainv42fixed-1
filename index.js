@@ -1186,8 +1186,9 @@ function detectActions(text = "", symbols = []) {
     }
     
     // 使用自建热力图（快速、稳定、支持所有市场和指数）
-    // 使用生产域名确保外部服务可访问
-    const baseUrl = 'https://node-js-liqixi842.replit.app';
+    // 动态获取baseUrl（优先使用REPLIT_DOMAINS环境变量）
+    const replitDomains = process.env.REPLIT_DOMAINS || '';
+    const baseUrl = replitDomains ? `https://${replitDomains.split(',')[0]}` : 'http://localhost:5000';
     let heatmapUrl = `${baseUrl}/heatmap?market=${market}`;
     
     // 如果指定了具体指数，添加index参数
@@ -1196,12 +1197,15 @@ function detectActions(text = "", symbols = []) {
       marketName = indexName;
     }
     
+    console.log(`📊 生成热力图URL: ${heatmapUrl}`);
+    
     actions.push({
       type: 'fetch_heatmap',
       tool: 'A_Screenshot',
       url: heatmapUrl,
       market: marketName,
-      reason: `用户要求${marketName}热力图`
+      reason: `用户要求${marketName}热力图`,
+      dataSource: index || (market === 'usa' ? 'SPX500' : 'AllUSA')  // 添加dataSource供调试
     });
   }
   
@@ -1835,6 +1839,9 @@ async function multiAIAnalysis({ mode, scene, symbols, text, chatType, marketDat
   let dataContext = '';
   if (marketData && marketData.collected) {
     dataContext = `\n\n【实时数据】\n${marketData.summary}`;
+    console.log(`✅ 实时数据已注入AI prompt (${marketData.summary.length}字)`);
+  } else {
+    console.warn(`⚠️  实时数据未注入！marketData=${!!marketData}, collected=${marketData?.collected}`);
   }
   
   const context = {
@@ -2948,10 +2955,28 @@ app.post("/brain/orchestrate", async (req, res) => {
     // 4.5. 数据采集（如果有股票代码）
     let marketData = null;
     if (symbols.length > 0) {
+      console.log(`📊 开始采集市场数据: ${symbols.join(', ')}`);
       marketData = await collectMarketData(symbols, {
         mode: intent.mode,
         text: text
       });
+      
+      // 🔍 调试：打印市场数据状态
+      if (marketData) {
+        console.log(`📊 市场数据采集结果:`);
+        console.log(`   - collected: ${marketData.collected}`);
+        console.log(`   - summary长度: ${marketData.summary?.length || 0}字`);
+        console.log(`   - quotes数量: ${Object.keys(marketData.data?.quotes || {}).length}`);
+        if (marketData.summary) {
+          console.log(`   - summary预览: ${marketData.summary.substring(0, 200)}...`);
+        } else {
+          console.warn(`⚠️  警告：marketData.summary为空！AI将无法获得实时数据！`);
+        }
+      } else {
+        console.warn(`⚠️  警告：marketData为null！`);
+      }
+    } else {
+      console.log(`ℹ️  无股票代码，跳过市场数据采集`);
     }
     
     // 4.6. 宏观数据采集（FRED）
