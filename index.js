@@ -2091,7 +2091,14 @@ app.post('/brain/permission', async (req, res) => {
   const isAdmin = uid === ADMIN_ID;
   const isWhitelist = isAdmin || global.__WL__.has(uid);
 
-  console.log(`🔒 权限检查: user_id=${uid}, text="${msg}"`);
+  // 📊 调试输出
+  console.log('[PERMISSION]', {
+    text: msg,
+    user_id: uid,
+    chat_id,
+    allowed_type: typeof Boolean(isWhitelist),
+    allowed: Boolean(isWhitelist)
+  });
 
   // 管理命令（仅管理员）
   if (isAdmin && /^\/auth(\s+.+)?/i.test(msg)) {
@@ -2099,8 +2106,10 @@ app.post('/brain/permission', async (req, res) => {
     global.__WL__.add(String(target));
     console.log(`✅ 管理员授权: ${target}`);
     return res.json({ 
-      allowed: true, 
-      role: 'admin', 
+      ok: true,
+      allowed: Boolean(true), 
+      role: 'admin',
+      chat_id,
       tip: `✅ 已授权用户：${target}\n\n当前白名单人数：${global.__WL__.size}` 
     });
   }
@@ -2109,16 +2118,20 @@ app.post('/brain/permission', async (req, res) => {
     const target = (msg.split(/\s+/)[1] || uid).trim();
     if (target === ADMIN_ID) {
       return res.json({ 
-        allowed: true, 
-        role: 'admin', 
+        ok: true,
+        allowed: Boolean(true), 
+        role: 'admin',
+        chat_id,
         tip: '⚠️ 无法取消管理员自己的授权' 
       });
     }
     global.__WL__.delete(String(target));
     console.log(`🧹 管理员取消授权: ${target}`);
     return res.json({ 
-      allowed: true, 
-      role: 'admin', 
+      ok: true,
+      allowed: Boolean(true), 
+      role: 'admin',
+      chat_id,
       tip: `🧹 已取消授权：${target}\n\n当前白名单人数：${global.__WL__.size}` 
     });
   }
@@ -2127,26 +2140,47 @@ app.post('/brain/permission', async (req, res) => {
     const list = [...global.__WL__].join('\n') || '(空)';
     console.log(`📋 管理员查看白名单`);
     return res.json({ 
-      allowed: true, 
-      role: 'admin', 
+      ok: true,
+      allowed: Boolean(true), 
+      role: 'admin',
+      chat_id,
       tip: `📋 当前授权用户（共${global.__WL__.size}人）：\n\n${list}` 
     });
   }
 
-  // 普通判定
+  // 普通判定 - 已授权
   if (isWhitelist) {
-    console.log(`✅ 用户 ${uid} 有权限 (${isAdmin ? 'admin' : 'whitelist'})`);
+    console.log(`✅ 用户 ${uid} 有权限 (${isAdmin ? 'admin' : 'member'})`);
     return res.json({ 
-      allowed: true, 
-      role: isAdmin ? 'admin' : 'whitelist' 
+      ok: true,
+      allowed: Boolean(true), 
+      role: isAdmin ? 'admin' : 'member',
+      chat_id
     });
   }
 
+  // 未授权
   console.log(`🚫 用户 ${uid} 无权限`);
   return res.json({ 
-    allowed: false, 
-    role: 'none', 
-    message: '⚠️ 抱歉，你没有使用权限。请联系管理员。' 
+    ok: true,
+    allowed: Boolean(false),
+    role: null,
+    chat_id,
+    message: '未授权用户，请先发送 /auth 申请。',
+    tip: '管理员可用 /auth <user_id> 授权；/listauth 查看白名单。'
+  });
+});
+
+// 🧪 PERMISSION TEST ENDPOINT (便于远程验证)
+app.post('/brain/permission/test', (req, res) => {
+  const { chat_id } = req.body || {};
+  res.json({
+    ok: true,
+    allowed: Boolean(false),  // 注意是布尔，不是字符串
+    role: null,
+    chat_id,
+    message: '未授权（自测路由）',
+    tip: '这是 /brain/permission/test 的固定拒绝示例'
   });
 });
 
