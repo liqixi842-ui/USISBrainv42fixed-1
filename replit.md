@@ -124,73 +124,38 @@ The system automatically maps user requests to valid dataSource values:
 ## N8N Integration
 N8N workflow automatically detects `fetch_heatmap` action and generates screenshots without requiring manual configuration.
 
-# Permission System (2025-11-04)
+# Permission System - REMOVED (2025-01-04)
 
 ## Architecture Decision
-**权限管理由Brain API统一处理，N8N不做权限判断。**
+**权限系统已完全移除，系统恢复到无权限限制的简单架构。**
 
-### Rationale
-- Brain是决策中心，权限应该是核心能力的一部分
-- N8N数据流复杂（6-8个节点），变量传递不可靠，导致 "chat not found" 等错误
-- 集中式权限管理便于审计、黑名单、限流等扩展
+### Rationale for Removal
+- 权限系统导致N8N工作流复杂度显著增加（6-8个额外节点）
+- N8N数据流调试困难，经常出现"chat not found"等变量传递问题
+- 用户体验明显下降，系统不如之前智能流畅
+- 对于个人使用场景，权限管理非必需功能
+- 复杂度与收益不成正比
 
-## API Endpoint
+### What Was Removed
+- ❌ `/brain/permission` API端点
+- ❌ `/brain/orchestrate` 内的权限检查逻辑
+- ❌ 管理员命令处理（`/auth`, `/unauth`, `/listauth`）
+- ❌ 白名单管理（`global.__WL__`）
+- ❌ N8N权限检查节点（`Set_Context`, `Call_Permission`, `IF_Permission_Allowed`等）
 
-### POST /brain/permission
-检查用户权限并处理管理员命令。
+### Current State
+**任何人都可以直接使用机器人，无需授权。**
 
-**Request:**
-```json
-{
-  "text": "用户消息",
-  "user_id": "telegram_user_id",
-  "chat_id": "telegram_chat_id"
-}
+N8N工作流已简化为：
+```
+Telegram_Trigger → Call_Brain_Orchestrate → Parse_Brain_Response → ...
 ```
 
-**Response (允许):**
-```json
-{
-  "allowed": true,
-  "role": "admin|whitelist"
-}
-```
-
-**Response (拒绝):**
-```json
-{
-  "allowed": false,
-  "role": "none",
-  "message": "⚠️ 抱歉，你没有使用权限。请联系管理员。"
-}
-```
-
-**Response (管理命令):**
-```json
-{
-  "allowed": true,
-  "role": "admin",
-  "tip": "✅ 已授权用户：123456\n\n当前白名单人数：5"
-}
-```
-
-## Admin Commands
-- `/auth <user_id>` - 授权用户（管理员专用）
-- `/unauth <user_id>` - 取消授权（管理员专用）
-- `/listauth` - 查看白名单（管理员专用）
-
-## N8N Integration
-N8N工作流简化为：
-1. `Telegram_Trigger` - 接收消息
-2. `HTTP Request` - POST /brain/permission
-3. `IF (allowed)` - 判断权限
-   - True → 调用 /brain/orchestrate 执行业务逻辑
-   - False → 发送 message 字段给用户
-
-## Implementation
-- 白名单存储：`global.__WL__` (内存Set，重启丢失)
-- 管理员ID：`7561303850`（硬编码）
-- 未来可迁移到PostgreSQL持久化
+### Future Considerations
+如果未来确实需要访问控制，建议使用：
+- Telegram群组管理功能（限制使用群组）
+- Replit部署环境的IP白名单
+- **不建议**在应用代码或N8N工作流层面实现权限系统
 
 ---
 
