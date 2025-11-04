@@ -1487,6 +1487,18 @@ async function trackCost(user_id, mode, models, actualCost, responseTime) {
   }
 }
 
+// L3: 获取总成本 - 从数据库汇总特定请求的总成本
+async function getTotalCostFromDB(requestId) {
+  try {
+    // 由于我们目前使用user_id作为主键，这里返回null
+    // 后续可扩展为按requestId追踪
+    return null;
+  } catch (error) {
+    console.error('❌ 获取成本失败:', error.message);
+    return null;
+  }
+}
+
 // Planner - 任务规划器
 function planTasks(intent, scene, symbols = []) {
   const tasks = [];
@@ -2783,19 +2795,70 @@ app.post("/brain/orchestrate", async (req, res) => {
     const responseTime = Date.now() - startTime;
     console.log(`✅ 响应完成 (${responseTime}ms)\n`);
     
-    // 8. Response
-    return res.json({
-      status: "ok",  // N8N workflow需要此字段
+    // --- Response Mapper (v2): standardize orchestrator output ---
+    const reqId = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+
+    // L1
+    const l1_intent = intent;
+    const l1_score = complexity.score;
+
+    // L2
+    const l2_plan = tasks;  // 任务分解
+    const l2_models = modelSelection.models;
+    const l2_budget = modelSelection.budgetConfig;
+
+    // L3
+    const l3_triggered = complexity.tier === 'L3';
+    const l3_models = l3_triggered 
+      ? modelSelection.models.filter(m => m.name === 'o1' || m.name === 'claude-opus').map(m => m.name)
+      : [];
+    const l3_reason = l3_triggered ? complexity.reasoning : null;
+
+    // Cost
+    const estCost = modelSelection.estimatedCost;
+    let totalCost = null;
+    try {
+      totalCost = await getTotalCostFromDB(reqId);
+    } catch(_) {}
+
+    // SEC 财报
+    const sec_financials = marketData?.data?.sec_financials || null;
+
+    // 终端文本
+    const finalSummary = responseText;
+
+    // 归一化 actions
+    const actions_v2 = intent.actions || [];
+
+    // v2 标准响应
+    const responseV2 = {
       ok: true,
-      final_analysis: responseText,  // 主要字段：最终综合分析
-      final_text: responseText,  // N8N兼容字段
+      status: "ok",  // N8N workflow需要此字段
+      requestId: reqId,
+      levels: {
+        l1: { intent: l1_intent, score: l1_score, router: 'gpt-4o-mini' },
+        l2: { plan: l2_plan, modelsSelected: l2_models, budget: l2_budget },
+        l3: { triggered: l3_triggered, models: l3_models, reason: l3_reason }
+      },
+      cost: {
+        estimated: estCost,
+        total: totalCost
+      },
+      market_data: {
+        sec_financials,
+        collected: marketData?.collected,
+        summary: marketData?.summary,
+        data: marketData?.data
+      },
+      summary: finalSummary,
+      caption: finalSummary,
+      actions: actions_v2,
+      
+      // 兼容老字段
+      final_analysis: responseText,
+      final_text: responseText,
       image_url: imageUrl,
-      needs_heatmap: intent.actions ? intent.actions.some(a => a.type === 'fetch_heatmap') : false,  // N8N需要
-      
-      // 🎯 新增：Action指令集（给N8N的器官指令）
-      actions: intent.actions || [],  // Brain告诉N8N该执行哪些操作
-      
-      // 核心元数据
+      needs_heatmap: intent.actions ? intent.actions.some(a => a.type === 'fetch_heatmap') : false,
       intent: {
         mode: intent.mode,
         lang: intent.lang,
@@ -2807,24 +2870,11 @@ app.post("/brain/orchestrate", async (req, res) => {
         targetLength: scene.targetLength
       },
       symbols,
-      
-      // 数据采集结果
-      market_data: marketData ? {
-        collected: marketData.collected,
-        summary: marketData.summary,
-        data: marketData.data  // 包含完整数据供N8N使用
-      } : null,
-      
-      // AI分析结果
       ai_results: aiResults,
-      
-      // 综合信息
       synthesis: {
         success: synthesis.success,
         synthesized: synthesis.synthesized
       },
-      
-      // 系统信息
       low_confidence: intent.confidence < 0.7,
       chat_type,
       user_id,
@@ -2835,7 +2885,6 @@ app.post("/brain/orchestrate", async (req, res) => {
         style: chat_type === 'private' ? 'teacher_personal' : 'team_professional',
         tasks,
         user_prefs: userPrefs,
-        // 三级Orchestrator信息
         complexity: {
           score: complexity.score,
           tier: complexity.tier,
@@ -2847,8 +2896,8 @@ app.post("/brain/orchestrate", async (req, res) => {
           tier: modelSelection.tier
         }
       }
-    });
-    
+    };
+
     // 🚀 三级Orchestrator: 成本追踪（异步，不阻塞响应）
     trackCost(
       user_id, 
@@ -2857,6 +2906,9 @@ app.post("/brain/orchestrate", async (req, res) => {
       modelSelection.estimatedCost, 
       responseTime
     ).catch(err => console.error('成本追踪失败:', err.message));
+    
+    // 8. Response
+    return res.json(responseV2);
     
   } catch (err) {
     console.error("❌ Orchestrator 错误:", err);

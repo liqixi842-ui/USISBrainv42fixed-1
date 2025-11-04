@@ -1,0 +1,100 @@
+懂你现在要的节奏：别绕、别扩。你已经黑盒验证拿到结果了——功能OK，但响应结构不符合三级架构。
+我们就做一件事，把 /brain/orchestrate 的返回 JSON 统一成 v2 结构（levels / cost / market_data / summary），不改你现有计算流程。
+
+【第2步｜在 /brain/orchestrate 返回前，加入“Response Mapper (v2)”并用它输出】
+
+把下面这段放到 所有分析计算都已完成、res.json(...) 之前（保留你现有字段，新增标准结构；老字段可一起返回便于过渡）。
+
+// --- Response Mapper (v2): standardize orchestrator output ---
+const reqId = debug?.reqId || requestId || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+
+// L1
+const l1_intent = intent || levels?.l1?.intent || detectedIntent || null;
+const l1_score  = (debug?.complexity?.score ?? levels?.l1?.score ?? intentScore ?? null);
+
+// L2
+const l2_plan   = levels?.l2?.plan || taskPlan || [];               // 任务分解（数组或步骤描述）
+const l2_models = (debug?.model_selection?.models ?? levels?.l2?.modelsSelected ?? modelsSelected ?? []);
+const l2_budget = (debug?.model_selection?.budget ?? budget ?? null);
+
+// L3
+const l3_triggered =
+  (levels?.l3?.triggered)
+  ?? (debug?.complexity?.tier === 'L3')
+  ?? Boolean(usedDeepReasoning || used_o1 || used_opus);
+const l3_models  = usedDeepModels || (l3_triggered ? ['o1','claude-opus'].filter(Boolean) : []);
+const l3_reason  = l3Explanation || deepReasonNote || null;
+
+// Cost
+const estCost    = debug?.model_selection?.estimated_cost ?? estimatedCost ?? null;
+// 如果你有成本落库的 trackCost(requestId, model, cost)，可以在这里汇总一次：
+let totalCost = null;
+try {
+  if (getTotalCostFromDB) totalCost = await getTotalCostFromDB(reqId);  // 你已有的聚合函数名如果不同，替换为你的
+} catch(_) {}
+
+// SEC 财报
+const sec_financials =
+  market_data?.data?.sec_financials
+  || sec?.financials
+  || null;
+
+// 终端文本
+const finalSummary = final_analysis || summary || caption || null;
+
+// 归一化 actions（不动你现有的）
+const actions_v2 = Array.isArray(actions) ? actions : (debug?.actions || []);
+
+// v2 标准响应
+const responseV2 = {
+  ok: true,
+  requestId: reqId,
+  levels: {
+    l1: { intent: l1_intent, score: l1_score, router: 'gpt-4o-mini' },
+    l2: { plan: l2_plan, modelsSelected: l2_models, budget: l2_budget },
+    l3: { triggered: !!l3_triggered, models: l3_models, reason: l3_reason }
+  },
+  cost: {
+    estimated: estCost,
+    total: totalCost
+  },
+  market_data: {
+    sec_financials
+  },
+  summary: finalSummary,
+  caption: caption || finalSummary,
+  actions: actions_v2,
+  // 可选：保留原 debug 便于过渡
+  debug
+};
+
+// 如需兼容老前端：一起返回老字段（final_analysis 等）
+return res.json(responseV2);
+
+
+这段做的事：
+
+把你原来散落在 debug/...、intent、modelsSelected、usedDeepReasoning、sec.financials、final_analysis 的信息，统一映射到
+levels.l1/l2/l3、cost.estimated/total、market_data.sec_financials、summary/caption。
+
+不触碰你的计算流程（只在出口整形），老字段仍可随响应返回，便于前后端逐步迁移。
+
+getTotalCostFromDB(reqId) 若你已有别名，就替换为你的聚合函数；没有也没关系，total 会是 null，先用 estimated，后面再补落库汇总。
+
+完成这一步后，用你刚才同一条 curl 再打一次；如果响应里出现：
+
+levels.l1.intent / levels.l1.score
+
+levels.l2.plan / levels.l2.modelsSelected
+
+levels.l3.triggered（true）
+
+market_data.sec_financials（非空）
+
+cost.estimated（可用），cost.total（可为 null）
+
+就说明v2 响应结构已就位。贴回结果，我再给你【第3步】两条很小的补丁：
+
+getTotalCostFromDB(reqId) 的最小实现；
+
+levels.l2.plan 的自动填充（从你现有 task 拆分里取 2–3 个步骤映射
