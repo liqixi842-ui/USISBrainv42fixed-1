@@ -2,6 +2,7 @@
 const express = require("express");
 const fetch = require("node-fetch");
 const { Pool } = require("pg");
+const QuickChart = require('quickchart-js');
 const app = express();
 app.use(express.json());
 
@@ -2190,6 +2191,74 @@ async function collectMacroData({ needMacro = false } = {}) {
   }
   
   return out;
+}
+
+// ========================================
+// 智能可视化模块（最小版本）
+// ========================================
+
+// L2: 可视化需求判定（最小版）- 复用L1的intent
+// 规则：关键词映射到单个FRED指标 → 单图；盘前/总览 → 纯文字
+function detectVisualizationNeedSimple(l1Intent = {}, text = '') {
+  const t = (text || '').toLowerCase();
+  const mode = (l1Intent.mode || '').toLowerCase();
+  
+  // 关键词到FRED指标映射
+  const map = [
+    { test: /(cpi|通胀|物价)/, metric: 'CPIAUCSL' },
+    { test: /(失业|unrate|就业)/, metric: 'UNRATE' },
+    { test: /(gdp)/, metric: 'GDPC1' },
+    { test: /(利率|fedfunds|联邦基金|加息|降息)/, metric: 'FEDFUNDS' },
+  ];
+  
+  for (const m of map) {
+    if (m.test.test(t) || m.test.test(mode)) {
+      return { needChart: true, metrics: [m.metric], style: 'single', reason: 'rule-min' };
+    }
+  }
+  
+  // 盘前/宏观总览 → 先不画图，纯文字
+  if (/premarket|宏观|总览|overview/.test(t) || /premarket/.test(mode)) {
+    return { needChart: false, metrics: [], style: 'none', reason: 'overview-text' };
+  }
+  
+  return { needChart: false, metrics: [], style: 'none', reason: 'default-text' };
+}
+
+// 最小图表生成器（single模式）
+// 输入：macro为FRED拉取的market_data.macro；metric: 'CPIAUCSL'等；style: 'single'
+async function generateSmartChartSingle(macro, metric) {
+  const series = (macro?.[metric]?.observations || []).map(o => ({ 
+    date: o.date.slice(0, 7), 
+    value: o.value 
+  }));
+  
+  if (series.length < 2) return null;
+
+  const qc = new QuickChart();
+  qc.setConfig({
+    type: 'line',
+    data: {
+      labels: series.map(p => p.date),
+      datasets: [{ 
+        label: metric, 
+        data: series.map(p => p.value), 
+        fill: false, 
+        tension: 0.25 
+      }]
+    },
+    options: {
+      plugins: { 
+        legend: { display: false }, 
+        title: { display: true, text: metric } 
+      },
+      scales: { 
+        x: { ticks: { maxTicksLimit: 8 } } 
+      }
+    }
+  });
+  
+  return await qc.getShortUrl(); // 返回可直接发到Telegram的图片URL
 }
 
 // ========================================
