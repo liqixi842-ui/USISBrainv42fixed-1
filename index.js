@@ -3054,6 +3054,11 @@ app.post("/brain/orchestrate", async (req, res) => {
   try {
     const startTime = Date.now();
     
+    // 🆕 v4.2: 初始化debug容器（确保data_errors永远可用）
+    const debugInfo = {
+      data_errors: []
+    };
+    
     // 1. 解析输入（带默认值兜底）
     const {
       text = "default",
@@ -3388,11 +3393,10 @@ app.post("/brain/orchestrate", async (req, res) => {
         
         // 🆕 v4.2: 行情=软依赖，失败不阻断分析
         const validation = validateDataForAnalysis(marketData);
-        const dataErrors = []; // 收集数据错误
         
         if (!validation.valid) {
           console.warn(`⚠️  数据验证失败（继续分析）: ${validation.reason}`);
-          dataErrors.push({
+          debugInfo.data_errors.push({
             source: 'market_data',
             reason: validation.reason,
             symbols: symbols,
@@ -3853,7 +3857,7 @@ app.post("/brain/orchestrate", async (req, res) => {
         // 🆕 v4.1: error_history (如果有降级)
         ...(gpt5Result.debug?.error_history && { error_history: gpt5Result.debug.error_history }),
         // 🆕 v4.2: data_errors (数据采集错误)
-        ...(dataErrors.length > 0 && { data_errors: dataErrors }),
+        ...(debugInfo.data_errors.length > 0 && { data_errors: debugInfo.data_errors }),
         // L1层：复杂度评分
         l1_complexity: {
           score: complexity.score,
