@@ -2898,8 +2898,16 @@ app.post("/brain/orchestrate", async (req, res) => {
       symbols: providedSymbols = [],  // 股票代码（如果提供）
       user_id = null,
       lang = "zh",
-      budget = null           // 🆕 预算控制：low | medium | high | unlimited（N8N传入或环境变量）
+      budget = null,          // 🆕 预算控制：low | medium | high | unlimited（N8N传入或环境变量）
+      userHistory: inputUserHistory = null  // 🔧 从n8n传入的用户历史（可选）
     } = req.body || {};
+    
+    // 🔧 安全初始化 userHistory（防止 ReferenceError）
+    let userHistory = inputUserHistory || [];
+    if (!Array.isArray(userHistory)) {
+      userHistory = [];
+      console.log(`⚠️  userHistory 格式无效，已重置为空数组`);
+    }
     
     // 1.5. 生成请求ID（用于日志追踪和成本关联）
     const reqId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -2913,7 +2921,6 @@ app.post("/brain/orchestrate", async (req, res) => {
     // 🆕 v3.1: 智能意图理解（AI驱动，非关键词匹配）
     let semanticIntent = null;
     let symbols = [];
-    let userHistory = [];  // 🔧 提升到外层作用域
     
     try {
       // 读取用户历史（用于上下文理解）
