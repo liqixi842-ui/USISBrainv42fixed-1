@@ -117,17 +117,24 @@ function buildDataPrompt(marketData) {
     
     Object.entries(quotes).forEach(([symbol, quote]) => {
       dataPrompt += `【${symbol}】\n`;
-      dataPrompt += `  - 当前价格: $${quote.currentPrice.toFixed(2)}\n`;
-      dataPrompt += `  - 涨跌额: ${quote.change >= 0 ? '+' : ''}$${quote.change.toFixed(2)}\n`;
-      dataPrompt += `  - 涨跌幅: ${quote.changePercent >= 0 ? '+' : ''}${quote.changePercent.toFixed(2)}%\n`;
-      dataPrompt += `  - 今日最高: $${quote.high.toFixed(2)}\n`;
-      dataPrompt += `  - 今日最低: $${quote.low.toFixed(2)}\n`;
-      dataPrompt += `  - 开盘价: $${quote.open.toFixed(2)}\n`;
-      dataPrompt += `  - 昨收价: $${quote.previousClose.toFixed(2)}\n`;
-      dataPrompt += `  - 数据时间: ${new Date(quote.timestamp).toISOString()}\n`;
-      dataPrompt += `  - 数据年龄: ${quote.dataAgeMinutes}分钟\n`;
-      dataPrompt += `  - 数据来源: ${quote.source}\n`;
-      dataPrompt += `  - 新鲜度评分: ${(quote.freshnessScore * 100).toFixed(0)}%\n`;
+      
+      // 🆕 v3.1: 处理null或缺失数据的情况
+      if (quote && quote.currentPrice !== undefined && quote.currentPrice !== null) {
+        dataPrompt += `  - 当前价格: $${quote.currentPrice.toFixed(2)}\n`;
+        dataPrompt += `  - 涨跌额: ${quote.change >= 0 ? '+' : ''}$${quote.change.toFixed(2)}\n`;
+        dataPrompt += `  - 涨跌幅: ${quote.changePercent >= 0 ? '+' : ''}${quote.changePercent.toFixed(2)}%\n`;
+        dataPrompt += `  - 今日最高: $${quote.high.toFixed(2)}\n`;
+        dataPrompt += `  - 今日最低: $${quote.low.toFixed(2)}\n`;
+        dataPrompt += `  - 开盘价: $${quote.open.toFixed(2)}\n`;
+        dataPrompt += `  - 昨收价: $${quote.previousClose.toFixed(2)}\n`;
+        dataPrompt += `  - 数据时间: ${new Date(quote.timestamp).toISOString()}\n`;
+        dataPrompt += `  - 数据年龄: ${quote.dataAgeMinutes}分钟\n`;
+        dataPrompt += `  - 数据来源: ${quote.source}\n`;
+        dataPrompt += `  - 新鲜度评分: ${(quote.freshnessScore * 100).toFixed(0)}%\n`;
+      } else {
+        dataPrompt += `  ⚠️ 数据不可用（API调用失败或数据源暂时不可访问）\n`;
+      }
+      
       dataPrompt += `\n`;
     });
   } else {
