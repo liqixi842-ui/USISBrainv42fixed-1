@@ -331,7 +331,6 @@ async function fetchSingleQuote(symbol) {
 async function fetchNews(symbol) {
   const news = [];
   const sources = [];
-  let cacheHit = false;
   
   if (!FINNHUB_KEY) {
     return { news, sources, cacheHits: 0, cacheTotal: 1 };
@@ -347,7 +346,7 @@ async function fetchNews(symbol) {
       return { 
         news: cached.news, 
         sources: cached.sources, 
-        cacheHits: 1, 
+        cacheHits: 1,  // 🔧 修复：正确报告缓存命中
         cacheTotal: 1 
       };
     }
@@ -395,7 +394,8 @@ async function fetchNews(symbol) {
     console.error(`   ⚠️  获取新闻失败:`, error.message);
   }
   
-  return { news, sources, cacheHits: cacheHit ? 1 : 0, cacheTotal: 1 };
+  // 🔧 修复：缓存未命中时正确报告0
+  return { news, sources, cacheHits: 0, cacheTotal: 1 };
 }
 
 /**
