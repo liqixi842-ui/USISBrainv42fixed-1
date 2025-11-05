@@ -824,7 +824,7 @@ function generateFallbackHeatmap(exchangeName) {
   return chart.getUrl();
 }
 
-// 🆕 v4.3: 智能热力图生成（纯规则引擎 + ScreenshotAPI）
+// 🆕 v4.3: 智能热力图生成（纯规则引擎 + Playwright自动化截图）
 async function generateSmartHeatmap(userText) {
   const startTime = Date.now();
   console.log(`\n🧠 [Smart Heatmap] 处理请求: "${userText}"`);
@@ -832,69 +832,82 @@ async function generateSmartHeatmap(userText) {
   // 1️⃣ 使用纯规则引擎解析（不依赖GPT-5，100%准确）
   const query = extractHeatmapQueryRulesOnly(userText);
   console.log(`🎯 [规则引擎] 解析结果: region=${query.region}, index=${query.index}, sector=${query.sector}`);
-  const tradingViewUrl = buildTradingViewURL(query);
+  
   const caption = generateCaption(query);
   const summary = generateHeatmapSummary(query);
   
-  // 2️⃣ 使用ScreenshotAPI截图（禁用QuickChart降级）
-  if (!SCREENSHOT_API_KEY) {
-    throw new Error('ScreenshotAPI未配置，无法生成TradingView热力图');
+  // 2️⃣ 使用Playwright自动化浏览器截图（彻底防串台）
+  const { captureTvHeatmapWithRetry, INDEX_LABEL } = require('./tvHeatmapCapture');
+  
+  // 确保index有值
+  if (!query.index || query.index === 'AUTO') {
+    throw new Error('无法确定目标指数，请提供更具体的地区或指数信息');
   }
   
+  const label = INDEX_LABEL[query.index];
+  if (!label) {
+    throw new Error(`不支持的指数代码: ${query.index}`);
+  }
+  
+  // 语言映射
+  const langMap = {
+    'ES': 'es-ES',
+    'JP': 'ja-JP',
+    'FR': 'fr-FR',
+    'DE': 'de-DE',
+    'CN': 'zh-CN'
+  };
+  const lang = langMap[query.region] || 'en-US';
+  
   try {
-    console.log(`📸 [ScreenshotAPI] 截图: ${tradingViewUrl}`);
+    console.log(`📸 [Playwright] 开始自动化截图: dataset=${query.index}, label="${label}"`);
     
-    const params = new URLSearchParams({
-      url: tradingViewUrl,
-      token: SCREENSHOT_API_KEY,
-      output: 'image',
-      file_type: 'png',
-      wait_for_event: 'load',
-      delay: 5000,
-      full_page: 'false',
-      width: 1200,
-      height: 800,
-      device_scale_factor: 2
-    });
+    // 使用带重试的截图函数（最多2次重试）
+    const result = await captureTvHeatmapWithRetry({
+      dataset: query.index,
+      label: label,
+      lang: lang,
+      sector: query.sector !== 'AUTO' ? query.sector : undefined,
+      timeout: 15000
+    }, 2);
     
-    const apiUrl = `https://shot.screenshotapi.net/screenshot?${params.toString()}`;
-    const response = await fetch(apiUrl, { method: 'GET' });
+    const imageBuffer = Buffer.from(result.image_base64, 'base64');
+    const elapsed = Date.now() - startTime;
+    console.log(`✅ [Smart Heatmap] 成功 (${elapsed}ms, ${imageBuffer.length} bytes)`);
     
-    if (response.ok) {
-      const imageBuffer = await response.buffer();
-      const elapsed = Date.now() - startTime;
-      console.log(`✅ [Smart Heatmap] 成功 (${elapsed}ms, ${imageBuffer.length} bytes)`);
-      
-      // 🛡️ 防串台校验：确保数据集与地区匹配
-      const meta = {
-        source: 'tradingview',
-        dataset: query.index,
-        expected_region: query.region,
-        locale: query.locale,
-        sector: query.sector,
-        debug: query.debug
-      };
-      
-      // 🚨 关键校验：西班牙IBEX35
-      if (meta.expected_region === 'ES' && meta.dataset !== 'IBEX35') {
-        console.error(`🚨 [防串台失败] expected_region=ES 但 dataset=${meta.dataset}！`);
-        throw new Error(`防串台失败：西班牙地区必须使用IBEX35，当前为${meta.dataset}`);
-      }
-      
-      return {
-        ok: true,
-        buffer: imageBuffer,
-        source: 'tradingview_screenshot',
-        query: query,
-        meta: meta,
-        elapsed_ms: elapsed,
-        caption: caption,
-        summary: summary
-      };
-    } else {
-      const errorText = await response.text();
-      throw new Error(`ScreenshotAPI失败: ${response.status} - ${errorText.substring(0, 200)}`);
+    // 🛡️ 防串台校验：确保视觉指数与目标一致
+    const meta = {
+      source: 'tradingview_playwright',
+      dataset: query.index,
+      expected_region: query.region,
+      expected_label: label,
+      visual_index_label: result.visual_index_label,
+      locale: lang,
+      sector: query.sector,
+      debug: query.debug
+    };
+    
+    // 🚨 关键校验：西班牙IBEX35
+    if (meta.expected_region === 'ES' && meta.dataset !== 'IBEX35') {
+      console.error(`🚨 [防串台失败] expected_region=ES 但 dataset=${meta.dataset}！`);
+      throw new Error(`防串台失败：西班牙地区必须使用IBEX35，当前为${meta.dataset}`);
     }
+    
+    // 校验视觉标签
+    if (result.visual_index_label && !result.visual_index_label.includes(label.split(' ')[0])) {
+      console.warn(`⚠️  [视觉校验警告] 预期="${label}", 实际="${result.visual_index_label}"`);
+    }
+    
+    return {
+      ok: true,
+      buffer: imageBuffer,
+      source: 'tradingview_playwright',
+      query: query,
+      meta: meta,
+      elapsed_ms: elapsed,
+      caption: caption,
+      summary: summary
+    };
   } catch (error) {
     console.error(`❌ [Smart Heatmap] 失败:`, error.message);
     throw error;
