@@ -33,7 +33,7 @@ const { formatResponse, validateOutputCompliance, extractStructuredContent } = r
 const { generateWithGPT5, wrapAsV31Synthesis } = require("./gpt5Brain"); // 🆕 v4.0: GPT-5单核引擎
 
 // 🆕 v4.3: 智能热力图解析器
-const { extractHeatmapQuery, buildTradingViewURL, generateHeatmapSummary, generateCaption, generateDebugReport } = require("./heatmapIntentParser");
+const { extractHeatmapQuery, extractHeatmapQueryRulesOnly, buildTradingViewURL, generateHeatmapSummary, generateCaption, generateDebugReport } = require("./heatmapIntentParser");
 
 const app = express();
 app.use(express.json());
@@ -824,13 +824,14 @@ function generateFallbackHeatmap(exchangeName) {
   return chart.getUrl();
 }
 
-// 🆕 v4.3: 智能热力图生成（LLM解析 + ScreenshotAPI）
+// 🆕 v4.3: 智能热力图生成（纯规则引擎 + ScreenshotAPI）
 async function generateSmartHeatmap(userText) {
   const startTime = Date.now();
   console.log(`\n🧠 [Smart Heatmap] 处理请求: "${userText}"`);
   
-  // 1️⃣ 智能解析用户意图
-  const query = await extractHeatmapQuery(userText);
+  // 1️⃣ 使用纯规则引擎解析（不依赖GPT-5，100%准确）
+  const query = extractHeatmapQueryRulesOnly(userText);
+  console.log(`🎯 [规则引擎] 解析结果: region=${query.region}, index=${query.index}, sector=${query.sector}`);
   const tradingViewUrl = buildTradingViewURL(query);
   const caption = generateCaption(query);
   const summary = generateHeatmapSummary(query);
