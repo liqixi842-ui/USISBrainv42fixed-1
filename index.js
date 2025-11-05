@@ -12,6 +12,7 @@ const express = require("express");
 const fetch = require("node-fetch");
 const { Pool } = require("pg");
 const QuickChart = require('quickchart-js');
+const { Telegraf } = require('telegraf');
 
 // 🆕 智能Orchestrator模块（v3.1）
 const { parseUserIntent } = require("./semanticIntentAgent");
@@ -4238,4 +4239,97 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`📍 Listening on 0.0.0.0:${PORT}`);
   console.log(`🔗 Health check available at http://0.0.0.0:${PORT}/health`);
 });
+
+// ====== Telegram Bot (替代n8n) ======
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+
+if (TELEGRAM_TOKEN) {
+  console.log('🤖 启动Telegram Bot...');
+  
+  const bot = new Telegraf(TELEGRAM_TOKEN);
+  
+  // 启动命令
+  bot.start((ctx) => {
+    ctx.reply('✅ USIS Brain v4.2_fixed 已就绪\n\n直接发送消息即可获取分析，无需n8n！');
+  });
+  
+  // 处理所有文本消息
+  bot.on('text', async (ctx) => {
+    const text = ctx.message.text;
+    const userId = String(ctx.from.id);
+    const chatId = ctx.chat.id;
+    
+    console.log(`📨 Telegram消息: "${text}" (用户: ${userId})`);
+    
+    try {
+      // 发送"正在思考"提示
+      await ctx.reply('🧠 正在分析...');
+      
+      // 调用orchestrate逻辑（复用HTTP endpoint的逻辑）
+      const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: text,
+          user_id: userId,
+          chat_type: ctx.chat.type,
+          mode: 'auto',
+          budget: 'low'
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!data.ok) {
+        await ctx.reply('❌ 系统错误: ' + (data.error || '未知错误'));
+        return;
+      }
+      
+      // 提取最终文本
+      const finalText = data.final_text || data.final_analysis || '无分析结果';
+      
+      // 检查是否有图表需要发送
+      const actions = data.actions || [];
+      const chartAction = actions.find(a => a.type === 'send_chart' || a.type === 'fetch_heatmap');
+      
+      if (chartAction && chartAction.url) {
+        // 发送带图片的消息
+        try {
+          await ctx.replyWithPhoto(chartAction.url, {
+            caption: finalText.slice(0, 1024) // Telegram caption限制
+          });
+        } catch (photoErr) {
+          console.error('发送图片失败:', photoErr.message);
+          // 降级：只发文本
+          await ctx.reply(finalText);
+        }
+      } else {
+        // 只发文本
+        await ctx.reply(finalText);
+      }
+      
+    } catch (error) {
+      console.error('Telegram处理错误:', error);
+      await ctx.reply('⚠️ 处理失败: ' + error.message);
+    }
+  });
+  
+  // 启动bot（使用polling模式，无需webhook）
+  bot.launch({
+    dropPendingUpdates: true
+  }).then(() => {
+    console.log('✅ Telegram Bot启动成功 (polling模式)');
+    console.log('💡 发送消息到bot即可直接使用，无需n8n');
+  }).catch(err => {
+    console.error('❌ Telegram Bot启动失败:', err.message);
+  });
+  
+  // 优雅退出
+  process.once('SIGINT', () => bot.stop('SIGINT'));
+  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+  
+} else {
+  console.log('ℹ️  未配置TELEGRAM_BOT_TOKEN，Telegram Bot未启动');
+  console.log('💡 如需使用，请在Secrets中添加TELEGRAM_BOT_TOKEN');
+}
 
