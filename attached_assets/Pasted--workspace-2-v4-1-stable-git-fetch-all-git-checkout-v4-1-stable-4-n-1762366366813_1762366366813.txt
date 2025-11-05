@@ -1,0 +1,78 @@
+~/workspace$ # 步骤2: 回滚到v4.1-stable
+git fetch --all
+git checkout v4.1-stable -- .
+
+# 步骤4: 启动服务
+nohup bash start.sh > /tmp/usis_restore.log 2>&1 & echo "PID: $!"
+sleep 5
+
+# 查看启动日志
+tail -20 /tmp/usis_restore.log
+
+# 验证服务
+echo "=== Health Check ==="
+curl -s https://node-js-liqixi842.replit.app/health
+
+echo -e "\n=== Stats ==="
+curl -s https://node-js-liqixi842.replit.app/brain/stats
+
+echo -e "\n=== Test 1: IBEX 新闻 ==="
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"两小时内影响 IBEX 的新闻","user_id":"qa"}' | head -c 500
+
+echo -e "\n=== Test 2: NVDA 解析 ==="
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"NVDA 解析","user_id":"qa"}' | head -c 500
+fatal: invalid reference: v4.1-stable
+[2] 5864
+PID: 5864
+[1]-  Exit 137                nohup bash start.sh > /tmp/usis_restore.log 2>&1
+nohup: ignoring input
+[USIS Brain] hard reload @Wed Nov  5 06:12:17 PM UTC 2025
+[USIS Brain] git rev: 2e93fc0
+✅ [SmartBrain] 模型注册表已加载
+🔧 [SmartBrain] 主脑模型已覆盖: gpt-4o-turbo
+🔑 [SmartBrain] OPENAI_API_KEY状态: 已设置(sk-proj...)
+🧠 [SmartBrain] 主脑: gpt-4o-turbo
+🛡️  [SmartBrain] 保底链: gpt-4o → gpt-4o-mini
+✅ Using Replicate token: r8_ePsDg3M...
+⚠️  TWITTER_BEARER not found in environment
+🚀 USIS Brain v3 online on port 5000
+📍 Listening on 0.0.0.0:5000
+🔗 Health check available at http://0.0.0.0:5000/health
+✅ Database initialized: user_memory and cost_tracking tables ready
+start.sh: line 9:  5589 Killed                  NODE_ENV=production node index.js
+=== Health Check ===
+{"status":"ok","ts":1762366342545}
+=== Stats ===
+{"status":"ok","version":"v4.2","uptime_s":1665,"requests":0,"success":0,"failures":0,"success_rate":"0.00%","avg_latency_ms":0,"fallback_count":0,"fallback_rate":"0.00%","model_usage":{},"latency":{"avg_ms":0,"p50_ms":0,"p95_ms":0,"samples":0},"cache":{"hits":0,"total":0,"hit_rate":"0.0%"}}
+=== Test 1: IBEX 新闻 ===
+# 步骤2: 回滚到v4.1-stable
+git fetch --all
+git checkout v4.1-stable -- .
+
+# 步骤4: 启动服务
+nohup bash start.sh > /tmp/usis_restore.log 2>&1 & echo "PID: $!"
+sleep 5
+
+# 查看启动日志
+tail -20 /tmp/usis_restore.log
+
+# 验证服务
+echo "=== Health Check ==="
+curl -s https://node-js-liqixi842.replit.app/health
+
+echo -e "\n=== Stats ==="
+curl -s https://node-js-liqixi842.replit.app/brain/stats
+
+echo -e "\n=== Test 1: IBEX 新闻 ==="
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"两小时内影响 IBEX 的新闻","user_id":"qa"}' | head -c 500
+
+echo -e "\n=== Test 2: NVDA 解析 ==="
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"NVDA 解析","user_id":"qa"}' | head -c 500
