@@ -1,0 +1,308 @@
+给 Replit AI 的完整工单（清场 n8n → 单脑自洽最小版）
+
+目标：移除对 n8n 的依赖；Replit 直连 Telegram，内部 orchestrate；内置自检与定时器。
+动作：按以下目录与代码创建文件；安装依赖；设置环境变量；启动并跑两条自测 curl。
+
+1) 新建/覆盖 package.json
+{
+  "name": "usis-brain-v4.2_fixed-standalone",
+  "version": "4.2.1",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "NODE_ENV=development node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "express": "^4.19.2",
+    "telegraf": "^4.16.3",
+    "node-cron": "^3.0.3",
+    "body-parser": "^1.20.3"
+  }
+}
+
+2) 新建 index.js（服务主入口）
+import express from "express";
+import bodyParser from "body-parser";
+import cron from "node-cron";
+import { bot, webhookCallback, sendText, sendPhoto } from "./bot/index.js";
+import { orchestrate } from "./orchestrate.js";
+import selftestRouter from "./routes/selftest.js";
+
+const app = express();
+app.use(bodyParser.json({ limit: "1mb" }));
+
+// 健康与版本
+app.get("/health", (_, res) => res.json({ ok: true, status: "ok" }));
+app.get("/version", (_, res) => res.json({ version: "v4.2_fixed", status: "stable" }));
+
+// 仍保留外部 orchestrate（兼容旧调用）
+app.post("/brain/orchestrate", async (req, res) => {
+  try {
+    const { text = "", symbols = [], user_id = "anon" } = req.body || {};
+    const out = await orchestrate({ text, symbols, user_id });
+    res.json(out);
+  } catch (e) {
+    res.status(200).json({ ok: false, status: "error", error: String(e?.message || e) });
+  }
+});
+
+// 自检
+app.use(selftestRouter);
+
+// Telegram webhook
+app.post("/telegram/webhook", webhookCallback);
+
+// 启动
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`[USIS Brain] listening on :${PORT}`);
+});
+
+// ===== Cron（根据需要再改时间）=====
+// 盘前：工作日 13:00 UTC（示例）
+cron.schedule("0 13 * * 1-5", async () => {
+  try {
+    const chatId = process.env.CHAT_ID_PREMARKET;
+    if (!chatId) return;
+    const out = await orchestrate({ text: "盘前要点 + 热力图", symbols: [], user_id: "cron_premarket" });
+    if (out?.actions?.image_url) await sendPhoto(chatId, out.actions.image_url, out.final_text || "");
+    else await sendText(chatId, out.final_text || "[无内容]");
+  } catch (e) {
+    console.error("Premarket cron error:", e);
+  }
+});
+
+3) 新建 orchestrate.js（核心：合约稳定 + 软依赖）
+import { normalizeSymbol } from "./utils/symbols.js";
+import { screenshotSymbolChart } from "./actions/screenshot.js";
+import { fetchQuoteLine } from "./actions/quotes.js";
+import { fetchNews, formatNews } from "./actions/news.js";
+import { formatCaption } from "./formatters/caption.js";
+
+export async function orchestrate({ text = "", symbols = [], user_id = "anon" }) {
+  const debug = { data_errors: [] };
+  try {
+    // 简单意图判断（可扩展）
+    const lower = String(text).toLowerCase();
+    const wantsChart = /热力图|k线|chart|图/.test(text) || /chart/.test(lower);
+
+    // 归一化符号
+    const normalized_symbols = (symbols || [])
+      .map(s => normalizeSymbol(s))
+      .filter(Boolean);
+
+    // 最小分析文本（真实项目里你已有完整分析，这里只做壳）
+    let analysis = `收到：${text || "(空)"}\n`;
+    if (normalized_symbols.length) analysis += `符号：${normalized_symbols.join(", ")}\n`;
+
+    // 软依赖：行情 + 新闻（失败不阻断）
+    let quoteLine = "";
+    try { quoteLine = await fetchQuoteLine(normalized_symbols[0]); }
+    catch (e) { debug.data_errors.push({ quote: String(e.message || e) }); }
+
+    let newsBlock = "";
+    try {
+      const items = await fetchNews(normalized_symbols[0] || "market");
+      newsBlock = formatNews(items);
+    } catch (e) { debug.data_errors.push({ news: String(e.message || e) }); }
+
+    // 可选图
+    let image_url = "";
+    if (wantsChart && normalized_symbols[0]) {
+      try {
+        const img = await screenshotSymbolChart(normalized_symbols[0]);
+        image_url = img?.image_url || "";
+      } catch (e) { debug.data_errors.push({ screenshot: String(e.message || e) }); }
+    }
+
+    const { caption, finalText } = formatCaption({
+      analysis,
+      quote: quoteLine,
+      news: newsBlock,
+      chartUrl: image_url
+    });
+
+    return {
+      ok: true,
+      status: "ok",
+      model: "gpt-5-mini",
+      symbols,
+      normalized_symbols,
+      actions: image_url ? { image_url } : {},
+      final_text: finalText || caption,
+      debug
+    };
+  } catch (e) {
+    return { ok: false, status: "error", error: String(e?.message || e), debug };
+  }
+}
+
+4) 新建 utils/symbols.js（符号归一化，含 .MC→BME 等）
+export function normalizeSymbol(raw) {
+  const s = String(raw || "").trim().toUpperCase();
+  const map = [
+    { re: /\.MC$/, to: sym => `BME:${sym.replace(/\.MC$/, "")}` },
+    { re: /\.PA$/, to: sym => `EPA:${sym.replace(/\.PA$/, "")}` },
+    { re: /\.DE$/, to: sym => `XETRA:${sym.replace(/\.DE$/, "")}` },
+    { re: /\.MI$/, to: sym => `MIL:${sym.replace(/\.MI$/, "")}` },
+    { re: /\.L$/,  to: sym => `LSE:${sym.replace(/\.L$/, "")}` }
+  ];
+  for (const r of map) { if (r.re.test(s)) return r.to(s); }
+  return s;
+}
+
+5) 新建 actions/screenshot.js
+import axios from "axios";
+
+export async function screenshotSymbolChart(symbol) {
+  const token = process.env.SCREENSHOT_API_TOKEN;
+  if (!token) throw new Error("SCREENSHOT_API_TOKEN missing");
+  const tv = encodeURIComponent(symbol); // e.g., BME:GRF
+  const url = `https://api.screenshotapi.net/screenshot?token=${token}&url=https%3A%2F%2Fwww.tradingview.com%2Fchart%2F%3Fsymbol%3D${tv}&fresh=true`;
+  const res = await axios.get(url, { timeout: 15000 });
+  // 兼容不同返回结构
+  const image_url = res.data?.screenshot || res.data?.url || res.data?.image || "";
+  return { image_url };
+}
+
+6) 新建 actions/quotes.js（AlphaVantage 软依赖，拿不到就返回空）
+import axios from "axios";
+
+function toAlpha(sym = "") {
+  // BME:GRF -> GRF
+  const s = String(sym).toUpperCase();
+  return s.includes(":") ? s.split(":")[1] : s;
+}
+
+export async function fetchQuoteLine(symbol) {
+  if (!symbol) return "";
+  const key = process.env.ALPHA_VANTAGE_KEY;
+  if (!key) return ""; // 软依赖：没有 key 也不阻断
+  const av = toAlpha(symbol);
+  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(av)}&apikey=${key}`;
+  try {
+    const { data } = await axios.get(url, { timeout: 10000 });
+    const q = data?.["Global Quote"] || {};
+    const price = q?.["05. price"];
+    if (!price) return "";
+    return `最新价 ${av}: $${Number(price).toFixed(2)}`;
+  } catch (e) {
+    return "";
+  }
+}
+
+7) 新建 actions/news.js（示例：假数据或自定义源）
+// 这里先给最小壳：返回空数组。未来可接入你的新闻源。
+export async function fetchNews(/* symbolOrQuery */) { return []; }
+
+export function formatNews(items = []) {
+  if (!items.length) return "";
+  const tops = items.slice(0, 3).map(x => `• ${x.title} (${x.source})`).join("\n");
+  return `🗞️ 新闻速览\n${tops}`;
+}
+
+8) 新建 formatters/caption.js
+export function formatCaption({ analysis = "", quote = "", news = "", chartUrl = "" }) {
+  const blocks = [];
+  if (analysis) blocks.push(analysis.trim());
+  if (quote) blocks.push(`💬 ${quote}`);
+  if (news) blocks.push(news);
+  const finalText = blocks.join("\n\n");
+  const caption = chartUrl ? (analysis || "") : finalText;
+  return { caption, finalText };
+}
+
+9) 新建 routes/selftest.js
+import express from "express";
+import { orchestrate } from "../orchestrate.js";
+const router = express.Router();
+
+router.post("/selftest/orchestrate", async (req, res) => {
+  const body = req.body || {};
+  const text = body.text || "GRF.MC";
+  try {
+    const out = await orchestrate({ text, symbols: ["GRF.MC"], user_id: "probe" });
+    const ok = Array.isArray(out?.normalized_symbols) && out.normalized_symbols.includes("BME:GRF");
+    if (!ok) return res.json({ ok: false, status: "contract-failed", got: out?.normalized_symbols || [] });
+    return res.json({ ok: true, status: "ok", symbols: out.symbols, normalized: out.normalized_symbols });
+  } catch (e) {
+    return res.json({ ok: false, status: "error", error: String(e?.message || e) });
+  }
+});
+
+export default router;
+
+10) 新建 bot/index.js（直连 Telegram；先支持 webhook）
+import { Telegraf } from "telegraf";
+import { orchestrate } from "../orchestrate.js";
+
+const token = process.env.TELEGRAM_BOT_TOKEN;
+const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL; // 例如 https://<replit-url>/telegram/webhook
+
+export const bot = token ? new Telegraf(token) : null;
+
+if (bot) {
+  bot.start(ctx => ctx.reply("USIS Brain v4.2_fixed 已就绪 ✅"));
+  bot.on("text", async ctx => {
+    const text = ctx.message.text || "";
+    const uid = String(ctx.from?.id || "tg");
+
+    if (/清空记忆|reset memory|forget memory/i.test(text)) {
+      // 你的内存清理逻辑（此处示意）
+      return ctx.reply("记忆已清空 ✅");
+    }
+
+    const out = await orchestrate({ text, symbols: [], user_id: uid });
+    if (out?.actions?.image_url) {
+      await ctx.replyWithPhoto(out.actions.image_url, { caption: out.final_text || "" }).catch(()=>{});
+      return;
+    }
+    await ctx.reply(out.final_text || "[空]");
+  });
+}
+
+export const webhookCallback = bot
+  ? bot.webhookCallback("/telegram/webhook")
+  : (req, res) => res.status(200).json({ ok: true, note: "bot disabled (no token)" });
+
+
+11) 安装依赖并启动
+npm i
+npm run start &
+sleep 2
+
+12) 自测两条命令（请把输出贴回来）
+# 自检：应返回 ok:true,status:ok，且 normalized 含 BME:GRF
+curl -s -X POST http://localhost:5000/selftest/orchestrate | jq
+
+# 直调 orchestrate：应返回 ok:true,status:ok
+curl -s -X POST http://localhost:5000/brain/orchestrate \
+  -H "Content-Type: application/json" \
+  -d '{"text":"只要分析，不要建议。GRF.MC 图","symbols":["GRF.MC"],"user_id":"qa"}' | jq '{ok,status,normalized_symbols,actions,debug}'
+
+
+13) 环境变量（在 Replit Secrets 面板添加）
+
+
+TELEGRAM_BOT_TOKEN（先留空也行）
+
+
+TELEGRAM_WEBHOOK_URL（设置后再到 BotFather 绑定）
+
+
+SCREENSHOT_API_TOKEN（如有）
+
+
+ALPHA_VANTAGE_KEY（可选）
+
+
+CHAT_ID_PREMARKET（可选）
+
+
+完成后：请回传新建/修改的文件清单与两条 curl 的 JSON 输出。
+-- 以上 --
+
+
+发过去后，等它回你两条 curl 的结果。我这边马上根据输出给你下一步：要么开通 Telegram Webhook（把 BotFather 的 Webhook 指到 /telegram/webhook），要么补上 AlphaVantage/截图 token 验证真实图片发送。
