@@ -79,6 +79,15 @@ function buildIntentPrompt() {
 2. 提取实体（公司名称、股票代码、行业、指数等）
 3. 推断交易所（美国、西班牙、香港等）
 4. 识别用户需要的动作（获取报价、新闻、热力图等）
+5. **识别输出模式（responseMode）**：用户想要什么类型的输出？
+   - 'news': 只要新闻资讯（"给我新闻"、"两小时内新闻"、"盘前资讯"）
+   - 'analysis': 只要分析（"分析一下"、"怎么看"、"技术分析"）
+   - 'advice': 只要建议（"给建议"、"怎么操作"、"仓位建议"）
+   - 'full_report': 要完整报告（默认，或明确要"全面分析"）
+6. **识别时间窗口（timeHorizon）**：新闻的时间范围
+   - "2小时内"、"两小时"、"最近"、"盘前" → "2h"
+   - "24小时"、"今天"、"全天" → "24h"
+   - "本周"、"一周" → "7d"
 
 **关键原则**：
 - 使用语义理解，不要依赖关键词匹配
@@ -118,9 +127,18 @@ US, Spain, HK, CN, EU, UK, JP, Global
   "exchange": "Spain",
   "sector": null,
   "actions": ["fetch_quotes", "fetch_news"],
+  "responseMode": "full_report",
+  "timeHorizon": "2h",
   "confidence": 0.9,
   "reasoning": "用户询问Grifols公司，这是西班牙的生物制药公司，需要获取股票报价和新闻"
-}`;
+}
+
+**responseMode示例**：
+- "AAPL 新闻" → responseMode="news", timeHorizon="2h"
+- "分析TSLA" → responseMode="analysis"
+- "给我西班牙热力图和建议" → responseMode="advice"
+- "IBEX35 全面分析" → responseMode="full_report"
+- "两小时内影响IBEX的新闻" → responseMode="news", timeHorizon="2h"`;
 }
 
 /**
@@ -170,12 +188,39 @@ function normalizeIntent(rawIntent) {
     exchange: rawIntent.exchange || null,
     sector: rawIntent.sector || null,
     actions: rawIntent.actions || [],
+    responseMode: normalizeResponseMode(rawIntent.responseMode),
+    timeHorizon: rawIntent.timeHorizon || '2h',
     confidence: rawIntent.confidence || 0.5,
     reasoning: rawIntent.reasoning || '',
     language: detectLanguage(rawIntent)
   });
   
   return intent;
+}
+
+/**
+ * 规范化responseMode（支持同义词）
+ */
+function normalizeResponseMode(mode) {
+  if (!mode) return 'full_report';
+  
+  const normalized = mode.toLowerCase();
+  
+  // 同义词映射
+  const synonyms = {
+    'news': ['news', 'news_only', '新闻', '资讯'],
+    'analysis': ['analysis', 'analysis_only', '分析', '观点', '看法'],
+    'advice': ['advice', 'advice_only', '建议', '推荐', '操作'],
+    'full_report': ['full_report', 'full', 'complete', '完整', '全面']
+  };
+  
+  for (const [standard, variants] of Object.entries(synonyms)) {
+    if (variants.some(v => normalized.includes(v))) {
+      return standard;
+    }
+  }
+  
+  return 'full_report';
 }
 
 /**

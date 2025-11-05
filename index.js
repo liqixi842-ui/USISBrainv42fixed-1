@@ -10,6 +10,8 @@ const { resolveSymbols } = require("./symbolResolver");
 const { fetchMarketData, validateDataForAnalysis } = require("./dataBroker");
 const { buildAnalysisPrompt, buildErrorResponse } = require("./analysisPrompt");
 const { validateResponse, generateCorrectionSuggestion } = require("./complianceGuard");
+const { fetchAndRankNews, formatNewsOutput } = require("./newsBroker");
+const { formatResponse, validateOutputCompliance, extractStructuredContent } = require("./responseFormatter");
 
 const app = express();
 app.use(express.json());
@@ -3354,6 +3356,44 @@ app.post("/brain/orchestrate", async (req, res) => {
       }
     }
     
+    // 4.7. 🆕 新闻采集（ImpactRank评分系统）
+    let rankedNews = [];
+    const needNews = intent.responseMode === 'news' || intent.responseMode === 'full_report' || 
+                     intent.actions.some(a => a === 'fetch_news' || (typeof a === 'object' && a.type === 'fetch_news')) ||
+                     /新闻|资讯|news|热点/.test(text || '');
+    
+    if (needNews) {
+      try {
+        console.log(`📰 启动新闻采集（ImpactRank）`);
+        
+        // 解析时间窗口
+        const timeWindowMap = {
+          '2h': 120,
+          '24h': 1440,
+          '7d': 10080
+        };
+        const timeWindowMinutes = timeWindowMap[intent.timeHorizon] || 120;
+        
+        const newsOptions = {
+          symbols: symbols,
+          region: intent.exchange || 'US',
+          timeWindowMinutes: timeWindowMinutes,
+          topN: 5,
+          sectors: intent.sector ? [intent.sector] : []
+        };
+        
+        rankedNews = await fetchAndRankNews(newsOptions);
+        
+        console.log(`✅ 新闻采集完成: ${rankedNews.length}条`);
+        if (rankedNews.length > 0) {
+          tasks.push('fetch_news_impactrank');
+        }
+      } catch (error) {
+        console.error('❌ 新闻采集失败:', error.message);
+        rankedNews = [];
+      }
+    }
+    
     // 5. Execute Multi-AI Analysis（🆕 v3.1: 传递semanticIntent）
     const aiResults = await multiAIAnalysis({
       mode: intent.mode,
@@ -3503,8 +3543,62 @@ app.post("/brain/orchestrate", async (req, res) => {
     // SEC 财报
     const sec_financials = marketData?.data?.sec_financials || null;
 
-    // 终端文本
-    const finalSummary = responseText;
+    // 🆕 使用responseFormatter根据responseMode格式化输出
+    let finalSummary = responseText;
+    let formattedNewsData = null;
+    let analysisData = null;
+    let adviceData = null;
+    
+    try {
+      // 准备数据
+      formattedNewsData = rankedNews.length > 0 ? formatNewsOutput(rankedNews) : [];
+      
+      // 从AI生成的文本中提取结构化内容
+      const extractedContent = extractStructuredContent(responseText, intent.responseMode);
+      
+      analysisData = {
+        summary: extractedContent.summary || responseText.substring(0, 200),
+        scenarios: extractedContent.scenarios,
+        technical: extractedContent.technical,
+        fundamental: extractedContent.fundamental
+      };
+      
+      adviceData = {
+        positioning: extractedContent.positioning,
+        risk_controls: extractedContent.risk_controls,
+        watchlist: extractedContent.watchlist || symbols,
+        triggers: extractedContent.triggers
+      };
+      
+      // 根据responseMode格式化
+      if (intent.responseMode && intent.responseMode !== 'full_report') {
+        console.log(`📝 使用responseFormatter格式化输出 (模式: ${intent.responseMode})`);
+        
+        finalSummary = formatResponse(intent.responseMode, {
+          news: formattedNewsData,
+          analysis: analysisData,
+          advice: adviceData,
+          symbols: symbols,
+          lang: intent.lang || 'zh'
+        });
+        
+        // 验证输出合规性
+        const compliance = validateOutputCompliance(intent.responseMode, finalSummary);
+        if (!compliance.compliant) {
+          console.warn(`⚠️  输出合规性检查失败:`, compliance.violations);
+        } else {
+          console.log(`✅ 输出合规性检查通过 (${intent.responseMode})`);
+        }
+      } else {
+        // full_report模式：使用AI生成的完整文本
+        console.log(`📝 使用完整报告模式`);
+      }
+      
+    } catch (error) {
+      console.error(`❌ responseFormatter失败:`, error.message);
+      // 降级：使用原始AI文本
+      finalSummary = responseText;
+    }
 
     // 归一化 actions - 转换字符串数组为对象数组
     const rawActions = intent.actions || [];
@@ -3558,11 +3652,24 @@ app.post("/brain/orchestrate", async (req, res) => {
     
     console.log(`🎬 最终actions数组:`, JSON.stringify(actions_v2, null, 2));
 
-    // v2 标准响应
+    // v2 标准响应（符合GPT v3.1 MVP Schema）
     const responseV2 = {
       ok: true,
       status: "ok",  // N8N workflow需要此字段
       requestId: reqId,
+      
+      // 🆕 v3.1 MVP核心字段
+      parse: {
+        symbols: symbols.map(s => ({ resolved: s })),
+        disambiguation: false,
+        exchange: intent.exchange,
+        sector: intent.sector
+      },
+      news: formattedNewsData || [],
+      analysis: analysisData || {},
+      advice: adviceData || {},
+      
+      // 三层架构信息
       levels: {
         l1: { intent: l1_intent, score: l1_score, router: 'gpt-4o-mini' },
         l2: { 

@@ -200,6 +200,8 @@ function createIntent({
   exchange = null,
   sector = null,
   actions = [],
+  responseMode = 'full_report',
+  timeHorizon = '2h',
   confidence = 0.5,
   reasoning = '',
   language = 'zh'
@@ -211,6 +213,8 @@ function createIntent({
     exchange,
     sector,
     actions,
+    responseMode,
+    timeHorizon,
     confidence,
     reasoning,
     language
