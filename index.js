@@ -37,58 +37,98 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// Initialize database table
+// Initialize database table with retry logic for Neon auto-wake
 async function initDatabase() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_memory (
-        id SERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        timestamp TIMESTAMPTZ DEFAULT NOW(),
-        request_text TEXT,
-        mode TEXT,
-        symbols TEXT[],
-        response_text TEXT,
-        chat_type TEXT
-      );
-      CREATE INDEX IF NOT EXISTS idx_user_memory_user_id ON user_memory(user_id);
-      CREATE INDEX IF NOT EXISTS idx_user_memory_timestamp ON user_memory(timestamp DESC);
+  if (!process.env.DATABASE_URL) {
+    console.log("ℹ️  Skipping database initialization (no DATABASE_URL)");
+    return;
+  }
+
+  const maxRetries = 5;
+  const baseDelay = 2000; // 2 seconds
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔌 [尝试 ${attempt}/${maxRetries}] 连接数据库...`);
       
-      CREATE TABLE IF NOT EXISTS cost_tracking (
-        id SERIAL PRIMARY KEY,
-        request_id TEXT,
-        user_id TEXT,
-        timestamp TIMESTAMPTZ DEFAULT NOW(),
-        mode TEXT,
-        models JSONB,
-        estimated_cost DECIMAL(10,4),
-        actual_cost DECIMAL(10,4),
-        response_time_ms INTEGER
-      );
+      // Step 1: Wake up the database with a simple query
+      const wakeResult = await pool.query('SELECT NOW() as wake_time');
+      console.log(`✅ 数据库已唤醒！时间: ${wakeResult.rows[0].wake_time}`);
       
-      -- 迁移：为现有表添加request_id列（如果不存在）
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name='cost_tracking' AND column_name='request_id'
-        ) THEN
-          ALTER TABLE cost_tracking ADD COLUMN request_id TEXT;
-        END IF;
-      END $$;
+      // Step 2: Create tables
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS user_memory (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          timestamp TIMESTAMPTZ DEFAULT NOW(),
+          request_text TEXT,
+          mode TEXT,
+          symbols TEXT[],
+          response_text TEXT,
+          chat_type TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_memory_user_id ON user_memory(user_id);
+        CREATE INDEX IF NOT EXISTS idx_user_memory_timestamp ON user_memory(timestamp DESC);
+        
+        CREATE TABLE IF NOT EXISTS cost_tracking (
+          id SERIAL PRIMARY KEY,
+          request_id TEXT,
+          user_id TEXT,
+          timestamp TIMESTAMPTZ DEFAULT NOW(),
+          mode TEXT,
+          models JSONB,
+          estimated_cost DECIMAL(10,4),
+          actual_cost DECIMAL(10,4),
+          response_time_ms INTEGER
+        );
+        
+        -- 迁移：为现有表添加request_id列（如果不存在）
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name='cost_tracking' AND column_name='request_id'
+          ) THEN
+            ALTER TABLE cost_tracking ADD COLUMN request_id TEXT;
+          END IF;
+        END $$;
+        
+        CREATE INDEX IF NOT EXISTS idx_cost_tracking_user ON cost_tracking(user_id);
+        CREATE INDEX IF NOT EXISTS idx_cost_tracking_request ON cost_tracking(request_id);
+        CREATE INDEX IF NOT EXISTS idx_cost_tracking_time ON cost_tracking(timestamp DESC);
+      `);
       
-      CREATE INDEX IF NOT EXISTS idx_cost_tracking_user ON cost_tracking(user_id);
-      CREATE INDEX IF NOT EXISTS idx_cost_tracking_request ON cost_tracking(request_id);
-      CREATE INDEX IF NOT EXISTS idx_cost_tracking_time ON cost_tracking(timestamp DESC);
-    `);
-    console.log("✅ Database initialized: user_memory and cost_tracking tables ready");
-  } catch (error) {
-    console.error("❌ Database initialization error:", error.message);
+      console.log("✅ 数据库初始化完成: user_memory 和 cost_tracking 表已就绪");
+      return; // Success, exit the retry loop
+      
+    } catch (error) {
+      const isLastAttempt = attempt === maxRetries;
+      const errorMsg = error.message || String(error);
+      
+      if (errorMsg.includes('endpoint has been disabled') || errorMsg.includes('suspended')) {
+        console.log(`⏳ [尝试 ${attempt}/${maxRetries}] 数据库休眠中，正在唤醒...`);
+      } else {
+        console.error(`❌ [尝试 ${attempt}/${maxRetries}] 数据库错误: ${errorMsg}`);
+      }
+      
+      if (isLastAttempt) {
+        console.error(`💔 数据库初始化失败（已重试${maxRetries}次）`);
+        console.error(`⚠️  Brain将在无数据库模式下运行（记忆功能禁用）`);
+        return;
+      }
+      
+      // Exponential backoff
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      console.log(`⏱️  ${delay/1000}秒后重试...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
 }
 
-// Initialize database on startup
-initDatabase();
+// Initialize database on startup (async, non-blocking)
+initDatabase().catch(err => {
+  console.error("💥 数据库初始化异常:", err.message);
+});
 
 // 🆕 v4.2: 增强统计系统（P50/P95延迟 + 缓存统计）
 const stats = {
