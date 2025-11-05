@@ -3386,34 +3386,21 @@ app.post("/brain/orchestrate", async (req, res) => {
         
         marketData = await fetchMarketData(symbols, dataTypes);
         
-        // 验证数据是否可用于AI分析
+        // 🆕 v4.2: 行情=软依赖，失败不阻断分析
         const validation = validateDataForAnalysis(marketData);
+        const dataErrors = []; // 收集数据错误
         
         if (!validation.valid) {
-          console.error(`❌ 数据验证失败: ${validation.reason}`);
-          
-          return res.json({
-            status: "error",
-            ok: false,
-            final_analysis: buildErrorResponse(validation.reason, intent.lang || lang),
-            final_text: `⚠️ 数据采集失败，无法分析${symbols.join('、')}`,
-            needs_heatmap: false,
-            actions: [],
-            intent: { mode: intent.mode, lang: intent.lang, confidence: 0 },
-            scene: { name: 'Error', depth: 'simple', targetLength: 0 },
-            symbols,
-            market_data: { error: validation.reason },
-            ai_results: null,
-            synthesis: { success: false, synthesized: false },
-            low_confidence: true,
-            chat_type,
-            user_id,
-            response_time_ms: Date.now() - startTime,
-            debug: { 
-              note: 'v3.1 Data validation failed - aborted to prevent AI hallucination',
-              validation: validation
-            }
+          console.warn(`⚠️  数据验证失败（继续分析）: ${validation.reason}`);
+          dataErrors.push({
+            source: 'market_data',
+            reason: validation.reason,
+            symbols: symbols,
+            timestamp: new Date().toISOString()
           });
+          
+          // 🔧 不再阻断，继续分析（允许"仅分析"模式）
+          // 旧代码会return error，现在继续执行
         }
         
         // 打印数据质量信息
@@ -3865,6 +3852,8 @@ app.post("/brain/orchestrate", async (req, res) => {
           : 'N/A',
         // 🆕 v4.1: error_history (如果有降级)
         ...(gpt5Result.debug?.error_history && { error_history: gpt5Result.debug.error_history }),
+        // 🆕 v4.2: data_errors (数据采集错误)
+        ...(dataErrors.length > 0 && { data_errors: dataErrors }),
         // L1层：复杂度评分
         l1_complexity: {
           score: complexity.score,
@@ -4148,3 +4137,4 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`📍 Listening on 0.0.0.0:${PORT}`);
   console.log(`🔗 Health check available at http://0.0.0.0:${PORT}/health`);
 });
+

@@ -1,0 +1,118 @@
+1) 代码改动口径（不改 n8n，不改接口契约）
+目标：GRF.MC 等后缀符号能正确解析为 Finnhub 规范前缀，并且**行情获取失败不阻断“仅分析”**路径；失败原因写入 debug.data_errors 便于诊断。
+A) 符号归一化（Symbol Normalizer）
+在 符号解析完成后、行情拉取前 增加归一化函数（放在现有 symbolResolver 或 orchestrator 预处理处）：
+function normalizeSymbol(raw) {
+  const s = (raw || '').trim().toUpperCase();
+  const map = [
+    { re: /\.MC$/,  to: sym => `BME:${sym.replace(/\.MC$/, '')}` },    // Madrid
+    { re: /\.PA$/,  to: sym => `EPA:${sym.replace(/\.PA$/, '')}` },    // Paris
+    { re: /\.DE$/,  to: sym => `XETRA:${sym.replace(/\.DE$/, '')}` },  // Frankfurt
+    { re: /\.MI$/,  to: sym => `MIL:${sym.replace(/\.MI$/, '')}` },    // Milan
+    { re: /\.L$/,   to: sym => `LSE:${sym.replace(/\.L$/, '')}` },     // London
+  ];
+  for (const r of map) if (r.re.test(s)) return r.to(s);
+  return s; // 已带前缀或美股，原样返回
+}
+// 应用点：symbols[] 逐个 normalize 后再进入后续数据抓取与分析
+
+B) 行情=软依赖（不阻断分析）
+在行情/快照抓取处包裹 try/catch，失败时只记录错误并继续：
+let quote = null, quoteError = null;
+try {
+  quote = await finnhub.getQuote(normalizedSymbol);
+  if (!quote || Object.keys(quote).length === 0) throw new Error('empty payload');
+} catch (e) {
+  quoteError = String(e?.message || e);
+}
+// 在最终响应 debug 中附加
+if (!res.debug) res.debug = {};
+res.debug.data_errors = res.debug.data_errors || [];
+if (quoteError) {
+  res.debug.data_errors.push({ source: 'finnhub', symbol: normalizedSymbol, error: quoteError, when: new Date().toISOString() });
+}
+// 模板层：若 quote=null，不渲染价格行；分析/新闻照常输出
+
+
+备注：不新增供应商、不改响应字段名，确保与 n8n 兼容。
+
+
+2) 提交与启动
+git checkout -b fix/v4.2-grifols
+# 按上面的改动完成代码 & 自测后：
+git add .
+git commit -m "fix(v4.2): normalize *.MC→BME:*; make quotes soft-optional; add debug.data_errors"
+git push origin fix/v4.2-grifols
+
+# 启动
+pkill -f "node index.js" 2>/dev/null || true
+node index.js > /tmp/usis_v42_fix.log 2>&1 & sleep 3
+
+# 健康/统计
+curl -s https://node-js-liqixi842.replit.app/health | jq
+curl -s https://node-js-liqixi842.replit.app/brain/stats | jq
+
+
+3) 回归测试（必须粘贴 debug 摘要）
+A. Grifols 仅分析（不得阻断）
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"只要分析，不要建议。Grifols 行业影响","user_id":"qa"}' \
+ | jq '{symbols:.symbols, debug:.debug}'
+
+期望：
+
+
+status="ok"；不包含建议段（只分析）；
+
+
+symbols 中可见 BME:GRF 或等效 Madrid 标识；
+
+
+若行情失败，debug.data_errors 含 {source:'finnhub', symbol:'BME:GRF', error:'...'}。
+
+
+B. GRF.MC 解析（验证归一化）
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"GRF.MC 的基本面与风险点","user_id":"qa"}' \
+ | jq '{symbols:.symbols, debug:.debug}'
+
+期望：symbols 出现 BME:GRF；正常分析产出；model_used 仍以主脑优先。
+C. IBEX 新闻（不受影响）
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"两小时内影响 IBEX 的新闻","user_id":"qa"}' \
+ | jq '.debug'
+
+期望：与 v4.2 先前表现一致（sources_timing 可见，性能正常）。
+
+4) 回传材料（四条）
+
+
+A/B/C 三次请求的 .debug 摘要（需含 symbols 与 data_errors）
+
+
+/brain/stats 摘要（requests/success/p50_ms/p95_ms/fallback_rate/cache_hit_rate）
+
+
+/tmp/usis_v42_fix.log 尾部 60 行（确认无未捕获异常）
+
+
+一行文字：“6/6 金丝雀已通过”（由 Architect 侧勾选）
+
+
+完成即满足 Architect 的 6/6 要求，可标记 v4.2 stable。
+
+
+（GPT → 七喜｜你这边看这段）
+你已经拍板“选 B 修复再发”。上面这份就是给 Replit 的一步到位执行单。
+你要做的只剩两件事：
+
+
+把上面的“Replit执行单”原样转发；
+
+
+等他们回传 A/B/C 的 debug 摘要 + stats + 日志尾部，我来给你最后一句“可以标记 stable/还差一步”的明确结论。
+
+

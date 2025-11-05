@@ -8,6 +8,30 @@ const { ENTITY_TYPES, EXCHANGES } = require("./schemas");
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
 
 /**
+ * 🆕 v4.2: 符号归一化（欧洲后缀 → Finnhub前缀）
+ * GRF.MC → BME:GRF (Madrid)
+ * SAP.DE → XETRA:SAP (Frankfurt)
+ */
+function normalizeSymbol(raw) {
+  const s = (raw || '').trim().toUpperCase();
+  const map = [
+    { re: /\.MC$/,  to: sym => `BME:${sym.replace(/\.MC$/, '')}` },    // Madrid
+    { re: /\.PA$/,  to: sym => `EPA:${sym.replace(/\.PA$/, '')}` },    // Paris
+    { re: /\.DE$/,  to: sym => `XETRA:${sym.replace(/\.DE$/, '')}` },  // Frankfurt
+    { re: /\.MI$/,  to: sym => `MIL:${sym.replace(/\.MI$/, '')}` },    // Milan
+    { re: /\.L$/,   to: sym => `LSE:${sym.replace(/\.L$/, '')}` }      // London
+  ];
+  for (const r of map) {
+    if (r.re.test(s)) {
+      const normalized = r.to(s);
+      console.log(`   🔄 [Normalize] ${s} → ${normalized}`);
+      return normalized;
+    }
+  }
+  return s; // 已带前缀或美股，原样返回
+}
+
+/**
  * 解析股票代码 - 从Intent中的实体提取正确的股票代码
  * @param {Intent} intent - 语义意图对象
  * @returns {Promise<Array<string>>} - 解析后的股票代码列表
@@ -51,8 +75,11 @@ async function resolveSymbols(intent) {
   // 3. 去重
   const uniqueSymbols = [...new Set(symbols)];
   
-  console.log(`✅ [Symbol Resolver] 解析完成: [${uniqueSymbols.join(', ')}]`);
-  return uniqueSymbols;
+  // 🆕 v4.2: 归一化符号（欧洲后缀 → Finnhub前缀）
+  const normalizedSymbols = uniqueSymbols.map(sym => normalizeSymbol(sym));
+  
+  console.log(`✅ [Symbol Resolver] 解析完成: [${normalizedSymbols.join(', ')}]`);
+  return normalizedSymbols;
 }
 
 /**
