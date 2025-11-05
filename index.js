@@ -319,6 +319,45 @@ app.get("/heatmap", async (req, res) => {
   }
 });
 
+// 🆕 获取热力图URL（用于actions生成）
+function getHeatmapUrl(exchangeName) {
+  // 交易所到TradingView dataSource的映射
+  const exchangeMapping = {
+    // 美国
+    'US': 'SPX500',
+    'USA': 'AllUSA',
+    'United States': 'AllUSA',
+    // 西班牙
+    'Spain': 'IBEX35',
+    'ES': 'IBEX35',
+    // 德国
+    'Germany': 'DAX',
+    'DE': 'DAX',
+    // 英国
+    'UK': 'UK100',
+    'United Kingdom': 'UK100',
+    // 法国
+    'France': 'CAC40',
+    'FR': 'CAC40',
+    // 日本
+    'Japan': 'AllJP',
+    'JP': 'AllJP',
+    // 中国
+    'China': 'AllCN',
+    'CN': 'AllCN',
+    'HK': 'AllCN',
+    // 其他
+    'Global': 'SPX500',
+    'World': 'SPX500'
+  };
+  
+  const dataSource = exchangeMapping[exchangeName] || exchangeMapping[exchangeName.toLowerCase()] || 'SPX500';
+  const url = `https://www.tradingview.com/heatmap/stock/?color=change&dataset=${dataSource}&group=sector`;
+  
+  console.log(`📊 生成热力图URL: ${exchangeName} -> ${dataSource} -> ${url}`);
+  return url;
+}
+
 // 生成热力图HTML（使用TradingView嵌入Widget）
 function generateHeatmapHTML(stocks, marketName, indexName = '') {
   // TradingView 官方支持的 dataSource 完整列表
@@ -3467,8 +3506,45 @@ app.post("/brain/orchestrate", async (req, res) => {
     // 终端文本
     const finalSummary = responseText;
 
-    // 归一化 actions
-    const actions_v2 = intent.actions || [];
+    // 归一化 actions - 转换字符串数组为对象数组
+    const rawActions = intent.actions || [];
+    const actions_v2 = [];
+    
+    // 将semanticIntent的字符串actions转换为对象格式
+    for (const action of rawActions) {
+      if (typeof action === 'string') {
+        // 字符串格式：转换为对象
+        if (action === 'fetch_heatmap') {
+          const exchangeName = intent.exchange || 'Global';
+          const heatmapUrl = getHeatmapUrl(exchangeName); // 生成热力图URL
+          actions_v2.push({
+            type: 'fetch_heatmap',
+            exchange: exchangeName,
+            url: heatmapUrl,
+            reason: `用户请求${exchangeName}市场热力图`
+          });
+          console.log(`📊 添加热力图动作: ${exchangeName} -> ${heatmapUrl}`);
+        } else if (action === 'fetch_quotes') {
+          actions_v2.push({
+            type: 'fetch_quotes',
+            symbols: symbols,
+            reason: '获取股票实时报价'
+          });
+        } else if (action === 'fetch_news') {
+          actions_v2.push({
+            type: 'fetch_news',
+            symbols: symbols,
+            reason: '获取相关新闻'
+          });
+        } else {
+          // 其他未知action，保持原样
+          actions_v2.push({ type: action });
+        }
+      } else if (typeof action === 'object' && action.type) {
+        // 已经是对象格式，直接使用
+        actions_v2.push(action);
+      }
+    }
     
     // 将图表动作写入actions（供N8N消费 - 脑体分离）
     for (const { metric, url } of chartUrls) {
@@ -3479,6 +3555,8 @@ app.post("/brain/orchestrate", async (req, res) => {
         caption: `📈 ${metric} 最近走势（智能生成）`
       });
     }
+    
+    console.log(`🎬 最终actions数组:`, JSON.stringify(actions_v2, null, 2));
 
     // v2 标准响应
     const responseV2 = {
