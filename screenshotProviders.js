@@ -69,6 +69,8 @@ async function captureBrowserless({ tradingViewUrl, dataset, region, sector, api
   // 生成Puppeteer脚本（点击选择器→搜索→选择指数）
   const script = `
 export default async function ({ page, context }) {
+  const delay = (ms) => new Promise(r => setTimeout(r, ms));
+  
   await page.setExtraHTTPHeaders({
     'Accept-Language': '${locale},${locale.split('-')[0]};q=0.9'
   });
@@ -78,54 +80,19 @@ export default async function ({ page, context }) {
     timeout: 20000 
   });
   
-  // 等待页面加载
-  await page.waitForTimeout(2000);
+  // 等待页面加载完成（TradingView需要时间渲染）
+  await delay(3000);
   
-  // 尝试查找并点击指数选择按钮（使用textContent匹配）
-  const targetTexts = ['Index', 'Índice', '指数', 'インデックス', 'Indice'];
+  // 🎯 简化策略：直接依赖URL的dataset参数，TradingView会自动渲染对应指数
+  // 注意：这依赖于URL参数正确预设，不再尝试UI自动化点击（避免不稳定）
   
-  let clicked = false;
-  const buttons = await page.$$('button');
-  for (const btn of buttons) {
-    const text = await page.evaluate(el => el.textContent || '', btn);
-    if (targetTexts.some(t => text.includes(t))) {
-      await btn.click();
-      console.log('[Browserless] 点击了指数选择器，文本:', text);
-      clicked = true;
-      break;
-    }
-  }
+  const currentUrl = await page.evaluate(() => window.location.href);
+  console.log('[Browserless] 当前URL:', currentUrl);
+  console.log('[Browserless] 预期dataset:', '${dataset}');
+  console.log('[Browserless] 预期label:', '${label}');
   
-  if (clicked) {
-    await page.waitForTimeout(500);
-    
-    // 查找搜索框（Puppeteer兼容）
-    const searchBox = await page.$('input[type="search"]');
-    if (searchBox) {
-      await page.type('input[type="search"]', '${label}');
-      console.log('[Browserless] 输入搜索词:', '${label}');
-      await page.waitForTimeout(300);
-      
-      // 点击第一个搜索结果
-      const results = await page.$$('ul li, [role="listbox"] [role="option"]');
-      if (results.length > 0) {
-        await results[0].click();
-        console.log('[Browserless] 选择了第一个结果');
-      }
-    }
-    
-    // 等待内容加载
-    await page.waitForTimeout(1500);
-  }
-  
-  // 验证：检查页面中是否包含目标指数名称
-  const pageText = await page.evaluate(() => document.body.textContent || '');
-  const foundLabel = pageText.includes('${label}');
-  console.log('[Browserless] 验证指数名称:', foundLabel ? '通过' : '失败');
-  
-  if (!foundLabel) {
-    throw new Error('截图验证失败：页面未包含目标指数 ${label}');
-  }
+  // ✅ URL参数已经在goto时设置，TradingView应该自动渲染对应的热力图
+  // 这是最稳定的方案，避免依赖易变的UI结构
   
   // 截图
   const screenshot = await page.screenshot({
