@@ -1980,55 +1980,106 @@ async function callMistral(prompt, maxTokens = 300) {
 }
 
 // Multi-AI Analysis - 多AI并行分析（6个AI全面协同）
-async function multiAIAnalysis({ mode, scene, symbols, text, chatType, marketData }) {
+async function multiAIAnalysis({ mode, scene, symbols, text, chatType, marketData, semanticIntent }) {
   console.log(`🤖 开始6个AI并行分析...`);
   
-  // 准备上下文（包含实时数据）
-  let dataContext = '';
-  let hasRealData = false;
+  // 🆕 v3.1: 尝试使用新的反编造Prompt构建系统
+  let useNewPromptSystem = false;
+  let unifiedPrompt = '';
   
-  if (marketData && marketData.collected && marketData.summary) {
-    dataContext = `【⚠️ 必须使用以下Finnhub实时数据，禁止编造】\n${marketData.summary}\n\n用户请求：`;
-    hasRealData = true;
-    console.log(`✅ 实时数据已注入AI prompt (${marketData.summary.length}字)`);
-  } else if (symbols.length > 0) {
-    // 有股票代码但数据采集失败 - 直接报错，不让AI编造
-    console.error(`❌ 严重错误：有股票代码但marketData为空！`);
-    console.error(`   marketData存在: ${!!marketData}`);
-    console.error(`   collected: ${marketData?.collected}`);
-    console.error(`   summary: ${marketData?.summary}`);
-    dataContext = `【数据采集失败，以下分析基于历史知识，可能不准确】\n\n用户请求：`;
-  } else {
-    console.log(`ℹ️  无股票代码，跳过实时数据注入`);
-    dataContext = '';
+  if (marketData && marketData.metadata && semanticIntent) {
+    try {
+      // 使用新的buildAnalysisPrompt（强制数据引用）
+      unifiedPrompt = buildAnalysisPrompt({
+        marketData,
+        intent: semanticIntent,
+        userQuery: text,
+        mode,
+        language: semanticIntent.language || 'zh'
+      });
+      useNewPromptSystem = true;
+      console.log(`✅ 使用v3.1反编造Prompt系统 (${unifiedPrompt.length}字)`);
+    } catch (error) {
+      console.warn(`⚠️  新Prompt系统失败，降级到旧系统:`, error.message);
+      useNewPromptSystem = false;
+    }
   }
   
-  const context = {
-    mode,
-    scene: scene.name,
-    symbols: symbols.join(', ') || '无特定股票',
-    request: dataContext + text,
-    hasRealData  // 标记是否有真实数据
-  };
+  // 降级：使用旧的Prompt构建逻辑
+  if (!useNewPromptSystem) {
+    console.log(`ℹ️  使用v3.0 Prompt系统（旧逻辑）`);
+    
+    let dataContext = '';
+    let hasRealData = false;
+    
+    if (marketData && marketData.collected && marketData.summary) {
+      dataContext = `【⚠️ 必须使用以下Finnhub实时数据，禁止编造】\n${marketData.summary}\n\n用户请求：`;
+      hasRealData = true;
+      console.log(`✅ 实时数据已注入AI prompt (${marketData.summary.length}字)`);
+    } else if (symbols.length > 0) {
+      console.error(`❌ 严重错误：有股票代码但marketData为空！`);
+      dataContext = `【数据采集失败，以下分析基于历史知识，可能不准确】\n\n用户请求：`;
+    } else {
+      console.log(`ℹ️  无股票代码，跳过实时数据注入`);
+      dataContext = '';
+    }
+    
+    const context = {
+      mode,
+      scene: scene.name,
+      symbols: symbols.join(', ') || '无特定股票',
+      request: dataContext + text,
+      hasRealData
+    };
+    
+    // 构建不同AI的prompt（旧方式）
+    const prompts = {
+      claude: buildClaudePrompt(context, scene),
+      deepseek: buildDeepSeekPrompt(context, scene),
+      gpt4: buildGPT4Prompt(context, scene, chatType),
+      gemini: buildGeminiPrompt(context, scene),
+      perplexity: buildPerplexityPrompt(context, scene),
+      mistral: buildMistralPrompt(context, scene)
+    };
+    
+    // 并行调用6个AI（旧方式）
+    const [claudeResult, deepseekResult, gpt4Result, geminiResult, perplexityResult, mistralResult] = await Promise.all([
+      callClaude(prompts.claude, scene.targetLength * 0.25),
+      callDeepSeek(prompts.deepseek, scene.targetLength * 0.25),
+      callGPT4(prompts.gpt4, scene.targetLength * 0.3),
+      callGemini(prompts.gemini, scene.targetLength * 0.25),
+      callPerplexity(prompts.perplexity, scene.targetLength * 0.25),
+      callMistral(prompts.mistral, scene.targetLength * 0.25)
+    ]);
+    
+    console.log(`  ✅ Claude: ${claudeResult.success ? '成功' : '失败'}`);
+    console.log(`  ✅ DeepSeek: ${deepseekResult.success ? '成功' : '失败'}`);
+    console.log(`  ✅ GPT-4: ${gpt4Result.success ? '成功' : '失败'}`);
+    console.log(`  ✅ Gemini: ${geminiResult.success ? '成功' : '失败'}`);
+    console.log(`  ✅ Perplexity: ${perplexityResult.success ? '成功' : '失败'}`);
+    console.log(`  ✅ Mistral: ${mistralResult.success ? '成功' : '失败'}`);
+    
+    return {
+      claude: { ...AI_ROLES.claude, ...claudeResult },
+      deepseek: { ...AI_ROLES.deepseek, ...deepseekResult },
+      gpt4: { ...AI_ROLES.gpt4, ...gpt4Result },
+      gemini: { ...AI_ROLES.gemini, ...geminiResult },
+      perplexity: { ...AI_ROLES.perplexity, ...perplexityResult },
+      mistral: { ...AI_ROLES.mistral, ...mistralResult }
+    };
+  }
   
-  // 构建不同AI的prompt
-  const prompts = {
-    claude: buildClaudePrompt(context, scene),
-    deepseek: buildDeepSeekPrompt(context, scene),
-    gpt4: buildGPT4Prompt(context, scene, chatType),
-    gemini: buildGeminiPrompt(context, scene),
-    perplexity: buildPerplexityPrompt(context, scene),
-    mistral: buildMistralPrompt(context, scene)
-  };
+  // 🆕 v3.1: 使用统一的反编造Prompt
+  // 所有AI都使用相同的prompt（确保数据引用一致）
+  const targetLength = scene.targetLength * 0.25;
   
-  // 并行调用6个AI
   const [claudeResult, deepseekResult, gpt4Result, geminiResult, perplexityResult, mistralResult] = await Promise.all([
-    callClaude(prompts.claude, scene.targetLength * 0.25),
-    callDeepSeek(prompts.deepseek, scene.targetLength * 0.25),
-    callGPT4(prompts.gpt4, scene.targetLength * 0.3),
-    callGemini(prompts.gemini, scene.targetLength * 0.25),
-    callPerplexity(prompts.perplexity, scene.targetLength * 0.25),
-    callMistral(prompts.mistral, scene.targetLength * 0.25)
+    callClaude(unifiedPrompt, targetLength),
+    callDeepSeek(unifiedPrompt, targetLength),
+    callGPT4(unifiedPrompt, scene.targetLength * 0.3),
+    callGemini(unifiedPrompt, targetLength),
+    callPerplexity(unifiedPrompt, targetLength),
+    callMistral(unifiedPrompt, targetLength)
   ]);
   
   console.log(`  ✅ Claude: ${claudeResult.success ? '成功' : '失败'}`);
@@ -3149,57 +3200,83 @@ app.post("/brain/orchestrate", async (req, res) => {
       }
     }
     
-    // 4.5. 数据采集（如果有股票代码）
+    // 4.5. 🆕 v3.1: 智能数据采集（使用DataBroker）
     let marketData = null;
     if (symbols.length > 0) {
       console.log(`📊 开始采集市场数据: ${symbols.join(', ')}`);
-      marketData = await collectMarketData(symbols, {
-        mode: intent.mode,
-        text: text
-      });
       
-      // 🔍 调试：打印市场数据状态
-      if (marketData) {
-        console.log(`📊 市场数据采集结果:`);
-        console.log(`   - collected: ${marketData.collected}`);
-        console.log(`   - summary长度: ${marketData.summary?.length || 0}字`);
-        console.log(`   - quotes数量: ${Object.keys(marketData.data?.quotes || {}).length}`);
-        if (marketData.summary) {
-          console.log(`   - summary预览: ${marketData.summary.substring(0, 200)}...`);
-        } else {
-          console.warn(`⚠️  警告：marketData.summary为空！AI将无法获得实时数据！`);
+      try {
+        // 使用新的DataBroker获取数据（带来源追踪和新鲜度评分）
+        const dataTypes = ['quote'];
+        if (intent.mode === 'news') dataTypes.push('news');
+        
+        marketData = await fetchMarketData(symbols, dataTypes);
+        
+        // 验证数据是否可用于AI分析
+        const validation = validateDataForAnalysis(marketData);
+        
+        if (!validation.valid) {
+          console.error(`❌ 数据验证失败: ${validation.reason}`);
+          
+          return res.json({
+            status: "error",
+            ok: false,
+            final_analysis: buildErrorResponse(validation.reason, intent.lang || lang),
+            final_text: `⚠️ 数据采集失败，无法分析${symbols.join('、')}`,
+            needs_heatmap: false,
+            actions: [],
+            intent: { mode: intent.mode, lang: intent.lang, confidence: 0 },
+            scene: { name: 'Error', depth: 'simple', targetLength: 0 },
+            symbols,
+            market_data: { error: validation.reason },
+            ai_results: null,
+            synthesis: { success: false, synthesized: false },
+            low_confidence: true,
+            chat_type,
+            user_id,
+            response_time_ms: Date.now() - startTime,
+            debug: { 
+              note: 'v3.1 Data validation failed - aborted to prevent AI hallucination',
+              validation: validation
+            }
+          });
         }
-      } else {
-        console.warn(`⚠️  警告：marketData为null！`);
-      }
-      
-      // 🚨 严格数据验证：如果有股票代码但数据采集失败，返回明确错误
-      if (!marketData || !marketData.collected || !marketData.summary) {
-        console.error(`❌ 数据采集失败，中止AI分析以防编造数据`);
-        return res.json({
-          status: "error",
-          ok: false,
-          final_analysis: `⚠️ 抱歉，无法获取${symbols.join('、')}的实时行情数据。\n\n可能原因：\n1. Finnhub API暂时不可用\n2. 股票代码错误\n3. 系统繁忙\n\n请稍后重试或检查股票代码是否正确。`,
-          final_text: `⚠️ 数据采集失败，无法分析${symbols.join('、')}`,
-          needs_heatmap: false,
-          actions: [],
-          intent: { mode: intent.mode, lang: intent.lang, confidence: 0 },
-          scene: { name: 'Error', depth: 'simple', targetLength: 0 },
-          symbols,
-          market_data: { error: '数据采集失败' },
-          ai_results: null,
-          synthesis: { success: false, synthesized: false },
-          low_confidence: true,
-          chat_type,
-          user_id,
-          response_time_ms: Date.now() - startTime,
-          debug: { 
-            note: 'Data collection failed - aborted to prevent AI hallucination',
-            marketData_exists: !!marketData,
-            collected: marketData?.collected,
-            summary_exists: !!marketData?.summary
-          }
+        
+        // 打印数据质量信息
+        console.log(`✅ 数据采集成功 (质量: ${(marketData.metadata.dataQuality.overallScore * 100).toFixed(0)}%)`);
+        console.log(marketData.summary);
+        
+      } catch (error) {
+        console.error(`❌ DataBroker失败，尝试降级到旧系统:`, error.message);
+        
+        // 降级：使用旧的collectMarketData
+        marketData = await collectMarketData(symbols, {
+          mode: intent.mode,
+          text: text
         });
+        
+        // 旧系统验证
+        if (!marketData || !marketData.collected || !marketData.summary) {
+          console.error(`❌ 降级系统也失败，中止分析`);
+          return res.json({
+            status: "error",
+            ok: false,
+            final_analysis: `⚠️ 抱歉，无法获取${symbols.join('、')}的实时行情数据。请稍后重试。`,
+            final_text: `⚠️ 数据采集失败`,
+            needs_heatmap: false,
+            actions: [],
+            intent: { mode: intent.mode, lang: intent.lang, confidence: 0 },
+            scene: { name: 'Error', depth: 'simple', targetLength: 0 },
+            symbols,
+            market_data: { error: '数据采集失败（新旧系统均失败）' },
+            ai_results: null,
+            synthesis: { success: false, synthesized: false },
+            low_confidence: true,
+            chat_type,
+            user_id,
+            response_time_ms: Date.now() - startTime
+          });
+        }
       }
     } else {
       console.log(`ℹ️  无股票代码，跳过市场数据采集`);
@@ -3220,14 +3297,15 @@ app.post("/brain/orchestrate", async (req, res) => {
       }
     }
     
-    // 5. Execute Multi-AI Analysis
+    // 5. Execute Multi-AI Analysis（🆕 v3.1: 传递semanticIntent）
     const aiResults = await multiAIAnalysis({
       mode: intent.mode,
       scene,
       symbols,
       text,
       chatType: chat_type,
-      marketData
+      marketData,
+      semanticIntent: semanticIntent  // 🆕 传递语义意图给AI分析
     });
     
     // 6. Intelligent Synthesis
@@ -3239,7 +3317,33 @@ app.post("/brain/orchestrate", async (req, res) => {
       text
     });
     
-    const responseText = synthesis.text;
+    let responseText = synthesis.text;
+    
+    // 🆕 v3.1: 合规守卫 - 验证AI输出的数字是否存在于数据中
+    if (marketData && marketData.metadata && symbols.length > 0) {
+      try {
+        const validation = validateResponse(responseText, marketData);
+        
+        if (!validation.valid) {
+          console.warn(`⚠️  合规守卫检测到可疑数字！违规数量: ${validation.violations.length}`);
+          validation.violations.forEach(v => console.warn(`   - ${v}`));
+          
+          // 如果置信度低于60%，要求AI重新生成或添加警告
+          if (validation.confidence < 0.6) {
+            console.error(`❌ 数据验证失败（置信度: ${(validation.confidence * 100).toFixed(0)}%），添加警告`);
+            
+            const warning = `\n\n⚠️ 系统提示：以上分析中的部分数字可能不准确，建议以实时数据为准。`;
+            responseText = responseText + warning;
+          } else {
+            console.log(`✅ 合规守卫验证通过（置信度: ${(validation.confidence * 100).toFixed(0)}%）`);
+          }
+        } else {
+          console.log(`✅ 合规守卫验证完全通过`);
+        }
+      } catch (error) {
+        console.error(`⚠️  合规守卫执行失败:`, error.message);
+      }
+    }
     const imageUrl = null; // TODO: 后续添加图表生成
     
     // 7. Save to PostgreSQL Memory

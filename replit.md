@@ -26,8 +26,17 @@ Preferred communication style: Simple, everyday language.
 ### L3: Cost Tracker & Performance Monitor
 - Tracks user, models used, estimated/actual cost, and response time in a PostgreSQL database for cost analysis and optimization.
 
-## Orchestration Pipeline
-Intent → Complexity Scoring → Model Selection → Scene → Data Collection → Multi-AI Analysis → Intelligent Synthesis → Cost Tracking
+## Orchestration Pipeline (v3.1 Architecture)
+
+**v3.1 Intelligent Pipeline** (AI-Driven):
+User Input → **Semantic Intent Agent** (AI) → **Symbol Resolver** (Finnhub Lookup) → **Data Broker** (with provenance tracking) → Complexity Scoring → Model Selection → **Analysis Prompt** (anti-hallucination) → Multi-AI Analysis → **Compliance Guard** (validate output) → Intelligent Synthesis → Cost Tracking
+
+**Key v3.1 Improvements**:
+- **Semantic Intent Understanding**: AI-powered intent parsing (replaces regex/keyword matching)
+- **Intelligent Symbol Resolution**: Finnhub Symbol Lookup API for global stock discovery
+- **Data Broker with Provenance**: Every data point includes source, timestamp, and freshness score
+- **Anti-Hallucination Prompts**: Forces AI to cite only provided real-time data
+- **Compliance Guard**: Validates AI output numbers against actual data
 
 ## AI Models
 The system dynamically selects from up to 9 AI models including GPT-4o-mini, Claude 3.5 Sonnet, DeepSeek Chat, GPT-4, Gemini Pro, Perplexity Sonar, Mistral Large, Claude Opus, and OpenAI o1, based on complexity and cost.
@@ -36,9 +45,16 @@ The system dynamically selects from up to 9 AI models including GPT-4o-mini, Cla
 Integrates with Finnhub API, Alpha Vantage API, SEC EDGAR API, and FRED API for real-time quotes, news, market sentiment, technical indicators, financial filings, and macroeconomic data.
 
 ## Intelligence Features
-- **Intelligent Synthesis**: Extracts key points, identifies consensus/divergence, and generates unified reports.
-- **Dual Output Styles**: Offers a warm conversational tone for private chats and professional commentary for groups.
-- **Scene-Aware Content**: Adjusts content depth based on context (e.g., brief for premarket, deep for postmarket).
+- **Semantic Intent Understanding (v3.1)**: AI-powered natural language understanding replaces keyword workflows
+- **Global Stock Discovery (v3.1)**: Finnhub Symbol Lookup supports any company name in any language
+- **Data Provenance Tracking (v3.1)**: Every data point tagged with source, timestamp, and freshness score (0-1)
+- **Anti-Hallucination System (v3.1)**: Multi-layer protection prevents AI from fabricating data:
+  - Layer 1: Data validation before analysis (rejects invalid/stale data)
+  - Layer 2: Forced data citation in prompts (AI must reference provided data only)
+  - Layer 3: Compliance guard validates output numbers against input data
+- **Intelligent Synthesis**: Extracts key points, identifies consensus/divergence, and generates unified reports
+- **Dual Output Styles**: Offers a warm conversational tone for private chats and professional commentary for groups
+- **Scene-Aware Content**: Adjusts content depth based on context (e.g., brief for premarket, deep for postmarket)
 - **Memory Layer**: Utilizes a PostgreSQL-backed system to store user history (last 3 conversations) for personalized interactions, allowing the AI to adjust tone and depth based on past interactions. Users can clear their memory.
 
 ## Internationalization
