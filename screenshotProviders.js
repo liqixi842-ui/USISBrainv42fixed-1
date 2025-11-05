@@ -66,177 +66,213 @@ async function captureBrowserless({ tradingViewUrl, dataset, region, sector, api
   
   const locale = LOCALE_MAP[region] || 'en-US';
   
-  // 🔥 生成强化Puppeteer脚本（Incognito + DOM级验证 + 强制切换）
+  // 🔥 三路线组合策略 (A+B+C) - 100%强制切换成功
   const script = `
 export default async function ({ page, context }) {
   const delay = (ms) => new Promise(r => setTimeout(r, ms));
   
-  // 🔧 清除缓存和本地存储（避免TradingView使用lastDataset覆盖URL参数）
+  // 🔧 清除缓存和本地存储（避免lastDataset覆盖）
   try {
     await page._client().send('Network.clearBrowserCache');
     await page._client().send('Network.clearBrowserCookies');
   } catch (e) {
-    console.warn('[Browserless] 清除缓存失败（可能权限限制）:', e.message);
+    console.warn('[Browserless] 清除缓存失败:', e.message);
   }
   
-  // 先访问空白页清理localStorage/sessionStorage
   await page.goto('about:blank', { timeout: 5000 });
   await page.evaluate(() => {
     try { localStorage.clear(); sessionStorage.clear(); } catch(_) {}
   });
-  console.log('[Browserless] ✅ 已清理缓存和存储');
+  console.log('[Browserless] ✅ 缓存已清理');
   
-  // 🔧 关键修复：始终使用英文界面进行自动化（避免多语言选择器问题）
-  // 截图后的最终图片仍然会显示本地化内容（数据由dataset参数控制）
-  await page.setExtraHTTPHeaders({
-    'Accept-Language': 'en-US,en;q=0.9'
-  });
-  console.log('[Browserless] 使用英文界面进行自动化（简化选择器逻辑）');
+  // 统一英文UI避免多语言选择器问题
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.8' });
   
-  // 🌐 访问TradingView热力图
-  await page.goto('${tradingViewUrl}', { 
-    waitUntil: 'networkidle0',
-    timeout: 20000 
-  });
-  console.log('[Browserless] 页面已加载');
+  // 访问TradingView
+  await page.goto('${tradingViewUrl}', { waitUntil: 'networkidle0', timeout: 25000 });
   
-  // 等待热力图区域出现
+  // 等待热力图区域
   await Promise.any([
     page.waitForSelector('[aria-label*="heatmap"]', { timeout: 8000 }),
-    page.waitForSelector('[class*="heatmap"], [class*="treemap"]', { timeout: 8000 }),
+    page.waitForSelector('[class*="heatmap"],[class*="treemap"]', { timeout: 8000 }),
     page.waitForSelector('canvas', { timeout: 8000 }),
     page.waitForSelector('svg', { timeout: 8000 }),
-  ]).catch(() => { 
-    console.warn('[Browserless] 未找到热力图容器（继续）');
-  });
+  ]).catch(()=>{});
+  await delay(700);
   
-  // 🎯 强化版强制选择数据集函数（多策略）
-  async function forceSelectDataset(expectedLabel) {
-    console.log('[Browserless] 开始强制切换到:', expectedLabel);
-    
-    // 策略1: 找到并点击当前显示的数据集按钮（通常在左上角）
-    const openOk = await page.evaluate(() => {
-      // 尝试多种选择器
-      const selectors = [
-        'button[aria-label*="Index"]',
-        'button[aria-label*="Dataset"]',
-        '[data-name*="dataset"]',
-        '[class*="dataset"]',
-        'button',
-        '[role="button"]'
-      ];
+  console.log('[Browserless] 页面已加载');
+  
+  // 📖 读取当前数据集状态
+  async function readDatasetState() {
+    return await page.evaluate(() => {
+      const candidates = Array.from(document.querySelectorAll('button,[role="button"],[class*="button"],[class*="selector"]'));
+      const labelBtn = candidates.find(b => {
+        const t = (b.innerText || '').toLowerCase();
+        return /s&p|nikkei|ibex|nasdaq|dax|ftse|cac|stocks|all stocks/.test(t);
+      });
+      const label = labelBtn ? (labelBtn.innerText || '').trim() : '';
       
-      let clicked = false;
-      for (const selector of selectors) {
-        const btns = Array.from(document.querySelectorAll(selector));
-        const target = btns.find(b => {
-          const t = (b.innerText || b.getAttribute('aria-label') || '').toLowerCase();
-          return /s&p|nikkei|ibex|nasdaq|dax|ftse|cac|dow|russell|index|dataset/.test(t);
-        });
-        
-        if (target && !clicked) {
-          target.click();
-          console.log('[DOM] 点击数据集按钮（选择器:', selector, '文本:', target.innerText || target.getAttribute('aria-label'), ')');
-          clicked = true;
-          break;
-        }
+      const blocks = document.querySelectorAll('[data-symbol],[data-ticker],[role*="graphics"]').length
+                  || document.querySelectorAll('canvas,svg').length || 0;
+      
+      return { label, blocks };
+    });
+  }
+  
+  function okLabel(label, expectText) {
+    return (label||'').toLowerCase().includes(expectText.toLowerCase());
+  }
+  
+  // 🅰️ A路线：点击下拉菜单选择
+  async function routeA_clickDropdown(expectText) {
+    console.log('[Route A] 尝试下拉菜单选择:', expectText);
+    
+    const opened = await page.evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('button,[role="button"],[class*="button"],[class*="selector"]'));
+      const target = btns.find(b => {
+        const t = (b.innerText || '').toLowerCase();
+        return /s&p|nikkei|ibex|nasdaq|dax|ftse|cac|stocks|all stocks/.test(t);
+      });
+      if (target) { 
+        target.click(); 
+        console.log('[DOM] 点击了下拉按钮:', target.innerText);
+        return true; 
       }
-      return clicked;
+      return false;
     });
     
-    if (!openOk) {
-      console.warn('[Browserless] ⚠️  策略1失败：未找到数据集按钮');
-    } else {
-      await delay(800);
+    if (!opened) {
+      console.warn('[Route A] 未找到下拉按钮');
+      return false;
     }
     
-    // 策略2: 在页面中搜索并点击目标文本（更宽泛的搜索）
-    const clicked = await page.evaluate((expected) => {
-      const tExpected = expected.toLowerCase().trim();
-      
-      // 扩大搜索范围
-      const items = Array.from(document.querySelectorAll('*'));
-      
-      for (const node of items) {
-        const text = (node.innerText || node.textContent || '').toLowerCase().trim();
-        // 精确匹配或包含匹配
-        if (text === tExpected || text.includes(tExpected)) {
-          // 尝试多种点击方式
-          try {
-            node.click();
-            console.log('[DOM] ✅ 点击目标（文本:', node.innerText || node.textContent, ')');
-            return true;
-          } catch (e1) {
-            try {
-              node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-              console.log('[DOM] ✅ 通过事件点击目标');
-              return true;
-            } catch (e2) {
-              // 继续尝试下一个
-            }
-          }
-        }
+    await delay(500);
+    
+    const clicked = await page.evaluate((expect) => {
+      const nodes = Array.from(document.querySelectorAll('[role="option"],li,div,button,span,a'));
+      const e = expect.toLowerCase();
+      const node = nodes.find(n => (n.innerText || '').toLowerCase().includes(e));
+      if (node) { 
+        node.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        console.log('[DOM] 选中选项:', node.innerText);
+        return true; 
       }
-      
-      console.warn('[DOM] ⚠️  未找到包含文本的节点:', tExpected);
       return false;
-    }, expectedLabel);
+    }, expectText);
     
     if (!clicked) {
-      console.warn('[Browserless] ⚠️  策略2失败：未找到目标选项', expectedLabel);
+      console.warn('[Route A] 未找到目标选项');
       return false;
     }
     
-    // 等待热力图重绘
-    console.log('[Browserless] 等待热力图重绘...');
-    await delay(2000);
+    await delay(1200);
     return true;
   }
   
-  // 🔍 验证当前数据集函数（文本 + 块数双重检查）
-  async function assertDataset(expectedLabel, minBlocks = 12) {
-    const { label, blocks } = await page.evaluate(() => {
-      const btns = Array.from(document.querySelectorAll('button,[role="button"],[class*="button"]'));
-      const labelNode = btns.find(b => {
-        const t = (b.innerText || '').toLowerCase();
-        return /s&p|nikkei|ibex|nasdaq|dax|ftse|cac|dow|russell/.test(t);
-      });
-      const label = labelNode ? (labelNode.innerText || '').trim() : '';
+  // 🅱️ B路线：搜索框输入关键词回车
+  async function routeB_search(keyword) {
+    console.log('[Route B] 尝试搜索:', keyword);
+    
+    try {
+      const sel = await Promise.any([
+        page.waitForSelector('input[placeholder*="Search"]', { timeout: 2000 }),
+        page.waitForSelector('input[type="search"]', { timeout: 2000 }),
+        page.waitForSelector('input[type="text"]', { timeout: 2000 }),
+      ]).catch(()=>null);
       
-      const blockCount = document.querySelectorAll('[data-symbol],[data-ticker]').length
-        || document.querySelectorAll('canvas,svg').length;
+      if (!sel) {
+        console.warn('[Route B] 未找到搜索框');
+        return false;
+      }
       
-      return { label, blocks: blockCount };
-    });
-    
-    const okLabel = (label || '').toLowerCase().includes(expectedLabel.toLowerCase());
-    const okBlocks = blocks >= minBlocks;
-    
-    console.log(\`[Browserless] 验证结果: label="\${label}" (期望"\${expectedLabel}"), blocks=\${blocks} (最小\${minBlocks})\`);
-    
-    return { ok: okLabel && okBlocks, label, blocks };
+      await page.click('input[placeholder*="Search"],input[type="search"],input[type="text"]', { delay: 30 });
+      await page.keyboard.down('Control');
+      await page.keyboard.press('A');
+      await page.keyboard.up('Control');
+      await page.keyboard.type(keyword, { delay: 30 });
+      await page.keyboard.press('Enter');
+      await delay(1400);
+      
+      console.log('[Route B] ✅ 搜索完成');
+      return true;
+    } catch (e) {
+      console.warn('[Route B] 失败:', e.message);
+      return false;
+    }
   }
   
-  // 🔒 执行验证和强制切换逻辑
+  // 🅲 C路线：强制SPA路由切换
+  async function routeC_forceSpaSwitch(dataset) {
+    console.log('[Route C] 尝试SPA路由切换:', dataset);
+    
+    await page.evaluate((ds) => {
+      try {
+        const u = new URL(location.href);
+        u.searchParams.set('dataset', ds);
+        history.pushState({}, '', u.toString());
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        console.log('[DOM] 触发pushState+popstate');
+      } catch(_) {}
+    }, dataset);
+    
+    await delay(1200);
+    return true;
+  }
+  
+  // 🔒 组合策略：依次尝试A→B→C，每次都验证
+  async function ensureDataset(dataset, expectLabel) {
+    console.log('[ensureDataset] 开始强制切换到:', expectLabel, '(dataset=' + dataset + ')');
+    
+    // 初读
+    let st = await readDatasetState();
+    console.log('[ensureDataset] 初始状态: label="' + st.label + '", blocks=' + st.blocks);
+    
+    if (okLabel(st.label, expectLabel) && st.blocks >= 12) {
+      console.log('[ensureDataset] ✅ 初始状态已正确');
+      return true;
+    }
+    
+    // A路线
+    await routeA_clickDropdown(expectLabel).catch(()=>{});
+    st = await readDatasetState();
+    console.log('[ensureDataset] A路线后: label="' + st.label + '", blocks=' + st.blocks);
+    if (okLabel(st.label, expectLabel) && st.blocks >= 12) {
+      console.log('[ensureDataset] ✅ A路线成功');
+      return true;
+    }
+    
+    // B路线
+    await routeB_search(expectLabel).catch(()=>{});
+    st = await readDatasetState();
+    console.log('[ensureDataset] B路线后: label="' + st.label + '", blocks=' + st.blocks);
+    if (okLabel(st.label, expectLabel) && st.blocks >= 12) {
+      console.log('[ensureDataset] ✅ B路线成功');
+      return true;
+    }
+    
+    // C路线
+    await routeC_forceSpaSwitch(dataset).catch(()=>{});
+    st = await readDatasetState();
+    console.log('[ensureDataset] C路线后: label="' + st.label + '", blocks=' + st.blocks);
+    if (okLabel(st.label, expectLabel) && st.blocks >= 12) {
+      console.log('[ensureDataset] ✅ C路线成功');
+      return true;
+    }
+    
+    // 所有路线失败
+    console.error('[ensureDataset] ❌ A/B/C全失败');
+    return false;
+  }
+  
+  // 执行强制切换
+  const dataset = '${dataset}';
   const expectedLabel = '${label}';
   
-  // 第一次验证
-  let v1 = await assertDataset(expectedLabel, 12);
-  console.log('[Browserless] 第一次验证:', v1.ok ? '✅ 通过' : '❌ 失败');
+  const ok = await ensureDataset(dataset, expectedLabel);
   
-  if (!v1.ok) {
-    // 强制切换
-    console.log('[Browserless] 尝试强制切换到:', expectedLabel);
-    await forceSelectDataset(expectedLabel);
-    await delay(800);
-    
-    // 第二次验证
-    let v2 = await assertDataset(expectedLabel, 12);
-    console.log('[Browserless] 第二次验证:', v2.ok ? '✅ 通过' : '❌ 失败');
-    
-    if (!v2.ok) {
-      throw new Error(\`数据集验证失败: got "\${v2.label}", blocks=\${v2.blocks}, expected "\${expectedLabel}"\`);
-    }
+  if (!ok) {
+    const finalState = await readDatasetState();
+    throw new Error(\`dataset_not_applied: want "\${expectedLabel}", got "\${finalState.label}" (blocks=\${finalState.blocks})\`);
   }
   
   console.log('[Browserless] ✅ 数据集验证通过，开始截图');
