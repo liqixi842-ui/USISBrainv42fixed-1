@@ -1,0 +1,148 @@
+结论（TL;DR）
+
+
+主链路是兼容的：n8n 期望 status:"ok"、顶层 symbols，并从 actions 里判断是否要热力图/符号图表；v4.2_fixed 这几个点都满足。
+
+
+需要修两处指向：① 仍然请求了老域名 node-js-liqixi842.replit.app（应切到你当前的 .sisko.replit.dev），② 错误判断用了带换行的字符串比较，容易误判。
+
+
+建议修两处安全/健壮性：ScreenshotAPI 的 token 明文，AlphaVantage 的“永不报错”会吞掉异常，导致伪成功。
+
+
+
+必修项（不动 v4.2_fixed 代码）
+
+
+/brain 域名改成当前 .sisko.replit.dev
+
+
+
+
+现状：Call_Brain_Orchestrate 和 Clear_Memory_API 还在打旧域名 node-js-liqixi842.replit.app。Telegram to Replit Brain Messag… Telegram to Replit Brain Messag…
+
+
+影响：你封板后的 Replit 容器迁到新域名，旧域名可能失效/版本不一致。
+
+
+修法（n8n）：把这两处 URL 换成环境变量 {{$env.BRAIN_BASE}}/brain/...，在 n8n 的 Variables 里维护 BRAIN_BASE=https://<你的>.sisko.replit.dev。
+
+
+位置1：Call_Brain_Orchestrate。证据：请求节点 id=34c8…，名字 Call_Brain_Orchestrate。Telegram to Replit Brain Messag…
+
+
+位置2：Clear_Memory_API。证据：/brain/memory/clear 指向旧域名。Telegram to Replit Brain Messag…
+
+
+
+
+
+
+IF 错误判断的“换行符陷阱”
+
+
+
+
+现状：IF 条件是 {{$json.status || ''}}\n 和 =ok\n 的不等于判断，带了换行。Telegram to Replit Brain Messag…
+
+
+风险：只要 v4.2_fixed 返回里没有完全匹配那个“ok\n”字符串，就会误判为错误进 Error_Handler。
+
+
+修法（n8n）：把条件改成严格布尔判断：
+条件表达式：{{$json.status === "ok"}}
+真分支 → Parse_Brain_Response；假分支 → Error_Handler
+
+这样最稳，且与 v4.2_fixed 的 status:"ok" 完全对齐。
+
+
+
+强烈建议（安全与健壮性）
+
+
+ScreenshotAPI Token 明文 → 用 Credential
+
+
+
+
+现状：Screenshot_Heatmap / Screenshot_SymbolChart 的 token 在 Query 里明文。Telegram to Replit Brain Messag… Telegram to Replit Brain Messag…
+
+
+风险：导出/截图就泄密。
+
+
+修法（n8n）：创建 HTTP Credentials（Query Auth 或 Header Auth），把 token 放 Credential；节点里改“Use Credential”，删掉明文参数。
+
+
+
+
+AlphaVantage 的 “neverError:true” 会吞掉异常
+
+
+
+
+现状：Call_Brain_Orchestrate 使用了 response.neverError=true（这点在 orchestrate 调用节点看到；你的报价节点也建议检查同样选项）。Telegram to Replit Brain Messag…
+
+
+风险：后续 Format 节点拿到“伪成功”的空数据，最后发出误导性文案。
+
+
+修法（n8n）：对报价/新闻这类外部请求，关闭 neverError，或在后续 Code 节点显式判空后不拼入消息（你在 Pack_Final_Message 已有“有块才拼”的风格，很好）。
+
+
+
+已兼容/可保留的行为（放心用）
+
+
+动作解析：你的 Parse_Brain_Response 会从 actions 里提取 fetch_heatmap / send_chart 等指令并落到 needs_heatmap/charts 字段。与 v4.2_fixed 的 actions 设计兼容。Telegram to Replit Brain Messag…
+
+
+是否需要热力图：IF_Needs_Heatmap 判 needs_heatmap===true，逻辑清晰。Telegram to Replit Brain Messag…
+
+
+是否需要符号图表：IF_Needs_SymbolChart 避免与热力图冲突；当有 fetch_symbol_chart 或只有 symbols 时触发；和 v4.2_fixed 的 normalized 符号一起工作没问题。Telegram to Replit Brain Messag…
+
+
+最终打包：Pack_Final_Message 会把 quote/news/twitter/screenshot 这些块按有无拼装，并自动选择是否走 sendPhoto。逻辑健壮。Telegram to Replit Brain Messag… Telegram to Replit Brain Messag…
+
+
+
+超短“修补指令”（直接给 n8n 自己操作，3 分钟内改完）
+
+
+统一域名变量
+
+
+在 n8n “Variables” 里添加：BRAIN_BASE = https://<你的>.sisko.replit.dev
+
+
+打开节点 Call_Brain_Orchestrate 与 Clear_Memory_API，把 URL 改为：
+={{$env.BRAIN_BASE + "/brain/orchestrate"}}
+={{$env.BRAIN_BASE + "/brain/memory/clear"}}
+
+（分别对应 orchestrate 与 memory/clear）
+
+
+
+
+修 IF 判断
+
+
+打开 IF_ErrorCheck，把条件从“字符串不等于 ok\n”改成：
+条件：{{$json.status === "ok"}}
+真分支 → Parse_Brain_Response；假分支 → Error_Handler
+
+
+
+
+
+隐藏敏感 Key
+
+
+给 ScreenshotAPI 建 Credential；在两个 Screenshot 节点勾选 “Use Credential”，删除 Query 里的 token 字段。
+
+
+
+
+
+做完以上三点，n8n 将与 v4.2_fixed 完整契合：域名对、契约对、安全对。如果你愿意，我可以再给一版“对照自测脚本”（三条 curl），帮助你在 n8n 里一键回归。_
