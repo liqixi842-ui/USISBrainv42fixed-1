@@ -89,7 +89,7 @@ async function initDatabase() {
 // Initialize database on startup
 initDatabase();
 
-// 🆕 v4.1: 统计系统（滑窗监控）
+// 🆕 v4.2: 增强统计系统（P50/P95延迟 + 缓存统计）
 const stats = {
   requests: 0,
   success: 0,
@@ -97,10 +97,14 @@ const stats = {
   total_latency: 0,
   fallback_count: 0,
   model_usage: {}, // { 'gpt-5-mini': 5, 'gpt-4o': 2, ... }
-  uptime_start: Date.now()
+  uptime_start: Date.now(),
+  // 🆕 v4.2
+  latency_history: [], // 最近100次请求延迟（用于P50/P95计算）
+  cache_hits: 0,
+  cache_total: 0
 };
 
-function recordRequest(success, latency_ms, model_used, fallback_used) {
+function recordRequest(success, latency_ms, model_used, fallback_used, cache_stats) {
   stats.requests++;
   if (success) {
     stats.success++;
@@ -114,6 +118,26 @@ function recordRequest(success, latency_ms, model_used, fallback_used) {
   if (model_used) {
     stats.model_usage[model_used] = (stats.model_usage[model_used] || 0) + 1;
   }
+  
+  // 🆕 v4.2: 记录延迟历史（滑窗最多100条）
+  stats.latency_history.push(latency_ms);
+  if (stats.latency_history.length > 100) {
+    stats.latency_history.shift(); // 移除最旧的
+  }
+  
+  // 🆕 v4.2: 缓存统计
+  if (cache_stats) {
+    stats.cache_hits += cache_stats.hits || 0;
+    stats.cache_total += cache_stats.total || 0;
+  }
+}
+
+// 🆕 v4.2: 计算P50/P95延迟
+function calculatePercentile(values, percentile) {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.ceil(sorted.length * percentile) - 1;
+  return sorted[Math.max(0, index)];
 }
 
 // 添加请求日志中间件（用于调试Cloud Run健康检查）
@@ -150,16 +174,25 @@ if (TWITTER_BEARER) {
 // ---- Health
 app.get("/", (_req, res) => res.status(200).send("OK"));
 
-// 🆕 v4.1: Stats端点（滑窗监控）
+// 🆕 v4.2: 增强Stats端点（P50/P95延迟 + 缓存统计）
 app.get("/brain/stats", (_req, res) => {
   const uptime_s = Math.floor((Date.now() - stats.uptime_start) / 1000);
   const success_rate = stats.requests > 0 ? (stats.success / stats.requests) : 0;
   const avg_latency_ms = stats.requests > 0 ? Math.floor(stats.total_latency / stats.requests) : 0;
   const fallback_rate = stats.requests > 0 ? (stats.fallback_count / stats.requests) : 0;
   
+  // 🆕 v4.2: P50/P95延迟计算
+  const p50_latency_ms = calculatePercentile(stats.latency_history, 0.50);
+  const p95_latency_ms = calculatePercentile(stats.latency_history, 0.95);
+  
+  // 🆕 v4.2: 缓存命中率
+  const cache_hit_rate = stats.cache_total > 0 
+    ? (stats.cache_hits / stats.cache_total) 
+    : 0;
+  
   res.json({
     status: "ok",
-    version: "v4.1",
+    version: "v4.2",
     uptime_s,
     requests: stats.requests,
     success: stats.success,
@@ -168,7 +201,20 @@ app.get("/brain/stats", (_req, res) => {
     avg_latency_ms,
     fallback_count: stats.fallback_count,
     fallback_rate: (fallback_rate * 100).toFixed(2) + '%',
-    model_usage: stats.model_usage
+    model_usage: stats.model_usage,
+    // 🆕 v4.2: 延迟分布
+    latency: {
+      avg_ms: avg_latency_ms,
+      p50_ms: Math.floor(p50_latency_ms),
+      p95_ms: Math.floor(p95_latency_ms),
+      samples: stats.latency_history.length
+    },
+    // 🆕 v4.2: 缓存统计
+    cache: {
+      hits: stats.cache_hits,
+      total: stats.cache_total,
+      hit_rate: (cache_hit_rate * 100).toFixed(1) + '%'
+    }
   });
 });
 
@@ -3811,6 +3857,14 @@ app.post("/brain/orchestrate", async (req, res) => {
         latency_ms: responseTime,
         call_latency_ms: gpt5Result.debug?.call_latency_ms || gpt5Result.elapsed_ms,
         attempts: gpt5Result.debug?.attempts || 1,
+        // 🆕 v4.2: 数据源timing信息
+        sources_timing: marketData?.metadata?.timings || {},
+        cache_hit: marketData?.metadata?.cache_hits > 0 ? true : false,
+        cache_hit_rate: marketData?.metadata?.cache_total > 0 
+          ? `${(marketData.metadata.cache_hits / marketData.metadata.cache_total * 100).toFixed(1)}%`
+          : 'N/A',
+        // 🆕 v4.1: error_history (如果有降级)
+        ...(gpt5Result.debug?.error_history && { error_history: gpt5Result.debug.error_history }),
         // L1层：复杂度评分
         l1_complexity: {
           score: complexity.score,
@@ -3836,12 +3890,16 @@ app.post("/brain/orchestrate", async (req, res) => {
       }
     };
     
-    // 🆕 v4.1: 记录统计
+    // 🆕 v4.2: 记录统计（含缓存信息）
     recordRequest(
       gpt5Result.success,
       responseTime,
       gpt5Result.debug?.model_used || gpt5Result.model,
-      gpt5Result.debug?.fallback_used || false
+      gpt5Result.debug?.fallback_used || false,
+      { 
+        hits: marketData?.metadata?.cache_hits || 0,
+        total: marketData?.metadata?.cache_total || 0
+      }
     );
     
     // 8. Response
