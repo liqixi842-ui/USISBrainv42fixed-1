@@ -1,0 +1,88 @@
+👉 给 Replit（请原文转发｜不需要第三方意见）
+
+主题：USIS Brain「单主脑 + 智能保底」落地口径（最佳方案）
+目标：保证“最强输出 + 最稳可用 + 最低运维”。不改 /brain/orchestrate schema，不改 n8n。
+
+1) 模型策略（Model Registry）
+
+在 config/models.json 里声明可用顺序与触发条件：
+
+{
+  "primary":  { "id": "gpt-5-mini",   "max_tokens": 4000, "timeout_ms": 45000 },
+  "fallback": [
+    { "id": "gpt-4o-turbo", "max_tokens": 3000, "timeout_ms": 30000 },
+    { "id": "gpt-4o-mini",  "max_tokens": 2000, "timeout_ms": 20000 }
+  ]
+}
+
+
+启动自检：调用 GET /v1/models，把不可用/无权限的模型从候选里剔除，打印：[models] available=[...] primary=...
+
+2) 路由策略（复杂度 × 预算 × 健康状况）
+
+复杂度分层：L1（轻问答/资讯）、L2（分析+建议）、L3（多标的/场景推演）。
+
+预算：low → L1、medium → L1/L2、high/unlimited → 允许 L3。
+
+优先主脑；若出现以下任一情况，自动切保底并记录：
+
+API 4xx/5xx、超时（>timeout_ms）、token 预算超阈值、负载保护触发。
+
+每次请求返回 debug.model_used / fallback_used / latency_ms，便于可观测（对外仍保持现有 schema 字段）。
+
+3) 性能与稳定（v4.1 范围）
+
+并发抓取：行情/新闻与大模型推理并行发起，合并超时采用先到先用。
+
+缓存：高频指标（如 CPI、IBEX、SPX 成分、常见新闻 TopN）TTL=60–120s；命中则直接用，显著降延迟。
+
+降级不打断：图表失败→仅文字；新闻 2h 无结果→自动放宽到 6h 并提示“2h 内无显著事件”。
+
+长度限制：保持 800 字 caption（Telegram 不截断）。
+
+4) 接口不变（与 n8n 完全兼容）
+
+仍然：POST /brain/orchestrate 接收 text/chat_type/user_id/mode/budget；
+
+仍然返回：status / final_text / actions[] / symbols[] / model；
+
+严禁改变字段名或删除字段（n8n 已在产线上线）。
+
+5) 观测与成本（轻量实现）
+
+记录：request_id, model_used, latency_ms, input_tokens, output_tokens, cost_est, fallback_used:boolean。
+
+新增：GET /brain/stats（近 15 分钟滑窗的平均延迟、成功率、fallback 比例）。
+
+目标（验收线）：平均响应 ≤ 20s；成功率 ≥ 99%；fallback ≤ 10%；单请求成本 ≤ v4.0。
+
+6) 验收用例（必须全部通过）
+
+两小时内影响 IBEX 的新闻 → 按影响度排序 3–5 条，含来源与“为何重要”。
+
+只要分析，不要建议。Grifols 行业影响 → 仅 ANALYSIS；model_used 优先主脑，如失败自动保底。
+
+NVDA 解析；给我新闻+建议（24h） → 解析 + 24h 新闻 + 建议；必要时出图。
+
+台积电和 TSMC ADR 价差怎么理解？简要建议 → TW:2330 vs US:TSM 逻辑与风控；落入 L2/L3。
+
+西班牙热力图 盘中点评 → 必须出热力图或降级文字，绝不黑图或报错。
+
+每条响应必须带 debug.model_used / fallback_used / latency_ms 以便我们核查，但对外展示不变。
+
+7) 回滚与安全阀
+
+环境变量 PRIMARY_MODEL=gpt-4o-turbo 时，强制主脑改为 4o-turbo（用于紧急回退）。
+
+打开 DISABLE_FALLBACK=true 可在定位问题时关闭自动降级（仅内部调试使用）。
+
+请按以上口径实现；不需要改 n8n。完成后给出：
+
+启动日志中的 [models] available 与 primary=...；
+
+5 个验收用例的 model_used / latency_ms / fallback_used 摘要；
+
+/brain/stats 的一段样例输出。
+
+如果你认可这套“最好、最优”的定义（主脑=GPT-5 Mini，可用即用；不可用自动用 4o-turbo/mini 托底），你就把上面“给 Replit”的部分发过去。他们按这口径做完，我们拿验收用例逐条过。
+接下来你只需要关注：群里体验是不是稳、是不是快、是不是总有结果。其他底层切换、降级、成本、统计，全交给大脑自己打理。
