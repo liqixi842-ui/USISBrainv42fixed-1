@@ -157,10 +157,7 @@ async function generateWithGPT5({
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.3,
-        max_completion_tokens: 4000,  // 🔧 GPT-5 thinking需要更多token（推理+输出）
-        presence_penalty: 0.1,
-        frequency_penalty: 0.1
+        max_completion_tokens: 4000  // 🔧 GPT-5不支持temperature等参数，只保留必需参数
       }),
       timeout: 30000
     });
