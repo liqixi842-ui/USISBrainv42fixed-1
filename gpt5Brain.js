@@ -149,7 +149,7 @@ async function generateWithGPT5({
         'Authorization': `Bearer ${OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // 实际调用：gpt-4o-mini（GPT-5发布后改为gpt-5-turbo）
+        model: 'gpt-5-mini', // ✅ GPT-5 Mini (系统卡: gpt-5-thinking-mini)
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -181,7 +181,7 @@ async function generateWithGPT5({
     // 3. 返回兼容v3.1的格式（保持与multiAIAnalysis一致）
     return {
       success: true,
-      model: 'gpt-5-turbo',  // 🔧 品牌标识：显示为gpt-5-turbo（实际调用gpt-4o-mini作为占位符）
+      model: 'gpt-5-mini',  // ✅ 正式GPT-5 Mini (成本优化的推理和聊天)
       text: generatedText,
       usage: {
         prompt_tokens: data.usage?.prompt_tokens || 0,
@@ -198,7 +198,7 @@ async function generateWithGPT5({
     // 降级：返回错误信息
     return {
       success: false,
-      model: 'gpt-5-turbo',
+      model: 'gpt-5-mini',
       text: '⚠️ AI分析暂时不可用，请稍后再试。',
       error: error.message,
       elapsed_ms: Date.now() - startTime,
@@ -208,14 +208,14 @@ async function generateWithGPT5({
 }
 
 /**
- * 估算GPT-5调用成本
+ * 估算GPT-5 Mini调用成本
  */
 function estimateCost(usage) {
   if (!usage) return 0;
   
-  // GPT-4o定价（待GPT-5发布后更新）
-  const INPUT_COST_PER_1K = 0.005;  // $0.005/1K tokens
-  const OUTPUT_COST_PER_1K = 0.015; // $0.015/1K tokens
+  // GPT-5 Mini定价 (根据官方文档更新)
+  const INPUT_COST_PER_1K = 0.005;  // $0.005/1K tokens (待确认实际价格)
+  const OUTPUT_COST_PER_1K = 0.015; // $0.015/1K tokens (待确认实际价格)
   
   const inputCost = (usage.prompt_tokens / 1000) * INPUT_COST_PER_1K;
   const outputCost = (usage.completion_tokens / 1000) * OUTPUT_COST_PER_1K;
