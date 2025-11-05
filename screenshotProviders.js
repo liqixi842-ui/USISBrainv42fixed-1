@@ -66,38 +66,185 @@ async function captureBrowserless({ tradingViewUrl, dataset, region, sector, api
   
   const locale = LOCALE_MAP[region] || 'en-US';
   
-  // 生成Puppeteer脚本（点击选择器→搜索→选择指数）
+  // 🔥 生成强化Puppeteer脚本（Incognito + DOM级验证 + 强制切换）
   const script = `
 export default async function ({ page, context }) {
   const delay = (ms) => new Promise(r => setTimeout(r, ms));
   
-  await page.setExtraHTTPHeaders({
-    'Accept-Language': '${locale},${locale.split('-')[0]};q=0.9'
-  });
+  // 🔧 清除缓存和本地存储（避免TradingView使用lastDataset覆盖URL参数）
+  try {
+    await page._client().send('Network.clearBrowserCache');
+    await page._client().send('Network.clearBrowserCookies');
+  } catch (e) {
+    console.warn('[Browserless] 清除缓存失败（可能权限限制）:', e.message);
+  }
   
+  // 先访问空白页清理localStorage/sessionStorage
+  await page.goto('about:blank', { timeout: 5000 });
+  await page.evaluate(() => {
+    try { localStorage.clear(); sessionStorage.clear(); } catch(_) {}
+  });
+  console.log('[Browserless] ✅ 已清理缓存和存储');
+  
+  // 🔧 关键修复：始终使用英文界面进行自动化（避免多语言选择器问题）
+  // 截图后的最终图片仍然会显示本地化内容（数据由dataset参数控制）
+  await page.setExtraHTTPHeaders({
+    'Accept-Language': 'en-US,en;q=0.9'
+  });
+  console.log('[Browserless] 使用英文界面进行自动化（简化选择器逻辑）');
+  
+  // 🌐 访问TradingView热力图
   await page.goto('${tradingViewUrl}', { 
-    waitUntil: 'networkidle2',
+    waitUntil: 'networkidle0',
     timeout: 20000 
   });
+  console.log('[Browserless] 页面已加载');
   
-  // 等待页面加载完成（TradingView需要时间渲染）
-  await delay(3000);
+  // 等待热力图区域出现
+  await Promise.any([
+    page.waitForSelector('[aria-label*="heatmap"]', { timeout: 8000 }),
+    page.waitForSelector('[class*="heatmap"], [class*="treemap"]', { timeout: 8000 }),
+    page.waitForSelector('canvas', { timeout: 8000 }),
+    page.waitForSelector('svg', { timeout: 8000 }),
+  ]).catch(() => { 
+    console.warn('[Browserless] 未找到热力图容器（继续）');
+  });
   
-  // 🎯 简化策略：直接依赖URL的dataset参数，TradingView会自动渲染对应指数
-  // 注意：这依赖于URL参数正确预设，不再尝试UI自动化点击（避免不稳定）
+  // 🎯 强化版强制选择数据集函数（多策略）
+  async function forceSelectDataset(expectedLabel) {
+    console.log('[Browserless] 开始强制切换到:', expectedLabel);
+    
+    // 策略1: 找到并点击当前显示的数据集按钮（通常在左上角）
+    const openOk = await page.evaluate(() => {
+      // 尝试多种选择器
+      const selectors = [
+        'button[aria-label*="Index"]',
+        'button[aria-label*="Dataset"]',
+        '[data-name*="dataset"]',
+        '[class*="dataset"]',
+        'button',
+        '[role="button"]'
+      ];
+      
+      let clicked = false;
+      for (const selector of selectors) {
+        const btns = Array.from(document.querySelectorAll(selector));
+        const target = btns.find(b => {
+          const t = (b.innerText || b.getAttribute('aria-label') || '').toLowerCase();
+          return /s&p|nikkei|ibex|nasdaq|dax|ftse|cac|dow|russell|index|dataset/.test(t);
+        });
+        
+        if (target && !clicked) {
+          target.click();
+          console.log('[DOM] 点击数据集按钮（选择器:', selector, '文本:', target.innerText || target.getAttribute('aria-label'), ')');
+          clicked = true;
+          break;
+        }
+      }
+      return clicked;
+    });
+    
+    if (!openOk) {
+      console.warn('[Browserless] ⚠️  策略1失败：未找到数据集按钮');
+    } else {
+      await delay(800);
+    }
+    
+    // 策略2: 在页面中搜索并点击目标文本（更宽泛的搜索）
+    const clicked = await page.evaluate((expected) => {
+      const tExpected = expected.toLowerCase().trim();
+      
+      // 扩大搜索范围
+      const items = Array.from(document.querySelectorAll('*'));
+      
+      for (const node of items) {
+        const text = (node.innerText || node.textContent || '').toLowerCase().trim();
+        // 精确匹配或包含匹配
+        if (text === tExpected || text.includes(tExpected)) {
+          // 尝试多种点击方式
+          try {
+            node.click();
+            console.log('[DOM] ✅ 点击目标（文本:', node.innerText || node.textContent, ')');
+            return true;
+          } catch (e1) {
+            try {
+              node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+              console.log('[DOM] ✅ 通过事件点击目标');
+              return true;
+            } catch (e2) {
+              // 继续尝试下一个
+            }
+          }
+        }
+      }
+      
+      console.warn('[DOM] ⚠️  未找到包含文本的节点:', tExpected);
+      return false;
+    }, expectedLabel);
+    
+    if (!clicked) {
+      console.warn('[Browserless] ⚠️  策略2失败：未找到目标选项', expectedLabel);
+      return false;
+    }
+    
+    // 等待热力图重绘
+    console.log('[Browserless] 等待热力图重绘...');
+    await delay(2000);
+    return true;
+  }
   
-  const currentUrl = await page.evaluate(() => window.location.href);
-  console.log('[Browserless] 当前URL:', currentUrl);
-  console.log('[Browserless] 预期dataset:', '${dataset}');
-  console.log('[Browserless] 预期label:', '${label}');
+  // 🔍 验证当前数据集函数（文本 + 块数双重检查）
+  async function assertDataset(expectedLabel, minBlocks = 12) {
+    const { label, blocks } = await page.evaluate(() => {
+      const btns = Array.from(document.querySelectorAll('button,[role="button"],[class*="button"]'));
+      const labelNode = btns.find(b => {
+        const t = (b.innerText || '').toLowerCase();
+        return /s&p|nikkei|ibex|nasdaq|dax|ftse|cac|dow|russell/.test(t);
+      });
+      const label = labelNode ? (labelNode.innerText || '').trim() : '';
+      
+      const blockCount = document.querySelectorAll('[data-symbol],[data-ticker]').length
+        || document.querySelectorAll('canvas,svg').length;
+      
+      return { label, blocks: blockCount };
+    });
+    
+    const okLabel = (label || '').toLowerCase().includes(expectedLabel.toLowerCase());
+    const okBlocks = blocks >= minBlocks;
+    
+    console.log(\`[Browserless] 验证结果: label="\${label}" (期望"\${expectedLabel}"), blocks=\${blocks} (最小\${minBlocks})\`);
+    
+    return { ok: okLabel && okBlocks, label, blocks };
+  }
   
-  // ✅ URL参数已经在goto时设置，TradingView应该自动渲染对应的热力图
-  // 这是最稳定的方案，避免依赖易变的UI结构
+  // 🔒 执行验证和强制切换逻辑
+  const expectedLabel = '${label}';
+  
+  // 第一次验证
+  let v1 = await assertDataset(expectedLabel, 12);
+  console.log('[Browserless] 第一次验证:', v1.ok ? '✅ 通过' : '❌ 失败');
+  
+  if (!v1.ok) {
+    // 强制切换
+    console.log('[Browserless] 尝试强制切换到:', expectedLabel);
+    await forceSelectDataset(expectedLabel);
+    await delay(800);
+    
+    // 第二次验证
+    let v2 = await assertDataset(expectedLabel, 12);
+    console.log('[Browserless] 第二次验证:', v2.ok ? '✅ 通过' : '❌ 失败');
+    
+    if (!v2.ok) {
+      throw new Error(\`数据集验证失败: got "\${v2.label}", blocks=\${v2.blocks}, expected "\${expectedLabel}"\`);
+    }
+  }
+  
+  console.log('[Browserless] ✅ 数据集验证通过，开始截图');
   
   // 截图
   const screenshot = await page.screenshot({
     type: 'jpeg',
-    quality: 85,
+    quality: 90,
     fullPage: false
   });
   

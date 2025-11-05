@@ -1,0 +1,149 @@
+看见了，你的图还是 SP500（NVDA/AAPL/MSFT 一屏飘红绿），说明 仅凭 URL 的 dataset=NIKKEI225 没真正生效。TradingView 会受本地缓存/上次选择影响，并且在首屏会先渲染默认集合（SP500）再异步切换；你这时就截屏了，所以拿到的是美股。
+
+给你一套“硬而实用”的修复顺序，直接改 screenshotProviders.js 就能落地：
+
+一、根因与修复思路
+
+根因
+
+TradingView 先渲染默认数据集 → 再根据状态/缓存切换；
+
+你的截图发生在切换之前；
+
+甚至有时页面会忽略 URL 的 dataset，用 localStorage/lastDataset 覆盖。
+
+修复要点
+
+每次都用“干净会话”（无缓存）；
+
+DOM 级确认当前数据集文字确实是“Nikkei 225”，不对就强制点选到对；
+
+只有当数据集文本与期望一致、热力块数≥阈值，再截图；
+
+失败即回退下个 provider。
+
+二、最小改动清单（按顺序做）
+1) 新建无痕上下文 & 进页前清缓存
+// 使用 browserless 时：每次新建 incognito context
+const browser = await getPuppeteerBrowser(); // 你现有封装
+const context = await browser.createIncognitoBrowserContext();
+const page = await context.newPage();
+
+// 进站前清理缓存/存储，避免 lastDataset 覆盖
+await page._client().send('Network.clearBrowserCache');
+await page._client().send('Network.clearBrowserCookies');
+await page.goto('about:blank');
+await page.evaluate(() => {
+  try { localStorage.clear(); sessionStorage.clear(); } catch(_) {}
+});
+
+2) 进入热力图并等待“可交互”
+await page.goto(tradingViewUrl, { waitUntil: 'networkidle0', timeout: 20000 });
+// 等热力图区域或主容器，选择多个候选以增加鲁棒性
+await Promise.any([
+  page.waitForSelector('[aria-label*="heatmap"]', { timeout: 8000 }),
+  page.waitForSelector('[class*="heatmap"], [class*="treemap"]', { timeout: 8000 }),
+  page.waitForSelector('canvas', { timeout: 8000 }),
+  page.waitForSelector('svg', { timeout: 8000 }),
+]).catch(()=>{ /* 忽略，后面还有兜底验证 */ });
+
+3) 读取“数据集按钮”的当前文本，若不是目标就点击切换
+
+TradingView 左上第一个选择器通常是当前集合（如 “S&P 500 stocks”）。我们不依赖脆弱的 class，而是找包含关键字的按钮并展开下拉，选择“Nikkei 225”。
+
+async function forceSelectDataset(page, expectedLabel /* 'Nikkei 225' */) {
+  // 1) 找到集合按钮（包含 “S&P 500” / “Nikkei 225” / “IBEX 35”等字样）
+  const openOk = await page.evaluate((labels) => {
+    const btns = Array.from(document.querySelectorAll('button,[role="button"],[class*="button"]'));
+    const target = btns.find(b => {
+      const t = (b.innerText || '').toLowerCase();
+      return /s&p|nikkei|ibex|nasdaq|dax|ftse|cac/.test(t);
+    });
+    if (target) { (target).click(); return true; }
+    return false;
+  });
+
+  if (!openOk) return false;
+
+  // 2) 在展开的选单里点击目标项（用包含文字匹配，避免 class 抖动）
+  const clicked = await page.evaluate((expected) => {
+    const items = Array.from(document.querySelectorAll('[role="option"],li,div,button,span'));
+    const tExpected = expected.toLowerCase();
+    const node = items.find(n => (n.innerText || '').toLowerCase().includes(tExpected));
+    if (node) { (node).dispatchEvent(new MouseEvent('click', { bubbles: true })); return true; }
+    return false;
+  }, expectedLabel);
+
+  if (!clicked) return false;
+
+  // 3) 等待热力图完成重绘（块数上升/文本变化）
+  await page.waitForTimeout(1200);
+  return true;
+}
+
+4) 强校验当前集合是否已变为目标（文本 + 块数双重）
+async function assertDataset(page, expectedLabel, minBlocks = 12) {
+  const { label, blocks } = await page.evaluate(() => {
+    const btns = Array.from(document.querySelectorAll('button,[role="button"],[class*="button"]'));
+    const labelNode = btns.find(b => {
+      const t = (b.innerText || '').toLowerCase();
+      return /s&p|nikkei|ibex|nasdaq|dax|ftse|cac/.test(t);
+    });
+    const label = labelNode ? (labelNode.innerText || '').trim() : '';
+
+    const blockCount = document.querySelectorAll('[data-symbol],[data-ticker],[role*="graphics"]').length
+      || document.querySelectorAll('canvas,svg').length; // 退而求其次
+
+    return { label, blocks: blockCount };
+  });
+
+  const okLabel = (label || '').toLowerCase().includes(expectedLabel.toLowerCase());
+  const okBlocks = blocks >= minBlocks;
+  return { ok: okLabel && okBlocks, label, blocks };
+}
+
+5) 组合逻辑：不对就重试一次，再不对就换 provider
+const EXPECT = { dataset: 'NIKKEI225', label: 'Nikkei 225' };
+
+const v1 = await assertDataset(page, EXPECT.label);
+if (!v1.ok) {
+  await forceSelectDataset(page, EXPECT.label);
+  await page.waitForTimeout(800);
+  const v2 = await assertDataset(page, EXPECT.label);
+  if (!v2.ok) throw new Error(`dataset_not_applied: got "${v2.label}", blocks=${v2.blocks}`);
+}
+const buffer = await page.screenshot({ type: 'jpeg', quality: 90, fullPage: true });
+
+
+上面这段把**“看见就是证据”**落实了：
+a) 读到集合按钮文字包含 “Nikkei 225”
+b) 热力块数达到阈值（避免只加载了外壳）
+两者成立才截图；否则抛错 → 切换 ScreenshotOne / ApiFlash 路径。
+
+三、非 Browserless 路径的两点增强（可选）
+
+ScreenshotOne：加 block_ads=true&block_cookie_banners=true&delay=3&element=.tv-heatmap, .heatmap，并对截图做轻 OCR，匹配 ['Nikkei', 'トヨタ', 'ソニー'] ≥2 个命中再判定通过。
+
+ApiFlash：同上，至少加 delay=3&full_page=true&wait_for=heatmap（若不支持选择器，就延迟+OCR）。
+
+四、你当前症状的最快“热补丁”
+
+如果你想先立刻让 Telegram 里不再出现 SP500 误图，可以先做两条最小强制：
+
+每次 Browserless 走 incognito + 清缓存（上面第 1 步）；
+
+强制点击集合下拉并选择目标（上面第 3 步），再做第 4 步的断言后截图。
+
+这两条就能把“Nikkei 225 说了不照办”的问题掐死在源头。
+
+五、给 Replit AI 的一句话工单
+
+请在 screenshotProviders.js 的 Browserless 分支内加入：
+① 每次创建 incognito context，并在 goto 前清理 cache/cookies/localStorage/sessionStorage；
+② 访问后通过 forceSelectDataset(page, "Nikkei 225") 强制切换集合；
+③ 用 assertDataset(page, "Nikkei 225", 12) 进行双重验证（文本+块数），验证通过再截图；
+④ 验证失败抛错，触发 provider 回退；
+⑤ 同时把 assertDataset 的 label/blocks 记录到日志，便于诊断；
+⑥ SPX500、IBEX35 等指数复用同一逻辑（label 分别为 "S&P 500 stocks" / "IBEX 35"）。
+
+如果你愿意，我再给你把 IBEX35 / SPX500 的 label 白名单 和 ScreenshotOne 的 element/delay 参数补齐成可直接 paste 的常量表。随后你再发一张 Telegram 成功图，我们继续把 OCR 校验加上去，做到“有图有字双保险”。
