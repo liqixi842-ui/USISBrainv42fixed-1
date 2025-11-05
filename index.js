@@ -824,7 +824,7 @@ function generateFallbackHeatmap(exchangeName) {
   return chart.getUrl();
 }
 
-// 🆕 v4.3: 智能热力图生成（双模式：优先Puppeteer自动化，回退ScreenshotAPI）
+// 🆕 v4.3: 智能热力图生成（纯规则引擎 + ScreenshotAPI）
 async function generateSmartHeatmap(userText) {
   const startTime = Date.now();
   console.log(`\n🧠 [Smart Heatmap] 处理请求: "${userText}"`);
@@ -842,71 +842,9 @@ async function generateSmartHeatmap(userText) {
     throw new Error('无法确定目标指数，请提供更具体的地区或指数信息');
   }
   
-  // 2️⃣ 【优先方案】尝试Puppeteer自动化截图（彻底防串台）
-  const { captureTvHeatmapWithRetry, INDEX_LABEL } = require('./tvHeatmapCapture');
-  const label = INDEX_LABEL[query.index];
-  
-  if (label) {
-    const langMap = {
-      'ES': 'es-ES',
-      'JP': 'ja-JP',
-      'FR': 'fr-FR',
-      'DE': 'de-DE',
-      'CN': 'zh-CN'
-    };
-    const lang = langMap[query.region] || 'en-US';
-    
-    try {
-      console.log(`📸 [Puppeteer优先] 尝试自动化截图: dataset=${query.index}, label="${label}"`);
-      
-      const result = await captureTvHeatmapWithRetry({
-        dataset: query.index,
-        label: label,
-        lang: lang,
-        sector: query.sector !== 'AUTO' ? query.sector : undefined,
-        timeout: 15000
-      }, 1); // 只重试1次，快速失败以便回退
-      
-      const imageBuffer = Buffer.from(result.image_base64, 'base64');
-      const elapsed = Date.now() - startTime;
-      console.log(`✅ [Puppeteer] 自动化截图成功 (${elapsed}ms, ${imageBuffer.length} bytes)`);
-      
-      const meta = {
-        source: 'tradingview_puppeteer',
-        dataset: query.index,
-        expected_region: query.region,
-        expected_label: label,
-        visual_index_label: result.visual_index_label,
-        locale: lang,
-        sector: query.sector,
-        debug: query.debug
-      };
-      
-      // 🚨 关键校验：西班牙IBEX35
-      if (meta.expected_region === 'ES' && meta.dataset !== 'IBEX35') {
-        console.error(`🚨 [防串台失败] expected_region=ES 但 dataset=${meta.dataset}！`);
-        throw new Error(`防串台失败：西班牙地区必须使用IBEX35，当前为${meta.dataset}`);
-      }
-      
-      return {
-        ok: true,
-        buffer: imageBuffer,
-        source: 'tradingview_puppeteer',
-        query: query,
-        meta: meta,
-        elapsed_ms: elapsed,
-        caption: caption,
-        summary: summary
-      };
-    } catch (puppeteerError) {
-      console.warn(`⚠️  [Puppeteer失败] ${puppeteerError.message}`);
-      console.log(`🔄 [降级] 回退到ScreenshotAPI方案...`);
-    }
-  }
-  
-  // 3️⃣ 【回退方案】使用ScreenshotAPI截图
+  // 2️⃣ 使用ScreenshotAPI截图
   if (!SCREENSHOT_API_KEY) {
-    throw new Error('Puppeteer不可用且ScreenshotAPI未配置，无法生成热力图');
+    throw new Error('ScreenshotAPI未配置，无法生成热力图');
   }
   
   try {
@@ -939,8 +877,7 @@ async function generateSmartHeatmap(userText) {
         expected_region: query.region,
         locale: query.locale,
         sector: query.sector,
-        debug: query.debug,
-        note: 'Puppeteer不可用，已降级到ScreenshotAPI'
+        debug: query.debug
       };
       
       // 🚨 关键校验：西班牙IBEX35
@@ -964,7 +901,7 @@ async function generateSmartHeatmap(userText) {
       throw new Error(`ScreenshotAPI失败: ${response.status} - ${errorText.substring(0, 200)}`);
     }
   } catch (error) {
-    console.error(`❌ [Smart Heatmap] 完全失败:`, error.message);
+    console.error(`❌ [Smart Heatmap] 失败:`, error.message);
     throw error;
   }
 }
