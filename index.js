@@ -3,6 +3,14 @@ const express = require("express");
 const fetch = require("node-fetch");
 const { Pool } = require("pg");
 const QuickChart = require('quickchart-js');
+
+// 🆕 智能Orchestrator模块（v3.1）
+const { parseUserIntent } = require("./semanticIntentAgent");
+const { resolveSymbols } = require("./symbolResolver");
+const { fetchMarketData, validateDataForAnalysis } = require("./dataBroker");
+const { buildAnalysisPrompt, buildErrorResponse } = require("./analysisPrompt");
+const { validateResponse, generateCorrectionSuggestion } = require("./complianceGuard");
+
 const app = express();
 app.use(express.json());
 
@@ -2845,20 +2853,53 @@ app.post("/brain/orchestrate", async (req, res) => {
     // 1.5. 生成请求ID（用于日志追踪和成本关联）
     const reqId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     
-    // 1.6. 自动提取symbols（如果未提供）
-    const extractedSymbols = extractSymbols(text);
-    const symbols = providedSymbols.length > 0 ? providedSymbols : extractedSymbols;
-    
     console.log(`\n🧠 [${reqId}] Orchestrator 收到请求:`);
     console.log(`   文本: "${text}"`);
     console.log(`   场景: ${chat_type}`);
     console.log(`   模式: ${mode || '自动检测'}`);
     console.log(`   预算: ${budget || '未指定（使用默认）'}`);
-    console.log(`   股票: ${symbols.join(', ') || '无'}${extractedSymbols.length > 0 ? ' (自动提取)' : ''}`);
     
-    // 2. Intent Understanding (传入symbols用于智能判断图表类型)
-    const intent = understandIntent(text, mode, symbols);
-    console.log(`🎯 意图识别: ${intent.mode} (置信度: ${intent.confidence})`);
+    // 🆕 v3.1: 智能意图理解（AI驱动，非关键词匹配）
+    let semanticIntent = null;
+    let symbols = [];
+    
+    try {
+      // 读取用户历史（用于上下文理解）
+      let userHistory = [];
+      if (user_id) {
+        try {
+          const historyResult = await pool.query(
+            'SELECT request_text, mode, symbols, response_text, timestamp FROM user_memory WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 3',
+            [user_id]
+          );
+          userHistory = historyResult.rows;
+        } catch (error) {
+          console.error(`❌ 读取用户历史失败:`, error.message);
+        }
+      }
+      
+      // Step 1: AI理解用户意图
+      semanticIntent = await parseUserIntent(text, userHistory);
+      
+      // Step 2: 智能解析股票代码
+      const resolvedSymbols = await resolveSymbols(semanticIntent);
+      symbols = providedSymbols.length > 0 ? providedSymbols : resolvedSymbols;
+      
+      console.log(`🎯 意图识别: ${semanticIntent.intentType} → ${semanticIntent.mode} (置信度: ${semanticIntent.confidence.toFixed(2)})`);
+      console.log(`   股票: ${symbols.join(', ') || '无'}`);
+      
+    } catch (error) {
+      console.error(`⚠️  智能意图理解失败，使用降级逻辑:`, error.message);
+      
+      // 降级：使用旧的extractSymbols和understandIntent
+      const extractedSymbols = extractSymbols(text);
+      symbols = providedSymbols.length > 0 ? providedSymbols : extractedSymbols;
+      semanticIntent = null;
+    }
+    
+    // 2. Intent Understanding (兼容旧系统)
+    const intent = semanticIntent || understandIntent(text, mode, symbols);
+    console.log(`🎯 意图模式: ${intent.mode} (置信度: ${intent.confidence})`);
     
     // 2.6. 检测到的Action指令
     if (intent.actions && intent.actions.length > 0) {
@@ -2868,27 +2909,12 @@ app.post("/brain/orchestrate", async (req, res) => {
       });
     }
     
-    // 2.5. 从 PostgreSQL 读取用户历史记忆（最近3条）
-    let userHistory = [];
+    // 2.5. 读取用户偏好（用户历史已在意图理解时读取）
     let userPrefs = {};
     if (user_id) {
-      try {
-        const historyResult = await pool.query(
-          'SELECT request_text, mode, symbols, response_text, timestamp FROM user_memory WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 3',
-          [user_id]
-        );
-        userHistory = historyResult.rows;
-        console.log(`💾 用户历史记忆: 找到${userHistory.length}条记录`);
-        
-        // 从内存中读取用户偏好（旧逻辑保留兼容）
-        userPrefs = Memory.userPrefs[user_id] || {};
-      } catch (error) {
-        console.error(`❌ 读取用户历史失败:`, error.message);
-        userHistory = [];
-        userPrefs = Memory.userPrefs[user_id] || {};
-      }
+      userPrefs = Memory.userPrefs[user_id] || {};
+      console.log(`💾 用户偏好:`, Object.keys(userPrefs).length ? userPrefs : '无');
     }
-    console.log(`💾 用户偏好:`, Object.keys(userPrefs).length ? userPrefs : '无');
     
     // 3. Scene Awareness (考虑置信度和用户偏好)
     const scene = analyzeScene(intent.mode, symbols);
