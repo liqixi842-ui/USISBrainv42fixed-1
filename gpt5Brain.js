@@ -85,7 +85,7 @@ async function generateWithGPT5({
         'Authorization': `Bearer ${OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o', // 暂用gpt-4o，GPT-5正式发布后改为gpt-5-turbo
+        model: 'gpt-4o-mini', // 使用gpt-4o-mini（GPT-5正式发布后改为gpt-5-turbo）
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -116,7 +116,7 @@ async function generateWithGPT5({
     // 3. 返回兼容v3.1的格式（保持与multiAIAnalysis一致）
     return {
       success: true,
-      model: 'gpt-5-single',
+      model: 'gpt-4o-mini',
       text: generatedText,
       usage: {
         prompt_tokens: data.usage?.prompt_tokens || 0,
@@ -133,7 +133,7 @@ async function generateWithGPT5({
     // 降级：返回错误信息
     return {
       success: false,
-      model: 'gpt-5-single',
+      model: 'gpt-4o-mini',
       text: '⚠️ AI分析暂时不可用，请稍后再试。',
       error: error.message,
       elapsed_ms: Date.now() - startTime,
