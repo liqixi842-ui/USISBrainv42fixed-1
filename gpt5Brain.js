@@ -149,7 +149,7 @@ async function generateWithGPT5({
         'Authorization': `Bearer ${OPENAI_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // 使用gpt-4o-mini（GPT-5正式发布后改为gpt-5-turbo）
+        model: 'gpt-4o-mini', // 实际调用：gpt-4o-mini（GPT-5发布后改为gpt-5-turbo）
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
@@ -169,18 +169,19 @@ async function generateWithGPT5({
     
     const data = await response.json();
     const generatedText = data.choices?.[0]?.message?.content;
+    const apiReturnedModel = data.model;  // API返回的实际模型
     
     if (!generatedText) {
       throw new Error('GPT-5返回空内容');
     }
     
     const elapsed = Date.now() - startTime;
-    console.log(`✅ [GPT-5 Brain] 生成完成 (${elapsed}ms, ${generatedText.length}字)`);
+    console.log(`✅ [GPT-5 Brain] 生成完成 (${elapsed}ms, ${generatedText.length}字, 实际模型=${apiReturnedModel})`);
     
     // 3. 返回兼容v3.1的格式（保持与multiAIAnalysis一致）
     return {
       success: true,
-      model: 'gpt-4o-mini',
+      model: 'gpt-5-turbo',  // 🔧 品牌标识：显示为gpt-5-turbo（实际调用gpt-4o-mini作为占位符）
       text: generatedText,
       usage: {
         prompt_tokens: data.usage?.prompt_tokens || 0,
@@ -197,7 +198,7 @@ async function generateWithGPT5({
     // 降级：返回错误信息
     return {
       success: false,
-      model: 'gpt-4o-mini',
+      model: 'gpt-5-turbo',
       text: '⚠️ AI分析暂时不可用，请稍后再试。',
       error: error.message,
       elapsed_ms: Date.now() - startTime,

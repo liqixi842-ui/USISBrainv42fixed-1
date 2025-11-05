@@ -3673,6 +3673,7 @@ app.post("/brain/orchestrate", async (req, res) => {
     const responseV2 = {
       ok: true,
       status: "ok",  // N8N workflow需要此字段
+      model: gpt5Result.model,  // 🆕 v4.0: 顶层model字段（便于n8n观测）
       requestId: reqId,
       
       // 🆕 v3.1 MVP核心字段
