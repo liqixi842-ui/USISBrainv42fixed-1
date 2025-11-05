@@ -978,22 +978,71 @@ const Memory = {
   }
 };
 
-// Symbol Extraction - 从文本中提取股票代码
+// Symbol Extraction - 从文本中提取股票代码（支持交易所后缀和中文名称）
 function extractSymbols(text = "") {
-  // 大小写不敏感匹配（转大写处理）
+  // 西班牙股票中文名称映射（常见蓝筹股）
+  const spanishStockNames = {
+    '电力公司': 'IBE.MC', 'iberdrola': 'IBE.MC',
+    '西班牙电信': 'TEF.MC', 'telefonica': 'TEF.MC',
+    '桑坦德': 'SAN.MC', 'santander': 'SAN.MC',
+    '毕尔巴鄂': 'BBVA.MC', 'bbva': 'BBVA.MC',
+    'inditex': 'ITX.MC', 'zara': 'ITX.MC',
+    'repsol': 'REP.MC', '雷普索尔': 'REP.MC',
+    'naturgy': 'NTGY.MC', '天然气': 'NTGY.MC',
+    'endesa': 'ELE.MC', '恩德萨': 'ELE.MC',
+    'ferrovial': 'FER.MC', '费罗维亚': 'FER.MC',
+    'aena': 'AENA.MC', '机场': 'AENA.MC'
+  };
+  
+  const lowerText = text.toLowerCase();
+  const symbols = [];
+  
+  // 1. 检查中文/英文股票名称
+  for (const [name, symbol] of Object.entries(spanishStockNames)) {
+    if (lowerText.includes(name)) {
+      symbols.push(symbol);
+    }
+  }
+  
+  // 2. 提取带交易所后缀的符号（如 IBE.MC, AAPL, 0700.HK）
   const upperText = text.toUpperCase();
-  const matches = upperText.match(/\b[A-Z]{1,5}\b/g) || [];
+  
+  // 匹配: 字母+数字组合 + 可选的.交易所后缀
+  // 支持: AAPL, IBE.MC, 0700.HK, BABA, SAN.MC
+  const symbolPattern = /\b([A-Z0-9]{1,5}(?:\.[A-Z]{1,3})?)\b/g;
+  const matches = upperText.match(symbolPattern) || [];
   
   // 去重并过滤常见非股票词（扩展黑名单）
   const blacklist = [
     'US', 'USD', 'PM', 'AM', 'ET', 'PT', 'NY', 'LA', 'SF', 
     'AI', 'EV', 'IPO', 'CEO', 'CFO', 'CTO', 'API', 'URL', 'HTML',
     'GDP', 'CPI', 'PPI', 'PMI', 'FED', 'SEC', 'DOW', 'FX', 'VIX',
-    'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HAS', 'HAD', 'HER', 'WAS', 'ONE', 'OUR', 'OUT', 'DAY'
+    'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 
+    'HAS', 'HAD', 'HER', 'WAS', 'ONE', 'OUR', 'OUT', 'DAY', 'GET',
+    'NEW', 'NOW', 'OLD', 'SEE', 'TWO', 'WAY', 'WHO', 'BOY', 'DID',
+    'ITS', 'LET', 'PUT', 'SAY', 'SHE', 'TOO', 'USE', 'MC', 'BCN',
+    'IBEX', 'BME', 'MAD'  // 西班牙交易所/指数代码
   ];
   
-  const filtered = [...new Set(matches)].filter(s => !blacklist.includes(s));
-  return filtered;
+  const filtered = matches.filter(s => {
+    // 🔍 规则1：带交易所后缀的必须保留（如0700.HK, IBE.MC）
+    if (s.includes('.')) return true;
+    
+    // 🔍 规则2：纯数字拒绝（防止年份2025、日期等误报）
+    if (/^\d+$/.test(s)) return false;
+    
+    // 🔍 规则3：必须包含至少一个字母
+    if (!/[A-Z]/.test(s)) return false;
+    
+    // 🔍 规则4：检查黑名单
+    return !blacklist.includes(s);
+  });
+  
+  // 合并所有符号并去重
+  const allSymbols = [...new Set([...symbols, ...filtered])];
+  
+  console.log(`🔍 符号提取: "${text}" → [${allSymbols.join(', ')}]`);
+  return allSymbols;
 }
 
 // Detect Actions - 检测用户需要的"器官"操作（Brain给N8N下指令）
@@ -1185,6 +1234,61 @@ function detectActions(text = "", symbols = []) {
       }
     }
     
+    // 🏭 检测行业板块意图（11个GICS行业）
+    let sector = '';
+    let sectorName = '';
+    
+    // 能源（Energy）
+    if (/能源|energy|石油|oil|天然气|natural gas|repsol|雷普索尔/.test(t)) {
+      sector = 'energy';
+      sectorName = '能源板块';
+    }
+    // 科技（Technology）
+    else if (/科技|technology|tech|软件|software|半导体|semiconductor|芯片/.test(t)) {
+      sector = 'technology';
+      sectorName = '科技板块';
+    }
+    // 金融（Financials）
+    else if (/金融|finance|银行|bank|保险|insurance|桑坦德|santander|bbva/.test(t)) {
+      sector = 'financials';
+      sectorName = '金融板块';
+    }
+    // 医疗（Healthcare）
+    else if (/医疗|healthcare|health|医药|pharma|制药/.test(t)) {
+      sector = 'healthcare';
+      sectorName = '医疗板块';
+    }
+    // 消费（Consumer）
+    else if (/消费|consumer|零售|retail/.test(t)) {
+      sector = 'consumer-cyclical';
+      sectorName = '消费板块';
+    }
+    // 工业（Industrials）
+    else if (/工业|industrial|制造|manufacturing/.test(t)) {
+      sector = 'industrials';
+      sectorName = '工业板块';
+    }
+    // 房地产（Real Estate）
+    else if (/房地产|real estate|地产/.test(t)) {
+      sector = 'real-estate';
+      sectorName = '房地产板块';
+    }
+    // 材料（Materials）
+    else if (/材料|materials|化工|chemical/.test(t)) {
+      sector = 'basic-materials';
+      sectorName = '材料板块';
+    }
+    // 公用事业（Utilities）
+    else if (/公用|utilities|电力|iberdrola|endesa/.test(t)) {
+      sector = 'utilities';
+      sectorName = '公用事业板块';
+    }
+    // 通信（Communication Services）
+    else if (/通信|communication|电信|telecom|telefonica|西班牙电信/.test(t)) {
+      sector = 'communication-services';
+      sectorName = '通信板块';
+    }
+    
     // 🎯 直接使用TradingView官方热力图URL（更稳定，加载更快）
     // 将市场/指数映射到TradingView的dataSource
     const dataSourceMapping = {
@@ -1223,10 +1327,17 @@ function detectActions(text = "", symbols = []) {
       dataSource = 'SPX500'; // 默认S&P 500
     }
     
-    // 使用TradingView官方URL
-    const heatmapUrl = `https://www.tradingview.com/heatmap/stock/?color=change&dataset=${dataSource}&group=sector`;
+    // 构建TradingView官方URL（支持行业筛选）
+    let heatmapUrl = `https://www.tradingview.com/heatmap/stock/?color=change&dataset=${dataSource}&group=sector`;
     
-    console.log(`📊 生成TradingView官方热力图URL: ${heatmapUrl} (dataSource: ${dataSource})`);
+    // 如果指定了行业，添加section参数
+    if (sector) {
+      heatmapUrl += `&section=${sector}`;
+      marketName = `${marketName} - ${sectorName}`;
+      console.log(`🏭 检测到行业板块: ${sectorName} (${sector})`);
+    }
+    
+    console.log(`📊 生成TradingView官方热力图URL: ${heatmapUrl} (dataSource: ${dataSource}${sector ? `, sector: ${sector}` : ''})`);
     
     actions.push({
       type: 'fetch_heatmap',
