@@ -14,10 +14,12 @@ const { Pool } = require("pg");
 const QuickChart = require('quickchart-js');
 const { Telegraf } = require('telegraf');
 
-// 🆕 ScreenshotAPI配置
-const SCREENSHOT_API_KEY = process.env.SCREENSHOT_API_KEY || '';
+// 🆕 ScreenshotAPI配置（自动去除前后空格）
+const SCREENSHOT_API_KEY = (process.env.SCREENSHOT_API_KEY || '').trim();
 if (!SCREENSHOT_API_KEY) {
   console.warn('⚠️  SCREENSHOT_API_KEY 未配置，TradingView截图将降级到QuickChart');
+} else {
+  console.log(`✅ ScreenshotAPI已配置 (Key长度: ${SCREENSHOT_API_KEY.length})`);
 }
 
 // 🆕 智能Orchestrator模块（v3.1）
@@ -845,7 +847,7 @@ async function generateHeatmap({market='US', color='change', size='market_cap'} 
       const targetUrl = `https://www.tradingview.com/heatmap/stock/?color=${color}&dataset=${dataset}&group=sector&blockColor=${color}&blockSize=${size}`;
       console.log(`🌐 ScreenshotAPI: ${targetUrl} (dataset: ${dataset})`);
       
-      // ScreenshotAPI使用GET请求，参数在query string
+      // ScreenshotAPI使用GET请求，参数在query string (v3 endpoint)
       const params = new URLSearchParams({
         url: targetUrl,
         token: SCREENSHOT_API_KEY,
