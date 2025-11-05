@@ -155,7 +155,7 @@ async function generateWithGPT5({
           { role: 'user', content: userPrompt }
         ],
         temperature: 0.3,
-        max_tokens: 1200,
+        max_completion_tokens: 4000,  // 🔧 GPT-5 thinking需要更多token（推理+输出）
         presence_penalty: 0.1,
         frequency_penalty: 0.1
       }),
@@ -194,6 +194,8 @@ async function generateWithGPT5({
     
   } catch (error) {
     console.error(`❌ [GPT-5 Brain] 生成失败:`, error.message);
+    console.error(`❌ [GPT-5 Brain] 错误堆栈:`, error.stack);
+    console.error(`❌ [GPT-5 Brain] OPENAI_API_KEY状态:`, OPENAI_API_KEY ? '已设置' : '未设置');
     
     // 降级：返回错误信息
     return {
@@ -201,6 +203,7 @@ async function generateWithGPT5({
       model: 'gpt-5-mini',
       text: '⚠️ AI分析暂时不可用，请稍后再试。',
       error: error.message,
+      error_detail: error.stack?.split('\n')[0] || 'Unknown',
       elapsed_ms: Date.now() - startTime,
       cost_usd: 0
     };
