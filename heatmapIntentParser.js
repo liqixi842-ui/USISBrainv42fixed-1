@@ -118,36 +118,69 @@ async function extractHeatmapQuery(text) {
       };
     }
     
+    // 🔒 Hotfix: 西班牙IBEX35强制锁定（关键词检测）
+    const debugInfo = { force: [] };
+    const saidSpain = /西班牙|spain|ibex|ibex\s*35/i.test(text);
+    if (saidSpain) {
+      parsed.region = 'ES';
+      parsed.index = 'IBEX35';
+      parsed.confidence = Math.max(parsed.confidence || 0, 0.80);
+      parsed.rationale = (parsed.rationale ? parsed.rationale + ' ; ' : '') + 'force: Spain/IBEX keyword';
+      debugInfo.force.push('spain_keyword_lock');
+      console.log('🔒 [强制锁定] 检测到西班牙关键词 → ES/IBEX35');
+    }
+    
     // 防串台：检查region和index是否匹配
-    const debugInfo = { force: null };
     if (parsed.index !== 'AUTO' && parsed.region !== 'AUTO') {
       const expectedRegion = INDEX_REGION_MAP[parsed.index];
       if (expectedRegion && expectedRegion !== parsed.region) {
         console.log(`⚠️  [防串台] 地区/指数不匹配: ${parsed.region}/${parsed.index} → 强制修正为 ${expectedRegion}/${parsed.index}`);
         parsed.region = expectedRegion;
-        debugInfo.force = 'region guard';
+        debugInfo.force.push('region_guard');
       }
     }
     
-    // 自动填充：如果提供了region但index是AUTO，使用默认映射
-    if (parsed.region !== 'AUTO' && parsed.index === 'AUTO') {
-      const defaultIndex = REGION_INDEX_MAP[parsed.region];
-      if (defaultIndex) {
-        console.log(`📍 [自动映射] ${parsed.region} → ${defaultIndex}`);
-        parsed.index = defaultIndex;
+    // 🆕 修改回退策略：仅当region和index都是AUTO时才回退SPX500
+    if (parsed.region && parsed.region !== 'AUTO') {
+      // region已识别，使用映射表强制对应指数
+      if (!parsed.index || parsed.index === 'AUTO') {
+        const defaultIndex = REGION_INDEX_MAP[parsed.region];
+        if (defaultIndex) {
+          console.log(`📍 [强制映射] ${parsed.region} → ${defaultIndex} (不允许回退SPX500)`);
+          parsed.index = defaultIndex;
+          debugInfo.force.push('region_to_index_mapping');
+        } else {
+          // 映射表中不存在的region，保守使用SPX500
+          console.log(`⚠️  [未知地区] ${parsed.region} 不在映射表中，回退SPX500`);
+          parsed.index = 'SPX500';
+        }
+      }
+    } else {
+      // region是AUTO，检查index
+      if (!parsed.index || parsed.index === 'AUTO') {
+        // 两者都是AUTO，默认美股
+        console.log('📍 [默认] 使用美股 SPX500');
+        parsed.region = 'US';
+        parsed.index = 'SPX500';
+        debugInfo.force.push('default_us');
       }
     }
     
-    // 如果都是AUTO，默认美股SPX500
-    if (parsed.region === 'AUTO' && parsed.index === 'AUTO') {
-      console.log('📍 [默认] 使用美股 SPX500');
-      parsed.region = 'US';
-      parsed.index = 'SPX500';
+    // 🛡️ 西班牙防串台最终校验
+    if (parsed.region === 'ES' && parsed.index !== 'IBEX35') {
+      console.log(`🚨 [防串台] ES地区但index=${parsed.index} → 强制修正为IBEX35`);
+      parsed.index = 'IBEX35';
+      debugInfo.force.push('region_guard: ES->IBEX35');
     }
     
-    // 添加原始文本
+    // 添加原始文本和增强debug信息
     parsed.raw = text;
     parsed.debug = debugInfo;
+    parsed.debug.selected = {
+      region: parsed.region,
+      index: parsed.index,
+      sector: parsed.sector || 'AUTO'
+    };
     
     console.log(`✅ [Heatmap Parser] 解析结果:`, JSON.stringify(parsed, null, 2));
     return parsed;

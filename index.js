@@ -864,11 +864,28 @@ async function generateSmartHeatmap(userText) {
       const elapsed = Date.now() - startTime;
       console.log(`✅ [Smart Heatmap] 成功 (${elapsed}ms, ${imageBuffer.length} bytes)`);
       
+      // 🛡️ 防串台校验：确保数据集与地区匹配
+      const meta = {
+        source: 'tradingview',
+        dataset: query.index,
+        expected_region: query.region,
+        locale: query.locale,
+        sector: query.sector,
+        debug: query.debug
+      };
+      
+      // 🚨 关键校验：西班牙IBEX35
+      if (meta.expected_region === 'ES' && meta.dataset !== 'IBEX35') {
+        console.error(`🚨 [防串台失败] expected_region=ES 但 dataset=${meta.dataset}！`);
+        throw new Error(`防串台失败：西班牙地区必须使用IBEX35，当前为${meta.dataset}`);
+      }
+      
       return {
         ok: true,
         buffer: imageBuffer,
         source: 'tradingview_screenshot',
         query: query,
+        meta: meta,
         elapsed_ms: elapsed,
         caption: caption,
         summary: summary
