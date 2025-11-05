@@ -14,6 +14,12 @@ const { Pool } = require("pg");
 const QuickChart = require('quickchart-js');
 const { Telegraf } = require('telegraf');
 
+// 🆕 ScreenshotAPI配置
+const SCREENSHOT_API_KEY = process.env.SCREENSHOT_API_KEY || '';
+if (!SCREENSHOT_API_KEY) {
+  console.warn('⚠️  SCREENSHOT_API_KEY 未配置，TradingView截图将降级到QuickChart');
+}
+
 // 🆕 智能Orchestrator模块（v3.1）
 const { parseUserIntent } = require("./semanticIntentAgent");
 const { resolveSymbols } = require("./symbolResolver");
@@ -811,6 +817,95 @@ function generateFallbackHeatmap(exchangeName) {
   chart.setBackgroundColor('#f5f5f5');
   
   return chart.getUrl();
+}
+
+// 🆕 主热力图生成函数（优先ScreenshotAPI，降级QuickChart）
+async function generateHeatmap({market='US', color='change', size='market_cap'} = {}) {
+  const startTime = Date.now();
+  console.log(`📸 生成热力图: market=${market}, color=${color}, size=${size}`);
+  
+  // 1️⃣ 优先方案：ScreenshotAPI 截取TradingView
+  if (SCREENSHOT_API_KEY) {
+    try {
+      // 市场映射（复用getHeatmapUrl的逻辑）
+      const marketDatasets = {
+        'US': 'SPX500',
+        'USA': 'SPX500',
+        'United States': 'SPX500',
+        'Europe': 'DAX',
+        'China': 'AllCN',
+        'Spain': 'IBEX35',
+        'Germany': 'DAX',
+        'UK': 'UK100',
+        'France': 'CAC40',
+        'Japan': 'AllJP'
+      };
+      
+      const dataset = marketDatasets[market] || 'SPX500';
+      const targetUrl = `https://www.tradingview.com/heatmap/stock/?color=${color}&dataset=${dataset}&group=sector&blockColor=${color}&blockSize=${size}`;
+      console.log(`🌐 ScreenshotAPI: ${targetUrl} (dataset: ${dataset})`);
+      
+      // ScreenshotAPI使用GET请求，参数在query string
+      const params = new URLSearchParams({
+        url: targetUrl,
+        token: SCREENSHOT_API_KEY,
+        output: 'image',
+        file_type: 'png',
+        wait_for_event: 'load',
+        delay: 5000,
+        full_page: 'false',
+        width: 1200,
+        height: 800,
+        device_scale_factor: 2
+      });
+      
+      const apiUrl = `https://shot.screenshotapi.net/screenshot?${params.toString()}`;
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        timeout: 25000
+      });
+      
+      if (response.ok) {
+        const imageBuffer = await response.buffer();
+        const elapsed = Date.now() - startTime;
+        console.log(`✅ ScreenshotAPI成功 (${elapsed}ms, ${imageBuffer.length} bytes)`);
+        
+        return {
+          ok: true,
+          buffer: imageBuffer,  // Telegram可以直接发送buffer
+          source: 'tradingview_screenshot',
+          elapsed_ms: elapsed,
+          caption: `📊 ${getMarketName(market)} TradingView热力图\n数据集: ${dataset}\n来源: ScreenshotAPI截图\n耗时: ${(elapsed/1000).toFixed(1)}秒`
+        };
+      } else {
+        const errorText = await response.text();
+        console.warn(`⚠️  ScreenshotAPI失败: ${response.status} - ${errorText.substring(0, 200)}`);
+      }
+    } catch (error) {
+      console.warn(`⚠️  ScreenshotAPI错误: ${error.message}`);
+    }
+  }
+  
+  // 2️⃣ 降级方案：QuickChart生成热力图
+  console.log('📉 降级到QuickChart生成热力图...');
+  try {
+    const imageUrl = await generateHeatmapImage(market);
+    const elapsed = Date.now() - startTime;
+    console.log(`✅ QuickChart降级成功 (${elapsed}ms)`);
+    
+    return {
+      ok: true,
+      image_url: imageUrl,  // QuickChart返回URL
+      source: 'quickchart_fallback',
+      fallback_used: true,
+      elapsed_ms: elapsed,
+      caption: `📊 ${getMarketName(market)} 实时热力图\n来源: QuickChart (降级)\n耗时: ${(elapsed/1000).toFixed(1)}秒`
+    };
+  } catch (error) {
+    console.error(`❌ QuickChart也失败了: ${error.message}`);
+    throw new Error('热力图生成失败：所有方案均失败');
+  }
 }
 
 // 🆕 获取热力图URL（用于actions生成）- 已废弃，使用generateHeatmapImage
@@ -4588,6 +4683,27 @@ if (TELEGRAM_TOKEN) {
     ctx.reply('✅ USIS Brain v4.2_fixed 已就绪\n\n直接发送消息即可获取分析，无需n8n！');
   });
   
+  // 🆕 热力图命令处理
+  bot.command('heatmap', async (ctx) => {
+    console.log(`📊 热力图命令触发 (用户: ${ctx.from.id})`);
+    await ctx.reply('🎨 正在生成TradingView热力图...');
+    
+    try {
+      const result = await generateHeatmap({ market: 'US' });
+      
+      if (result.buffer) {
+        // ScreenshotAPI成功，发送buffer
+        await ctx.replyWithPhoto({ source: result.buffer }, { caption: result.caption });
+      } else if (result.image_url) {
+        // QuickChart降级，发送URL
+        await ctx.replyWithPhoto(result.image_url, { caption: result.caption });
+      }
+    } catch (error) {
+      console.error('热力图生成失败:', error);
+      await ctx.reply(`❌ 热力图生成失败: ${error.message}`);
+    }
+  });
+  
   // 处理所有文本消息
   bot.on('text', async (ctx) => {
     const text = ctx.message.text;
@@ -4595,6 +4711,27 @@ if (TELEGRAM_TOKEN) {
     const chatId = ctx.chat.id;
     
     console.log(`📨 Telegram消息: "${text}" (用户: ${userId})`);
+    
+    // 🆕 检测热力图关键词
+    if (text.includes('热力图') || text.toLowerCase().includes('heatmap')) {
+      console.log(`📊 检测到热力图请求`);
+      await ctx.reply('🎨 正在生成TradingView热力图...');
+      
+      try {
+        const result = await generateHeatmap({ market: 'US' });
+        
+        if (result.buffer) {
+          await ctx.replyWithPhoto({ source: result.buffer }, { caption: result.caption });
+        } else if (result.image_url) {
+          await ctx.replyWithPhoto(result.image_url, { caption: result.caption });
+        }
+        return; // 直接返回，不继续分析
+      } catch (error) {
+        console.error('热力图生成失败:', error);
+        await ctx.reply(`❌ 热力图生成失败: ${error.message}\n\n继续为您进行常规分析...`);
+        // 失败后继续常规分析
+      }
+    }
     
     try {
       // 发送"正在思考"提示
