@@ -1185,19 +1185,48 @@ function detectActions(text = "", symbols = []) {
       }
     }
     
-    // 使用自建热力图（快速、稳定、支持所有市场和指数）
-    // 动态获取baseUrl（优先使用REPLIT_DOMAINS环境变量）
-    const replitDomains = process.env.REPLIT_DOMAINS || '';
-    const baseUrl = replitDomains ? `https://${replitDomains.split(',')[0]}` : 'http://localhost:5000';
-    let heatmapUrl = `${baseUrl}/heatmap?market=${market}`;
+    // 🎯 直接使用TradingView官方热力图URL（更稳定，加载更快）
+    // 将市场/指数映射到TradingView的dataSource
+    const dataSourceMapping = {
+      // 美国
+      'usa': 'SPX500',
+      'NASDAQ100': 'NASDAQ100',
+      'NASDAQ': 'NASDAQCOMPOSITE',
+      'DJI': 'DJDJI',
+      'DOW': 'DJDJI',
+      'SP500': 'SPX500',
+      // 西班牙
+      'spain': 'IBEX35',
+      'IBEX': 'IBEX35',
+      'IBEX35': 'IBEX35',
+      // 德国
+      'germany': 'DAX',
+      'DAX': 'DAX',
+      // 英国
+      'uk': 'UK100',
+      'FTSE': 'UK100',
+      // 法国
+      'france': 'CAC40',
+      'CAC40': 'CAC40',
+      // 其他
+      'japan': 'AllJP',
+      'china': 'AllCN',
+      'hongkong': 'AllCN',
+      'australia': 'AllAU',
+      'europe': 'CAC40',
+      'world': 'SPX500'
+    };
     
-    // 如果指定了具体指数，添加index参数
-    if (index) {
-      heatmapUrl += `&index=${index}`;
-      marketName = indexName;
+    // 确定dataSource
+    let dataSource = index ? dataSourceMapping[index.toUpperCase()] : dataSourceMapping[market];
+    if (!dataSource) {
+      dataSource = 'SPX500'; // 默认S&P 500
     }
     
-    console.log(`📊 生成热力图URL: ${heatmapUrl}`);
+    // 使用TradingView官方URL
+    const heatmapUrl = `https://www.tradingview.com/heatmap/stock/?color=change&dataset=${dataSource}&group=sector`;
+    
+    console.log(`📊 生成TradingView官方热力图URL: ${heatmapUrl} (dataSource: ${dataSource})`);
     
     actions.push({
       type: 'fetch_heatmap',
@@ -1205,7 +1234,7 @@ function detectActions(text = "", symbols = []) {
       url: heatmapUrl,
       market: marketName,
       reason: `用户要求${marketName}热力图`,
-      dataSource: index || (market === 'usa' ? 'SPX500' : 'AllUSA')  // 添加dataSource供调试
+      dataSource: dataSource
     });
   }
   
