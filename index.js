@@ -3112,7 +3112,40 @@ app.post("/brain/orchestrate", async (req, res) => {
       });
     }
     
-    // 🎯 特殊处理3：闲聊模式检测（用简短AI回复，不调用6模型）
+    // 🎯 特殊处理3：纯热力图请求（只需要图片，不需要AI分析文字）
+    const isHeatmapOnly = intent.actions && intent.actions.some(a => 
+      (typeof a === 'string' && a === 'fetch_heatmap') || 
+      (typeof a === 'object' && a.type === 'fetch_heatmap')
+    ) && symbols.length === 0;
+    
+    if (isHeatmapOnly) {
+      console.log(`🗺️  检测到纯热力图请求，跳过AI分析`);
+      
+      const exchangeName = intent.exchange || 'Global';
+      const heatmapText = `📊 ${exchangeName} 市场热力图\n\n✅ 正在为您生成热力图，请稍等...`;
+      
+      return res.json({
+        status: "ok",
+        ok: true,
+        final_analysis: heatmapText,
+        final_text: heatmapText,
+        needs_heatmap: true,
+        actions: intent.actions,
+        intent: { mode: intent.mode, lang: intent.lang, confidence: intent.confidence, exchange: intent.exchange },
+        scene: { name: 'Heatmap', depth: 'visual', targetLength: 50 },
+        symbols: [],
+        market_data: null,
+        ai_results: null,
+        synthesis: { success: true, synthesized: false },
+        low_confidence: false,
+        chat_type,
+        user_id,
+        response_time_ms: Date.now() - startTime,
+        debug: { note: 'Pure heatmap request - skipped AI analysis' }
+      });
+    }
+    
+    // 🎯 特殊处理4：闲聊模式检测（用简短AI回复，不调用6模型）
     const marketKeywords = ['分析', '走势', '图', 'K线', '趋势', '价格', '股票', '行情', '盘前', '盘中', '盘后', '热力图', '涨', '跌', '买', '卖', '买点', '卖点', '止损', '止盈', '复盘', '板块', 'chart', 'stock', 'market'];
     const hasMarketKeywords = marketKeywords.some(k => text.toLowerCase().includes(k));
     const isMarketMode = ['premarket', 'intraday', 'postmarket', 'diagnose', 'news', 'heatmap'].includes(intent.mode);
@@ -3506,7 +3539,10 @@ app.post("/brain/orchestrate", async (req, res) => {
       final_analysis: responseText,
       final_text: responseText,
       image_url: imageUrl,
-      needs_heatmap: intent.actions ? intent.actions.some(a => a.type === 'fetch_heatmap') : false,
+      needs_heatmap: intent.actions ? intent.actions.some(a => 
+        (typeof a === 'string' && a === 'fetch_heatmap') || 
+        (typeof a === 'object' && a.type === 'fetch_heatmap')
+      ) : false,
       intent: {
         mode: intent.mode,
         lang: intent.lang,
