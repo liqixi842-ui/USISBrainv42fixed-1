@@ -159,7 +159,7 @@ async function generateWithGPT5({
         ],
         max_completion_tokens: 4000  // 🔧 GPT-5不支持temperature等参数，只保留必需参数
       }),
-      timeout: 30000
+      timeout: 90000  // 🔧 GPT-5推理需要更长时间（90秒）
     });
     
     if (!response.ok) {
