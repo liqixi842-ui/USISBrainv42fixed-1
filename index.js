@@ -1,4 +1,4 @@
-// ====== USIS Brain · v3（多模型 + 投票） ======
+// ====== USIS Brain · v4.0（GPT-5单核 + 实时数据） ======
 const express = require("express");
 const fetch = require("node-fetch");
 const { Pool } = require("pg");
@@ -12,6 +12,7 @@ const { buildAnalysisPrompt, buildErrorResponse } = require("./analysisPrompt");
 const { validateResponse, generateCorrectionSuggestion } = require("./complianceGuard");
 const { fetchAndRankNews, formatNewsOutput } = require("./newsBroker");
 const { formatResponse, validateOutputCompliance, extractStructuredContent } = require("./responseFormatter");
+const { generateWithGPT5, wrapAsV31Synthesis } = require("./gpt5Brain"); // 🆕 v4.0: GPT-5单核引擎
 
 const app = express();
 app.use(express.json());
@@ -3394,27 +3395,24 @@ app.post("/brain/orchestrate", async (req, res) => {
       }
     }
     
-    // 5. Execute Multi-AI Analysis（🆕 v3.1: 传递semanticIntent）
-    const aiResults = await multiAIAnalysis({
+    // 5. 🆕 v4.0: GPT-5单核生成（替换多AI并行投票）
+    console.log(`🧠 [v4.0] 使用GPT-5单核引擎生成分析...`);
+    const gpt5Result = await generateWithGPT5({
+      text,
+      marketData,
+      semanticIntent: semanticIntent,
       mode: intent.mode,
       scene,
       symbols,
-      text,
-      chatType: chat_type,
-      marketData,
-      semanticIntent: semanticIntent  // 🆕 传递语义意图给AI分析
+      rankedNews: rankedNews  // 传递ImpactRank排序后的新闻
     });
     
-    // 6. Intelligent Synthesis
-    const synthesis = await synthesizeAIOutputs(aiResults, {
-      mode: intent.mode,
-      scene,
-      chatType: chat_type,
-      symbols,
-      text
-    });
+    // 6. 兼容v3.1格式（保持后续逻辑不变）
+    const synthesis = wrapAsV31Synthesis(gpt5Result);
     
     let responseText = synthesis.text;
+    
+    console.log(`✅ [v4.0] GPT-5生成完成 (成本: $${gpt5Result.cost_usd?.toFixed(4) || '0.00'})`);
     
     // 🆕 v3.1: 合规守卫 - 验证AI输出的数字是否存在于数据中
     if (marketData && marketData.metadata && symbols.length > 0) {
@@ -3717,7 +3715,12 @@ app.post("/brain/orchestrate", async (req, res) => {
         targetLength: scene.targetLength
       },
       symbols,
-      ai_results: aiResults,
+      ai_results: {  // 🆕 v4.0: GPT-5单核结果（兼容格式）
+        model: gpt5Result.model,
+        success: gpt5Result.success,
+        cost_usd: gpt5Result.cost_usd,
+        elapsed_ms: gpt5Result.elapsed_ms
+      },
       synthesis: {
         success: synthesis.success,
         synthesized: synthesis.synthesized
