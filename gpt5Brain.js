@@ -6,6 +6,9 @@ const { buildAnalysisPrompt } = require('./analysisPrompt');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
+// 🔍 诊断：在模块加载时检查密钥
+console.log(`🔑 [GPT-5 Brain] 模块加载 - OPENAI_API_KEY状态: ${OPENAI_API_KEY ? '已设置(' + OPENAI_API_KEY.slice(0, 7) + '...)' : '❌ 未设置'}`);
+
 /**
  * GPT-5单核分析生成
  * 输入：实时市场数据 + 用户问题
