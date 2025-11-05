@@ -1,4 +1,13 @@
 // ====== USIS Brain · v4.0（GPT-5单核 + 实时数据） ======
+
+// ===== Global hardeners =====
+process.on('unhandledRejection', (err) => {
+  console.error('[FATAL] UnhandledRejection:', err);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] UncaughtException:', err);
+});
+
 const express = require("express");
 const fetch = require("node-fetch");
 const { Pool } = require("pg");
@@ -114,6 +123,14 @@ if (TWITTER_BEARER) {
 // ---- Health
 app.get("/", (_req, res) => res.status(200).send("OK"));
 
+app.get("/health", (_req, res) => {
+  res.json({ status: 'ok', ts: Date.now() });
+});
+
+app.post("/brain/ping", (req, res) => {
+  res.json({ status: 'ok', echo: req.body || {} });
+});
+
 // ---- Feed Receiver: 接收 n8n 发来的行情+新闻数据
 app.post("/brain/feed", (req, res) => {
   try {
@@ -163,8 +180,6 @@ app.post("/mj/imagine", async (req, res) => {
     res.json({ ok: false, error: err.message });
   }
 });
-
-app.get("/health", (_req, res) => res.json({ ok: true, service: "USIS Brain", ts: Date.now() }));
 
 // ---- Image Generation Health Check
 app.get("/img/health", (_req, res) => {
@@ -2940,20 +2955,24 @@ function formatMultipleOutputs(outputs, chatType, scene) {
 
 // Main Orchestrator Endpoint
 app.post("/brain/orchestrate", async (req, res) => {
+  const started = Date.now();
   try {
     const startTime = Date.now();
     
-    // 1. 解析输入
+    // 1. 解析输入（带默认值兜底）
     const {
-      text = "",
+      text = "default",
       chat_type = "private",  // private | group
       mode = null,            // premarket | intraday | postmarket | diagnose | news
       symbols: providedSymbols = [],  // 股票代码（如果提供）
-      user_id = null,
+      user_id = "system",
       lang = "zh",
-      budget = null,          // 🆕 预算控制：low | medium | high | unlimited（N8N传入或环境变量）
+      budget = "low",          // 🆕 预算控制：low | medium | high | unlimited（N8N传入或环境变量）
       userHistory: inputUserHistory = null  // 🔧 从n8n传入的用户历史（可选）
     } = req.body || {};
+    
+    // 记录原始入参，帮助定位
+    console.log('[orchestrate] inbound', { text, chat_type, user_id, mode, budget });
     
     // 🔧 安全初始化 userHistory（防止 ReferenceError）
     let userHistory = inputUserHistory || [];
@@ -3765,13 +3784,19 @@ app.post("/brain/orchestrate", async (req, res) => {
     return res.json(responseV2);
     
   } catch (err) {
-    console.error("❌ Orchestrator 错误:", err);
+    console.error('[orchestrate] error', err);
     Memory.save({ error: String(err), ok: false });
     
-    return res.status(500).json({
+    // 永不抛出，让 n8n 的 Normalize_Brain_Response / IF_ErrorCheck 有稳定语义
+    return res.status(200).json({
+      status: 'error',
       ok: false,
-      error: "orchestrator_failed",
-      detail: String(err)
+      error: String(err && err.message || err),
+      final_text: '⚠️ 系统临时故障，稍后再试',
+      final_analysis: '⚠️ 系统临时故障，稍后再试',
+      actions: [],
+      symbols: [],
+      elapsed_ms: Date.now() - started
     });
   }
 });
