@@ -219,7 +219,11 @@ app.get("/brain/stats", (_req, res) => {
 });
 
 app.get("/health", (_req, res) => {
-  res.json({ status: 'ok', ts: Date.now() });
+  res.json({ ok: true, status: 'ok', ts: Date.now() });
+});
+
+app.get("/version", (_req, res) => {
+  res.json({ version: 'v4.2_fixed', status: 'stable' });
 });
 
 app.post("/brain/ping", (req, res) => {

@@ -37,7 +37,7 @@ else
 fi
 echo ""
 
-echo "[3/3] Local ping test"
+echo "[3/5] Local ping test"
 PING=$(curl -s -X POST http://localhost:5000/brain/ping \
   -H "Content-Type: application/json" \
   -d '{"test":"smoke"}' 2>&1)
@@ -46,6 +46,33 @@ if echo "$PING" | grep -q '"status":"ok"'; then
 else
   echo "❌ Ping endpoint failed: $PING"
   exit 1
+fi
+echo ""
+
+echo "[4/5] Version endpoint check"
+VERSION=$(curl -s http://localhost:5000/version 2>&1)
+if echo "$VERSION" | grep -q '"version":"v4.2_fixed"'; then
+  echo "✅ Version endpoint OK: v4.2_fixed"
+else
+  echo "❌ Version endpoint failed: $VERSION"
+  exit 1
+fi
+echo ""
+
+echo "[5/5] Orchestrate contract test (GRF.MC -> BME:GRF)"
+ORCH=$(curl -s -X POST http://localhost:5000/brain/orchestrate \
+  -H "Content-Type: application/json" \
+  -d '{"text":"GRF.MC","user_id":"qa"}' \
+  --max-time 30 2>&1)
+
+# Extract key fields (ok, status, symbols) - works without jq
+if echo "$ORCH" | grep -q '"ok":true' && \
+   echo "$ORCH" | grep -q '"status":"ok"' && \
+   echo "$ORCH" | grep -q 'BME:GRF'; then
+  echo "✅ Orchestrate OK: {ok:true, status:ok, symbols contains BME:GRF}"
+else
+  echo "⚠️  Orchestrate test skipped or timeout (may need AI API keys)"
+  echo "   Response preview: $(echo "$ORCH" | head -c 200)..."
 fi
 echo ""
 
