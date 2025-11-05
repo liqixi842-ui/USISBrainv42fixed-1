@@ -1,0 +1,84 @@
+（第1页）给 Replit 的执行指令 + 自测清单
+A. 分支与准备
+# 基于 v4.1-stable 开新分支
+git checkout -b feature/v4.2-perf v4.1-stable
+
+# 安装依赖（仅生产依赖）
+npm i --omit=dev
+
+B. 运行时开关（如需调整）
+# 可选：运行时环境变量（不改代码）
+export CACHE_TTL=120                 # 缓存TTL秒
+export SLOW_SOURCE_TIMEOUT_MS=7000   # 外部慢源软超时
+export ENABLE_STREAMING=false        # 流式关闭（默认）
+export FAST_RETURN=false             # 早返回关闭（默认）
+# 主脑&降级策略（延用v4.1）
+export PRIMARY_MODEL=gpt-5-mini
+# export DISABLE_FALLBACK=true       # 仅排障时打开
+
+C. 启动与健康检查
+pkill -f "node index.js" 2>/dev/null || true
+node index.js > /tmp/usis_v42.log 2>&1 & sleep 3
+
+# 健康
+curl -s https://node-js-liqixi842.replit.app/health | jq
+
+# 统计面板（应含 version 字段）
+curl -s https://node-js-liqixi842.replit.app/brain/stats | jq
+
+D. 并行与缓存（Phase 1/2 开关验证）
+# Phase 1：并行+软超时开启后的基本验证
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+  -H "Content-Type: application/json" \
+  -d '{"text":"IBEX 两小时内影响的新闻","user_id":"qa","mode":"news","budget":"medium"}' | jq '.debug'
+
+# Phase 2：开启缓存后（命中率检查）
+export CACHE_TTL=120
+curl -s https://node-js-liqixi842.replit.app/brain/stats | jq '.cache'
+
+
+预期：debug 中出现 sources_timing 字段；/brain/stats 出现 cache_hit_rate（≥60% 为达标目标）。
+
+E. 可选：流式与早返回（Phase 3）
+export ENABLE_STREAMING=true
+export FAST_RETURN=true
+# 再跑一次新闻/分析请求，观察 P50 是否改善
+
+F. 6 条金丝雀（只看 debug 与主指标）
+# 1 IBEX 新闻（2h）
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"两小时内影响 IBEX 的新闻","user_id":"qa"}' | jq '.debug'
+
+# 2 Grifols 仅分析
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"只要分析，不要建议。Grifols 行业影响","user_id":"qa"}' | jq '.debug'
+
+# 3 西班牙热力图 盘中点评
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"西班牙热力图 盘中点评（带图）","user_id":"qa"}' | jq '.debug'
+
+# 4 NVDA 解析 + 新闻 + 建议（24h）
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"NVDA 解析；新闻+建议（24h）","user_id":"qa"}' | jq '.debug'
+
+# 5 台积电 vs TSMC ADR 价差
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"台积电 vs TSMC ADR 价差简要建议","user_id":"qa"}' | jq '.debug'
+
+# 6 AAPL 最近资讯（2h）
+curl -s -X POST https://node-js-liqixi842.replit.app/brain/orchestrate \
+ -H "Content-Type: application/json" \
+ -d '{"text":"AAPL 最近资讯（2h）","user_id":"qa"}' | jq '.debug'
+
+
+每条预期 debug：model_used、fallback_used、latency_ms、sources_timing、cache_hit:boolean（如命中）。
+
+G. 提交与标记
+git add .
+git commit -m "v4.2 perf: parallel fetch + cache + stats(P50/P95) + switches"
+git push origin feature/v4.2-perf
