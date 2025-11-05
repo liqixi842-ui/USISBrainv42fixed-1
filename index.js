@@ -2913,10 +2913,10 @@ app.post("/brain/orchestrate", async (req, res) => {
     // 🆕 v3.1: 智能意图理解（AI驱动，非关键词匹配）
     let semanticIntent = null;
     let symbols = [];
+    let userHistory = [];  // 🔧 提升到外层作用域
     
     try {
       // 读取用户历史（用于上下文理解）
-      let userHistory = [];
       if (user_id) {
         try {
           const historyResult = await pool.query(
