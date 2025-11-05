@@ -570,39 +570,47 @@ app.get("/heatmap", async (req, res) => {
   }
 });
 
-// 🆕 生成真实的热力图图片（QuickChart）
-async function generateHeatmapImage(exchangeName) {
+// 🆕 生成真实的热力图图片（QuickChart + Finnhub实时数据）
+async function generateHeatmapImage(exchangeName = 'US') {
   try {
-    console.log(`📊 生成热力图: ${exchangeName}`);
+    console.log(`📊 生成实时热力图: ${exchangeName}`);
     
-    // 美股主要股票列表（用于演示）
-    const stockSymbols = {
-      'US': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'UNH', 'JNJ', 'V', 'WMT', 'XOM', 'JPM', 'PG', 'MA', 'HD', 'CVX', 'LLY', 'ABBV'],
-      'USA': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'UNH', 'JNJ', 'V', 'WMT', 'XOM', 'JPM', 'PG', 'MA', 'HD', 'CVX', 'LLY', 'ABBV'],
-      'United States': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'UNH', 'JNJ', 'V', 'WMT', 'XOM', 'JPM', 'PG', 'MA', 'HD', 'CVX', 'LLY', 'ABBV']
+    const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
+    if (!FINNHUB_KEY) {
+      console.warn('⚠️ FINNHUB_API_KEY未配置，使用模拟数据');
+      return generateFallbackHeatmap(exchangeName);
+    }
+    
+    // 主要市场股票列表
+    const marketSymbols = {
+      'US': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'JPM', 'V', 'WMT', 'UNH', 'JNJ', 'XOM', 'PG', 'MA', 'HD', 'CVX', 'LLY', 'ABBV', 'BAC'],
+      'USA': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'JPM', 'V', 'WMT', 'UNH', 'JNJ', 'XOM', 'PG', 'MA', 'HD', 'CVX', 'LLY', 'ABBV', 'BAC'],
+      'United States': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'JPM', 'V', 'WMT'],
+      'Europe': ['ASML.AS', 'MC.PA', 'SAP', 'TTE.PA', 'NOVO-B.CO', 'SIE.DE', 'OR.PA', 'ADS.DE', 'AIR.PA'],
+      'China': ['BABA', '9988.HK', 'JD', 'BIDU', 'NIO', 'XPEV', 'LI', 'PDD']
     };
     
-    const symbols = stockSymbols[exchangeName] || stockSymbols['US'];
-    const ALPHA_KEY = process.env.ALPHA_VANTAGE_KEY || 'demo';
+    const symbols = marketSymbols[exchangeName] || marketSymbols['US'];
+    const maxSymbols = 20; // Finnhub免费额度优化
     
-    // 获取实时数据
-    const dataPromises = symbols.slice(0, 12).map(async (symbol) => {
+    // 使用Finnhub API批量获取实时数据
+    console.log(`🔄 从Finnhub获取${symbols.length}个股票的实时数据...`);
+    const dataPromises = symbols.slice(0, maxSymbols).map(async (symbol) => {
       try {
-        const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_KEY}`;
+        const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`;
         const res = await fetch(url);
-        const json = await res.json();
-        const quote = json['Global Quote'];
+        const data = await res.json();
         
-        if (quote && quote['05. price']) {
-          const price = parseFloat(quote['05. price']);
-          const change = parseFloat(quote['09. change']);
-          const changePercent = parseFloat(quote['10. change percent']?.replace('%', '') || '0');
-          
+        if (data && data.c && data.c > 0) {
           return {
-            symbol,
-            price,
-            change: changePercent,
-            value: Math.abs(price * 0.01) // 用于大小
+            symbol: symbol,
+            price: data.c,              // 当前价格
+            change: data.dp || 0,       // 涨跌幅%
+            changeValue: data.d || 0,   // 涨跌值
+            high: data.h || data.c,     // 最高价
+            low: data.l || data.c,      // 最低价
+            volume: data.v || 1,        // 成交量（用于方块大小）
+            timestamp: data.t
           };
         }
       } catch (err) {
@@ -614,98 +622,195 @@ async function generateHeatmapImage(exchangeName) {
     const results = await Promise.all(dataPromises);
     const validData = results.filter(d => d !== null);
     
+    console.log(`✅ 获取到${validData.length}个有效数据`);
+    
     if (validData.length === 0) {
-      console.log('⚠️ 无有效数据，返回静态图表');
-      // 返回静态演示数据
-      validData.push(
-        { symbol: 'AAPL', change: 2.5, value: 10 },
-        { symbol: 'MSFT', change: 1.8, value: 9 },
-        { symbol: 'GOOGL', change: -0.5, value: 8 },
-        { symbol: 'AMZN', change: 3.2, value: 7 },
-        { symbol: 'NVDA', change: 5.1, value: 11 },
-        { symbol: 'META', change: -1.2, value: 6 }
-      );
+      console.warn('⚠️ 无有效数据，使用fallback');
+      return generateFallbackHeatmap(exchangeName);
     }
     
-    // 构建treemap数据
+    // 按市值权重计算方块大小（简化版：使用价格*成交量）
+    const maxValue = Math.max(...validData.map(d => d.price * Math.log(d.volume + 1)));
     const treeData = validData.map(d => ({
-      value: d.value,
+      symbol: d.symbol,
+      price: d.price,
       change: d.change,
-      symbol: d.symbol
+      value: (d.price * Math.log(d.volume + 1)) / maxValue * 100, // 归一化
+      volume: d.volume
     }));
     
-    // Chart.js treemap配置
+    // 动态颜色映射（基于涨跌幅）
+    const getColor = (change) => {
+      if (change >= 3) return '#00C853';      // 深绿 +3%以上
+      if (change >= 1) return '#69F0AE';      // 中绿 +1-3%
+      if (change >= 0) return '#B2FF59';      // 浅绿 0-1%
+      if (change >= -1) return '#FFAB91';     // 浅红 0到-1%
+      if (change >= -3) return '#FF5252';     // 中红 -1到-3%
+      return '#D32F2F';                       // 深红 -3%以下
+    };
+    
+    // QuickChart配置：使用水平条形图模拟热力图
+    const sortedData = treeData.sort((a, b) => b.change - a.change); // 按涨跌幅排序
+    
     const chartConfig = {
-      type: 'treemap',
+      type: 'bar',
       data: {
+        labels: sortedData.map(d => `${d.symbol} $${d.price.toFixed(2)}`),
         datasets: [{
-          tree: treeData,
-          key: 'value',
-          groups: ['symbol'],
-          backgroundColor: (ctx) => {
-            if (!ctx.raw) return 'gray';
-            const change = ctx.raw._data.change;
-            if (change > 2) return 'rgba(34, 197, 94, 0.8)'; // 深绿
-            if (change > 0) return 'rgba(134, 239, 172, 0.8)'; // 浅绿
-            if (change > -2) return 'rgba(252, 165, 165, 0.8)'; // 浅红
-            return 'rgba(239, 68, 68, 0.8)'; // 深红
-          },
-          borderColor: 'white',
-          borderWidth: 2,
-          labels: {
-            display: true,
-            formatter: (ctx) => {
-              if (!ctx.raw) return '';
-              return [ctx.raw._data.symbol, ctx.raw._data.change.toFixed(2) + '%'];
-            },
-            color: 'white',
-            font: { size: 14, weight: 'bold' }
-          }
+          label: '涨跌幅 %',
+          data: sortedData.map(d => d.change),
+          backgroundColor: sortedData.map(d => getColor(d.change)),
+          borderColor: sortedData.map(d => getColor(d.change)),
+          borderWidth: 1
         }]
       },
       options: {
+        indexAxis: 'y', // 水平条形图
+        responsive: true,
         plugins: {
           title: {
             display: true,
-            text: `${exchangeName || 'US'} 股市热力图`,
-            font: { size: 18 }
+            text: `${getMarketName(exchangeName)} 实时热力图 - ${new Date().toLocaleString('zh-CN', {timeZone: 'Asia/Shanghai', hour12: false})}`,
+            font: {
+              size: 18,
+              weight: 'bold'
+            },
+            color: '#1a1a1a'
           },
-          legend: { display: false }
+          legend: {
+            display: false
+          },
+          tooltip: {
+            callbacks: {
+              label: (context) => {
+                const value = context.parsed.x;
+                return `涨跌幅: ${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: '涨跌幅 (%)',
+              font: { size: 14, weight: 'bold' }
+            },
+            grid: {
+              color: 'rgba(0, 0, 0, 0.1)'
+            }
+          },
+          y: {
+            ticks: {
+              font: {
+                size: 10
+              }
+            },
+            grid: {
+              display: false
+            }
+          }
         }
       }
     };
     
-    // 使用QuickChart生成图片
+    // 使用QuickChart生成PNG
     const chart = new QuickChart();
     chart.setConfig(chartConfig);
-    chart.setWidth(800);
-    chart.setHeight(600);
-    chart.setBackgroundColor('white');
+    chart.setWidth(1000);
+    chart.setHeight(700);
+    chart.setBackgroundColor('#f5f5f5');
+    chart.setVersion('3'); // Chart.js v3
     
     const imageUrl = chart.getUrl();
-    console.log(`✅ 热力图生成成功: ${imageUrl.substring(0, 100)}...`);
+    console.log(`✅ 热力图生成成功: ${imageUrl.substring(0, 80)}...`);
     
     return imageUrl;
     
   } catch (error) {
     console.error('❌ 热力图生成失败:', error.message);
-    // 返回fallback静态图
-    const fallbackChart = new QuickChart();
-    fallbackChart.setConfig({
-      type: 'bar',
-      data: {
-        labels: ['数据加载中'],
-        datasets: [{
-          label: '热力图',
-          data: [1],
-          backgroundColor: 'rgba(59, 130, 246, 0.5)'
-        }]
-      }
-    });
-    fallbackChart.setWidth(800);
-    fallbackChart.setHeight(600);
-    return fallbackChart.getUrl();
+    return generateFallbackHeatmap(exchangeName);
   }
+}
+
+// 市场名称映射
+function getMarketName(exchange) {
+  const names = {
+    'US': '美股',
+    'USA': '美股',
+    'United States': '美国市场',
+    'Europe': '欧洲市场',
+    'China': '中国市场'
+  };
+  return names[exchange] || exchange;
+}
+
+// Fallback热力图（模拟数据）
+function generateFallbackHeatmap(exchangeName) {
+  const mockData = [
+    { symbol: 'AAPL', price: 178.50, change: 2.3 },
+    { symbol: 'MSFT', price: 378.80, change: 1.5 },
+    { symbol: 'NVDA', price: 488.50, change: 4.5 },
+    { symbol: 'AMZN', price: 155.30, change: 1.2 },
+    { symbol: 'TSLA', price: 245.80, change: 3.2 },
+    { symbol: 'JPM', price: 156.40, change: 0.5 },
+    { symbol: 'GOOGL', price: 142.20, change: -0.8 },
+    { symbol: 'META', price: 378.20, change: -1.5 }
+  ].sort((a, b) => b.change - a.change);
+  
+  const getColor = (change) => {
+    if (change >= 3) return '#00C853';
+    if (change >= 1) return '#69F0AE';
+    if (change >= 0) return '#B2FF59';
+    if (change >= -1) return '#FFAB91';
+    if (change >= -3) return '#FF5252';
+    return '#D32F2F';
+  };
+  
+  const chartConfig = {
+    type: 'bar',
+    data: {
+      labels: mockData.map(d => `${d.symbol} $${d.price.toFixed(2)}`),
+      datasets: [{
+        label: '涨跌幅 %',
+        data: mockData.map(d => d.change),
+        backgroundColor: mockData.map(d => getColor(d.change)),
+        borderColor: mockData.map(d => getColor(d.change)),
+        borderWidth: 1
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: {
+        title: {
+          display: true,
+          text: `${getMarketName(exchangeName)} 热力图（演示数据）`,
+          font: { size: 16, weight: 'bold' },
+          color: '#1a1a1a'
+        },
+        legend: { display: false }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: '涨跌幅 (%)' },
+          grid: { color: 'rgba(0, 0, 0, 0.1)' }
+        },
+        y: {
+          ticks: { font: { size: 10 } },
+          grid: { display: false }
+        }
+      }
+    }
+  };
+  
+  const chart = new QuickChart();
+  chart.setConfig(chartConfig);
+  chart.setWidth(1000);
+  chart.setHeight(700);
+  chart.setBackgroundColor('#f5f5f5');
+  
+  return chart.getUrl();
 }
 
 // 🆕 获取热力图URL（用于actions生成）- 已废弃，使用generateHeatmapImage
@@ -4417,11 +4522,57 @@ app.get("/heatmap/test", (req, res) => {
   `);
 });
 
+// 🆕 测试热力图API端点
+app.get("/api/test-heatmap", async (req, res) => {
+  try {
+    const market = req.query.market || 'US';
+    console.log(`🧪 测试热力图生成: ${market}`);
+    
+    const imageUrl = await generateHeatmapImage(market);
+    
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>热力图测试 - ${market}</title>
+        <style>
+          body { font-family: Arial; background: #1a1a1a; color: white; padding: 20px; text-align: center; }
+          h1 { color: #4CAF50; }
+          img { max-width: 100%; border: 2px solid #333; border-radius: 8px; margin-top: 20px; }
+          .info { background: #2a2a2a; padding: 15px; border-radius: 8px; margin: 20px auto; max-width: 600px; }
+          a { color: #4CAF50; text-decoration: none; margin: 0 10px; }
+        </style>
+      </head>
+      <body>
+        <h1>📊 热力图测试结果</h1>
+        <div class="info">
+          <p><strong>市场:</strong> ${market}</p>
+          <p><strong>时间:</strong> ${new Date().toLocaleString('zh-CN')}</p>
+          <p><strong>数据源:</strong> Finnhub API + QuickChart</p>
+        </div>
+        <img src="${imageUrl}" alt="Stock Heatmap" />
+        <div style="margin-top: 20px;">
+          <a href="/api/test-heatmap?market=US">美股</a>
+          <a href="/api/test-heatmap?market=Europe">欧洲</a>
+          <a href="/api/test-heatmap?market=China">中国</a>
+        </div>
+        <div style="margin-top: 30px; font-size: 12px; color: #888;">
+          <p>图片URL: <code style="color: #4CAF50;">${imageUrl.substring(0, 100)}...</code></p>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    res.status(500).send(`<h1>错误: ${error.message}</h1>`);
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 USIS Brain v3 online on port ${PORT}`);
   console.log(`📍 Listening on 0.0.0.0:${PORT}`);
   console.log(`🔗 Health check available at http://0.0.0.0:${PORT}/health`);
+  console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
 });
 
 // ====== Telegram Bot (替代n8n) ======
