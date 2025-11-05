@@ -1,10 +1,13 @@
 # Overview
 
-USIS Brain v4.0 is a Real-time Financial Data Brain with GPT-5 language frontend. The system combines proprietary real-time data integration (Finnhub, SEC, FRED) and algorithmic scoring (ImpactRank) with GPT-5's natural language understanding and generation capabilities. It features semantic intent parsing, global stock discovery, anti-hallucination data validation, and delivers dual output styles: a warm conversational tone for private chats and professional commentary for groups. Designed for deployment on Replit's Autoscale platform.
+USIS Brain v4.3 is a Real-time Financial Data Brain with GPT-5 language frontend and intelligent TradingView heatmap generation. The system combines proprietary real-time data integration (Finnhub, SEC, FRED) and algorithmic scoring (ImpactRank) with GPT-5's natural language understanding and generation capabilities. It features semantic intent parsing, global stock discovery, anti-hallucination data validation, pluggable screenshot providers with automatic fallback, and delivers dual output styles: a warm conversational tone for private chats and professional commentary for groups. Designed for deployment on Replit's Autoscale platform.
 
-**Architecture Evolution**: v3.1 (multi-AI voting) → v4.0 (GPT-5 single-core generation)
+**Architecture Evolution**: 
+- v3.1 (multi-AI voting) → v4.0 (GPT-5 single-core generation) 
+- v4.3 (Browserless/ScreenshotAPI/QuickChart three-tier screenshot system)
+
 **Performance**: Response time ↓67% (16s→5s), Cost ↓87% ($0.06→$0.0075)
-**Core IP Preserved**: ImpactRank algorithm, real-time data pipelines, Compliance Guard
+**Core IP Preserved**: ImpactRank algorithm, real-time data pipelines, Compliance Guard, pure rule-based heatmap parser
 
 # User Preferences
 
@@ -65,21 +68,44 @@ Supports built-in multilingual responses (Chinese `zh`, Spanish `es`, English `e
 ## Observability
 Provides console-based request logging with emoji markers and includes confidence scores, model voting details, and timestamps in responses.
 
-## Heatmap System
-Integrates official TradingView stock heatmap widgets, supporting numerous global indices and cryptocurrencies. It intelligently maps user requests to appropriate data sources.
+## Heatmap System (v4.3)
+**Three-Tier Screenshot Architecture**:
+- **Tier 1 - Browserless** (Primary): Cloud-based headless Chromium with Puppeteer script execution. Captures TradingView heatmaps with proper localization headers and dataset URL parameters. ~10s response time.
+- **Tier 2 - ScreenshotAPI** (Fallback): Direct URL screenshot service. Falls back when Browserless unavailable or rate-limited.
+- **Tier 3 - QuickChart** (Final Fallback): Generates simplified treemap visualizations when all screenshot services fail.
+
+**Pure Rule-Based Parser (v4.3)**: 
+- 100% accurate intent parsing without GPT dependencies
+- Supports 21 global indices (SPX500, NIKKEI225, IBEX35, etc.)
+- Multi-language region detection (日本→JP/NIKKEI225, Spain→ES/IBEX35)
+- Sector filtering (technology, healthcare, finance, energy, etc.)
+- Three-layer anti-leakage protection for Spain/IBEX35
+
+**Provider Module** (`screenshotProviders.js`):
+- Pluggable architecture with automatic fallback
+- Error handling and retry logic
+- Comprehensive logging for debugging
+- Environment variable based configuration
 
 # External Dependencies
 
 ## Runtime Dependencies
-- **express**: Web application framework.
-- **node-fetch**: HTTP client for API calls.
+- **express**: Web application framework
+- **node-fetch**: HTTP client for API calls
+- **telegraf**: Telegram Bot framework
+- **pg**: PostgreSQL client
+- **cheerio**: HTML parsing
+- **quickchart-js**: Chart generation (fallback heatmaps)
 
 ## API Integrations
-**Active (v4.0)**:
+**Active (v4.3)**:
 - **OpenAI API**: GPT-5 single-core generation
 - **Finnhub API**: Real-time quotes, news, symbol lookup
 - **FRED API**: Federal Reserve Economic Data (CPI, unemployment, GDP, interest rates)
 - **SEC EDGAR API**: Company financial filings (10-K, 10-Q)
+- **Browserless API**: Cloud headless browser for TradingView screenshot automation
+- **ScreenshotAPI**: Fallback screenshot service
+- **Telegram Bot API**: Direct bot integration for user interactions
 - **Replicate API**: Image generation
 - **Twitter API v2**: Recent tweet search
 
