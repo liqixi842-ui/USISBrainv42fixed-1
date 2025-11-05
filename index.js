@@ -4789,13 +4789,17 @@ if (TELEGRAM_TOKEN) {
   });
   
   // 启动bot（使用polling模式，无需webhook）
+  console.log('🔄 正在调用bot.launch()...');
   bot.launch({
     dropPendingUpdates: true
   }).then(() => {
-    console.log('✅ Telegram Bot启动成功 (polling模式)');
+    console.log('✅ ✅ ✅ Telegram Bot启动成功 (polling模式)');
     console.log('💡 发送消息到bot即可直接使用，无需n8n');
   }).catch(err => {
-    console.error('❌ Telegram Bot启动失败:', err.message);
+    console.error('❌ ❌ ❌ Telegram Bot启动失败:');
+    console.error('错误消息:', err.message);
+    console.error('错误代码:', err.code);
+    console.error('完整错误:', err);
   });
   
   // 优雅退出
