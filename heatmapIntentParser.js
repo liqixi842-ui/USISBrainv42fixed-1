@@ -54,12 +54,123 @@ const SECTOR_CN_NAMES = {
 };
 
 /**
+ * 🔍 轻量级解析（仅规则，不调用LLM）- 用于诊断
+ * @param {string} text - 用户输入文本
+ * @returns {Object} 解析结果
+ */
+function extractHeatmapQueryRulesOnly(text) {
+  const raw = text || "";
+  const norm = raw.normalize("NFKC");
+  const lc = norm.toLowerCase();
+  
+  const parsed = {
+    region: 'AUTO',
+    index: 'AUTO',
+    sector: 'AUTO',
+    confidence: 0.5,
+    rules_fired: [],
+    rationale: '规则引擎解析'
+  };
+  
+  // 🔒 Rule 1: 西班牙/IBEX强制锁（最高优先级）
+  if (/(西班牙|spain|ibex\s*35?|ibex)/iu.test(norm)) {
+    parsed.region = 'ES';
+    parsed.index = 'IBEX35';
+    parsed.confidence = Math.max(parsed.confidence || 0, 0.9);
+    parsed.rules_fired.push('force_lock_ES_IBEX35');
+    parsed.rationale = '检测到西班牙/IBEX关键词';
+  }
+  
+  // Rule 2: 日本检测
+  if (/(日本|japan|日経|nikkei)/iu.test(norm) && !parsed.rules_fired.includes('force_lock_ES_IBEX35')) {
+    parsed.region = 'JP';
+    parsed.index = 'NIKKEI225';
+    parsed.rules_fired.push('detect_japan');
+  }
+  
+  // Rule 3: 美股检测
+  if (/(美股|美国|us\s|nasdaq|纳斯达克|nasdaq100|道指|dow)/iu.test(norm) && parsed.region === 'AUTO') {
+    parsed.region = 'US';
+    if (/nasdaq|纳斯达克|nasdaq100/iu.test(norm)) {
+      parsed.index = 'NASDAQ100';
+      parsed.rules_fired.push('detect_nasdaq100');
+    } else if (/道指|dow/iu.test(norm)) {
+      parsed.index = 'DJ30';
+      parsed.rules_fired.push('detect_dow30');
+    } else {
+      parsed.index = 'SPX500';
+      parsed.rules_fired.push('detect_us_default_spx');
+    }
+  }
+  
+  // Rule 4: 行业检测
+  const sectorMap = {
+    '科技|技术|technology|tech': 'technology',
+    '金融|financials|finance': 'financials',
+    '医疗|healthcare|health': 'healthcare',
+    '能源|energy': 'energy'
+  };
+  for (const [pattern, sector] of Object.entries(sectorMap)) {
+    if (new RegExp(pattern, 'iu').test(norm)) {
+      parsed.sector = sector;
+      parsed.rules_fired.push(`detect_sector_${sector}`);
+      break;
+    }
+  }
+  
+  // Rule 5: 回退规则（修正版）
+  if (parsed.region && parsed.region !== 'AUTO') {
+    if (!parsed.index || parsed.index === 'AUTO') {
+      const defaultIndex = REGION_INDEX_MAP[parsed.region];
+      if (defaultIndex) {
+        parsed.index = defaultIndex;
+        parsed.rules_fired.push('map_region_to_default_index');
+      } else {
+        parsed.index = 'SPX500';
+        parsed.rules_fired.push('fallback_unknown_region');
+      }
+    }
+  } else {
+    if (!parsed.index || parsed.index === 'AUTO') {
+      parsed.index = 'SPX500';
+      parsed.rules_fired.push('fallback_SPX500_only_when_no_region_and_no_index');
+    }
+  }
+  
+  // Rule 6: 防串台校验
+  if (parsed.region === 'ES' && parsed.index !== 'IBEX35') {
+    parsed.rules_fired.push('region_guard_fix_ES_to_IBEX35');
+    parsed.index = 'IBEX35';
+  }
+  
+  return {
+    text: raw,
+    region: parsed.region,
+    index: parsed.index,
+    sector: parsed.sector,
+    confidence: parsed.confidence,
+    rules_fired: parsed.rules_fired,
+    rationale: parsed.rationale
+  };
+}
+
+/**
  * 使用GPT-5解析热力图查询意图
  * @param {string} text - 用户输入文本
+ * @param {boolean} debugMode - 是否启用调试模式
  * @returns {Promise<Object>} 结构化查询结果
  */
-async function extractHeatmapQuery(text) {
-  console.log(`\n🎨 [Heatmap Parser] 解析热力图请求: "${text}"`);
+async function extractHeatmapQuery(text, debugMode = false) {
+  console.log(`\n🎨 [Heatmap Parser] 解析热力图请求: "${text}"${debugMode ? ' (DEBUG模式)' : ''}`);
+  
+  // 规范化文本
+  const raw = text || "";
+  const norm = raw.normalize("NFKC");
+  const lc = norm.toLowerCase();
+  
+  // 检测是否包含 #dbg
+  const hasDebugFlag = /#dbg/i.test(text);
+  const actualDebugMode = debugMode || hasDebugFlag;
   
   const prompt = `你是一个金融市场热力图查询解析器。请将用户的自然语言请求解析为结构化JSON。
 
@@ -118,14 +229,20 @@ async function extractHeatmapQuery(text) {
       };
     }
     
-    // 🔒 Hotfix: 西班牙IBEX35强制锁定（关键词检测）
+    // 🆕 添加 rules_fired 追踪
+    if (!parsed.rules_fired) {
+      parsed.rules_fired = [];
+    }
+    
+    // 🔒 Hotfix: 西班牙IBEX35强制锁定（关键词检测）- 最高优先级
     const debugInfo = { force: [] };
-    const saidSpain = /西班牙|spain|ibex|ibex\s*35/i.test(text);
+    const saidSpain = /(西班牙|spain|ibex\s*35?|ibex)/iu.test(norm);
     if (saidSpain) {
       parsed.region = 'ES';
       parsed.index = 'IBEX35';
-      parsed.confidence = Math.max(parsed.confidence || 0, 0.80);
+      parsed.confidence = Math.max(parsed.confidence || 0, 0.90);
       parsed.rationale = (parsed.rationale ? parsed.rationale + ' ; ' : '') + 'force: Spain/IBEX keyword';
+      parsed.rules_fired.push('force_lock_ES_IBEX35');
       debugInfo.force.push('spain_keyword_lock');
       console.log('🔒 [强制锁定] 检测到西班牙关键词 → ES/IBEX35');
     }
@@ -136,6 +253,7 @@ async function extractHeatmapQuery(text) {
       if (expectedRegion && expectedRegion !== parsed.region) {
         console.log(`⚠️  [防串台] 地区/指数不匹配: ${parsed.region}/${parsed.index} → 强制修正为 ${expectedRegion}/${parsed.index}`);
         parsed.region = expectedRegion;
+        parsed.rules_fired.push('region_guard');
         debugInfo.force.push('region_guard');
       }
     }
@@ -148,11 +266,13 @@ async function extractHeatmapQuery(text) {
         if (defaultIndex) {
           console.log(`📍 [强制映射] ${parsed.region} → ${defaultIndex} (不允许回退SPX500)`);
           parsed.index = defaultIndex;
+          parsed.rules_fired.push('map_region_to_default_index');
           debugInfo.force.push('region_to_index_mapping');
         } else {
           // 映射表中不存在的region，保守使用SPX500
           console.log(`⚠️  [未知地区] ${parsed.region} 不在映射表中，回退SPX500`);
           parsed.index = 'SPX500';
+          parsed.rules_fired.push('fallback_unknown_region');
         }
       }
     } else {
@@ -162,6 +282,7 @@ async function extractHeatmapQuery(text) {
         console.log('📍 [默认] 使用美股 SPX500');
         parsed.region = 'US';
         parsed.index = 'SPX500';
+        parsed.rules_fired.push('fallback_SPX500_only_when_no_region_and_no_index');
         debugInfo.force.push('default_us');
       }
     }
@@ -170,6 +291,7 @@ async function extractHeatmapQuery(text) {
     if (parsed.region === 'ES' && parsed.index !== 'IBEX35') {
       console.log(`🚨 [防串台] ES地区但index=${parsed.index} → 强制修正为IBEX35`);
       parsed.index = 'IBEX35';
+      parsed.rules_fired.push('region_guard_fix_ES_to_IBEX35');
       debugInfo.force.push('region_guard: ES->IBEX35');
     }
     
@@ -331,11 +453,56 @@ function generateCaption(query) {
   return caption;
 }
 
+/**
+ * 🔍 生成诊断报告（含自检样例）
+ * @param {string} text - 用户输入文本
+ * @param {Object} parsed - 解析结果
+ * @returns {Object} 诊断报告
+ */
+function generateDebugReport(text, parsed) {
+  const raw = text || "";
+  const norm = raw.normalize("NFKC");
+  const lc = norm.toLowerCase();
+  
+  const url = buildTradingViewURL(parsed);
+  
+  // 自检样例
+  const samples = [
+    "西班牙热力图 带分析 #dbg",
+    "Spain IBEX heatmap #dbg",
+    "日本大盘热力图 #dbg",
+    "美股的科技股的热力图 #dbg"
+  ];
+  
+  const selftest = samples.map(sample => extractHeatmapQueryRulesOnly(sample));
+  
+  return {
+    input: { raw, norm, lc },
+    parsed: {
+      region: parsed.region,
+      index: parsed.index,
+      sector: parsed.sector || 'AUTO',
+      confidence: parsed.confidence,
+      rules_fired: parsed.rules_fired || [],
+      rationale: parsed.rationale || ''
+    },
+    action_preview: {
+      provider: 'screenshotapi',
+      url,
+      expected_region: parsed.region,
+      dataset: parsed.index
+    },
+    selftest
+  };
+}
+
 module.exports = {
   extractHeatmapQuery,
+  extractHeatmapQueryRulesOnly,
   buildTradingViewURL,
   generateHeatmapSummary,
   generateCaption,
+  generateDebugReport,
   SECTOR_CN_NAMES,
   REGION_INDEX_MAP,
   INDEX_REGION_MAP

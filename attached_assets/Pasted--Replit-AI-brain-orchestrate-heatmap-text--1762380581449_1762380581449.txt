@@ -1,0 +1,85 @@
+一次性粘贴给 Replit AI：开启热力图诊断并输出报告
+目标：为 /brain/orchestrate 的 heatmap 流程添加【可审计诊断报告】。
+要求：不改现有接口协议；当 text 中含有 "#dbg" 时，返回对象增加 debug_report（详单）、并打印四条内测样例的检测结果。
+
+实现要点：
+1) 规范化文本
+   const raw = input.text || "";
+   const norm = raw.normalize("NFKC");
+   const lc = norm.toLowerCase();
+
+2) 实体解析（保持你现有逻辑即可），但在对象里记录：
+   parsed = {
+     region,        // US/ES/JP/...
+     index,         // SPX500/IBEX35/NIKKEI225/...
+     sector,        // technology/... or AUTO
+     confidence,    // 0~1
+     rules_fired: [], // 字符串数组，依次 push 命中的规则名
+     rationale      // 简短说明
+   };
+
+3) “西班牙/IBEX”强制锁（必须在所有回退之前执行）
+   if (/(西班牙|spain|ibex\s*35?|ibex)/iu.test(norm)) {
+     parsed.region = "ES";
+     parsed.index = "IBEX35";
+     parsed.confidence = Math.max(parsed.confidence||0, 0.9);
+     parsed.rules_fired.push("force_lock_ES_IBEX35");
+   }
+
+4) 回退规则（修正）
+   // 仅当 region===AUTO 且 index===AUTO 时，才允许回退到 SPX500
+   if (parsed.region && parsed.region !== "AUTO") {
+     const MAP = {US:"SPX500", JP:"NIKKEI225", ES:"IBEX35", DE:"DAX40", FR:"CAC40", UK:"FTSE100", EU:"EURO50", HK:"HSI", CN:"CSI300", IN:"NIFTY50"};
+     if (!parsed.index || parsed.index === "AUTO") {
+       parsed.index = MAP[parsed.region] || "SPX500";
+       parsed.rules_fired.push("map_region_to_default_index");
+     }
+   } else {
+     if (!parsed.index || parsed.index === "AUTO") {
+       parsed.index = "SPX500";
+       parsed.rules_fired.push("fallback_SPX500_only_when_no_region_and_no_index");
+     }
+   }
+
+5) 防串台校验（动作编排前）
+   if (parsed.region === "ES" && parsed.index !== "IBEX35") {
+     parsed.rules_fired.push("region_guard_fix_ES_to_IBEX35");
+     parsed.index = "IBEX35";
+   }
+
+6) 仅走 Screenshot 动作，构造 URL
+   const url = `https://www.tradingview.com/heatmap/stock/?color=change&dataset=${parsed.index}&group=sector&blockSize=market_cap&tileColor=change`;
+
+7) 若文本包含 "#dbg"（不区分大小写），追加 debug_report：
+   response.debug_report = {
+     input: { raw, norm, lc },
+     parsed,
+     action_preview: {
+       provider: "screenshotapi",
+       url,
+       expected_region: parsed.region,
+       dataset: parsed.index
+     }
+   };
+
+8) 自检样例（仅当包含 "#dbg" 时附加）
+   const samples = [
+     "西班牙热力图 带分析 #dbg",
+     "Spain IBEX heatmap #dbg",
+     "日本大盘热力图 #dbg",
+     "美股的科技股的热力图 #dbg"
+   ];
+   response.debug_report.selftest = samples.map(s => run_extract_only(s)); 
+   // run_extract_only 返回 {text, region, index, sector, rules_fired}
+
+9) 返回字段（保持现有）：
+   - intent: "heatmap"
+   - actions: 仅一个 get_heatmap_screenshot（provider:screenshotapi, url:上面生成的）
+   - caption/analysis 照旧
+   - 追加 debug_report（仅当 #dbg 存在）
+
+请只改动与解析与动作编排相关的文件。提交后确保：
+- 输入 "西班牙热力图 带分析 #dbg" → debug_report.action_preview.dataset === "IBEX35"
+- 输入 "Spain IBEX heatmap #dbg" → 同上
+- 输入 "日本大盘热力图 #dbg" → dataset === "NIKKEI225"
+- 输入 "美股的科技股的热力图 #dbg" → dataset === "SPX500"，sector≈technology（若你有 sector 字段）

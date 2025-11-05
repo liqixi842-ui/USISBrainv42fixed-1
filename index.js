@@ -33,7 +33,7 @@ const { formatResponse, validateOutputCompliance, extractStructuredContent } = r
 const { generateWithGPT5, wrapAsV31Synthesis } = require("./gpt5Brain"); // 🆕 v4.0: GPT-5单核引擎
 
 // 🆕 v4.3: 智能热力图解析器
-const { extractHeatmapQuery, buildTradingViewURL, generateHeatmapSummary, generateCaption } = require("./heatmapIntentParser");
+const { extractHeatmapQuery, buildTradingViewURL, generateHeatmapSummary, generateCaption, generateDebugReport } = require("./heatmapIntentParser");
 
 const app = express();
 app.use(express.json());
@@ -4795,15 +4795,56 @@ if (TELEGRAM_TOKEN) {
   // 处理热力图请求
   const handleHeatmapRequest = async (chatId, text) => {
     console.log(`🎨 [Heatmap Handler] 处理请求: "${text}"`);
-    await sendMessage(chatId, '🎨 正在生成TradingView热力图...');
+    
+    // 🔍 检测诊断模式
+    const hasDebugFlag = /#dbg/i.test(text);
+    
+    if (hasDebugFlag) {
+      console.log('🔍 [DEBUG模式] 启用诊断报告');
+    }
+    
+    await sendMessage(chatId, `🎨 正在生成TradingView热力图...${hasDebugFlag ? '\n🔍 诊断模式已启用' : ''}`);
     
     try {
       const result = await generateSmartHeatmap(text);
       
       if (result.buffer) {
         await sendPhoto(chatId, result.buffer, result.caption);
+        
         // 发送详细分析
         await sendMessage(chatId, result.summary);
+        
+        // 🔍 如果是诊断模式，发送debug报告
+        if (hasDebugFlag && result.query) {
+          const debugReport = generateDebugReport(text, result.query);
+          const reportText = `
+🔍 诊断报告
+━━━━━━━━━━━━━━━━━━━━
+📥 输入:
+原文: ${debugReport.input.raw}
+规范化: ${debugReport.input.norm}
+
+📊 解析结果:
+地区: ${debugReport.parsed.region}
+指数: ${debugReport.parsed.index}
+板块: ${debugReport.parsed.sector}
+置信度: ${debugReport.parsed.confidence}
+
+🎯 触发规则:
+${debugReport.parsed.rules_fired.join('\n')}
+
+🌐 动作预览:
+数据集: ${debugReport.action_preview.dataset}
+期望地区: ${debugReport.action_preview.expected_region}
+URL: ${debugReport.action_preview.url.substring(0, 80)}...
+
+🧪 自检样例:
+${debugReport.selftest.map((t, i) => `${i+1}. ${t.text.replace(/#dbg/i, '')}\n   → ${t.index} (${t.region}), rules: ${t.rules_fired.slice(0,2).join(', ')}`).join('\n')}
+━━━━━━━━━━━━━━━━━━━━
+          `.trim();
+          await sendMessage(chatId, reportText);
+        }
+        
         console.log(`✅ [Heatmap Handler] 成功发送 (${result.query.index}, ${result.query.sector})`);
       } else {
         throw new Error('未生成图片buffer');
