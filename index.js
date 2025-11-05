@@ -32,6 +32,9 @@ const { fetchAndRankNews, formatNewsOutput } = require("./newsBroker");
 const { formatResponse, validateOutputCompliance, extractStructuredContent } = require("./responseFormatter");
 const { generateWithGPT5, wrapAsV31Synthesis } = require("./gpt5Brain"); // 🆕 v4.0: GPT-5单核引擎
 
+// 🆕 v4.3: 智能热力图解析器
+const { extractHeatmapQuery, buildTradingViewURL, generateHeatmapSummary, generateCaption } = require("./heatmapIntentParser");
+
 const app = express();
 app.use(express.json());
 
@@ -821,7 +824,66 @@ function generateFallbackHeatmap(exchangeName) {
   return chart.getUrl();
 }
 
-// 🆕 主热力图生成函数（优先ScreenshotAPI，降级QuickChart）
+// 🆕 v4.3: 智能热力图生成（LLM解析 + ScreenshotAPI）
+async function generateSmartHeatmap(userText) {
+  const startTime = Date.now();
+  console.log(`\n🧠 [Smart Heatmap] 处理请求: "${userText}"`);
+  
+  // 1️⃣ 智能解析用户意图
+  const query = await extractHeatmapQuery(userText);
+  const tradingViewUrl = buildTradingViewURL(query);
+  const caption = generateCaption(query);
+  const summary = generateHeatmapSummary(query);
+  
+  // 2️⃣ 使用ScreenshotAPI截图（禁用QuickChart降级）
+  if (!SCREENSHOT_API_KEY) {
+    throw new Error('ScreenshotAPI未配置，无法生成TradingView热力图');
+  }
+  
+  try {
+    console.log(`📸 [ScreenshotAPI] 截图: ${tradingViewUrl}`);
+    
+    const params = new URLSearchParams({
+      url: tradingViewUrl,
+      token: SCREENSHOT_API_KEY,
+      output: 'image',
+      file_type: 'png',
+      wait_for_event: 'load',
+      delay: 5000,
+      full_page: 'false',
+      width: 1200,
+      height: 800,
+      device_scale_factor: 2
+    });
+    
+    const apiUrl = `https://shot.screenshotapi.net/screenshot?${params.toString()}`;
+    const response = await fetch(apiUrl, { method: 'GET' });
+    
+    if (response.ok) {
+      const imageBuffer = await response.buffer();
+      const elapsed = Date.now() - startTime;
+      console.log(`✅ [Smart Heatmap] 成功 (${elapsed}ms, ${imageBuffer.length} bytes)`);
+      
+      return {
+        ok: true,
+        buffer: imageBuffer,
+        source: 'tradingview_screenshot',
+        query: query,
+        elapsed_ms: elapsed,
+        caption: caption,
+        summary: summary
+      };
+    } else {
+      const errorText = await response.text();
+      throw new Error(`ScreenshotAPI失败: ${response.status} - ${errorText.substring(0, 200)}`);
+    }
+  } catch (error) {
+    console.error(`❌ [Smart Heatmap] 失败:`, error.message);
+    throw error;
+  }
+}
+
+// 🆕 主热力图生成函数（优先ScreenshotAPI，降级QuickChart）- 已废弃，使用generateSmartHeatmap
 async function generateHeatmap({market='US', color='change', size='market_cap'} = {}) {
   const startTime = Date.now();
   console.log(`📸 生成热力图: market=${market}, color=${color}, size=${size}`);
@@ -4672,139 +4734,139 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
 });
 
-// ====== Telegram Bot (替代n8n) ======
+// ====== Telegram Bot v4.3 (手动Polling + 智能热力图) ======
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
 if (TELEGRAM_TOKEN) {
-  console.log('🤖 启动Telegram Bot...');
+  console.log('🤖 启动Telegram Bot (手动polling模式)...');
   
-  const bot = new Telegraf(TELEGRAM_TOKEN);
+  let updateOffset = 0;
   
-  // 启动命令
-  bot.start((ctx) => {
-    ctx.reply('✅ USIS Brain v4.2_fixed 已就绪\n\n直接发送消息即可获取分析，无需n8n！');
-  });
+  // 热力图检测函数
+  const isHeatmapRequest = (text) => {
+    return text.includes('热力图') || 
+           text.toLowerCase().includes('heatmap') || 
+           text === '/heatmap';
+  };
   
-  // 🆕 热力图命令处理
-  bot.command('heatmap', async (ctx) => {
-    console.log(`📊 热力图命令触发 (用户: ${ctx.from.id})`);
-    await ctx.reply('🎨 正在生成TradingView热力图...');
+  // 发送Telegram消息
+  const sendMessage = async (chatId, text) => {
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text })
+    });
+  };
+  
+  // 发送Telegram图片
+  const sendPhoto = async (chatId, buffer, caption) => {
+    const FormData = require('form-data');
+    const form = new FormData();
+    form.append('chat_id', chatId);
+    form.append('photo', buffer, { filename: 'heatmap.png' });
+    form.append('caption', caption);
+    
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendPhoto`;
+    await fetch(url, {
+      method: 'POST',
+      body: form,
+      headers: form.getHeaders()
+    });
+  };
+  
+  // 处理热力图请求
+  const handleHeatmapRequest = async (chatId, text) => {
+    console.log(`🎨 [Heatmap Handler] 处理请求: "${text}"`);
+    await sendMessage(chatId, '🎨 正在生成TradingView热力图...');
     
     try {
-      const result = await generateHeatmap({ market: 'US' });
+      const result = await generateSmartHeatmap(text);
       
       if (result.buffer) {
-        // ScreenshotAPI成功，发送buffer
-        await ctx.replyWithPhoto({ source: result.buffer }, { caption: result.caption });
-      } else if (result.image_url) {
-        // QuickChart降级，发送URL
-        await ctx.replyWithPhoto(result.image_url, { caption: result.caption });
-      }
-    } catch (error) {
-      console.error('热力图生成失败:', error);
-      await ctx.reply(`❌ 热力图生成失败: ${error.message}`);
-    }
-  });
-  
-  // 处理所有文本消息
-  bot.on('text', async (ctx) => {
-    const text = ctx.message.text;
-    const userId = String(ctx.from.id);
-    const chatId = ctx.chat.id;
-    
-    console.log(`📨 Telegram消息: "${text}" (用户: ${userId})`);
-    
-    // 🆕 检测热力图关键词
-    if (text.includes('热力图') || text.toLowerCase().includes('heatmap')) {
-      console.log(`📊 检测到热力图请求`);
-      await ctx.reply('🎨 正在生成TradingView热力图...');
-      
-      try {
-        const result = await generateHeatmap({ market: 'US' });
-        
-        if (result.buffer) {
-          await ctx.replyWithPhoto({ source: result.buffer }, { caption: result.caption });
-        } else if (result.image_url) {
-          await ctx.replyWithPhoto(result.image_url, { caption: result.caption });
-        }
-        return; // 直接返回，不继续分析
-      } catch (error) {
-        console.error('热力图生成失败:', error);
-        await ctx.reply(`❌ 热力图生成失败: ${error.message}\n\n继续为您进行常规分析...`);
-        // 失败后继续常规分析
-      }
-    }
-    
-    try {
-      // 发送"正在思考"提示
-      await ctx.reply('🧠 正在分析...');
-      
-      // 调用orchestrate逻辑（复用HTTP endpoint的逻辑）
-      const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: text,
-          user_id: userId,
-          chat_type: ctx.chat.type,
-          mode: 'auto',
-          budget: 'low'
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (!data.ok) {
-        await ctx.reply('❌ 系统错误: ' + (data.error || '未知错误'));
-        return;
-      }
-      
-      // 提取最终文本
-      const finalText = data.final_text || data.final_analysis || '无分析结果';
-      
-      // 检查是否有图表需要发送
-      const actions = data.actions || [];
-      const chartAction = actions.find(a => a.type === 'send_chart' || a.type === 'fetch_heatmap');
-      
-      if (chartAction && chartAction.url) {
-        // 发送带图片的消息
-        try {
-          await ctx.replyWithPhoto(chartAction.url, {
-            caption: finalText.slice(0, 1024) // Telegram caption限制
-          });
-        } catch (photoErr) {
-          console.error('发送图片失败:', photoErr.message);
-          // 降级：只发文本
-          await ctx.reply(finalText);
-        }
+        await sendPhoto(chatId, result.buffer, result.caption);
+        // 发送详细分析
+        await sendMessage(chatId, result.summary);
+        console.log(`✅ [Heatmap Handler] 成功发送 (${result.query.index}, ${result.query.sector})`);
       } else {
-        // 只发文本
-        await ctx.reply(finalText);
+        throw new Error('未生成图片buffer');
       }
-      
     } catch (error) {
-      console.error('Telegram处理错误:', error);
-      await ctx.reply('⚠️ 处理失败: ' + error.message);
+      console.error(`❌ [Heatmap Handler] 失败:`, error.message);
+      await sendMessage(chatId, `❌ 热力图生成失败: ${error.message}`);
     }
-  });
+  };
   
-  // 启动bot（使用polling模式，无需webhook）
-  console.log('🔄 正在调用bot.launch()...');
-  bot.launch({
-    dropPendingUpdates: true
-  }).then(() => {
-    console.log('✅ ✅ ✅ Telegram Bot启动成功 (polling模式)');
-    console.log('💡 发送消息到bot即可直接使用，无需n8n');
-  }).catch(err => {
-    console.error('❌ ❌ ❌ Telegram Bot启动失败:');
-    console.error('错误消息:', err.message);
-    console.error('错误代码:', err.code);
-    console.error('完整错误:', err);
-  });
+  // 手动polling循环（绕过bot.launch()卡住问题）
+  const manualPolling = async () => {
+    try {
+      const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates?offset=${updateOffset}&timeout=30`;
+      const res = await fetch(url);
+      const data = await res.json();
+      
+      if (data.ok && data.result.length > 0) {
+        for (const update of data.result) {
+          updateOffset = update.update_id + 1;
+          
+          if (update.message && update.message.text) {
+            const text = update.message.text;
+            const chatId = update.message.chat.id;
+            const userId = String(update.message.from.id);
+            
+            console.log(`\n📨 [Telegram] 收到消息: "${text}" (用户: ${userId}, chat: ${chatId})`);
+            
+            // 检测热力图请求
+            if (isHeatmapRequest(text)) {
+              await handleHeatmapRequest(chatId, text);
+              continue; // 不继续常规分析
+            }
+            
+            // 常规分析流程
+            try {
+              await sendMessage(chatId, '🧠 正在分析...');
+              
+              const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  text: text,
+                  user_id: userId,
+                  chat_type: update.message.chat.type,
+                  mode: 'auto',
+                  budget: 'low'
+                })
+              });
+              
+              const data = await response.json();
+              
+              if (!data.ok) {
+                await sendMessage(chatId, '❌ 系统错误: ' + (data.error || '未知错误'));
+                continue;
+              }
+              
+              const finalText = data.final_text || data.final_analysis || '无分析结果';
+              await sendMessage(chatId, finalText);
+              
+            } catch (error) {
+              console.error('❌ [Telegram] 处理错误:', error.message);
+              await sendMessage(chatId, '⚠️ 处理失败: ' + error.message);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('⚠️  [Telegram Polling] 错误:', error.message);
+    }
+    
+    // 立即继续下一次polling
+    setImmediate(manualPolling);
+  };
   
-  // 优雅退出
-  process.once('SIGINT', () => bot.stop('SIGINT'));
-  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+  // 启动手动polling
+  manualPolling();
+  console.log('✅ Telegram Bot手动polling已启动！');
+  console.log('💡 发送消息到bot即可直接使用');
+  console.log('🎨 支持智能热力图：直接说"美股的科技股热力图"、"日本大盘热力图"等');
   
 } else {
   console.log('ℹ️  未配置TELEGRAM_BOT_TOKEN，Telegram Bot未启动');

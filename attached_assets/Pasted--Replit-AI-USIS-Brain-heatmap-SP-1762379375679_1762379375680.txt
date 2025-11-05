@@ -1,0 +1,98 @@
+给 Replit AI（原样粘贴）
+目标：让 USIS_Brain 的“heatmap/热力图”支持自然语言解析（地区/指数/行业），不用固定关键词清单；当用户说“美股的科技股的热力图”时，得到 SPX500 的 TradingView 热力图，并尽量聚焦 Technology；日本=日经225、德国=DAX40 等，绝不串台。
+
+一、Schema 化抽取（用 LLM 解析而非关键词匹配）
+定义一个结构化解析函数 extract_heatmap_query(text)：
+返回 JSON：
+{
+  "region": "US|JP|ES|DE|FR|UK|EU|HK|CN|IN|AUTO",
+  "index":  "SPX500|NASDAQ100|DJ30|NIKKEI225|IBEX35|DAX40|CAC40|FTSE100|EURO50|HSI|CSI300|NIFTY50|AUTO",
+  "sector": "technology|financials|healthcare|industrials|energy|materials|consumer_discretionary|consumer_staples|communication_services|utilities|real_estate|AUTO",
+  "locale": "auto|zh-CN|en-US|es-ES|ja-JP|…",
+  "confidence": 0.0~1.0,
+  "rationale": "<简要理由>",
+  "raw": "<原文本>"
+}
+
+策略：
+- 允许开放词汇映射：科技=technology，金融=financials，通信=communication_services，必需消费=consumer_staples，可选消费=consumer_discretionary，材料=materials，工业=industrials，能源=energy，公用事业=utilities，房地产=real_estate，医疗保健=healthcare。
+- 允许“美股/美/美国”→ region=US；“日本/日股”→ JP；“西班牙”→ ES 等。
+- 如果用户提到“纳指/纳斯达克100/NDX/QQQ”→ index=NASDAQ100；“道指/DJIA”→ index=DJ30；否则 US 默认 SPX500。
+- 没提指数但提国家/地区时，用映射默认值：
+  US→SPX500, JP→NIKKEI225, ES→IBEX35, DE→DAX40, FR→CAC40, UK→FTSE100, EU→EURO50, HK→HSI, CN→CSI300, IN→NIFTY50。
+- locale：若文本含“西语/Spanish/esp”→es-ES；“日语/日本語/ja”→ja-JP；否则 auto。
+
+二、防串台与回退
+- 若 region=JP，却得到 index 属于 US 系列，强制改正为 NIKKEI225（写入 debug.force="region guard"）。
+- 若解析 confidence < 0.45：保持 region/index 映射默认，但在 caption 末尾附 “(可能需要确认市场/指数)”；不抛错，不追问。
+
+三、构造 TradingView Heatmap URL（仅股票）
+base = "https://www.tradingview.com/heatmap/stock/"
+query 基本项：
+  color=change
+  dataset=<index>               // 例：SPX500 / NIKKEI225 / IBEX35 ...
+  group=sector
+  blockSize=market_cap
+  tileColor=change
+  lang=<es|ja|en>（来自 locale，auto 则省略）
+
+四、行业聚焦（可选增强）
+- 如果 sector != "AUTO"，在 meta 里返回一个“聚焦意图”，供截图器尝试执行：
+  meta.focus = { "type": "sector", "value": "<sector>" }
+- 同时在 url 的 querystring 附加一个无害提示参数 focus_hint=<sector>（即使 TV 不识别也不影响页面），真实聚焦由截图器脚本完成（见下）。
+- 若截图器不支持脚本，则仍发全市场热力图，并在 analysis 附带“科技板块简评”。
+
+五、返回动作（只走 ScreenshotAPI）
+actions = [{
+  "action": "get_heatmap_screenshot",
+  "provider": "screenshotapi",
+  "url": base + "?" + querystring,     // 见上
+  "file_name": "tv_heatmap_${index}_{ts}.png",
+  "meta": {
+    "source": "tradingview",
+    "dataset": "<index>",
+    "expected_region": "<region>",
+    "locale": "<locale>",
+    "headers": (locale!="auto") ? {"Accept-Language": locale+",q=0.9"} : {},
+    "focus": (sector!="AUTO") ? {"type":"sector","value":"<sector>"} : null
+  }
+}]
+
+六、自动简评（不读图，基于常识模板）
+- 生成 3~5 句 summary（跟随 locale；auto 则中文），包含：
+  - 指数名（中文+英文简写）
+  - 该 sector 若被指定：给出“相对强弱/新闻驱动倾向”的保守描述（不下结论）
+  - “仅供参考”提示
+- 放在 response.analysis；caption 类似 “📊 <指数> 板块热力图（TradingView）<若 sector 则 +『·聚焦：<sector中文>』>”。
+
+七、示例映射
+- “美股的科技股的热力图” → region=US, index=SPX500, sector=technology
+- “日本大盘热力图” → region=JP, index=NIKKEI225, sector=AUTO
+- “西班牙热力图（金融）” → region=ES, index=IBEX35, sector=financials
+- “欧洲热力图 可选消费” → region=EU, index=EURO50, sector=consumer_discretionary
+
+八、禁止 QuickChart
+- intent==="heatmap" 时绝不返回 QuickChart。
+
+九、提交要求
+- 只改意图/抽取与动作编排；/brain/orchestrate 输出结构不变。
+- 单测用例：上面四条示例的 index/sector 均正确，且 debug.force 在需要时出现。
+
+（可选）n8n 截图器“行业聚焦”兜底脚本思路
+
+如果你用的 ScreenshotAPI 支持 简单点击脚本 / selector 截图，让它按 meta.focus 去点击：
+
+打开页面后等待 button[data-name="filter-sector"]（或 Sector 下拉）出现；
+
+点开并选择对应 sector（technology/financials…），再截图。
+如果服务不支持脚本，就直接截图全市场热力图，但 caption/analysis 会明确“聚焦：科技”，用户视觉上看到全图，文本上得到行业聚焦信息，不会串台。
+
+结果示例（你发给机器人）
+
+你发：美股的科技股的热力图
+
+Brain 回：dataset=SPX500，meta.focus=technology；截图成功则是 TV 的 S&P500 热力图；analysis 会提示“聚焦：科技板块”的简评。
+
+如果你发：日本大盘热力图，就只可能是 NIKKEI225。
+
+下一步想加“子行业（semiconductors）/主题（AI）”也能扩展在 sector 字段里，用 subsector/theme 再细化，不改外层协议。
