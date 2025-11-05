@@ -863,9 +863,9 @@ async function generateHeatmap({market='US', color='change', size='market_cap'} 
       
       const apiUrl = `https://shot.screenshotapi.net/screenshot?${params.toString()}`;
       
+      // 移除timeout参数，让请求自然完成（TradingView需要约12秒）
       const response = await fetch(apiUrl, {
-        method: 'GET',
-        timeout: 25000
+        method: 'GET'
       });
       
       if (response.ok) {
