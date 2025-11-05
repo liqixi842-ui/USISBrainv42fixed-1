@@ -52,6 +52,7 @@ async function callModelWithFallback({
 }) {
   const modelChain = [modelRegistry.primary, ...modelRegistry.fallback];
   let lastError = null;
+  const errorHistory = []; // 🆕 记录所有失败历史
   
   for (let i = 0; i < modelChain.length; i++) {
     const modelConfig = modelChain[i];
@@ -101,6 +102,19 @@ async function callModelWithFallback({
       
       console.log(`✅ [SmartBrain] 成功: ${modelConfig.id} (${latency}ms, ${generatedText.length}字)`);
       
+      // 🆕 如果有失败历史，记录到debug中
+      const debugInfo = {
+        model_used: modelConfig.id,
+        fallback_used: isFallback,
+        latency_ms: totalLatency,
+        call_latency_ms: latency,
+        attempts: i + 1
+      };
+      
+      if (errorHistory.length > 0) {
+        debugInfo.error_history = errorHistory;
+      }
+      
       return {
         success: true,
         model: modelConfig.id,
@@ -110,20 +124,25 @@ async function callModelWithFallback({
           completion_tokens: data.usage?.completion_tokens || 0,
           total_tokens: data.usage?.total_tokens || 0
         },
-        debug: {
-          model_used: modelConfig.id,
-          fallback_used: isFallback,
-          latency_ms: totalLatency,
-          call_latency_ms: latency,
-          attempts: i + 1
-        },
+        debug: debugInfo,
         elapsed_ms: totalLatency,
         cost_usd: estimateCost(modelConfig.id, data.usage)
       };
       
     } catch (error) {
       lastError = error;
+      
+      // 🆕 记录失败详情
+      const errorDetail = {
+        model: modelConfig.id,
+        error: error.message,
+        type: error.name,
+        timestamp: new Date().toISOString()
+      };
+      errorHistory.push(errorDetail);
+      
       console.error(`❌ [SmartBrain] ${modelConfig.id} 失败: ${error.message}`);
+      console.error(`   错误类型: ${error.name}`);
       
       // 如果不是最后一个模型，继续尝试下一个
       if (i < modelChain.length - 1) {
@@ -136,6 +155,7 @@ async function callModelWithFallback({
   // 所有模型都失败了
   const totalLatency = Date.now() - requestStartTime;
   console.error(`❌ [SmartBrain] 所有模型均失败，最后错误:`, lastError?.message);
+  console.error(`📋 [SmartBrain] 失败历史:`, JSON.stringify(errorHistory, null, 2));
   
   return {
     success: false,
@@ -147,7 +167,8 @@ async function callModelWithFallback({
       fallback_used: true,
       latency_ms: totalLatency,
       attempts: modelChain.length,
-      all_failed: true
+      all_failed: true,
+      error_history: errorHistory  // 🆕 暴露所有失败原因
     },
     elapsed_ms: totalLatency,
     cost_usd: 0
