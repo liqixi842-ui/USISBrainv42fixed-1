@@ -2020,8 +2020,19 @@ async function multiAIAnalysis({ mode, scene, symbols, text, chatType, marketDat
       console.error(`❌ 严重错误：有股票代码但marketData为空！`);
       dataContext = `【数据采集失败，以下分析基于历史知识，可能不准确】\n\n用户请求：`;
     } else {
-      console.log(`ℹ️  无股票代码，跳过实时数据注入`);
-      dataContext = '';
+      // 🔧 修复：热力图请求也需要明确指令，禁止编造数据
+      const isHeatmapRequest = semanticIntent && semanticIntent.actions && semanticIntent.actions.some(a => 
+        a === 'fetch_heatmap' || (a.type && a.type === 'fetch_heatmap')
+      );
+      
+      if (isHeatmapRequest) {
+        const exchangeName = semanticIntent.exchange || '全球';
+        console.log(`🗺️  热力图请求，添加市场分析指令`);
+        dataContext = `【用户请求${exchangeName}市场热力图】\n\n⚠️ 重要提示：\n- 你无法获取${exchangeName}市场的实时数据\n- 请提供该市场的一般性分析（不要编造具体价格或涨跌幅）\n- 重点分析市场趋势、板块轮动、投资策略等宏观话题\n- 避免提及任何具体数字（如"涨了X%"、"价格Y元"等）\n\n用户请求：`;
+      } else {
+        console.log(`ℹ️  无股票代码，跳过实时数据注入`);
+        dataContext = '';
+      }
     }
     
     const context = {
@@ -3112,40 +3123,7 @@ app.post("/brain/orchestrate", async (req, res) => {
       });
     }
     
-    // 🎯 特殊处理3：纯热力图请求（只需要图片，不需要AI分析文字）
-    const isHeatmapOnly = intent.actions && intent.actions.some(a => 
-      (typeof a === 'string' && a === 'fetch_heatmap') || 
-      (typeof a === 'object' && a.type === 'fetch_heatmap')
-    ) && symbols.length === 0;
-    
-    if (isHeatmapOnly) {
-      console.log(`🗺️  检测到纯热力图请求，跳过AI分析`);
-      
-      const exchangeName = intent.exchange || 'Global';
-      const heatmapText = `📊 ${exchangeName} 市场热力图\n\n✅ 正在为您生成热力图，请稍等...`;
-      
-      return res.json({
-        status: "ok",
-        ok: true,
-        final_analysis: heatmapText,
-        final_text: heatmapText,
-        needs_heatmap: true,
-        actions: intent.actions,
-        intent: { mode: intent.mode, lang: intent.lang, confidence: intent.confidence, exchange: intent.exchange },
-        scene: { name: 'Heatmap', depth: 'visual', targetLength: 50 },
-        symbols: [],
-        market_data: null,
-        ai_results: null,
-        synthesis: { success: true, synthesized: false },
-        low_confidence: false,
-        chat_type,
-        user_id,
-        response_time_ms: Date.now() - startTime,
-        debug: { note: 'Pure heatmap request - skipped AI analysis' }
-      });
-    }
-    
-    // 🎯 特殊处理4：闲聊模式检测（用简短AI回复，不调用6模型）
+    // 🎯 特殊处理3：闲聊模式检测（用简短AI回复，不调用6模型）
     const marketKeywords = ['分析', '走势', '图', 'K线', '趋势', '价格', '股票', '行情', '盘前', '盘中', '盘后', '热力图', '涨', '跌', '买', '卖', '买点', '卖点', '止损', '止盈', '复盘', '板块', 'chart', 'stock', 'market'];
     const hasMarketKeywords = marketKeywords.some(k => text.toLowerCase().includes(k));
     const isMarketMode = ['premarket', 'intraday', 'postmarket', 'diagnose', 'news', 'heatmap'].includes(intent.mode);
