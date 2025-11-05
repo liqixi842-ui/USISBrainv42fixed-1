@@ -1,18 +1,161 @@
-// USIS Brain v4.0 - GPT-5单核生成引擎
-// 替换多AI并行投票，保留实时数据优势
+// USIS Brain v4.1 - 智能主脑 + 自动保底引擎
+// 主脑优先：GPT-5 Mini → 保底链：GPT-4o → GPT-4o-mini
 
 const fetch = require('node-fetch');
+const fs = require('fs');
 const { buildAnalysisPrompt } = require('./analysisPrompt');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// 🔍 诊断：在模块加载时检查密钥
-console.log(`🔑 [GPT-5 Brain] 模块加载 - OPENAI_API_KEY状态: ${OPENAI_API_KEY ? '已设置(' + OPENAI_API_KEY.slice(0, 7) + '...)' : '❌ 未设置'}`);
+// 加载模型注册表
+let modelRegistry = {
+  primary: { id: 'gpt-5-mini', max_tokens: 4000, timeout_ms: 45000 },
+  fallback: [
+    { id: 'gpt-4o', max_tokens: 3000, timeout_ms: 30000 },
+    { id: 'gpt-4o-mini', max_tokens: 2000, timeout_ms: 20000 }
+  ]
+};
+
+try {
+  const registryPath = './config/models.json';
+  if (fs.existsSync(registryPath)) {
+    modelRegistry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+    console.log(`✅ [SmartBrain] 模型注册表已加载`);
+  }
+} catch (error) {
+  console.warn(`⚠️  [SmartBrain] 模型注册表加载失败，使用默认配置:`, error.message);
+}
+
+// 环境变量控制（紧急回退）
+if (process.env.PRIMARY_MODEL) {
+  modelRegistry.primary.id = process.env.PRIMARY_MODEL;
+  console.log(`🔧 [SmartBrain] 主脑模型已覆盖: ${process.env.PRIMARY_MODEL}`);
+}
+
+// 禁用降级开关（调试用）
+const DISABLE_FALLBACK = process.env.DISABLE_FALLBACK === 'true';
+if (DISABLE_FALLBACK) {
+  console.warn(`⚠️  [SmartBrain] 自动降级已禁用（仅用于调试）`);
+}
+
+console.log(`🔑 [SmartBrain] OPENAI_API_KEY状态: ${OPENAI_API_KEY ? '已设置(' + OPENAI_API_KEY.slice(0, 7) + '...)' : '❌ 未设置'}`);
+console.log(`🧠 [SmartBrain] 主脑: ${modelRegistry.primary.id}`);
+console.log(`🛡️  [SmartBrain] 保底链: ${modelRegistry.fallback.map(f => f.id).join(' → ')}`);
 
 /**
- * GPT-5单核分析生成
- * 输入：实时市场数据 + 用户问题
- * 输出：统一格式的分析报告
+ * v4.1核心：智能模型调用（自动降级）
+ */
+async function callModelWithFallback({
+  systemPrompt,
+  userPrompt,
+  requestStartTime
+}) {
+  const modelChain = [modelRegistry.primary, ...modelRegistry.fallback];
+  let lastError = null;
+  
+  for (let i = 0; i < modelChain.length; i++) {
+    const modelConfig = modelChain[i];
+    const isFallback = i > 0;
+    
+    // 如果禁用降级且不是主脑，跳过
+    if (DISABLE_FALLBACK && isFallback) {
+      console.log(`⚠️  [SmartBrain] 自动降级已禁用，跳过 ${modelConfig.id}`);
+      continue;
+    }
+    
+    try {
+      console.log(`${isFallback ? '🛡️ ' : '🧠'} [SmartBrain] 尝试: ${modelConfig.id} (${i + 1}/${modelChain.length})`);
+      
+      const callStartTime = Date.now();
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: modelConfig.id,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          max_completion_tokens: modelConfig.max_tokens
+        }),
+        timeout: modelConfig.timeout_ms
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API ${response.status}: ${errorText.slice(0, 200)}`);
+      }
+      
+      const data = await response.json();
+      const generatedText = data.choices?.[0]?.message?.content;
+      
+      if (!generatedText) {
+        throw new Error('模型返回空内容');
+      }
+      
+      const latency = Date.now() - callStartTime;
+      const totalLatency = Date.now() - requestStartTime;
+      
+      console.log(`✅ [SmartBrain] 成功: ${modelConfig.id} (${latency}ms, ${generatedText.length}字)`);
+      
+      return {
+        success: true,
+        model: modelConfig.id,
+        text: generatedText,
+        usage: {
+          prompt_tokens: data.usage?.prompt_tokens || 0,
+          completion_tokens: data.usage?.completion_tokens || 0,
+          total_tokens: data.usage?.total_tokens || 0
+        },
+        debug: {
+          model_used: modelConfig.id,
+          fallback_used: isFallback,
+          latency_ms: totalLatency,
+          call_latency_ms: latency,
+          attempts: i + 1
+        },
+        elapsed_ms: totalLatency,
+        cost_usd: estimateCost(modelConfig.id, data.usage)
+      };
+      
+    } catch (error) {
+      lastError = error;
+      console.error(`❌ [SmartBrain] ${modelConfig.id} 失败: ${error.message}`);
+      
+      // 如果不是最后一个模型，继续尝试下一个
+      if (i < modelChain.length - 1) {
+        console.log(`🔄 [SmartBrain] 切换到下一个模型...`);
+        continue;
+      }
+    }
+  }
+  
+  // 所有模型都失败了
+  const totalLatency = Date.now() - requestStartTime;
+  console.error(`❌ [SmartBrain] 所有模型均失败，最后错误:`, lastError?.message);
+  
+  return {
+    success: false,
+    model: 'none',
+    text: '⚠️ AI分析暂时不可用，所有模型均失败，请稍后再试。',
+    error: lastError?.message || 'All models failed',
+    debug: {
+      model_used: 'none',
+      fallback_used: true,
+      latency_ms: totalLatency,
+      attempts: modelChain.length,
+      all_failed: true
+    },
+    elapsed_ms: totalLatency,
+    cost_usd: 0
+  };
+}
+
+/**
+ * GPT-5单核分析生成（v4.1增强版）
  */
 async function generateWithGPT5({
   text,
@@ -23,7 +166,7 @@ async function generateWithGPT5({
   symbols,
   rankedNews = []
 }) {
-  console.log(`🧠 [GPT-5 Brain] 开始生成分析...`);
+  console.log(`🧠 [SmartBrain] 开始生成分析...`);
   
   const startTime = Date.now();
   
@@ -51,14 +194,14 @@ async function generateWithGPT5({
       
       userPrompt = fullPrompt;
       
-      console.log(`✅ [GPT-5 Brain] Prompt构建完成 (${fullPrompt.length}字)`);
+      console.log(`✅ [SmartBrain] Prompt构建完成 (${fullPrompt.length}字)`);
     } else {
       // 无市场数据时：使用增强型通用分析模式
       throw new Error('无市场数据，使用增强型推理模式');
     }
     
   } catch (error) {
-    console.log(`📝 [GPT-5 Brain] 使用增强型推理模式:`, error.message);
+    console.log(`📝 [SmartBrain] 使用增强型推理模式:`, error.message);
     
     // 增强型推理prompt（不是简单模板！）
     systemPrompt = `你是USIS Brain高级市场分析师。你的核心能力：
@@ -145,85 +288,31 @@ async function generateWithGPT5({
     userPrompt = intelligentContext;
   }
   
-  // 2. 调用GPT-5 API
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-5-mini', // ✅ GPT-5 Mini (系统卡: gpt-5-thinking-mini)
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        max_completion_tokens: 4000  // 🔧 GPT-5不支持temperature等参数，只保留必需参数
-      }),
-      timeout: 90000  // 🔧 GPT-5推理需要更长时间（90秒）
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI API错误 (${response.status}): ${errorText}`);
-    }
-    
-    const data = await response.json();
-    const generatedText = data.choices?.[0]?.message?.content;
-    const apiReturnedModel = data.model;  // API返回的实际模型
-    
-    if (!generatedText) {
-      throw new Error('GPT-5返回空内容');
-    }
-    
-    const elapsed = Date.now() - startTime;
-    console.log(`✅ [GPT-5 Brain] 生成完成 (${elapsed}ms, ${generatedText.length}字, 实际模型=${apiReturnedModel})`);
-    
-    // 3. 返回兼容v3.1的格式（保持与multiAIAnalysis一致）
-    return {
-      success: true,
-      model: 'gpt-5-mini',  // ✅ 正式GPT-5 Mini (成本优化的推理和聊天)
-      text: generatedText,
-      usage: {
-        prompt_tokens: data.usage?.prompt_tokens || 0,
-        completion_tokens: data.usage?.completion_tokens || 0,
-        total_tokens: data.usage?.total_tokens || 0
-      },
-      elapsed_ms: elapsed,
-      cost_usd: estimateCost(data.usage)
-    };
-    
-  } catch (error) {
-    console.error(`❌ [GPT-5 Brain] 生成失败:`, error.message);
-    console.error(`❌ [GPT-5 Brain] 错误堆栈:`, error.stack);
-    console.error(`❌ [GPT-5 Brain] OPENAI_API_KEY状态:`, OPENAI_API_KEY ? '已设置' : '未设置');
-    
-    // 降级：返回错误信息
-    return {
-      success: false,
-      model: 'gpt-5-mini',
-      text: '⚠️ AI分析暂时不可用，请稍后再试。',
-      error: error.message,
-      error_detail: error.stack?.split('\n')[0] || 'Unknown',
-      elapsed_ms: Date.now() - startTime,
-      cost_usd: 0
-    };
-  }
+  // 2. 调用智能模型链（自动降级）
+  return await callModelWithFallback({
+    systemPrompt,
+    userPrompt,
+    requestStartTime: startTime
+  });
 }
 
 /**
- * 估算GPT-5 Mini调用成本
+ * 估算模型调用成本（支持多模型）
  */
-function estimateCost(usage) {
+function estimateCost(modelId, usage) {
   if (!usage) return 0;
   
-  // GPT-5 Mini定价 (根据官方文档更新)
-  const INPUT_COST_PER_1K = 0.005;  // $0.005/1K tokens (待确认实际价格)
-  const OUTPUT_COST_PER_1K = 0.015; // $0.015/1K tokens (待确认实际价格)
+  // 模型定价表（$/1K tokens）
+  const pricing = {
+    'gpt-5-mini': { input: 0.005, output: 0.015 },
+    'gpt-4o': { input: 0.0025, output: 0.010 },
+    'gpt-4o-mini': { input: 0.00015, output: 0.0006 }
+  };
   
-  const inputCost = (usage.prompt_tokens / 1000) * INPUT_COST_PER_1K;
-  const outputCost = (usage.completion_tokens / 1000) * OUTPUT_COST_PER_1K;
+  const price = pricing[modelId] || pricing['gpt-4o-mini']; // 默认最便宜
+  
+  const inputCost = (usage.prompt_tokens / 1000) * price.input;
+  const outputCost = (usage.completion_tokens / 1000) * price.output;
   
   return inputCost + outputCost;
 }
@@ -239,7 +328,8 @@ function wrapAsV31Synthesis(gpt5Result) {
     confidence: gpt5Result.success ? 0.95 : 0.3,
     model: gpt5Result.model,
     usage: gpt5Result.usage,
-    cost_usd: gpt5Result.cost_usd
+    cost_usd: gpt5Result.cost_usd,
+    debug: gpt5Result.debug // v4.1新增：调试信息
   };
 }
 

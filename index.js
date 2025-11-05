@@ -89,6 +89,33 @@ async function initDatabase() {
 // Initialize database on startup
 initDatabase();
 
+// 🆕 v4.1: 统计系统（滑窗监控）
+const stats = {
+  requests: 0,
+  success: 0,
+  failures: 0,
+  total_latency: 0,
+  fallback_count: 0,
+  model_usage: {}, // { 'gpt-5-mini': 5, 'gpt-4o': 2, ... }
+  uptime_start: Date.now()
+};
+
+function recordRequest(success, latency_ms, model_used, fallback_used) {
+  stats.requests++;
+  if (success) {
+    stats.success++;
+  } else {
+    stats.failures++;
+  }
+  stats.total_latency += latency_ms;
+  if (fallback_used) {
+    stats.fallback_count++;
+  }
+  if (model_used) {
+    stats.model_usage[model_used] = (stats.model_usage[model_used] || 0) + 1;
+  }
+}
+
 // 添加请求日志中间件（用于调试Cloud Run健康检查）
 app.use((req, res, next) => {
   console.log(`📥 ${req.method} ${req.path} from ${req.ip || req.connection.remoteAddress}`);
@@ -122,6 +149,28 @@ if (TWITTER_BEARER) {
 
 // ---- Health
 app.get("/", (_req, res) => res.status(200).send("OK"));
+
+// 🆕 v4.1: Stats端点（滑窗监控）
+app.get("/brain/stats", (_req, res) => {
+  const uptime_s = Math.floor((Date.now() - stats.uptime_start) / 1000);
+  const success_rate = stats.requests > 0 ? (stats.success / stats.requests) : 0;
+  const avg_latency_ms = stats.requests > 0 ? Math.floor(stats.total_latency / stats.requests) : 0;
+  const fallback_rate = stats.requests > 0 ? (stats.fallback_count / stats.requests) : 0;
+  
+  res.json({
+    status: "ok",
+    version: "v4.1",
+    uptime_s,
+    requests: stats.requests,
+    success: stats.success,
+    failures: stats.failures,
+    success_rate: (success_rate * 100).toFixed(2) + '%',
+    avg_latency_ms,
+    fallback_count: stats.fallback_count,
+    fallback_rate: (fallback_rate * 100).toFixed(2) + '%',
+    model_usage: stats.model_usage
+  });
+});
 
 app.get("/health", (_req, res) => {
   res.json({ status: 'ok', ts: Date.now() });
@@ -3756,6 +3805,12 @@ app.post("/brain/orchestrate", async (req, res) => {
         style: chat_type === 'private' ? 'teacher_personal' : 'team_professional',
         tasks,
         user_prefs: userPrefs,
+        // 🆕 v4.1: SmartBrain debug信息
+        model_used: gpt5Result.debug?.model_used || gpt5Result.model,
+        fallback_used: gpt5Result.debug?.fallback_used || false,
+        latency_ms: responseTime,
+        call_latency_ms: gpt5Result.debug?.call_latency_ms || gpt5Result.elapsed_ms,
+        attempts: gpt5Result.debug?.attempts || 1,
         // L1层：复杂度评分
         l1_complexity: {
           score: complexity.score,
@@ -3780,6 +3835,14 @@ app.post("/brain/orchestrate", async (req, res) => {
         }
       }
     };
+    
+    // 🆕 v4.1: 记录统计
+    recordRequest(
+      gpt5Result.success,
+      responseTime,
+      gpt5Result.debug?.model_used || gpt5Result.model,
+      gpt5Result.debug?.fallback_used || false
+    );
     
     // 8. Response
     return res.json(responseV2);
