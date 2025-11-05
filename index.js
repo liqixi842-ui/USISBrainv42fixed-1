@@ -824,7 +824,7 @@ function generateFallbackHeatmap(exchangeName) {
   return chart.getUrl();
 }
 
-// 🆕 v4.3: 智能热力图生成（纯规则引擎 + ScreenshotAPI）
+// 🆕 v4.3: 智能热力图生成（纯规则引擎 + 可插拔Provider系统）
 async function generateSmartHeatmap(userText) {
   const startTime = Date.now();
   console.log(`\n🧠 [Smart Heatmap] 处理请求: "${userText}"`);
@@ -842,64 +842,50 @@ async function generateSmartHeatmap(userText) {
     throw new Error('无法确定目标指数，请提供更具体的地区或指数信息');
   }
   
-  // 2️⃣ 使用ScreenshotAPI截图
-  if (!SCREENSHOT_API_KEY) {
-    throw new Error('ScreenshotAPI未配置，无法生成热力图');
+  // 🚨 关键校验：西班牙IBEX35（三层防护第1层）
+  if (query.region === 'ES' && query.index !== 'IBEX35') {
+    console.error(`🚨 [防串台] 规则引擎层拦截：西班牙地区强制使用IBEX35`);
+    throw new Error(`防串台失败：西班牙地区必须使用IBEX35，当前为${query.index}`);
   }
   
+  // 2️⃣ 使用可插拔Provider系统截图（Browserless → ScreenshotAPI → QuickChart）
+  const { captureHeatmapSmart } = require('./screenshotProviders');
+  
   try {
-    console.log(`📸 [ScreenshotAPI] 截图: ${tradingViewUrl}`);
-    
-    const params = new URLSearchParams({
-      url: tradingViewUrl,
-      token: SCREENSHOT_API_KEY,
-      output: 'image',
-      file_type: 'png',
-      wait_for_event: 'load',
-      delay: 5000,
-      full_page: 'false',
-      width: 1200,
-      height: 800,
-      device_scale_factor: 2
+    const result = await captureHeatmapSmart({
+      tradingViewUrl,
+      dataset: query.index,
+      region: query.region,
+      sector: query.sector !== 'AUTO' ? query.sector : undefined
     });
     
-    const apiUrl = `https://shot.screenshotapi.net/screenshot?${params.toString()}`;
-    const response = await fetch(apiUrl, { method: 'GET' });
+    const elapsed = Date.now() - startTime;
     
-    if (response.ok) {
-      const imageBuffer = await response.buffer();
-      const elapsed = Date.now() - startTime;
-      console.log(`✅ [ScreenshotAPI] 成功 (${elapsed}ms, ${imageBuffer.length} bytes)`);
-      
-      const meta = {
-        source: 'tradingview_screenshot_api',
+    // 🚨 关键校验：西班牙IBEX35（三层防护第2层）
+    if (query.region === 'ES' && query.index !== 'IBEX35') {
+      console.error(`🚨 [防串台] Provider响应层拦截：西班牙地区必须使用IBEX35`);
+      throw new Error(`防串台失败：西班牙地区必须使用IBEX35，当前为${query.index}`);
+    }
+    
+    console.log(`✅ [Smart Heatmap] 完成 (${elapsed}ms, provider=${result.provider})`);
+    
+    return {
+      ok: true,
+      buffer: result.buffer,
+      source: result.provider,
+      query: query,
+      meta: {
+        ...result.meta,
         dataset: query.index,
         expected_region: query.region,
         locale: query.locale,
         sector: query.sector,
         debug: query.debug
-      };
-      
-      // 🚨 关键校验：西班牙IBEX35
-      if (meta.expected_region === 'ES' && meta.dataset !== 'IBEX35') {
-        console.error(`🚨 [防串台失败] expected_region=ES 但 dataset=${meta.dataset}！`);
-        throw new Error(`防串台失败：西班牙地区必须使用IBEX35，当前为${meta.dataset}`);
-      }
-      
-      return {
-        ok: true,
-        buffer: imageBuffer,
-        source: 'tradingview_screenshot_api',
-        query: query,
-        meta: meta,
-        elapsed_ms: elapsed,
-        caption: caption,
-        summary: summary
-      };
-    } else {
-      const errorText = await response.text();
-      throw new Error(`ScreenshotAPI失败: ${response.status} - ${errorText.substring(0, 200)}`);
-    }
+      },
+      elapsed_ms: elapsed,
+      caption: caption,
+      summary: summary
+    };
   } catch (error) {
     console.error(`❌ [Smart Heatmap] 失败:`, error.message);
     throw error;
