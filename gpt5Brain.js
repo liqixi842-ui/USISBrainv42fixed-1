@@ -29,51 +29,109 @@ async function generateWithGPT5({
   let userPrompt = '';
   
   try {
-    // 使用buildAnalysisPrompt构建反编造prompt
-    const fullPrompt = buildAnalysisPrompt({
-      marketData,
-      intent: semanticIntent,
-      userQuery: text,
-      mode,
-      language: semanticIntent?.language || 'zh'
-    });
-    
-    // 分离system和user部分
-    systemPrompt = `你是专业市场分析师。严格遵守以下规则：
+    // 使用buildAnalysisPrompt构建反编造prompt（仅当有有效marketData时）
+    if (marketData && marketData.collected) {
+      const fullPrompt = buildAnalysisPrompt({
+        marketData,
+        intent: semanticIntent,
+        userQuery: text,
+        mode,
+        language: semanticIntent?.language || 'zh'
+      });
+      
+      systemPrompt = `你是专业市场分析师。严格遵守以下规则：
 1. 只使用提供的实时数据，禁止编造数字
 2. 如果数据不足，明确说明而不是猜测
 3. 保持自然语气，避免机器式复述
-4. 根据responseMode生成对应格式：
-   - news: 只输出新闻资讯
-   - analysis: 只输出市场分析
-   - advice: 只输出操作建议
-   - full_report: 完整报告（默认）`;
-    
-    userPrompt = fullPrompt;
-    
-    console.log(`✅ [GPT-5 Brain] Prompt构建完成 (${fullPrompt.length}字)`);
+4. 进行深度推理：分析趋势、风险、机会，而不是简单复述数据`;
+      
+      userPrompt = fullPrompt;
+      
+      console.log(`✅ [GPT-5 Brain] Prompt构建完成 (${fullPrompt.length}字)`);
+    } else {
+      // 无市场数据时：使用增强型通用分析模式
+      throw new Error('无市场数据，使用增强型推理模式');
+    }
     
   } catch (error) {
-    console.warn(`⚠️  [GPT-5 Brain] Prompt构建失败，使用简化版本:`, error.message);
+    console.log(`📝 [GPT-5 Brain] 使用增强型推理模式:`, error.message);
     
-    // 降级：简化prompt
-    systemPrompt = `你是专业市场分析师。基于提供的实时数据生成分析，禁止编造数据。`;
+    // 增强型推理prompt（不是简单模板！）
+    systemPrompt = `你是USIS Brain高级市场分析师。你的核心能力：
+
+🧠 **深度推理模式**（而非模板填充）：
+1. **趋势分析** - 识别数据背后的市场逻辑和驱动因素
+2. **风险评估** - 评估潜在风险和不确定性
+3. **机会挖掘** - 发现市场机会和关键拐点
+4. **策略建议** - 提供可执行的投资策略
+
+⚠️ **禁止事项**：
+- 禁止简单罗列数据（如"价格是X，涨幅Y%"）
+- 禁止使用训练数据中的价格信息
+- 禁止机械式复述而不做推理
+
+✅ **必须做到**：
+- 解释"为什么"（价格为什么涨/跌？市场在担心什么？）
+- 推理"接下来"（基于当前数据，可能的走势是？）
+- 建议"怎么做"（投资者应该关注什么？）
+
+语言风格：自然、专业、有洞察力，像一个资深分析师在解读市场。`;
     
-    // 构建简化的数据上下文
-    let dataContext = '';
+    // 构建智能上下文（而非简单摘要）
+    let intelligentContext = '';
+    
+    // 1. 市场数据（如果有）
     if (marketData && marketData.summary) {
-      dataContext = `实时市场数据：\n${marketData.summary}\n\n`;
+      intelligentContext += `📊 **实时市场数据**：\n${marketData.summary}\n\n`;
+      
+      // 添加数据质量信息
+      if (marketData.metadata) {
+        intelligentContext += `数据质量：${(marketData.metadata.dataQuality?.overallScore * 100 || 0).toFixed(0)}% | `;
+        intelligentContext += `新鲜度：${(marketData.metadata.dataQuality?.freshnessAvg * 100 || 0).toFixed(0)}%\n\n`;
+      }
     }
     
+    // 2. ImpactRank新闻（智能注入）
     if (rankedNews && rankedNews.length > 0) {
-      dataContext += `最新新闻（ImpactRank排序）：\n`;
-      rankedNews.slice(0, 3).forEach((news, i) => {
-        dataContext += `${i + 1}. ${news.title} (评分: ${news.impact_score})\n`;
+      intelligentContext += `📰 **市场新闻动态**（按ImpactRank评分排序）：\n\n`;
+      rankedNews.slice(0, 5).forEach((news, i) => {
+        intelligentContext += `${i + 1}. **${news.title}**\n`;
+        intelligentContext += `   影响力评分: ${news.impact_score.toFixed(1)}/10 (紧迫度:${news.urgency} | 相关度:${news.relevance} | 权威性:${news.authority})\n`;
+        if (news.summary) {
+          intelligentContext += `   摘要: ${news.summary}\n`;
+        }
+        intelligentContext += `   来源: ${news.source} | 发布时间: ${new Date(news.datetime).toLocaleString()}\n\n`;
       });
-      dataContext += '\n';
     }
     
-    userPrompt = `${dataContext}用户问题：${text}`;
+    // 3. 语义意图（帮助AI理解用户真正想要什么）
+    if (semanticIntent) {
+      intelligentContext += `🎯 **用户意图解析**：\n`;
+      intelligentContext += `- 意图类型: ${semanticIntent.intentType}\n`;
+      intelligentContext += `- 分析模式: ${semanticIntent.mode}\n`;
+      intelligentContext += `- 响应模式: ${semanticIntent.responseMode || 'full_report'}\n`;
+      if (semanticIntent.reasoning) {
+        intelligentContext += `- AI推理: ${semanticIntent.reasoning}\n`;
+      }
+      intelligentContext += `\n`;
+    }
+    
+    // 4. 股票符号（如果有）
+    if (symbols && symbols.length > 0) {
+      intelligentContext += `📌 **关注标的**: ${symbols.join(', ')}\n\n`;
+    }
+    
+    // 5. 分析指令（明确要求深度推理）
+    intelligentContext += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    intelligentContext += `📋 **分析任务**：\n`;
+    intelligentContext += `用户问题："${text}"\n\n`;
+    intelligentContext += `请基于以上数据进行**深度推理分析**，而不是简单数据复述：\n`;
+    intelligentContext += `1. 解读市场信号（数据和新闻背后的逻辑）\n`;
+    intelligentContext += `2. 评估风险与机会（短期和中期视角）\n`;
+    intelligentContext += `3. 提供可执行建议（具体的关注点和策略）\n\n`;
+    intelligentContext += `注意：如果数据不足，明确说明而不是猜测。保持专业但自然的语气。`;
+    
+    userPrompt = intelligentContext;
   }
   
   // 2. 调用GPT-5 API
