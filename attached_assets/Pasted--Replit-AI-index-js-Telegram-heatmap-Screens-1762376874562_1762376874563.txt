@@ -1,0 +1,102 @@
+给 Replit AI 的改进指令（一次性贴上）
+
+任务目标： 在 index.js 中新增“美股热力图”能力，支持 Telegram 文本 热力图 / /heatmap 触发；优先用 ScreenshotAPI 截 TradingView 的热力图页面；失败则自动降级用 QuickChart 生成 treemap 图片。把图片发回 Telegram。
+
+具体修改：
+
+新增环境变量并在启动时读取
+
+在 Replit 的 Secrets 里新增：
+
+SCREENSHOT_API_KEY（你的 ScreenshotAPI Key）
+
+在 index.js 顶部 env 读取区加入：
+
+const SCREENSHOT_API_KEY = process.env.SCREENSHOT_API_KEY || '';
+
+
+如果为空，日志警告但仍允许降级到 QuickChart。
+
+新增热力图生成服务（优先 ScreenshotAPI）
+
+在 index.js 里新增一个 generateHeatmap 工具函数，逻辑：
+
+目标 URL（TradingView 热力图）：
+https://www.tradingview.com/heatmap/?section=stock&exchange=US&color=change&size=market_cap
+
+调用 ScreenshotAPI（GET 或 POST 都可），参数建议：
+
+url: 目标 URL
+
+deviceScaleFactor: 2，fullPage: true
+
+waitFor: 选择器 div[class*="heatmap"]（若不可用，使用 #overlap-manager-root 或设置 waitFor: 4000 毫秒）
+
+timeout: 15000
+
+成功则返回 image_url（ScreenshotAPI 的结果链接或你把二进制上传到临时图床得到的 URL）。
+
+失败则进入 降级：调用 QuickChart 生成一个 treemap（sector→市值），返回 image_url。
+
+伪代码示例（让 AI 生成并插入完整实现）：
+
+async function generateHeatmap({market='US', color='change', size='market_cap'} = {}) {
+  // 1) 首选 ScreenshotAPI
+  if (SCREENSHOT_API_KEY) {
+    try {
+      const target = `https://www.tradingview.com/heatmap/?section=stock&exchange=${market}&color=${color}&size=${size}`;
+      const shot = await fetch('https://api.screenshotapi.net/screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': SCREENSHOT_API_KEY },
+        body: JSON.stringify({
+          url: target,
+          output: 'image',
+          full_page: true,
+          device_scale_factor: 2,
+          // 二选一：wait_for 选择器或固定等待
+          // wait_for: 'div[class*="heatmap"]',
+          delay: 4000,
+          timeout: 15000
+        })
+      });
+      if (shot.ok) {
+        const buf = await shot.arrayBuffer();
+        // 将 buf 上传到现有的 file server / Replit storage / imgBB（任选一种你项目里已有的）得到 image_url
+        const image_url = await saveBufferAndGetUrl(Buffer.from(buf), `heatmap_${Date.now()}.png`);
+        return { ok: true, image_url, source: 'tradingview_screenshot' };
+      }
+    } catch (e) {
+      console.warn('ScreenshotAPI failed, fallback to QuickChart', e);
+    }
+  }
+  // 2) 降级：QuickChart treemap（示例）
+  const quickChartUrl = buildQuickChartTreemapURL(); // 让 AI 新增这个函数：汇总板块→权重→生成 treemap
+  return { ok: true, image_url: quickChartUrl, source: 'quickchart_treemap' };
+}
+
+
+请一并实现 saveBufferAndGetUrl()（若项目已有文件存储/临时CDN就复用），以及 buildQuickChartTreemapURL()（可以内置几个示例权重，或从你现有行情接口取 sector 市值；接口不可用时用静态 mock）。
+
+把 Telegram 触发绑定到热力图生成
+
+在现有 Telegraf 处理逻辑里（你说在 4246–4337 行附近），增加：
+
+文本命中 热力图 / /heatmap → 回复 “正在生成热力图…”，调用 generateHeatmap()，完成后 ctx.replyWithPhoto(image_url, { caption })。
+
+caption 带上来源与耗时，例如：[US Heatmap] 来源: TradingView (Screenshot) / QuickChart (Fallback)。
+
+同时在 /brain/orchestrate 的动作解析里加个桥接：如果大脑返回 actions: [{type: 'needs_heatmap'}]，则同样调用 generateHeatmap() 并把 image_url 填回响应，再由 Telegram 发送。
+
+日志与容错
+
+对 ScreenshotAPI 的错误打印到 debug.data_errors（你已有这个字段），但不要中断主流程；
+
+超时 15s，失败立即走降级；
+
+在 caption 里标明 fallback_used=true/false，方便你观察稳定性。
+
+简单配置
+
+在 package.json 如需新增 form-data 或上传依赖请自动添加；
+
+若没有 saveBufferAndGetUrl 的存储，允许先走 base64→data URI 临时方案（Telegraf 支持 buffer 直接发）——但推荐落地静态 URL，方便复用。
