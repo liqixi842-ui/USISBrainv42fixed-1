@@ -4639,69 +4639,127 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
 });
 
-// ====== Telegram Bot v5.0 (稳定版 + 黑匣子) ======
+// ====== Telegram Bot v5.0 (手动轮询 - Replit兼容) ======
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
 if (TELEGRAM_TOKEN) {
-  const { Telegraf } = require('telegraf');
+  const https = require('https');
   
-  console.log('🤖 启动 Telegram Bot...');
-  logf('TG: Creating bot instance');
+  console.log('🤖 启动 Telegram Bot (Manual Polling)...');
+  logf('TG: Starting manual polling');
   
-  const bot = new Telegraf(TELEGRAM_TOKEN);
+  // Telegram API 调用
+  function telegramAPI(method, params = {}, timeout = 35000) {
+    return new Promise((resolve, reject) => {
+      const data = JSON.stringify(params);
+      const options = {
+        hostname: 'api.telegram.org',
+        port: 443,
+        path: `/bot${TELEGRAM_TOKEN}/${method}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(data, 'utf8')
+        },
+        timeout
+      };
+
+      const req = https.request(options, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(body);
+            if (!result.ok) {
+              reject(new Error(result.description || 'API call failed'));
+            } else {
+              resolve(result);
+            }
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error(`Timeout for ${method}`));
+      });
+
+      req.write(data);
+      req.end();
+    });
+  }
   
-  // 错误捕获
-  bot.catch((err) => {
-    logf(`TG: bot.catch ${err?.message || err}`);
-    console.error('[TG] Error:', err.message);
-    console.error('[TG] Stack:', err.stack);
-  });
-  
-  // 中间件日志
-  bot.use((ctx, next) => { 
-    logf(`TG: update type=${ctx.updateType} sub=${(ctx.updateSubTypes||[]).join(',')}`); 
-    return next(); 
-  });
-  
-  // 保护中间件
-  bot.use(async (ctx, next) => {
-    try { return await next(); }
-    catch (err) {
-      logf(`TG: middleware-guard caught: ${err?.stack || err}`);
-      try { await ctx.reply('⚠️ 内部错误已记录'); } catch {}
-    }
-  });
-  
-  // 处理文本消息
-  bot.on('text', async (ctx) => {
-    logf(`TG: text received: ${(ctx.message?.text||'').slice(0,80)}`);
+  // 消息处理函数
+  async function handleTelegramMessage(message) {
+    const chatId = message.chat.id;
+    const text = message.text || '';
+    const userId = message.from.id;
+    
+    console.log(`\n📨 [TG] Message from ${userId}: "${text}"`);
+    logf(`TG: msg from ${userId}: ${text.slice(0,80)}`);
+    
     try {
-      const text = ctx.message.text;
-      const userId = ctx.from.id;
-      
-      console.log(`\n📨 收到消息: "${text}"`);
-      
-      // 检测热力图请求
       const isHeatmap = text.includes('热力图') || text.toLowerCase().includes('heatmap');
       
       if (isHeatmap) {
-        await ctx.reply('🎨 正在生成热力图...');
+        console.log('🎨 热力图请求');
+        await telegramAPI('sendMessage', { chat_id: chatId, text: '🎨 正在生成热力图...' });
         
         const result = await generateSmartHeatmap(text);
         
         if (result.buffer) {
-          // 使用 Document 发送（更稳定，避免图像管线问题）
-          await ctx.replyWithDocument(
-            { source: result.buffer, filename: 'heatmap.png' },
-            { caption: result.caption.slice(0, 1000) }
-          );
-          await ctx.reply(result.summary);
-          logf('TG: heatmap sent successfully');
-          console.log('✅ 热力图发送成功');
+          // 使用 multipart/form-data 发送文档
+          const boundary = '----WebKitFormBoundary' + Math.random().toString(36);
+          const parts = [
+            `--${boundary}\r\nContent-Disposition: form-data; name="document"; filename="heatmap.png"\r\nContent-Type: image/png\r\n\r\n`,
+            result.buffer,
+            `\r\n--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${chatId}\r\n`,
+            `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${result.caption.slice(0, 1000)}\r\n`,
+            `--${boundary}--\r\n`
+          ];
+          
+          const bufferParts = parts.map(p => Buffer.isBuffer(p) ? p : Buffer.from(p, 'utf-8'));
+          const bodyBuffer = Buffer.concat(bufferParts);
+          
+          await new Promise((resolve, reject) => {
+            const req = https.request({
+              hostname: 'api.telegram.org',
+              port: 443,
+              path: `/bot${TELEGRAM_TOKEN}/sendDocument`,
+              method: 'POST',
+              headers: {
+                'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                'Content-Length': bodyBuffer.length
+              },
+              timeout: 60000
+            }, (res) => {
+              let body = '';
+              res.on('data', chunk => body += chunk);
+              res.on('end', () => {
+                try {
+                  const result = JSON.parse(body);
+                  result.ok ? resolve(result) : reject(new Error(result.description));
+                } catch (e) { reject(e); }
+              });
+            });
+            req.on('error', reject);
+            req.on('timeout', () => { req.destroy(); reject(new Error('sendDocument timeout')); });
+            req.write(bodyBuffer);
+            req.end();
+          });
+          
+          if (result.summary) {
+            await telegramAPI('sendMessage', { chat_id: chatId, text: result.summary });
+          }
+          console.log('✅ 热力图已发送');
+          logf('TG: heatmap sent');
         }
       } else {
-        // 常规分析
-        await ctx.reply('🧠 正在分析...');
+        console.log('🧠 常规分析');
+        await telegramAPI('sendMessage', { chat_id: chatId, text: '🧠 正在分析...' });
         
         const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
           method: 'POST',
@@ -4709,44 +4767,71 @@ if (TELEGRAM_TOKEN) {
           body: JSON.stringify({
             text,
             user_id: `tg_${userId}`,
-            chat_type: ctx.chat.type,
+            chat_type: message.chat.type,
             mode: 'auto',
             budget: 'low'
           })
         });
         
         const data = await response.json();
-        await ctx.reply(data.final_text || data.final_analysis || '分析完成');
+        await telegramAPI('sendMessage', { 
+          chat_id: chatId, 
+          text: data.final_text || data.final_analysis || '分析完成' 
+        });
+        console.log('✅ 分析结果已发送');
       }
     } catch (error) {
-      console.error('[TG] Handler error:', error.message);
-      console.error('[TG] Handler stack:', error.stack);
+      console.error('[TG] Error:', error.message);
+      logf(`TG: error: ${error.message}`);
       try {
-        await ctx.reply('⚠️ 处理失败，请重试');
+        await telegramAPI('sendMessage', { 
+          chat_id: chatId, 
+          text: `⚠️ 处理失败: ${error.message}` 
+        });
       } catch (e) {
         console.error('[TG] Failed to send error message:', e.message);
       }
     }
-  });
+  }
   
-  // 启动前清理旧的 webhook（避免冲突）
-  (async () => {
-    try {
-      await bot.telegram.deleteWebhook({ drop_pending_updates: false });
-      logf('TG: webhook deleted');
-    } catch (e) {
-      logf(`TG: deleteWebhook failed: ${e.message}`);
-    }
+  // 轮询循环
+  let offset = 0;
+  let polling = false;
+  
+  async function pollTelegram() {
+    if (polling) return;
+    polling = true;
     
-    await bot.launch({ dropPendingUpdates: false });
-    logf('TG: bot launched');
-    console.log('✅ Telegram Bot 已启动！');
-    console.log('💬 现在可以在 Telegram 里直接发消息了');
-  })();
+    try {
+      const result = await telegramAPI('getUpdates', { offset, timeout: 25 }, 35000);
+      
+      if (result.result && result.result.length > 0) {
+        console.log(`📬 [TG] Got ${result.result.length} updates`);
+        
+        for (const update of result.result) {
+          offset = update.update_id + 1;
+          if (update.message && update.message.text) {
+            await handleTelegramMessage(update.message);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[TG] Poll error:', e.message);
+      logf(`TG: poll error: ${e.message}`);
+    } finally {
+      polling = false;
+      setTimeout(pollTelegram, 1000);
+    }
+  }
   
-  // 优雅停止
-  process.once('SIGINT', () => { logf('TG: stopping (SIGINT)'); bot.stop('SIGINT'); });
-  process.once('SIGTERM', () => { logf('TG: stopping (SIGTERM)'); bot.stop('SIGTERM'); });
+  // 延迟2秒启动轮询（让Express服务器先启动）
+  setTimeout(() => {
+    console.log('✅ Telegram Bot 已启动（手动轮询）');
+    console.log('💬 现在可以在 Telegram 里直接发消息了');
+    logf('TG: polling started');
+    pollTelegram();
+  }, 2000);
+  
 } else {
   console.log('⚠️  未配置 TELEGRAM_BOT_TOKEN');
 }
