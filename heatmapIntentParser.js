@@ -370,18 +370,26 @@ function buildTradingViewURL(query) {
   const params = new URLSearchParams({
     color: 'change',
     dataset: index,
-    group: sector !== 'AUTO' ? 'industry' : 'sector',  // 指定板块时切换到行业视图
+    group: sector !== 'AUTO' ? 'industry' : 'sector',
     blockSize: 'market_cap_basic',
     blockColor: 'change'
   });
   
+  // 为日本市场添加特殊参数
+  if (index === 'NIKKEI225') {
+    console.log('🎌 应用日本市场特殊参数');
+    params.set('exchange', 'JPX');
+    params.set('country', 'JP');
+    params.set('locale', 'ja');
+  }
+  
   // 语言参数
   if (locale && locale !== 'auto') {
-    const langCode = locale.split('-')[0]; // zh-CN → zh
+    const langCode = locale.split('-')[0];
     params.set('lang', langCode);
   }
   
-  // 板块筛选（TradingView支持的filter参数）
+  // 板块筛选
   if (sector && sector !== 'AUTO') {
     params.set('filter', sector);
     console.log(`🎯 [板块筛选] 启用 filter=${sector}`);

@@ -3,6 +3,54 @@
 
 const { extractHeatmapQueryRulesOnly, buildTradingViewURL, generateHeatmapSummary, generateCaption } = require("./heatmapIntentParser");
 const { captureHeatmapSmart } = require('./screenshotProviders');
+const { generateWithGPT5 } = require('./gpt5Brain');
+
+/**
+ * 生成AI市场分析
+ * @param {string} marketIndex - 市场指数名称
+ * @param {string} userQuery - 用户原始查询
+ * @returns {Promise<string>} AI分析结果
+ */
+async function generateMarketAnalysis(marketIndex, userQuery) {
+  try {
+    console.log(`🤖 开始分析${marketIndex}市场`);
+    
+    const indexNames = {
+      'SPX500': '标普500', 'NASDAQ100': '纳斯达克100', 'DJ30': '道琼斯30',
+      'NIKKEI225': '日经225', 'IBEX35': 'IBEX35', 'DAX40': 'DAX40',
+      'CAC40': 'CAC40', 'FTSE100': '富时100', 'EURO50': '欧洲斯托克50',
+      'HSI': '恒生指数', 'CSI300': '沪深300', 'NIFTY50': 'Nifty 50'
+    };
+    
+    const indexName = indexNames[marketIndex] || marketIndex;
+    
+    const prompt = `作为专业股票分析师，基于${indexName}热力图提供简要市场分析：
+- 当前市场整体趋势
+- 表现最好和最差的板块
+- 简要的投资建议
+请用简洁专业的中文回答，控制在150字以内。`;
+    
+    const analysis = await generateWithGPT5({
+      text: prompt,
+      marketData: {},
+      semanticIntent: { action: 'heatmap_analysis', symbols: [] },
+      mode: 'analysis',
+      scene: 'intraday',
+      symbols: []
+    });
+    
+    return analysis.text || `📊 ${indexName}实时热力图已生成。建议关注板块轮动和资金流向。`;
+    
+  } catch (error) {
+    console.log('❌ AI分析失败，使用备用分析:', error.message);
+    const indexNames = {
+      'NIKKEI225': '日经225', 'IBEX35': 'IBEX35', 'DAX40': 'DAX40',
+      'SPX500': '标普500', 'NASDAQ100': '纳斯达克100'
+    };
+    const indexName = indexNames[marketIndex] || marketIndex;
+    return `📊 ${indexName}实时热力图已生成。建议关注板块轮动和资金流向。`;
+  }
+}
 
 /**
  * 智能热力图生成（纯规则引擎 + 可插拔Provider系统）
@@ -61,6 +109,9 @@ async function generateSmartHeatmap(userText) {
       
       console.log(`✅ [Smart Heatmap] 完成 (${elapsed}ms, provider=${result.provider})`);
       
+      // 生成AI市场分析
+      const marketAnalysis = await generateMarketAnalysis(query.index, userText);
+      
       return {
         ok: true,
         buffer: result.buffer,
@@ -75,7 +126,7 @@ async function generateSmartHeatmap(userText) {
           debug: query.debug
         },
         elapsed_ms: elapsed,
-        caption: caption,
+        caption: marketAnalysis,
         summary: summary
       };
     } catch (error) {
