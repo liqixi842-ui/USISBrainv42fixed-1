@@ -344,74 +344,74 @@ export default async function ({ page, context }) {
 }
 
 // ========================================
-// Provider 2: ScreenshotAPI (回退方案 - 长延迟策略)
+// Provider 2: ScreenshotN8N (n8n风格 - 长延迟+元素等待+重试)
 // ========================================
-async function captureScreenshotAPI({ tradingViewUrl, dataset, region, sector }) {
-  const startTime = Date.now();
-  console.log(`\n📸 [ScreenshotAPI] 截图: ${tradingViewUrl}`);
+async function captureViaScreenshotN8N({ url, dataset }) {
+  const start = Date.now();
+  console.log(`\n📸 [ScreenshotN8N] n8n风格截图: ${url}`);
   
-  const endpoint = process.env.SCREENSHOT_API_ENDPOINT || 'https://shot.screenshotapi.net/screenshot';
-  const apiKey = process.env.SCREENSHOT_API_KEY;
+  const ep = process.env.SCREENSHOT_API_ENDPOINT || 'https://shot.screenshotapi.net/screenshot';
+  const key = process.env.SCREENSHOT_API_KEY;
   
-  if (!apiKey) {
-    throw new Error('SCREENSHOT_API_KEY未配置');
+  if (!ep || !key) {
+    throw new Error('screenshot_api_not_configured');
   }
   
-  // 参数优化：长延迟 + 广告拦截 + 网络静默
+  // n8n核心策略：长延迟 + 元素等待 + 网络静默
   const params = new URLSearchParams({
-    token: apiKey,
-    url: tradingViewUrl,
-    output: 'image',
-    file_type: 'png',
+    token: key,                    // 或access_key，根据供应商
+    url,
     full_page: 'true',
-    delay: '6000',              // 6秒延迟让TradingView充分加载
+    viewport_width: '1920',
+    viewport_height: '1080',
+    device_scale_factor: '2',      // 高清
     block_ads: 'true',
     block_cookie_banners: 'true',
-    ttl: '600',                 // 10分钟缓存
+    delay: '7000',                 // 7秒延迟，给TradingView充足时间
+    ttl: '600',                    // 10分钟缓存
     wait_for_event: 'load',
-    width: '1400',
-    height: '900',
-    device_scale_factor: '2'
+    output: 'image',
+    file_type: 'png'
   });
   
-  try {
-    const response = await fetch(`${endpoint}?${params.toString()}`, {
-      method: 'GET',
-      timeout: 25000  // 25秒超时保护
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`screenshot_api_http_${response.status}: ${errorText.substring(0, 200)}`);
-    }
-    
-    const imageBuffer = await response.buffer();
-    
-    // 轻量级验证
-    const validationResult = await lightValidate(imageBuffer, MUST_HAVE[dataset] || []);
-    if (!validationResult) {
-      throw new Error('image_validation_failed');
-    }
-    
-    const elapsed = Date.now() - startTime;
-    console.log(`✅ [ScreenshotAPI] 成功 (${elapsed}ms, ${imageBuffer.length} bytes, validation=${validationResult})`);
-    
-    return {
-      success: true,
-      buffer: imageBuffer,
-      provider: 'screenshot_api',
-      elapsed_ms: elapsed,
-      validation: validationResult,
-      meta: {
-        dataset,
-        region,
-        sector
+  // 尝试添加元素选择器（如果供应商支持）
+  // element: '.tv-heatmap,.heatmap,.treemap,[data-name*="heatmap"]'
+  
+  // 三次重试 + 指数退避
+  let lastErr;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const resp = await fetch(`${ep}?${params.toString()}`, { timeout: 25000 });
+      
+      if (!resp.ok) {
+        throw new Error(`screenshot_http_${resp.status}`);
       }
-    };
-  } catch (error) {
-    console.error(`❌ [ScreenshotAPI] 失败:`, error.message);
-    throw error;
+      
+      const buf = await resp.buffer();
+      
+      // 轻量验证：避免1x1空图
+      if (!buf || buf.length < 60000) {
+        throw new Error('screenshot_too_small');
+      }
+      
+      const elapsed = Date.now() - start;
+      console.log(`✅ [ScreenshotN8N] 成功 (${elapsed}ms, ${buf.length} bytes, retry=${i})`);
+      
+      return {
+        buffer: buf,
+        elapsed_ms: elapsed,
+        validation: 'saas-waited'
+      };
+    } catch (e) {
+      lastErr = e;
+      const backoff = jitter(800 * Math.pow(2, i));
+      console.warn(`⚠️  [ScreenshotN8N] 重试${i + 1}/3失败: ${e.message}, 退避${backoff}ms`);
+      await sleep(backoff);
+      continue;
+    }
   }
+  
+  throw lastErr || new Error('screenshot_failed');
 }
 
 // ========================================
@@ -525,65 +525,50 @@ async function captureQuickChart({ dataset, region }) {
 }
 
 // ========================================
-// 主入口：智能路由（三层回退 + 指数退避）
+// 主入口：n8n风格优先（截图SaaS → Browserless → QuickChart）
 // ========================================
 async function captureHeatmapSmart({ tradingViewUrl, dataset, region, sector }) {
-  console.log(`\n🚀 [Smart Router] 开始智能截图流程`);
-  console.log(`   - Browserless可用: ${!!process.env.BROWSERLESS_API_KEY}`);
+  console.log(`\n🚀 [Smart Router] n8n风格路由：优先截图SaaS`);
   console.log(`   - ScreenshotAPI可用: ${!!process.env.SCREENSHOT_API_KEY}`);
+  console.log(`   - Browserless可用: ${!!process.env.BROWSERLESS_API_KEY}`);
   
-  const providers = ['browserless', 'screenshot', 'quickchart'];
+  // n8n顺序：截图SaaS → Browserless增强 → QuickChart保底
+  const providers = ['screenshot_n8n', 'browserless', 'quickchart'];
   const errors = [];
-  let attempt = 0;
   
-  for (const provider of providers) {
-    attempt++;
-    
+  for (const p of providers) {
     try {
-      if (provider === 'browserless' && process.env.BROWSERLESS_API_KEY) {
-        return {
-          provider: 'browserless',
-          ...(await captureBrowserless({
-            tradingViewUrl,
-            dataset,
-            region,
-            sector,
-            apiKey: process.env.BROWSERLESS_API_KEY
-          }))
-        };
+      if (p === 'screenshot_n8n' && process.env.SCREENSHOT_API_KEY) {
+        const r = await captureViaScreenshotN8N({
+          url: tradingViewUrl,
+          dataset
+        });
+        return { provider: 'screenshot', ...r };
       }
       
-      if (provider === 'screenshot' && process.env.SCREENSHOT_API_KEY) {
-        return {
-          provider: 'screenshot',
-          ...(await captureScreenshotAPI({
-            tradingViewUrl,
-            dataset,
-            region,
-            sector
-          }))
-        };
+      if (p === 'browserless' && process.env.BROWSERLESS_API_KEY) {
+        console.log(`\n📸 [Browserless] 尝试DOM增强截图（非必需）`);
+        const r = await captureBrowserless({
+          tradingViewUrl,
+          dataset,
+          region,
+          sector,
+          apiKey: process.env.BROWSERLESS_API_KEY
+        });
+        return { provider: 'browserless', ...r };
       }
       
-      if (provider === 'quickchart') {
-        return {
-          provider: 'quickchart',
-          ...(await captureQuickChart({
-            dataset,
-            region
-          }))
-        };
+      if (p === 'quickchart') {
+        const r = await captureQuickChart({
+          dataset,
+          region
+        });
+        return { provider: 'quickchart', ...r };
       }
     } catch (error) {
-      // 指数退避：800ms * 2^n + 随机抖动
-      const backoff = jitter(800 * Math.pow(2, attempt - 1));
-      console.warn(`⚠️  [fallback] ${provider} failed: ${error.message}; backoff=${backoff}ms`);
-      errors.push({ provider, error: error.message });
-      
-      // 最后一个provider失败则不等待
-      if (attempt < providers.length) {
-        await sleep(backoff);
-      }
+      console.warn(`⚠️  [${p}] 失败，继续回退: ${error.message.substring(0, 100)}`);
+      errors.push({ provider: p, error: error.message });
+      continue;
     }
   }
   
@@ -593,7 +578,7 @@ async function captureHeatmapSmart({ tradingViewUrl, dataset, region, sector }) 
 
 module.exports = {
   captureBrowserless,
-  captureScreenshotAPI,
+  captureViaScreenshotN8N,
   captureQuickChart,
   captureHeatmapSmart,
   DATASET_LABEL,

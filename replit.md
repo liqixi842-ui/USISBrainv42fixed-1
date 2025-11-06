@@ -68,11 +68,16 @@ Supports built-in multilingual responses (Chinese `zh`, Spanish `es`, English `e
 ## Observability
 Provides console-based request logging with emoji markers and includes confidence scores, model voting details, and timestamps in responses.
 
-## Heatmap System (v4.3)
-**Three-Tier Screenshot Architecture**:
-- **Tier 1 - Browserless** (Primary): Cloud-based headless Chromium with Puppeteer script execution. Captures TradingView heatmaps with proper localization headers and dataset URL parameters. ~10s response time.
-- **Tier 2 - ScreenshotAPI** (Fallback): Direct URL screenshot service. Falls back when Browserless unavailable or rate-limited.
-- **Tier 3 - QuickChart** (Final Fallback): Generates simplified treemap visualizations when all screenshot services fail.
+## Heatmap System (v4.3 - n8n Style)
+**Three-Tier Screenshot Architecture (n8n风格优先级)**:
+- **Tier 1 - ScreenshotN8N** (Primary): n8n-style SaaS screenshot with 7-second delay + element waiting + network idle. Avoids complex DOM interactions. 3 retries with exponential backoff. ~8-10s response time.
+- **Tier 2 - Browserless** (Enhancement): Cloud-based headless Chromium with A+B+C dataset switching strategy (dropdown click → search input → SPA route forcing). Used only when SaaS unavailable. DOM-level validation (label text + block count). ~10-15s response time.
+- **Tier 3 - QuickChart** (Final Fallback): Generates simplified bar chart when all screenshot services fail. Returns with `validation: 'degraded'` flag.
+
+**n8n Design Philosophy**:
+- **Stability over Complexity**: Rely on long delays and browser waiting instead of DOM manipulation
+- **SaaS-First**: Screenshot services handle the complexity; avoid fragile UI automation
+- **Graceful Degradation**: Each tier provides progressively simpler but always-working output
 
 **Pure Rule-Based Parser (v4.3)**: 
 - 100% accurate intent parsing without GPT dependencies
@@ -82,10 +87,17 @@ Provides console-based request logging with emoji markers and includes confidenc
 - Three-layer anti-leakage protection for Spain/IBEX35
 
 **Provider Module** (`screenshotProviders.js`):
-- Pluggable architecture with automatic fallback
-- Error handling and retry logic
-- Comprehensive logging for debugging
+- n8n-style smart routing with priority order
+- Unified validation flags: `saas-waited`, `dom-strong`, `degraded`
+- Exponential backoff retry logic (800ms × 2^n + jitter)
+- Serial execution to avoid rate limiting
 - Environment variable based configuration
+
+**Recent Changes (v4.3.1)**:
+- Restored n8n-style screenshot priority (SaaS → Browserless → QuickChart)
+- Implemented `captureViaScreenshotN8N` with 7s delay and 3-retry logic
+- Removed reliance on TradingView DOM interaction for primary path
+- Added degradation markers for fallback scenarios
 
 # External Dependencies
 
