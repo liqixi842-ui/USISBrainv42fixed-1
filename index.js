@@ -4690,10 +4690,77 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
 });
 
-// ====== HTTP API Ready ======
-console.log('[BOOT] ✅ USIS Brain v4.5 ready (HTTP API mode)');
-console.log('📡 使用方式:');
-console.log(`   curl -X POST http://localhost:${PORT}/brain/orchestrate \\`);
-console.log('     -H "Content-Type: application/json" \\');
-console.log('     -d \'{"text":"日本大盘热力图","user_id":"test"}\'');
+// ====== Telegram Bot v4.5 (简化版，无循环依赖) ======
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+
+if (TELEGRAM_TOKEN) {
+  const { Telegraf } = require('telegraf');
+  
+  console.log('🤖 启动 Telegram Bot...');
+  
+  const bot = new Telegraf(TELEGRAM_TOKEN);
+  
+  // 错误捕获
+  bot.catch((err) => {
+    console.error('[TG] Error:', err.message);
+  });
+  
+  // 处理文本消息
+  bot.on('text', async (ctx) => {
+    try {
+      const text = ctx.message.text;
+      const userId = ctx.from.id;
+      
+      console.log(`\n📨 收到消息: "${text}"`);
+      
+      // 检测热力图请求
+      const isHeatmap = text.includes('热力图') || text.toLowerCase().includes('heatmap');
+      
+      if (isHeatmap) {
+        await ctx.reply('🎨 正在生成热力图...');
+        
+        const result = await generateSmartHeatmap(text);
+        
+        if (result.buffer) {
+          await ctx.replyWithPhoto(
+            { source: result.buffer },
+            { caption: result.caption.slice(0, 1000) }
+          );
+          await ctx.reply(result.summary);
+          console.log('✅ 热力图发送成功');
+        }
+      } else {
+        // 常规分析
+        await ctx.reply('🧠 正在分析...');
+        
+        const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            user_id: `tg_${userId}`,
+            chat_type: ctx.chat.type,
+            mode: 'auto',
+            budget: 'low'
+          })
+        });
+        
+        const data = await response.json();
+        await ctx.reply(data.final_text || data.final_analysis || '分析完成');
+      }
+    } catch (error) {
+      console.error('[TG] Handler error:', error.message);
+      await ctx.reply('⚠️ 处理失败，请重试');
+    }
+  });
+  
+  bot.launch({ dropPendingUpdates: true });
+  console.log('✅ Telegram Bot 已启动！');
+  console.log('💬 现在可以在 Telegram 里直接发消息了');
+  
+  process.once('SIGINT', () => bot.stop('SIGINT'));
+  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+} else {
+  console.log('⚠️  未配置 TELEGRAM_BOT_TOKEN');
+}
 
