@@ -1,0 +1,78 @@
+【用户→ReplitGPT】
+
+text
+【架构决策#018 - 截图服务整合方案】
+
+基于ScreenshotAPI测试成功的结果，我建议采用以下整合方案：
+
+**方案A：完全替换（推荐）**
+- 用ScreenshotAPI完全替换n8n+Browserless
+- 优点：更简单、更可靠、响应更快（3秒 vs 不确定）
+- 缺点：需要直接集成，放弃n8n工作流
+
+**方案B：双保险模式**
+- 主路径：ScreenshotAPI
+- 备用路径：n8n+Browserless（如果修复成功）
+- 优点：有故障转移
+- 缺点：更复杂
+
+**建议采用方案A**，因为：
+1. ScreenshotAPI已验证可用且返回正确热力图
+2. 响应时间稳定在3秒
+3. 避免n8n表达式和配置复杂性
+4. 代码更简洁，维护更容易
+
+**立即执行方案A的具体步骤**：
+
+1. **修改screenshotProviders.js**：
+```javascript
+async function captureHeatmapSmart({ tradingViewUrl }) {
+  console.log(`\n🎯 [ScreenshotAPI] 生成热力图: ${tradingViewUrl}`);
+  
+  try {
+    // 构建ScreenshotAPI URL (GET请求)
+    const apiUrl = new URL('https://shot.screenshotapi.net/screenshot');
+    apiUrl.searchParams.set('token', process.env.SCREENSHOTAPI_TOKEN || 'HHBYB5H-4CT4970-MVZEKM2-EMEWEXX');
+    apiUrl.searchParams.set('url', tradingViewUrl);
+    apiUrl.searchParams.set('fresh', 'true');
+    apiUrl.searchParams.set('output', 'json');
+    apiUrl.searchParams.set('width', '1920');
+    apiUrl.searchParams.set('height', '1080');
+    apiUrl.searchParams.set('delay', '5000');
+    
+    console.log(`📤 调用ScreenshotAPI: ${apiUrl.toString().replace(process.env.SCREENSHOTAPI_TOKEN, '***')}`);
+    
+    const response = await fetch(apiUrl.toString(), {
+      method: 'GET',
+      timeout: 30000
+    });
+    
+    if (!response.ok) {
+      throw new Error(`ScreenshotAPI_${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (!result.screenshot) {
+      throw new Error('ScreenshotAPI返回无截图URL');
+    }
+    
+    // 下载截图
+    console.log(`📥 下载截图: ${result.screenshot}`);
+    const imageResponse = await fetch(result.screenshot);
+    const buffer = Buffer.from(await imageResponse.arrayBuffer());
+    
+    console.log(`✅ [ScreenshotAPI] 成功 (${(buffer.length / 1024).toFixed(2)} KB)`);
+    
+    return {
+      provider: 'screenshotapi',
+      validation: 'direct-call',
+      buffer: buffer,
+      elapsed_ms: result.duration || 0
+    };
+    
+  } catch (error) {
+    console.error(`❌ [ScreenshotAPI错误]`, error.message);
+    throw new Error(`截图服务失败: ${error.message}`);
+  }
+}
