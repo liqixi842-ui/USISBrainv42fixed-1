@@ -1,11 +1,13 @@
-// 热力图服务模块 - v5.0 Vision Upgrade
+// 热力图服务模块 - v5.0 Enhanced Vision Upgrade
 // 独立模块，避免循环依赖
-// 新增：GPT-4 Vision视觉分析能力
+// 新增：GPT-4o视觉分析 + 增强数据经纪人 + 专业报告生成
 
 const { extractHeatmapQueryRulesOnly, buildTradingViewURL, generateHeatmapSummary, generateCaption } = require("./heatmapIntentParser");
 const { captureHeatmapSmart } = require('./screenshotProviders');
 const { generateWithGPT5 } = require('./gpt5Brain');
-const VisionAnalysisService = require('./visionAnalysis');
+const VisionAnalyzer = require('./visionAnalyzer');
+const EnhancedDataBroker = require('./enhancedDataBroker');
+const ProfessionalReporter = require('./professionalReporter');
 
 /**
  * 生成AI市场分析 - 基于可观察热力图特征
@@ -120,83 +122,109 @@ async function generateSmartHeatmap(userText) {
       
       console.log(`✅ [Smart Heatmap] 完成 (${elapsed}ms, provider=${result.provider})`);
       
-      // 🆕 v5.0: 视觉AI分析（基于真实图像内容）
-      // 三层降级策略：Vision AI → GPT-5 Text Fallback → Legacy Text
+      // 🆕 v5.0 Enhanced: 视觉AI + 增强数据 + 专业报告
       let marketAnalysis;
       let analysisMetadata = {};
+      let professionalReport = null;
       
-      const visionService = new VisionAnalysisService(process.env.OPENAI_API_KEY);
       const marketContext = {
         index: query.index,
         region: query.region,
-        sector: query.sector
+        sector: query.sector !== 'AUTO' ? query.sector : null
       };
       
-      // 检查是否应该使用视觉分析（成本优化）
-      const useVision = visionService.shouldUseVisionAnalysis('standard', query.index);
+      // 判断是否使用增强分析（重要市场）
+      const importantMarkets = ['NIKKEI225', 'SPX500', 'NASDAQ100', 'HSI', 'DAX40', 'IBEX35'];
+      const useEnhancedAnalysis = importantMarkets.includes(query.index);
       
-      if (useVision) {
-        // Tier 1: 尝试Vision AI
+      if (useEnhancedAnalysis) {
         try {
-          console.log('👁️  [Vision AI - Tier 1] 启用视觉AI分析');
-          const visionResult = await visionService.analyzeHeatmapVision(
+          console.log('🔬 [Enhanced Analysis] 启用增强分析模式');
+          
+          // 1. 视觉分析（GPT-4o）
+          const visionAnalyzer = new VisionAnalyzer();
+          const visualAnalysis = await visionAnalyzer.analyzeHeatmapImage(
             result.buffer,
             marketContext
           );
-          marketAnalysis = visionResult.text;
-          analysisMetadata = visionResult.metadata;
+          console.log(`👁️  [Vision] 识别到${visualAnalysis.sectors.length}个板块`);
           
-        } catch (visionError) {
-          console.log('⚠️  [Vision AI Failed] 切换到GPT-5文本模式');
-          console.log(`   错误: ${visionError.message}`);
+          // 2. 增强数据采集
+          const dataBroker = new EnhancedDataBroker();
+          const marketData = await dataBroker.fetchComprehensiveMarketData(
+            query.index,
+            query.region,
+            marketContext.sector
+          );
+          console.log(`📊 [Data] 获取${marketData.components.length}个成分股数据`);
           
-          // Tier 2: GPT-5 Text Fallback
+          // 3. 生成专业报告
+          const reporter = new ProfessionalReporter();
+          professionalReport = await reporter.generateHeatmapAnalysisReport(
+            visualAnalysis,
+            marketData,
+            marketData.economics || [],
+            marketData.news || { articles: [] }
+          );
+          console.log('📋 [Report] 专业报告生成完成');
+          
+          marketAnalysis = professionalReport.rawAnalysis;
+          analysisMetadata = {
+            analysis_type: 'enhanced_vision',
+            visual_sectors: visualAnalysis.sectors.length,
+            data_components: marketData.components.length,
+            confidence: professionalReport.dataConfidence,
+            risk_level: professionalReport.riskAssessment
+          };
+          
+        } catch (enhancedError) {
+          console.log('⚠️  [Enhanced Analysis Failed] 降级到基础视觉分析');
+          console.log(`   错误: ${enhancedError.message}`);
+          
+          // Fallback 1: 基础视觉分析
           try {
-            console.log('🔄 [GPT-5 Fallback - Tier 2] 使用GPT-5文本分析');
-            const fallbackResult = await visionService.analyzeHeatmapFallback(
-              marketContext,
-              { generateWithGPT5 }
+            const visionAnalyzer = new VisionAnalyzer();
+            const visualAnalysis = await visionAnalyzer.analyzeHeatmapImage(
+              result.buffer,
+              marketContext
             );
-            marketAnalysis = fallbackResult.text;
+            marketAnalysis = visualAnalysis.rawAnalysis;
             analysisMetadata = {
-              ...fallbackResult.metadata,
-              vision_error: visionError.message
+              analysis_type: 'vision_basic',
+              enhanced_error: enhancedError.message
             };
+          } catch (visionError) {
+            console.log('⚠️  [Vision Failed] 降级到文本分析');
             
-          } catch (gpt5Error) {
-            console.log('⚠️  [GPT-5 Fallback Failed] 切换到Legacy文本');
-            console.log(`   错误: ${gpt5Error.message}`);
-            
-            // Tier 3: Legacy Text
-            console.log('🆘 [Legacy - Tier 3] 使用传统文本分析');
+            // Fallback 2: 文本分析
             marketAnalysis = await generateMarketAnalysis(query.index, userText);
             analysisMetadata = {
               analysis_type: 'text_legacy',
-              vision_error: visionError.message,
-              gpt5_error: gpt5Error.message
+              enhanced_error: enhancedError.message,
+              vision_error: visionError.message
             };
           }
         }
       } else {
-        // 非重要市场直接使用GPT-5 Text Fallback
+        // 非重要市场使用基础视觉分析
         try {
-          console.log('📝 [Text Mode - Standard] 使用GPT-5文本分析');
-          const fallbackResult = await visionService.analyzeHeatmapFallback(
-            marketContext,
-            { generateWithGPT5 }
+          console.log('👁️  [Basic Vision] 使用基础视觉分析');
+          const visionAnalyzer = new VisionAnalyzer();
+          const visualAnalysis = await visionAnalyzer.analyzeHeatmapImage(
+            result.buffer,
+            marketContext
           );
-          marketAnalysis = fallbackResult.text;
-          analysisMetadata = fallbackResult.metadata;
-          
-        } catch (gpt5Error) {
-          console.log('⚠️  [Text Mode Failed] 切换到Legacy');
-          console.log(`   错误: ${gpt5Error.message}`);
-          
-          // Fallback to Legacy
+          marketAnalysis = visualAnalysis.rawAnalysis;
+          analysisMetadata = {
+            analysis_type: 'vision_basic',
+            visual_sectors: visualAnalysis.sectors.length
+          };
+        } catch (visionError) {
+          console.log('⚠️  [Vision Failed] 降级到文本分析');
           marketAnalysis = await generateMarketAnalysis(query.index, userText);
           analysisMetadata = {
             analysis_type: 'text_legacy',
-            gpt5_error: gpt5Error.message
+            vision_error: visionError.message
           };
         }
       }
@@ -217,7 +245,8 @@ async function generateSmartHeatmap(userText) {
         },
         elapsed_ms: elapsed,
         caption: marketAnalysis,
-        summary: summary
+        summary: summary,
+        professionalReport: professionalReport
       };
     } catch (error) {
       console.error(`❌ [Smart Heatmap] 失败:`, error.message);
