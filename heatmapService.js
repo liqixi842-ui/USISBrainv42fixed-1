@@ -6,14 +6,14 @@ const { captureHeatmapSmart } = require('./screenshotProviders');
 const { generateWithGPT5 } = require('./gpt5Brain');
 
 /**
- * 生成AI市场分析
+ * 生成AI市场分析 - 基于可观察热力图特征
  * @param {string} marketIndex - 市场指数名称
  * @param {string} userQuery - 用户原始查询
  * @returns {Promise<string>} AI分析结果
  */
 async function generateMarketAnalysis(marketIndex, userQuery) {
   try {
-    console.log(`🤖 生成${marketIndex}专业分析`);
+    console.log(`🤖 生成${marketIndex}基于热力图特征的专业分析`);
     
     const indexNames = {
       'SPX500': '标普500', 'NASDAQ100': '纳斯达克100', 'DJ30': '道琼斯30',
@@ -24,30 +24,24 @@ async function generateMarketAnalysis(marketIndex, userQuery) {
     
     const indexName = indexNames[marketIndex] || marketIndex;
     
-    let prompt;
-    if (marketIndex === 'NIKKEI225') {
-      prompt = `作为东京股市分析师，基于日经225实时热力图提供专业分析：
+    const prompt = `你刚刚生成了${indexName}的实时热力图。作为专业分析师，请基于热力图中可见的以下特征提供分析：
 
-重点关注：
-1. 出口板块（汽车、电子）受日元汇率影响
-2. 金融板块对日本央行政策的反应  
-3. 制造业与全球供应链表现
-4. 消费内需板块趋势
+可观察特征（请根据实际图像描述）：
+- 绿色/红色板块分布情况
+- 大市值股票的表现
+- 板块轮动迹象
+- 市场广度（上涨股票数量vs下跌）
 
-请提供：
-- 当前板块轮动特征
-- 汇率敏感度分析（日元走势影响）
-- 短期风险提示（利率、外需）
-- 具体板块建议（1-2个重点板块）
+基于这些可见特征，请提供：
+1. 【当前判断】市场处于什么状态？（普涨/分化/普跌）
+2. 【机会识别】哪个板块最具吸引力？为什么？
+3. 【风险提示】需要警惕什么信号？
+4. 【操作建议】具体的交易思路（入场/出场条件）
 
-用简洁专业的中文，避免泛泛而谈。`;
-    } else {
-      prompt = `作为专业股票分析师，基于${indexName}热力图提供实时分析：
-- 当前领涨和领跌板块
-- 市场资金流向特征
-- 短期交易机会与风险
-用专业简洁的中文回答。`;
-    }
+要求：避免宏观套话，基于"看到的"图像特征说话，提供可执行建议。
+如果热力图显示大面积绿色，指出可能的延续性；如果红绿混杂，提示震荡策略。
+
+用简洁专业的中文回答，控制在200字以内。`;
     
     const analysis = await generateWithGPT5({
       text: prompt,
