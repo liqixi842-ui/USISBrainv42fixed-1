@@ -4764,3 +4764,7 @@ if (TELEGRAM_TOKEN) {
   console.log('⚠️  未配置 TELEGRAM_BOT_TOKEN');
 }
 
+// ====== Exports for telegram.js ======
+module.exports = {
+  generateSmartHeatmap
+};

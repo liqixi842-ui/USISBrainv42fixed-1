@@ -23,8 +23,9 @@ async function handleHeatmapRequest(ctx, text) {
   try {
     await ctx.reply(`🎨 正在生成TradingView热力图...${hasDebugFlag ? '\n🔍 诊断模式已启用' : ''}`);
     
-    // 调用热力图生成函数（需要从 index.js 导入）
-    const { generateSmartHeatmap, generateDebugReport } = require('./index.js');
+    // 调用热力图生成函数
+    const { generateSmartHeatmap } = require('./index.js');
+    const { generateDebugReport } = require('./heatmapIntentParser.js');
     
     const result = await generateSmartHeatmap(text);
     
