@@ -1,0 +1,121 @@
+{
+  "name": "Capture TradingView Heatmap via Browserless",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "capture_heatmap",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "005207c9-d2ef-4a32-a7c5-404570674eab",
+      "name": "Receive Heatmap Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "capture_heatmap"
+    },
+    {
+      "parameters": {
+        "respondWith": "binary",
+        "options": {}
+      },
+      "id": "f1042ebb-28fb-4837-a035-efa8142e4964",
+      "name": "Return Image to Replit",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://shot.screenshotapi.net/screenshot",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "HHBYB5H-4CT4970-MVZEKM2-EMEWEXX"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.url }}"
+            },
+            {
+              "name": "fresh",
+              "value": "true"
+            },
+            {
+              "name": "output",
+              "value": "json"
+            },
+            {
+              "name": "width",
+              "value": "1920"
+            },
+            {
+              "name": "height",
+              "value": "1080"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        256,
+        16
+      ],
+      "id": "74193017-c515-4039-81b0-1113819276aa",
+      "name": "ScreenshotAPI 截图服务"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Heatmap Request": {
+      "main": [
+        [
+          {
+            "node": "ScreenshotAPI 截图服务",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ScreenshotAPI 截图服务": {
+      "main": [
+        [
+          {
+            "node": "Return Image to Replit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "eed81ef9-a8cb-4f31-95e4-2a54b747fc04",
+  "meta": {
+    "instanceId": "e55566bfe54f88b404d502841707ce3b88351798d04a45b88b4e50f6ca391fb1"
+  },
+  "id": "94XFa6PjmmbNI3a6",
+  "tags": []
+}
