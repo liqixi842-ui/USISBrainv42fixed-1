@@ -1,0 +1,233 @@
+0）快速“气味测试”：更新到稳定组合
+
+Telegraf：固定到 ^4.16.3
+
+Node 启动参数（见第 2 步）
+很多“无声崩溃”来自更高版本 Node 与某些依赖的边缘交互。先把地基稳住。
+
+1）把“死前遗言”写进磁盘（即使被 SIGKILL 也能留线索）
+
+把下面这个最顶层“黑匣子”放到 index.js 最开头（任何 import/require 之前），确保即便是 beforeExit/SIGTERM 也会同步落盘到 /tmp/usis-brain.log：
+
+// --- CRASH BLACKBOX (must be first) ---
+import fs from 'fs';
+const logf = (msg) => {
+  try { fs.writeFileSync('/tmp/usis-brain.log', `[${new Date().toISOString()}] ${msg}\n`, { flag: 'a' }); } catch {}
+};
+process.on('beforeExit', (code) => logf(`beforeExit ${code}`));
+process.on('exit', (code) => logf(`exit ${code}`));
+process.on('SIGINT', () => { logf('SIGINT'); });
+process.on('SIGTERM', () => { logf('SIGTERM'); });
+process.on('SIGHUP', () => { logf('SIGHUP'); });
+process.on('uncaughtExceptionMonitor', (err, origin) => logf(`uncaughtExceptionMonitor ${origin}: ${err?.stack || err}`));
+process.on('uncaughtException', (err) => { logf(`uncaughtException: ${err?.stack || err}`); });
+process.on('unhandledRejection', (r) => { logf(`unhandledRejection: ${r?.stack || r}`); });
+logf('USIS Brain v5 booting...');
+
+
+同时，在进消息的第一行也同步落盘：
+
+bot.use((ctx, next) => { logf(`update type=${ctx.updateType} sub=${(ctx.updateSubTypes||[]).join(',')}`); return next(); });
+bot.on('text', async (ctx) => {
+  logf(`TG text received: ${(ctx.message?.text||'').slice(0,80)}`);
+  // 你原来的代码...
+});
+
+
+这一步能分辨：是信号杀死（会有 SIGTERM 记录）、是正常退出路径（有 exit/beforeExit）、还是完全被 “拍死”（/tmp 没增加任何新日志，多半是 OOM 或原生崩溃）。
+
+2）用 Node Report 抓“尸检报告”
+
+把你的启动命令替换为（Replit Nix/Run 里加 NODE_OPTIONS）：
+
+NODE_OPTIONS="--trace-uncaught --trace-warnings --unhandled-rejections=strict \
+ --report-uncaught-exception --report-on-signal --report-on-fatalerror \
+ --heap-prof --max-old-space-size=512" node index.js
+
+
+触发崩溃时，Node 会在当前目录生成 report.*.json。
+
+若是内存/原生崩溃，这里会给出罪魁（如 V8 fatal error / heap OOM / native abort）。
+
+Replit 小内存，一张图 + 大依赖就可能把进程顶炸。加 --max-old-space-size=512 可控内存上限并让报告更明确。
+
+3）打开 Telegraf 的“里话筒”
+
+在启动前设置环境变量（或代码里 process.env.DEBUG = 'telegraf:*'）：
+
+DEBUG=telegraf:* node index.js
+
+
+Telegraf 在 收到 update → 进入/退出中间件链 → 调用处理器 的每一步都会吐日志。
+如果日志显示收到 update 就结束，多半是外部信号或进程被平台杀死（见第 6 步 Replit 看门狗）。
+
+4）二分法：空 handler 试验（排除你业务代码的影响）
+
+把你的 bot.on('text') 暂时替换为“纯空”版本运行一次：
+
+bot.on('text', async (ctx) => {
+  logf('handler-enter');
+  try {
+    await ctx.reply('pong');
+  } finally {
+    logf('handler-exit');
+  }
+});
+
+
+仍然崩且连 handler-enter 都看不到：问题在进入 handler 之前（Telegraf/平台/双实例冲突/信号）。
+
+不崩：说明问题在你原先的 handler 内部链路（即使你觉得 console.log 是第一句，也可能被 Tree-Shaking/Transpile 或上游 middleware 先做了事情）。
+
+5）最常见“无声死因”与即刻修复
+A. 双实例 / 冲突轮询 → 409/致命 abort
+
+症状：你在 Replit 上开着另一个相同 TOKEN 的进程（或热加载残留），一收到消息，Telegram 轮询冲突，某些版本/写法会直接中止。
+修复：
+
+// 启动前强制停止旧长轮询（确保只有一份在跑）
+await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(()=>{});
+await bot.launch({ dropPendingUpdates: false });
+logf('bot launched');
+// 进程退出时优雅停掉
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+
+同时，确保只用一种模式（别同时挂 webhookCallback 和 polling）。你现在用 polling，就不要 app.use(bot.webhookCallback(...))。
+
+B. OOM（内存爆掉，Replit 直接 SIGKILL）
+
+症状：完全没日志；/tmp 也不增长；图片 300–600KB + 某些依赖（如 sharp、canvas、大型 JSON）使瞬时内存刺破阈值。
+修复（最有效的 4 点）：
+
+不在内存里转图：直接把 Buffer 改成 流/URL 发送，避免重复拷贝：
+
+// 如果 n8n 能返回可公开访问的图像 URL（推荐），直接：
+await ctx.replyWithPhoto(result.imageUrl, { caption: result.caption.slice(0, 1000) });
+
+// 如果只能拿到 Buffer，至少附上 filename，减少类型探测：
+await ctx.replyWithPhoto({ source: result.buffer, filename: 'heatmap.png' }, { caption: ... });
+
+
+提前 GC/释放：大函数返回后，把大对象置空：
+
+const res = await generateSmartHeatmap(text);
+try {
+  await ctx.replyWithPhoto({ source: res.buffer, filename: 'heatmap.png' }, { caption: res.caption.slice(0,1000) });
+} finally {
+  if (res.buffer) { try { res.buffer = null; } catch {} }
+}
+
+
+降低峰值：n8n 端把截图尺寸限制在 1280x720 左右，quality 调到 70–80。
+
+上限可控：保持 --max-old-space-size=512，崩溃时 Node Report 会明示 OOM。
+
+C. 原生依赖崩溃（segfault）
+
+即使你说“独立调用正常”，但不同事件路径可能首次触发 sharp/canvas 的不同分支。
+修复：把所有图像处理移到 n8n（或 Browserless）侧，Node 侧不做任何变换，只转发 Buffer/URL。若必须本地处理，临时移除 sharp/canvas 验证是否不再崩。
+
+D. Handler 里同步抛错 → 被外层中间件吞掉并导致退出
+
+你在 bot.use(...) 某处若同步 throw，可能在 Telegraf 某版本组合下走到致命路径。
+修复：在最外层加“保护中间件”：
+
+bot.use(async (ctx, next) => {
+  try { return await next(); }
+  catch (err) {
+    logf(`middleware-guard caught: ${err?.stack || err}`);
+    try { await ctx.reply('⚠️ 内部错误已记录'); } catch {}
+  }
+});
+
+6）Replit“看门狗”/端口守护问题（收到消息时被杀）
+
+Replit 会“期望”你有一个 HTTP 端口在监听；有些模板在收到某类事件时临时阻塞事件循环导致“存活探针”失败被杀。
+修复：确保你有个轻量心跳 HTTP 服务一直在，且不会被阻塞：
+
+import express from 'express';
+const app = express();
+app.get('/health', (_req, res) => res.send('ok'));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => logf(`health server on ${PORT}`));
+
+
+并确保你的热力图生成是纯异步（不要有同步的大计算或阻塞 I/O）。
+
+7）把热力图发送改为“文档发送”降魔（规避 Telegram 图像管线问题）
+
+某些情况下 replyWithPhoto 的自动 MIME 探测会踩坑。先试一次文档通道（更鲁棒）：
+
+await ctx.replyWithDocument(
+  { source: result.buffer, filename: 'heatmap.png' },
+  { caption: result.caption.slice(0, 1000) }
+);
+
+
+如果这样不崩，基本就能确定是 Photo 路径上的类型探测/压缩问题。
+
+8）把“生成”与“发送”拆线程（任务排队，避免长处理卡死主循环）
+
+用一个简单的 in-memory 队列，把 generateSmartHeatmap 放到队列工作者里，handler 只排队并立刻 reply('稍等…')。这既降峰值又减少“长任务 + polling”的相互干扰。
+
+const q = [];
+let working = false;
+const work = async () => {
+  if (working || q.length === 0) return;
+  working = true;
+  const job = q.shift();
+  try {
+    const res = await generateSmartHeatmap(job.text);
+    await job.ctx.replyWithDocument({ source: res.buffer, filename: 'heatmap.png' }, { caption: res.caption.slice(0,1000) });
+  } catch (e) {
+    logf('worker error ' + (e?.stack || e));
+    try { await job.ctx.reply('⚠️ 生成失败，请稍后重试'); } catch {}
+  } finally { working = false; setImmediate(work); }
+};
+bot.on('text', async (ctx) => {
+  logf('enqueue job');
+  await ctx.reply('🎨 正在生成热力图...');
+  q.push({ ctx, text: ctx.message.text });
+  work();
+});
+
+9）终局修复建议（稳定性提升打包版）
+
+只保留 polling；启动前 deleteWebhook；退出时 bot.stop()；DEBUG=telegraf:* 打开。
+
+图像链路全外包给 n8n（返回 URL 更佳）；Node 侧仅转发。
+
+发送用 Document 路径并提供 filename。
+
+黑匣子 + Node Report 常驻；Replit 有事时至少给你“遗书”。
+
+心跳 HTTP 常驻，防守护误杀。
+
+队列/worker 解耦长任务，降低崩溃面。
+
+你现在可以直接执行的最小修复组合
+
+1）在 index.js 顶部加入 黑匣子（第 1 步代码）
+2）在启动命令加上 NODE_OPTIONS（第 2 步）
+3）在启动前执行：
+
+await bot.telegram.deleteWebhook({ drop_pending_updates: false }).catch(()=>{});
+await bot.launch({ dropPendingUpdates: false });
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
+
+
+4）把 replyWithPhoto 暂时换成 replyWithDocument + filename（第 7 步）
+5）若仍崩：启用 空 handler（第 4 步）跑一次 → 立判“在不在 handler”
+
+做完这些后，查看：
+
+终端 DEBUG=telegraf:* 输出
+
+/tmp/usis-brain.log 里最后几行
+
+根目录 report.*.json（有就是致命错误/内存/原生）
+
+把三样的片段贴回来，我能根据具体线索给出精准点杀（是 409 冲突、OOM、原生崩，还是框架链路）。接着再把文档/URL 发送方式切回更优的形态。

@@ -1,4 +1,19 @@
-// ====== USIS Brain · v4.0（GPT-5单核 + 实时数据） ======
+// ====== USIS Brain · v5.0（Telegram Bot + n8n 热力图） ======
+
+// --- CRASH BLACKBOX (must be first) ---
+const fs = require('fs');
+const logf = (msg) => {
+  try { fs.writeFileSync('/tmp/usis-brain.log', `[${new Date().toISOString()}] ${msg}\n`, { flag: 'a' }); } catch {}
+};
+process.on('beforeExit', (code) => logf(`beforeExit ${code}`));
+process.on('exit', (code) => logf(`exit ${code}`));
+process.on('SIGINT', () => { logf('SIGINT'); });
+process.on('SIGTERM', () => { logf('SIGTERM'); });
+process.on('SIGHUP', () => { logf('SIGHUP'); });
+process.on('uncaughtExceptionMonitor', (err, origin) => logf(`uncaughtExceptionMonitor ${origin}: ${err?.stack || err}`));
+process.on('uncaughtException', (err) => { logf(`uncaughtException: ${err?.stack || err}`); });
+process.on('unhandledRejection', (r) => { logf(`unhandledRejection: ${r?.stack || r}`); });
+logf('USIS Brain v5 booting...');
 
 // ===== Global hardeners =====
 process.on('unhandledRejection', (err) => {
@@ -4624,24 +4639,42 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
 });
 
-// ====== Telegram Bot v4.5 (简化版，无循环依赖) ======
+// ====== Telegram Bot v5.0 (稳定版 + 黑匣子) ======
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
 if (TELEGRAM_TOKEN) {
   const { Telegraf } = require('telegraf');
   
   console.log('🤖 启动 Telegram Bot...');
+  logf('TG: Creating bot instance');
   
   const bot = new Telegraf(TELEGRAM_TOKEN);
   
   // 错误捕获
   bot.catch((err) => {
+    logf(`TG: bot.catch ${err?.message || err}`);
     console.error('[TG] Error:', err.message);
     console.error('[TG] Stack:', err.stack);
   });
   
+  // 中间件日志
+  bot.use((ctx, next) => { 
+    logf(`TG: update type=${ctx.updateType} sub=${(ctx.updateSubTypes||[]).join(',')}`); 
+    return next(); 
+  });
+  
+  // 保护中间件
+  bot.use(async (ctx, next) => {
+    try { return await next(); }
+    catch (err) {
+      logf(`TG: middleware-guard caught: ${err?.stack || err}`);
+      try { await ctx.reply('⚠️ 内部错误已记录'); } catch {}
+    }
+  });
+  
   // 处理文本消息
   bot.on('text', async (ctx) => {
+    logf(`TG: text received: ${(ctx.message?.text||'').slice(0,80)}`);
     try {
       const text = ctx.message.text;
       const userId = ctx.from.id;
@@ -4657,11 +4690,13 @@ if (TELEGRAM_TOKEN) {
         const result = await generateSmartHeatmap(text);
         
         if (result.buffer) {
-          await ctx.replyWithPhoto(
-            { source: result.buffer },
+          // 使用 Document 发送（更稳定，避免图像管线问题）
+          await ctx.replyWithDocument(
+            { source: result.buffer, filename: 'heatmap.png' },
             { caption: result.caption.slice(0, 1000) }
           );
           await ctx.reply(result.summary);
+          logf('TG: heatmap sent successfully');
           console.log('✅ 热力图发送成功');
         }
       } else {
@@ -4694,12 +4729,24 @@ if (TELEGRAM_TOKEN) {
     }
   });
   
-  bot.launch({ dropPendingUpdates: true });
-  console.log('✅ Telegram Bot 已启动！');
-  console.log('💬 现在可以在 Telegram 里直接发消息了');
+  // 启动前清理旧的 webhook（避免冲突）
+  (async () => {
+    try {
+      await bot.telegram.deleteWebhook({ drop_pending_updates: false });
+      logf('TG: webhook deleted');
+    } catch (e) {
+      logf(`TG: deleteWebhook failed: ${e.message}`);
+    }
+    
+    await bot.launch({ dropPendingUpdates: false });
+    logf('TG: bot launched');
+    console.log('✅ Telegram Bot 已启动！');
+    console.log('💬 现在可以在 Telegram 里直接发消息了');
+  })();
   
-  process.once('SIGINT', () => bot.stop('SIGINT'));
-  process.once('SIGTERM', () => bot.stop('SIGTERM'));
+  // 优雅停止
+  process.once('SIGINT', () => { logf('TG: stopping (SIGINT)'); bot.stop('SIGINT'); });
+  process.once('SIGTERM', () => { logf('TG: stopping (SIGTERM)'); bot.stop('SIGTERM'); });
 } else {
   console.log('⚠️  未配置 TELEGRAM_BOT_TOKEN');
 }
