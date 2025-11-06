@@ -61,81 +61,73 @@ class ProfessionalReporter {
     
     return `作为机构研究部首席策略分析师，撰写${context.market.index.symbol}盘中策略报告（Morgan Stanley/Goldman Sachs标准）：
 
-========================================
-EXECUTIVE SUMMARY（执行摘要）
-========================================
+## 执行摘要
+
 指数: ${context.market.index.symbol} | 价格: ${context.market.index.price || 'N/A'} (${context.market.index.change >= 0 ? '+' : ''}${context.market.index.changePercent || 0}%)
 市场广度: Advance ${context.market.breadth?.advances || 0} vs Decline ${context.market.breadth?.declines || 0} (A/D Ratio: ${adRatio.toFixed(2)})
 广度健康度: ${advPct.toFixed(1)}% 成分股参与上行
 
-========================================
-TECHNICAL HEATMAP ANALYSIS（技术面热力图解读）
-========================================
+## 技术面热力图解读
+
 ${context.visual.rawInsights}
 
-========================================
-MARKET MICROSTRUCTURE（市场微观结构）
-========================================
+## 市场微观结构数据
+
 ${this.formatMarketData(context.market)}
 
 波动率指标: ${(context.market.technicals?.volatility || 0).toFixed(2)}% (${(context.market.technicals?.volatility || 0) > 2 ? '高波动环境' : '正常波动区间'})
 涨跌幅分布: 最大涨幅${(context.market.technicals?.maxGain || 0).toFixed(2)}% vs 最大跌幅${(context.market.technicals?.maxLoss || 0).toFixed(2)}%
 
-========================================
-MACRO BACKDROP（宏观经济背景）
-========================================
+## 宏观经济背景
+
 ${this.formatEconomicData(context.economics)}
 
-========================================
-NEWS SENTIMENT GAUGE（新闻情绪指标）
-========================================
+## 新闻情绪指标
+
 ${this.formatNewsData(context.news)}
 情绪倾向: ${context.news.sentiment.toUpperCase()} (${context.news.totalResults} articles scanned)
 
-========================================
-INSTITUTIONAL RESEARCH OUTPUT（机构研究结论）
-========================================
-请按以下五大模块输出，使用清晰简洁的中文：
+## 机构研究结论
 
-[I. 市场概览与指数表现]
+请按以下五大模块输出，使用标准Markdown格式：
+
+### I. 市场概览与指数表现
 - 开盘至今价格行为特征
 - 成交量能结构分析
 - 指数技术形态判断
 
-[II. 板块轮动特征分析]
+### II. 板块轮动特征分析
 - 领涨板块及持续性评估
 - 承压板块及反弹概率
 - 板块相对强弱排序
 
-[III. 个股异动深度解读]
+### III. 个股异动深度解读
 - Top 3 催化剂驱动个股
 - 基本面vs技术面一致性验证
 - 异常波动标的风险评估
 
-[IV. 资金流向与技术面分析]
+### IV. 资金流向与技术面分析
 - 主力资金净流向推断
 - 关键支撑/阻力位定位
 - 短期趋势强度打分（1-10分）
 
-[V. 交易策略与风险管理]
+### V. 交易策略与风险管理
 - 3个高确定性交易机会
 - 风险等级评估（1=保守 到 5=激进）
 - 1-3日市场展望
 - 止损止盈位建议
 
-========================================
-写作要求：
-1. 使用机构研报标准术语（避免"红色板块"等视觉描述）
-2. 所有观点必须有数据支撑（引用具体数值）
-3. 采用客观严谨的分析师语气
-4. 突出逻辑推理链条
-5. 提供可执行的交易指引
+【输出要求】
+1. 使用标准Markdown格式（## ### -）
+2. 不使用星号强调符号
+3. 使用机构研报术语（避免颜色描述）
+4. 所有观点有数据支撑
+5. 保持简洁专业排版
 
-术语规范：
-- 避免："红色板块较多" | 改用："空头压力集中于XX板块"
-- 避免："绿色板块表现好" | 改用："XX板块获得增量资金青睐"
-- 避免："颜色深浅" | 改用："价格波动幅度差异显著"
-- 避免："看着很难受" | 改用："技术面呈现明显承压特征"`;
+【术语规范】
+- 避免："红色板块较多" → 改用："空头压力集中于XX板块"
+- 避免："绿色板块表现好" → 改用："XX板块获得增量资金青睐"
+- 避免："颜色深浅" → 改用："价格波动幅度差异显著"`;
   }
 
   formatMarketData(marketData) {
