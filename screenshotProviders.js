@@ -1,115 +1,89 @@
 /**
- * Screenshot Provider System - v5.0 n8n Webhook Mode
+ * Screenshot Provider System - v5.1 Direct ScreenshotAPI
  * 
- * 架构：Replit调用n8n webhook → n8n调用ScreenshotAPI → 返回PNG
- * n8n端点：https://qian.app.n8n.cloud/webhook/capture_heatmap
+ * 简化架构：Replit直接调用ScreenshotAPI（单跳）
+ * 端点：https://shot.screenshotapi.net/screenshot
  */
 
 const fetch = require('node-fetch');
 
 /**
- * 通过 n8n webhook 调用截图服务
- * n8n内部已配置ScreenshotAPI (shot.screenshotapi.net)
- * @param {string} url - TradingView URL
- * @returns {Promise<{provider: string, validation: string, elapsed_ms: number, buffer: Buffer}>}
- */
-async function captureViaN8N(url, webhookUrl) {
-  try {
-    if (!webhookUrl) {
-      throw new Error('n8n_webhook_url_missing');
-    }
-
-    const start = Date.now();
-    console.log(`\n📸 [n8n Webhook] 调用截图服务...`);
-    console.log(`   URL: ${url}`);
-    
-    // 使用AbortController实现超时（node-fetch v2兼容）
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 40000);
-    
-    const res = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`❌ [n8n] HTTP ${res.status}: ${errorText.substring(0, 200)}`);
-      throw new Error(`n8n_http_${res.status}`);
-    }
-
-    const contentType = res.headers.get('content-type');
-    let buf;
-    
-    // 兼容两种返回格式：PNG binary 或 JSON (含screenshot URL)
-    if (contentType && contentType.includes('application/json')) {
-      console.log(`📋 [n8n] 返回JSON格式，提取screenshot URL...`);
-      const jsonData = await res.json();
-      
-      if (!jsonData.screenshot) {
-        console.error(`❌ [n8n] JSON中无screenshot字段:`, jsonData);
-        throw new Error('n8n_no_screenshot_url');
-      }
-      
-      // 下载实际图片
-      console.log(`📥 [n8n] 下载图片: ${jsonData.screenshot}`);
-      const imgController = new AbortController();
-      const imgTimeoutId = setTimeout(() => imgController.abort(), 15000);
-      
-      const imgRes = await fetch(jsonData.screenshot, {
-        signal: imgController.signal
-      });
-      
-      clearTimeout(imgTimeoutId);
-      
-      if (!imgRes.ok) {
-        throw new Error(`图片下载失败: ${imgRes.status}`);
-      }
-      
-      buf = Buffer.from(await imgRes.arrayBuffer());
-      
-    } else if (contentType && contentType.includes('image/png')) {
-      console.log(`🖼️  [n8n] 直接返回PNG`);
-      buf = Buffer.from(await res.arrayBuffer());
-      
-    } else {
-      console.error(`❌ [n8n] 不支持的Content-Type: ${contentType}`);
-      throw new Error('n8n_invalid_content_type');
-    }
-    
-    if (!buf || buf.length < 20000) {
-      throw new Error('n8n_small_image');
-    }
-
-    const elapsed = Date.now() - start;
-    console.log(`✅ [n8n Webhook] 成功 (${elapsed}ms, ${(buf.length / 1024).toFixed(2)} KB)`);
-
-    return {
-      provider: 'n8n-screenshotapi',
-      validation: 'saas-waited',
-      elapsed_ms: elapsed,
-      buffer: buf
-    };
-  } catch (error) {
-    console.error(`❌ [n8n Webhook 错误]`, error.message);
-    throw new Error(`截图服务暂时不可用: ${error.message}`);
-  }
-}
-
-/**
  * 主入口：智能热力图截图
- * v5.0: 通过n8n webhook模式（n8n内部使用ScreenshotAPI）
+ * v5.1: 直接调用ScreenshotAPI（已验证）
  * @param {Object} params
  * @param {string} params.tradingViewUrl - TradingView 热力图 URL
  * @returns {Promise<{provider: string, validation: string, elapsed_ms: number, buffer: Buffer}>}
  */
 async function captureHeatmapSmart({ tradingViewUrl }) {
-  const n8nWebhook = process.env.N8N_HEATMAP_WEBHOOK || 'https://qian.app.n8n.cloud/webhook/capture_heatmap';
-  return await captureViaN8N(tradingViewUrl, n8nWebhook);
+  const start = Date.now();
+  console.log(`\n📸 [ScreenshotAPI] 截图: ${tradingViewUrl}`);
+  
+  try {
+    const token = process.env.SCREENSHOT_API_KEY || 'HHBYB5H-4CT4970-MVZEKM2-EMEWEXX';
+    
+    const params = new URLSearchParams({
+      token: token,
+      url: tradingViewUrl,
+      fresh: 'true',
+      output: 'json',
+      width: '1920',
+      height: '1080',
+      delay: '5000'
+    });
+    
+    const apiUrl = `https://shot.screenshotapi.net/screenshot?${params.toString()}`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    if (!result.screenshot) {
+      throw new Error('无截图URL');
+    }
+    
+    console.log(`📥 下载: ${result.screenshot}`);
+    
+    const imgController = new AbortController();
+    const imgTimeoutId = setTimeout(() => imgController.abort(), 15000);
+    
+    const imageResponse = await fetch(result.screenshot, {
+      signal: imgController.signal
+    });
+    
+    clearTimeout(imgTimeoutId);
+    
+    if (!imageResponse.ok) {
+      throw new Error(`下载失败: ${imageResponse.status}`);
+    }
+    
+    const buffer = Buffer.from(await imageResponse.arrayBuffer());
+    
+    const elapsed = Date.now() - start;
+    console.log(`✅ 成功 (${elapsed}ms, ${(buffer.length / 1024).toFixed(2)} KB)`);
+    
+    return {
+      provider: 'screenshotapi',
+      validation: 'direct',
+      buffer: buffer,
+      elapsed_ms: elapsed
+    };
+    
+  } catch (error) {
+    console.error(`❌ 错误:`, error.message);
+    throw new Error(`截图失败: ${error.message}`);
+  }
 }
 
 module.exports = {
