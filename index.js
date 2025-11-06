@@ -11,7 +11,6 @@ process.on('uncaughtException', (err) => {
 const express = require("express");
 const fetch = require("node-fetch");
 const { Pool } = require("pg");
-const QuickChart = require('quickchart-js');
 const { Telegraf } = require('telegraf');
 
 // 🆕 ScreenshotAPI配置（自动去除前后空格）
@@ -725,18 +724,8 @@ async function generateHeatmapImage(exchangeName = 'US') {
       }
     };
     
-    // 使用QuickChart生成PNG
-    const chart = new QuickChart();
-    chart.setConfig(chartConfig);
-    chart.setWidth(1000);
-    chart.setHeight(700);
-    chart.setBackgroundColor('#f5f5f5');
-    chart.setVersion('3'); // Chart.js v3
-    
-    const imageUrl = chart.getUrl();
-    console.log(`✅ 热力图生成成功: ${imageUrl.substring(0, 80)}...`);
-    
-    return imageUrl;
+    // 旧版 QuickChart 已移除（v4.5使用纯SaaS方案）
+    throw new Error('generateHeatmapImage已废弃，请使用generateSmartHeatmap');
     
   } catch (error) {
     console.error('❌ 热力图生成失败:', error.message);
@@ -815,13 +804,8 @@ function generateFallbackHeatmap(exchangeName) {
     }
   };
   
-  const chart = new QuickChart();
-  chart.setConfig(chartConfig);
-  chart.setWidth(1000);
-  chart.setHeight(700);
-  chart.setBackgroundColor('#f5f5f5');
-  
-  return chart.getUrl();
+  // 旧版 QuickChart 已移除（v4.5使用纯SaaS方案）
+  throw new Error('generateFallbackHeatmap已废弃');
 }
 
 // 🆕 v4.3: 智能热力图生成（纯规则引擎 + 可插拔Provider系统）
@@ -960,25 +944,8 @@ async function generateHeatmap({market='US', color='change', size='market_cap'} 
     }
   }
   
-  // 2️⃣ 降级方案：QuickChart生成热力图
-  console.log('📉 降级到QuickChart生成热力图...');
-  try {
-    const imageUrl = await generateHeatmapImage(market);
-    const elapsed = Date.now() - startTime;
-    console.log(`✅ QuickChart降级成功 (${elapsed}ms)`);
-    
-    return {
-      ok: true,
-      image_url: imageUrl,  // QuickChart返回URL
-      source: 'quickchart_fallback',
-      fallback_used: true,
-      elapsed_ms: elapsed,
-      caption: `📊 ${getMarketName(market)} 实时热力图\n来源: QuickChart (降级)\n耗时: ${(elapsed/1000).toFixed(1)}秒`
-    };
-  } catch (error) {
-    console.error(`❌ QuickChart也失败了: ${error.message}`);
-    throw new Error('热力图生成失败：所有方案均失败');
-  }
+  // QuickChart已移除（v4.5纯SaaS方案）
+  throw new Error('热力图生成失败：ScreenshotAPI不可用且QuickChart已被移除');
 }
 
 // 🆕 获取热力图URL（用于actions生成）- 已废弃，使用generateHeatmapImage
@@ -3163,30 +3130,10 @@ async function generateSmartChartSingle(macro, metric) {
   
   if (series.length < 2) return null;
 
-  const qc = new QuickChart();
-  qc.setConfig({
-    type: 'line',
-    data: {
-      labels: series.map(p => p.date),
-      datasets: [{ 
-        label: metric, 
-        data: series.map(p => p.value), 
-        fill: false, 
-        tension: 0.25 
-      }]
-    },
-    options: {
-      plugins: { 
-        legend: { display: false }, 
-        title: { display: true, text: metric } 
-      },
-      scales: { 
-        x: { ticks: { maxTicksLimit: 8 } } 
-      }
-    }
-  });
-  
-  return await qc.getShortUrl(); // 返回可直接发到Telegram的图片URL
+  // 旧版 QuickChart 已移除（v4.5纯SaaS方案）
+  // 宏观经济图表暂不支持，仅返回文本分析
+  console.warn('⚠️  宏观经济图表暂不支持（QuickChart已移除）');
+  return null;
 }
 
 // ========================================

@@ -7,6 +7,7 @@
  */
 
 const fetch = require('node-fetch');
+const { runWithGuards } = require('./runner');
 
 const ENABLE_SAAS = process.env.HEATMAP_ENABLE_SCREENSHOT_SAAS !== 'false';
 
@@ -19,18 +20,19 @@ function qs(obj) {
  * 纯云端截图，无本地依赖
  */
 async function captureViaScreenshotSaaS({ url }) {
-  const start = Date.now();
-  console.log(`\n📸 [Screenshot SaaS] ${url.substring(0, 80)}...`);
-  
-  const endpoint = process.env.SCREENSHOT_API_ENDPOINT || 'https://shot.screenshotapi.net/screenshot';
-  const key = process.env.SCREENSHOT_API_KEY;
-  
-  if (!key) {
-    throw new Error('screenshot_api_not_configured');
-  }
-  
-  // 根据服务商选择参数格式
-  const isScreenshotAPI = endpoint.includes('screenshotapi.net');
+  return runWithGuards('screenshot', async () => {
+    const start = Date.now();
+    console.log(`\n📸 [Screenshot SaaS] ${url.substring(0, 80)}...`);
+    
+    const endpoint = process.env.SCREENSHOT_API_ENDPOINT || 'https://shot.screenshotapi.net/screenshot';
+    const key = process.env.SCREENSHOT_API_KEY;
+    
+    if (!key) {
+      throw new Error('screenshot_api_not_configured');
+    }
+    
+    // 根据服务商选择参数格式
+    const isScreenshotAPI = endpoint.includes('screenshotapi.net');
   
   const params = isScreenshotAPI ? {
     // ScreenshotAPI.net 参数格式
@@ -60,28 +62,29 @@ async function captureViaScreenshotSaaS({ url }) {
     ttl: '600'
   };
   
-  const res = await fetch(`${endpoint}?${qs(params)}`, { timeout: 60000 });  // 60秒超时
-  
-  if (!res.ok) {
-    throw new Error(`screenshot_http_${res.status}`);
-  }
-  
-  const buffer = await res.buffer();
-  
-  // 轻量验证：避免空图
-  if (!buffer || buffer.length < 20000) {
-    throw new Error('screenshot_too_small');
-  }
-  
-  const elapsed = Date.now() - start;
-  console.log(`✅ [Screenshot SaaS] 成功 (${elapsed}ms, ${buffer.length} bytes)`);
-  
-  return {
-    provider: 'screenshot',
-    validation: 'saas',
-    elapsed_ms: elapsed,
-    buffer
-  };
+    const res = await fetch(`${endpoint}?${qs(params)}`, { timeout: 50000 });  // 50秒超时（留10秒给runWithGuards）
+    
+    if (!res.ok) {
+      throw new Error(`screenshot_http_${res.status}`);
+    }
+    
+    const buffer = await res.buffer();
+    
+    // 轻量验证：避免空图
+    if (!buffer || buffer.length < 20000) {
+      throw new Error('screenshot_too_small');
+    }
+    
+    const elapsed = Date.now() - start;
+    console.log(`✅ [Screenshot SaaS] 成功 (${elapsed}ms, ${buffer.length} bytes)`);
+    
+    return {
+      provider: 'screenshot',
+      validation: 'saas',
+      elapsed_ms: elapsed,
+      buffer
+    };
+  });
 }
 
 /**
