@@ -1,11 +1,62 @@
 /**
- * Screenshot Provider System - v5.1 Browserless Direct
+ * Screenshot Provider System - v5.0 n8n Webhook
  * 
- * 直接调用 Browserless API，不经过 n8n
- * 简单、可靠、无需复杂配置
+ * 使用 n8n workflow 调用 Browserless API
+ * n8n 处理截图逻辑，Replit 专注于 Bot 接口和自然语言解析
  */
 
 const fetch = require('node-fetch');
+
+/**
+ * 通过 n8n webhook 调用 Browserless 截图
+ * @param {string} url - TradingView URL
+ * @returns {Promise<{provider: string, validation: string, elapsed_ms: number, buffer: Buffer}>}
+ */
+async function captureViaN8N(url) {
+  const webhookUrl = process.env.N8N_HEATMAP_WEBHOOK;
+  if (!webhookUrl) {
+    throw new Error('n8n_webhook_url_missing');
+  }
+
+  const start = Date.now();
+  console.log(`\n📸 [n8n Webhook] 调用截图服务...`);
+  console.log(`   URL: ${url}`);
+  
+  const res = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+    timeout: 40000
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error(`❌ [n8n] HTTP ${res.status}: ${errorText.substring(0, 200)}`);
+    throw new Error(`n8n_http_${res.status}`);
+  }
+
+  const contentType = res.headers.get('content-type');
+  if (!contentType || !contentType.includes('image/png')) {
+    console.error(`❌ [n8n] 错误的Content-Type: ${contentType}`);
+    throw new Error('n8n_invalid_content_type');
+  }
+
+  const buf = Buffer.from(await res.arrayBuffer());
+  
+  if (!buf || buf.length < 20000) {
+    throw new Error('n8n_small_image');
+  }
+
+  const elapsed = Date.now() - start;
+  console.log(`✅ [n8n Webhook] 成功 (${elapsed}ms, ${(buf.length / 1024).toFixed(2)} KB)`);
+
+  return {
+    provider: 'n8n-browserless',
+    validation: 'saas-waited',
+    elapsed_ms: elapsed,
+    buffer: buf
+  };
+}
 
 /**
  * 使用 Browserless Function API + Puppeteer 脚本切换数据集并截图
@@ -106,11 +157,22 @@ function extractDataset(url) {
 
 /**
  * 主入口：智能热力图截图
+ * v5.0: 优先使用 n8n webhook，回退到 Browserless Puppeteer
  * @param {Object} params
  * @param {string} params.tradingViewUrl - TradingView 热力图 URL
  * @returns {Promise<{provider: string, validation: string, elapsed_ms: number, buffer: Buffer}>}
  */
 async function captureHeatmapSmart({ tradingViewUrl }) {
+  // Tier 1: n8n webhook (推荐)
+  if (process.env.N8N_HEATMAP_WEBHOOK) {
+    try {
+      return await captureViaN8N(tradingViewUrl);
+    } catch (error) {
+      console.error(`⚠️ [n8n] 失败，回退到 Browserless Puppeteer: ${error.message}`);
+    }
+  }
+  
+  // Tier 2: Browserless Puppeteer (备用)
   const dataset = extractDataset(tradingViewUrl);
   return captureViaBrowserlessPuppeteer(tradingViewUrl, dataset);
 }
