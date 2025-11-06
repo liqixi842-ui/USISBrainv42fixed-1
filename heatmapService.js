@@ -13,7 +13,7 @@ const { generateWithGPT5 } = require('./gpt5Brain');
  */
 async function generateMarketAnalysis(marketIndex, userQuery) {
   try {
-    console.log(`🤖 开始分析${marketIndex}市场`);
+    console.log(`🤖 生成${marketIndex}专业分析`);
     
     const indexNames = {
       'SPX500': '标普500', 'NASDAQ100': '纳斯达克100', 'DJ30': '道琼斯30',
@@ -24,11 +24,30 @@ async function generateMarketAnalysis(marketIndex, userQuery) {
     
     const indexName = indexNames[marketIndex] || marketIndex;
     
-    const prompt = `作为专业股票分析师，基于${indexName}热力图提供简要市场分析：
-- 当前市场整体趋势
-- 表现最好和最差的板块
-- 简要的投资建议
-请用简洁专业的中文回答，控制在150字以内。`;
+    let prompt;
+    if (marketIndex === 'NIKKEI225') {
+      prompt = `作为东京股市分析师，基于日经225实时热力图提供专业分析：
+
+重点关注：
+1. 出口板块（汽车、电子）受日元汇率影响
+2. 金融板块对日本央行政策的反应  
+3. 制造业与全球供应链表现
+4. 消费内需板块趋势
+
+请提供：
+- 当前板块轮动特征
+- 汇率敏感度分析（日元走势影响）
+- 短期风险提示（利率、外需）
+- 具体板块建议（1-2个重点板块）
+
+用简洁专业的中文，避免泛泛而谈。`;
+    } else {
+      prompt = `作为专业股票分析师，基于${indexName}热力图提供实时分析：
+- 当前领涨和领跌板块
+- 市场资金流向特征
+- 短期交易机会与风险
+用专业简洁的中文回答。`;
+    }
     
     const analysis = await generateWithGPT5({
       text: prompt,
@@ -43,10 +62,6 @@ async function generateMarketAnalysis(marketIndex, userQuery) {
     
   } catch (error) {
     console.log('❌ AI分析失败，使用备用分析:', error.message);
-    const indexNames = {
-      'NIKKEI225': '日经225', 'IBEX35': 'IBEX35', 'DAX40': 'DAX40',
-      'SPX500': '标普500', 'NASDAQ100': '纳斯达克100'
-    };
     const indexName = indexNames[marketIndex] || marketIndex;
     return `📊 ${indexName}实时热力图已生成。建议关注板块轮动和资金流向。`;
   }

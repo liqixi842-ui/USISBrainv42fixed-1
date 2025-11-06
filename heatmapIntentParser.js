@@ -366,6 +366,24 @@ async function extractHeatmapQuery(text, debugMode = false) {
 function buildTradingViewURL(query) {
   const { index, locale, sector } = query;
   
+  // 日本市场使用特殊参数结构
+  if (index === 'NIKKEI225') {
+    console.log('🎌 使用日本市场专用参数');
+    
+    const japanParams = {
+      dataSource: "NI225",
+      blockColor: "change",
+      blockSize: "market_cap_basic", 
+      grouping: "sector"
+    };
+    
+    const hashParams = encodeURIComponent(JSON.stringify(japanParams));
+    const url = `https://www.tradingview.com/heatmap/stock/#${hashParams}`;
+    console.log(`🔗 [TradingView URL - Japan] ${url}`);
+    return url;
+  }
+  
+  // 其他市场保持原有逻辑
   const baseUrl = 'https://www.tradingview.com/heatmap/stock/';
   const params = new URLSearchParams({
     color: 'change',
@@ -374,14 +392,6 @@ function buildTradingViewURL(query) {
     blockSize: 'market_cap_basic',
     blockColor: 'change'
   });
-  
-  // 为日本市场添加特殊参数
-  if (index === 'NIKKEI225') {
-    console.log('🎌 应用日本市场特殊参数');
-    params.set('exchange', 'JPX');
-    params.set('country', 'JP');
-    params.set('locale', 'ja');
-  }
   
   // 语言参数
   if (locale && locale !== 'auto') {
