@@ -12,8 +12,7 @@ const fetch = require('node-fetch');
  * @param {string} url - TradingView URL
  * @returns {Promise<{provider: string, validation: string, elapsed_ms: number, buffer: Buffer}>}
  */
-async function captureViaN8N(url) {
-  const webhookUrl = process.env.N8N_HEATMAP_WEBHOOK;
+async function captureViaN8N(url, webhookUrl) {
   if (!webhookUrl) {
     throw new Error('n8n_webhook_url_missing');
   }
@@ -163,13 +162,13 @@ function extractDataset(url) {
  * @returns {Promise<{provider: string, validation: string, elapsed_ms: number, buffer: Buffer}>}
  */
 async function captureHeatmapSmart({ tradingViewUrl }) {
-  // Tier 1: n8n webhook (推荐)
-  if (process.env.N8N_HEATMAP_WEBHOOK) {
-    try {
-      return await captureViaN8N(tradingViewUrl);
-    } catch (error) {
-      console.error(`⚠️ [n8n] 失败，回退到 Browserless Puppeteer: ${error.message}`);
-    }
+  // Tier 1: n8n webhook (推荐) - 默认使用 n8n
+  const n8nWebhook = process.env.N8N_HEATMAP_WEBHOOK || 'https://qian.app.n8n.cloud/webhook/capture_heatmap';
+  
+  try {
+    return await captureViaN8N(tradingViewUrl, n8nWebhook);
+  } catch (error) {
+    console.error(`⚠️ [n8n] 失败，回退到 Browserless Puppeteer: ${error.message}`);
   }
   
   // Tier 2: Browserless Puppeteer (备用)
