@@ -121,45 +121,84 @@ async function generateSmartHeatmap(userText) {
       console.log(`✅ [Smart Heatmap] 完成 (${elapsed}ms, provider=${result.provider})`);
       
       // 🆕 v5.0: 视觉AI分析（基于真实图像内容）
+      // 三层降级策略：Vision AI → GPT-5 Text Fallback → Legacy Text
       let marketAnalysis;
       let analysisMetadata = {};
       
-      try {
-        const visionService = new VisionAnalysisService(process.env.OPENAI_API_KEY);
-        const marketContext = {
-          index: query.index,
-          region: query.region,
-          sector: query.sector
-        };
-        
-        // 检查是否应该使用视觉分析（成本优化）
-        const useVision = visionService.shouldUseVisionAnalysis('standard', query.index);
-        
-        if (useVision) {
-          console.log('👁️  [Vision Mode] 启用视觉AI分析');
+      const visionService = new VisionAnalysisService(process.env.OPENAI_API_KEY);
+      const marketContext = {
+        index: query.index,
+        region: query.region,
+        sector: query.sector
+      };
+      
+      // 检查是否应该使用视觉分析（成本优化）
+      const useVision = visionService.shouldUseVisionAnalysis('standard', query.index);
+      
+      if (useVision) {
+        // Tier 1: 尝试Vision AI
+        try {
+          console.log('👁️  [Vision AI - Tier 1] 启用视觉AI分析');
           const visionResult = await visionService.analyzeHeatmapVision(
             result.buffer,
             marketContext
           );
           marketAnalysis = visionResult.text;
           analysisMetadata = visionResult.metadata;
-        } else {
-          console.log('📝 [Text Mode] 使用文本模式分析');
+          
+        } catch (visionError) {
+          console.log('⚠️  [Vision AI Failed] 切换到GPT-5文本模式');
+          console.log(`   错误: ${visionError.message}`);
+          
+          // Tier 2: GPT-5 Text Fallback
+          try {
+            console.log('🔄 [GPT-5 Fallback - Tier 2] 使用GPT-5文本分析');
+            const fallbackResult = await visionService.analyzeHeatmapFallback(
+              marketContext,
+              { generateWithGPT5 }
+            );
+            marketAnalysis = fallbackResult.text;
+            analysisMetadata = {
+              ...fallbackResult.metadata,
+              vision_error: visionError.message
+            };
+            
+          } catch (gpt5Error) {
+            console.log('⚠️  [GPT-5 Fallback Failed] 切换到Legacy文本');
+            console.log(`   错误: ${gpt5Error.message}`);
+            
+            // Tier 3: Legacy Text
+            console.log('🆘 [Legacy - Tier 3] 使用传统文本分析');
+            marketAnalysis = await generateMarketAnalysis(query.index, userText);
+            analysisMetadata = {
+              analysis_type: 'text_legacy',
+              vision_error: visionError.message,
+              gpt5_error: gpt5Error.message
+            };
+          }
+        }
+      } else {
+        // 非重要市场直接使用GPT-5 Text Fallback
+        try {
+          console.log('📝 [Text Mode - Standard] 使用GPT-5文本分析');
           const fallbackResult = await visionService.analyzeHeatmapFallback(
             marketContext,
             { generateWithGPT5 }
           );
           marketAnalysis = fallbackResult.text;
           analysisMetadata = fallbackResult.metadata;
+          
+        } catch (gpt5Error) {
+          console.log('⚠️  [Text Mode Failed] 切换到Legacy');
+          console.log(`   错误: ${gpt5Error.message}`);
+          
+          // Fallback to Legacy
+          marketAnalysis = await generateMarketAnalysis(query.index, userText);
+          analysisMetadata = {
+            analysis_type: 'text_legacy',
+            gpt5_error: gpt5Error.message
+          };
         }
-        
-      } catch (visionError) {
-        console.log('⚠️  [Vision Fallback] 视觉分析失败，切换到文本模式');
-        console.log(`   错误: ${visionError.message}`);
-        
-        // 降级到旧的文本分析
-        marketAnalysis = await generateMarketAnalysis(query.index, userText);
-        analysisMetadata = { analysis_type: 'text_legacy', error: visionError.message };
       }
       
       return {
