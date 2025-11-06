@@ -54,7 +54,7 @@ const SECTOR_CN_NAMES = {
 };
 
 /**
- * 🔍 轻量级解析（仅规则，不调用LLM）- 用于诊断
+ * 🔍 轻量级解析（仅规则，不调用LLM）- v5.0 完整映射体系
  * @param {string} text - 用户输入文本
  * @returns {Object} 解析结果
  */
@@ -63,84 +63,118 @@ function extractHeatmapQueryRulesOnly(text) {
   const norm = raw.normalize("NFKC");
   const lc = norm.toLowerCase();
   
+  // 1️⃣ 市场映射表（20+全球市场）
+  const marketMap = {
+    // 美洲
+    'us|美股|美国|spx|sp500|标普': { index: 'SPX500', name: '标普500', region: 'US' },
+    'nasdaq|纳斯达克|纳指': { index: 'NAS100', name: '纳斯达克100', region: 'US' },
+    'dow|道指|道琼斯': { index: 'DJI', name: '道琼斯', region: 'US' },
+    'russell|罗素': { index: 'RUT', name: '罗素2000', region: 'US' },
+    'tsx|加拿大': { index: 'TSX', name: '加拿大TSX', region: 'CA' },
+    'brazil|巴西': { index: 'IBOV', name: '巴西IBOV', region: 'BR' },
+    'mexico|墨西哥': { index: 'MEXBOL', name: '墨西哥MEXBOL', region: 'MX' },
+    
+    // 欧洲
+    'spain|西班牙|ibex': { index: 'IBEX35', name: '西班牙IBEX35', region: 'ES' },
+    'germany|德国|dax': { index: 'DAX', name: '德国DAX', region: 'DE' },
+    'france|法国|cac': { index: 'CAC40', name: '法国CAC40', region: 'FR' },
+    'uk|英国|ftse|富时': { index: 'FTSE', name: '英国富时', region: 'UK' },
+    'italy|意大利': { index: 'FTSEMIB', name: '意大利FTSEMIB', region: 'IT' },
+    'netherlands|荷兰': { index: 'AEX', name: '荷兰AEX', region: 'NL' },
+    'switzerland|瑞士': { index: 'SMI', name: '瑞士SMI', region: 'CH' },
+    
+    // 亚洲
+    'japan|日本|nikkei|日経': { index: 'NIKKEI225', name: '日经225', region: 'JP' },
+    'hk|香港|恒生|hang seng|hsi': { index: 'HSI', name: '恒生指数', region: 'HK' },
+    'china|中国|上证': { index: 'SSE50', name: '上证50', region: 'CN' },
+    'shenzhen|深圳|深证': { index: 'SZI', name: '深证成指', region: 'CN' },
+    'korea|韩国|kospi': { index: 'KOSPI', name: '韩国KOSPI', region: 'KR' },
+    'taiwan|台湾|twii': { index: 'TWII', name: '台湾加权', region: 'TW' },
+    'india|印度|nifty': { index: 'NIFTY', name: '印度NIFTY', region: 'IN' },
+    'australia|澳洲|澳大利亚': { index: 'AS51', name: '澳洲AS51', region: 'AU' },
+    
+    // 其他
+    'russia|俄罗斯': { index: 'IMOEX', name: '俄罗斯IMOEX', region: 'RU' },
+    'singapore|新加坡': { index: 'STI', name: '新加坡STI', region: 'SG' }
+  };
+  
+  // 2️⃣ 板块映射表（10+行业）
+  const sectorMap = {
+    '科技|技术|technology|tech': 'technology',
+    '金融|financials|finance|银行': 'financial',
+    '医疗|healthcare|health|保健': 'healthcare',
+    '能源|energy|石油|oil': 'energy',
+    '原材料|materials|材料': 'basic_materials',
+    '工业|industrials|制造': 'industrials',
+    '消费|consumer|零售': 'consumer_cyclical',
+    '防御|defensive|日用': 'consumer_defensive',
+    '公用|utilities|电力': 'utilities',
+    '房地产|real estate|地产': 'real_estate',
+    '电信|telecom|通信': 'telecommunications'
+  };
+  
   const parsed = {
     region: 'AUTO',
     index: 'AUTO',
     sector: 'AUTO',
-    confidence: 0.5,
+    confidence: 0.6,
     rules_fired: [],
-    rationale: '规则引擎解析'
+    rationale: '规则引擎v5.0完整映射'
   };
   
-  // 🔒 Rule 1: 西班牙/IBEX强制锁（最高优先级）
-  if (/(西班牙|spain|ibex\s*35?|ibex)/iu.test(norm)) {
-    parsed.region = 'ES';
-    parsed.index = 'IBEX35';
-    parsed.confidence = Math.max(parsed.confidence || 0, 0.9);
-    parsed.rules_fired.push('force_lock_ES_IBEX35');
-    parsed.rationale = '检测到西班牙/IBEX关键词';
-  }
-  
-  // Rule 2: 日本检测
-  if (/(日本|japan|日経|nikkei)/iu.test(norm) && !parsed.rules_fired.includes('force_lock_ES_IBEX35')) {
-    parsed.region = 'JP';
-    parsed.index = 'NIKKEI225';
-    parsed.rules_fired.push('detect_japan');
-  }
-  
-  // Rule 3: 美股检测
-  if (/(美股|美国|us\s|nasdaq|纳斯达克|nasdaq100|道指|dow)/iu.test(norm) && parsed.region === 'AUTO') {
-    parsed.region = 'US';
-    if (/nasdaq|纳斯达克|nasdaq100/iu.test(norm)) {
-      parsed.index = 'NASDAQ100';
-      parsed.rules_fired.push('detect_nasdaq100');
-    } else if (/道指|dow/iu.test(norm)) {
-      parsed.index = 'DJ30';
-      parsed.rules_fired.push('detect_dow30');
-    } else {
-      parsed.index = 'SPX500';
-      parsed.rules_fired.push('detect_us_default_spx');
-    }
-  }
-  
-  // Rule 4: 行业检测
-  const sectorMap = {
-    '科技|技术|technology|tech': 'technology',
-    '金融|financials|finance': 'financials',
-    '医疗|healthcare|health': 'healthcare',
-    '能源|energy': 'energy'
-  };
-  for (const [pattern, sector] of Object.entries(sectorMap)) {
-    if (new RegExp(pattern, 'iu').test(norm)) {
-      parsed.sector = sector;
-      parsed.rules_fired.push(`detect_sector_${sector}`);
+  // 3️⃣ 智能市场匹配
+  for (const [pattern, data] of Object.entries(marketMap)) {
+    const regex = new RegExp(pattern, 'iu');
+    if (regex.test(norm)) {
+      parsed.index = data.index;
+      parsed.region = data.region;
+      parsed.confidence = 0.85;
+      parsed.rules_fired.push(`match_market_${data.index}`);
+      parsed.rationale = `检测到${data.name}关键词`;
+      console.log(`🎯 [市场匹配] ${pattern} → ${data.name} (${data.index})`);
       break;
     }
   }
   
-  // Rule 5: 回退规则（修正版）
-  if (parsed.region && parsed.region !== 'AUTO') {
-    if (!parsed.index || parsed.index === 'AUTO') {
-      const defaultIndex = REGION_INDEX_MAP[parsed.region];
-      if (defaultIndex) {
-        parsed.index = defaultIndex;
-        parsed.rules_fired.push('map_region_to_default_index');
-      } else {
-        parsed.index = 'SPX500';
-        parsed.rules_fired.push('fallback_unknown_region');
-      }
-    }
-  } else {
-    if (!parsed.index || parsed.index === 'AUTO') {
-      parsed.index = 'SPX500';
-      parsed.rules_fired.push('fallback_SPX500_only_when_no_region_and_no_index');
+  // 4️⃣ 智能板块匹配
+  for (const [pattern, sector] of Object.entries(sectorMap)) {
+    const regex = new RegExp(pattern, 'iu');
+    if (regex.test(norm)) {
+      parsed.sector = sector;
+      parsed.rules_fired.push(`match_sector_${sector}`);
+      console.log(`🎯 [板块匹配] ${pattern} → ${sector}`);
+      break;
     }
   }
   
-  // Rule 6: 防串台校验
+  // 5️⃣ 特殊组合逻辑
+  // 纳斯达克+科技股优化
+  if ((parsed.sector === 'technology' || /科技/.test(norm)) && parsed.index === 'SPX500') {
+    parsed.index = 'NAS100';
+    parsed.region = 'US';
+    parsed.rules_fired.push('optimize_tech_to_nasdaq');
+    console.log(`💡 [智能优化] 科技板块 → NAS100`);
+  }
+  
+  // A股特定逻辑
+  if (/a股|沪深/.test(norm)) {
+    parsed.index = /深圳|深证/.test(norm) ? 'SZI' : 'SSE50';
+    parsed.region = 'CN';
+    parsed.rules_fired.push('detect_china_a_shares');
+  }
+  
+  // 6️⃣ 回退规则
+  if (parsed.index === 'AUTO') {
+    parsed.index = 'SPX500';
+    parsed.region = 'US';
+    parsed.rules_fired.push('fallback_to_spx500');
+  }
+  
+  // 7️⃣ 🔒 西班牙防串台校验（最高优先级）
   if (parsed.region === 'ES' && parsed.index !== 'IBEX35') {
-    parsed.rules_fired.push('region_guard_fix_ES_to_IBEX35');
     parsed.index = 'IBEX35';
+    parsed.rules_fired.push('region_guard_ES_to_IBEX35');
+    console.log(`🚨 [防串台] ES地区强制 → IBEX35`);
   }
   
   return {
@@ -325,7 +359,7 @@ async function extractHeatmapQuery(text, debugMode = false) {
 }
 
 /**
- * 构造TradingView热力图URL
+ * 构造TradingView热力图URL - v5.0支持板块筛选
  * @param {Object} query - 解析后的查询结果
  * @returns {string} TradingView URL
  */
@@ -336,7 +370,7 @@ function buildTradingViewURL(query) {
   const params = new URLSearchParams({
     color: 'change',
     dataset: index,
-    group: 'sector',
+    group: sector !== 'AUTO' ? 'industry' : 'sector',  // 指定板块时切换到行业视图
     blockSize: 'market_cap_basic',
     blockColor: 'change'
   });
@@ -347,9 +381,10 @@ function buildTradingViewURL(query) {
     params.set('lang', langCode);
   }
   
-  // 行业聚焦提示（即使TradingView不识别也无害）
+  // 板块筛选（TradingView支持的filter参数）
   if (sector && sector !== 'AUTO') {
-    params.set('focus_hint', sector);
+    params.set('filter', sector);
+    console.log(`🎯 [板块筛选] 启用 filter=${sector}`);
   }
   
   const url = `${baseUrl}?${params.toString()}`;

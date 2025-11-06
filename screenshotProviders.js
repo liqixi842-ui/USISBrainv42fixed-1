@@ -22,12 +22,18 @@ async function captureViaN8N(url, webhookUrl) {
     console.log(`\n📸 [n8n Webhook] 调用截图服务...`);
     console.log(`   URL: ${url}`);
     
+    // 使用AbortController实现超时（node-fetch v2兼容）
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 40000);
+    
     const res = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
-      timeout: 40000
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
 
     if (!res.ok) {
       const errorText = await res.text();

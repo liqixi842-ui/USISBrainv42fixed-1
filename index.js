@@ -4652,12 +4652,18 @@ if (TELEGRAM_TOKEN) {
 
     console.log(`[TG] sendDocument: ${filename}, ${(buffer.length/1024).toFixed(2)}KB`);
     
+    // 使用AbortController实现超时（node-fetch v2兼容）
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    
     const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
       method: 'POST',
       headers: form.getHeaders(),
       body: form,
-      timeout: 45000,
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
 
     const text = await res.text();
     console.log('[TG] sendDocument status:', res.status, 'len:', text.length);
