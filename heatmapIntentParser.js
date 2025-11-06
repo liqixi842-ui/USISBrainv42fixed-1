@@ -113,16 +113,91 @@ function extractHeatmapQueryRulesOnly(text) {
     '电信|telecom|通信': 'telecommunications'
   };
   
+  // 3️⃣ 精确板块数据集映射（标普500子行业）
+  const sectorDatasetMap = {
+    // 美股板块精确映射
+    '美股金融|us financials|美国金融': { 
+      dataset: 'SP500-40', 
+      name: '标普500金融板块',
+      components: ['JPM', 'BAC', 'WFC', 'GS', 'MS', 'C', 'BLK', 'SCHW']
+    },
+    '美股科技|us technology|美国科技': { 
+      dataset: 'SP500-45', 
+      name: '标普500信息技术',
+      components: ['AAPL', 'MSFT', 'NVDA', 'AVGO', 'CRM', 'ORCL', 'ADBE']
+    },
+    '美股医疗|us healthcare|美国医疗': { 
+      dataset: 'SP500-35', 
+      name: '标普500医疗保健',
+      components: ['UNH', 'JNJ', 'LLY', 'ABBV', 'MRK', 'TMO', 'ABT']
+    },
+    '美股能源|us energy|美国能源': { 
+      dataset: 'SP500-10', 
+      name: '标普500能源',
+      components: ['XOM', 'CVX', 'COP', 'EOG', 'SLB', 'MPC', 'PSX']
+    },
+    '美股消费|us consumer|美国消费': { 
+      dataset: 'SP500-25', 
+      name: '标普500可选消费',
+      components: ['AMZN', 'TSLA', 'HD', 'MCD', 'NKE', 'SBUX', 'TJX']
+    },
+    '美股工业|us industrials|美国工业': { 
+      dataset: 'SP500-20', 
+      name: '标普500工业',
+      components: ['UNP', 'HON', 'UPS', 'RTX', 'LMT', 'BA', 'CAT']
+    },
+    '美股通信|us communication|美国通信': { 
+      dataset: 'SP500-50', 
+      name: '标普500通信服务',
+      components: ['GOOGL', 'META', 'NFLX', 'DIS', 'CMCSA', 'T', 'VZ']
+    },
+    '美股材料|us materials|美国材料': { 
+      dataset: 'SP500-15', 
+      name: '标普500材料',
+      components: ['LIN', 'APD', 'ECL', 'SHW', 'FCX', 'NEM', 'DOW']
+    },
+    '美股公用|us utilities|美国公用': { 
+      dataset: 'SP500-55', 
+      name: '标普500公用事业',
+      components: ['NEE', 'DUK', 'SO', 'D', 'AEP', 'EXC', 'SRE']
+    },
+    '美股地产|us real estate|美国地产': { 
+      dataset: 'SP500-60', 
+      name: '标普500房地产',
+      components: ['PLD', 'AMT', 'CCI', 'EQIX', 'PSA', 'WELL', 'DLR']
+    }
+  };
+  
   const parsed = {
     region: 'AUTO',
     index: 'AUTO',
     sector: 'AUTO',
+    dataset: null,
+    sectorName: null,
+    components: [],
     confidence: 0.6,
     rules_fired: [],
     rationale: '规则引擎v5.0完整映射'
   };
   
-  // 3️⃣ 智能市场匹配
+  // 4️⃣ 精确板块数据集匹配（优先级最高）
+  for (const [pattern, config] of Object.entries(sectorDatasetMap)) {
+    const regex = new RegExp(pattern, 'i');
+    if (regex.test(lc)) {
+      parsed.dataset = config.dataset;
+      parsed.sectorName = config.name;
+      parsed.components = config.components;
+      parsed.index = 'SPX500'; // 基础指数
+      parsed.region = 'US';
+      parsed.sector = config.dataset.split('-')[1]; // 提取GICS代码
+      parsed.confidence = 0.95;
+      parsed.rules_fired.push(`精确板块匹配: ${config.name} (${config.dataset})`);
+      parsed.rationale = `精确匹配到${config.name}，使用TradingView数据集${config.dataset}`;
+      return parsed; // 立即返回，优先级最高
+    }
+  }
+  
+  // 5️⃣ 智能市场匹配
   for (const [pattern, data] of Object.entries(marketMap)) {
     const regex = new RegExp(pattern, 'iu');
     if (regex.test(norm)) {
@@ -182,6 +257,9 @@ function extractHeatmapQueryRulesOnly(text) {
     region: parsed.region,
     index: parsed.index,
     sector: parsed.sector,
+    dataset: parsed.dataset, // 精确板块数据集
+    sectorName: parsed.sectorName, // 板块中文名称
+    components: parsed.components, // 主要成分股
     confidence: parsed.confidence,
     rules_fired: parsed.rules_fired,
     rationale: parsed.rationale

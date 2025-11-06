@@ -45,44 +45,75 @@ class VisionAnalyzer {
   }
 
   buildVisionPrompt(marketContext) {
-    return `作为机构级量化分析师，对${marketContext.index}热力图进行专业解读。请使用标准Markdown格式输出：
+    const isSectorFocused = marketContext.sectorName || marketContext.dataset;
+    const contextInfo = isSectorFocused 
+      ? `${marketContext.sectorName || marketContext.index}板块热力图` 
+      : `${marketContext.index}市场热力图`;
+    
+    return `作为Morgan Stanley/Goldman Sachs首席策略分析师，对${contextInfo}进行机构级深度解读。
 
-## 市场微观结构分析
+## 结构性市场分析框架
 
-### 价格离散度特征
-- 上行动能集中度：识别多头主导区域的市值占比
-- 下行压力分布：识别空头施压区域的分散程度
-- 波动幅度光谱：价格变动的离散特征（避免颜色描述）
+### I. 价格动能分布特征
+- 动量集中度：具体个股及其涨跌幅（如JPM +2.3%、BAC +1.8%）
+- 离散度分析：波动幅度差异的统计特征（标准差、极值比）
+- 市值分层表现：超大市值/中型股/小型股的分化程度
 
-### 市值加权效应
-- 权重股价格行为：大盘蓝筹的方向性分析
-- 中小盘个股离散度：非权重股的分化程度
-- 指数贡献度分析：单一成分股对指数的牵引效应
+### II. 板块内部结构分析${isSectorFocused ? `（${marketContext.sectorName}专项）` : ''}
+- 子行业轮动：识别板块内细分领域的相对强弱
+- 龙头vs跟随者：领先公司与二线公司的表现差异
+- 相关性矩阵：个股间联动性（高相关/低相关集群）
 
-### 板块资金流向特征
-- 获得增量资金青睐的板块：净流入板块识别
-- 遭遇抛压的板块：净流出板块定位
-- 板块间相关性模式：行业轮动节奏判断
+### III. 资金流向深度解析
+- 净流入/流出方向：识别资金迁移路径
+- 机构调仓迹象：尾盘大宗交易、异常成交量信号
+- 做空压力监测：空头仓位变化、卖空量异常
 
-### 市场广度指标
-- 上涨成分股占比（Advance Ratio）
-- 下跌成分股占比（Decline Ratio）
-- 极端波动个股识别（Tail Events）
+### IV. 基本面驱动因素${isSectorFocused ? '（板块特定）' : ''}
+${this.getSectorSpecificDrivers(marketContext)}
 
-## 量化洞察要点
+### V. 技术分析要素
+- 关键价格水平：阻力位/支撑位（具体价格）
+- 技术形态识别：突破/回调/盘整状态
+- 成交量验证：价格突破是否伴随量能配合
 
-### 异常波动监控
-- 重点关注标的：识别统计学异常波动个股
-- 板块轮动周期：当前所处轮动阶段
-- 市场情绪强度：1-10分评分
-- 技术形态关键位：支撑/阻力位识别
+### VI. 风险评估矩阵
+- 系统性风险：宏观环境、政策风险
+- 板块特有风险：行业周期、监管变化
+- 仓位风险：市场情绪过热/过冷指标
 
 【输出要求】
-1. 使用标准Markdown格式（## 二级标题，### 三级标题，- 项目符号）
-2. 避免使用星号强调符号
-3. 使用机构术语（避免"红色/绿色"等视觉描述）
-4. 提供具体数值和量化特征
-5. 保持简洁专业的排版风格`;
+1. 标准Markdown格式（## ### -）无星号强调
+2. 每个观点必须有数据支撑（具体个股代码+涨跌幅）
+3. 使用机构术语（避免颜色描述）
+4. 提供量化评分（如风险等级1-5、情绪强度1-10）
+5. 给出可执行的交易启示和价格目标`;
+  }
+
+  getSectorSpecificDrivers(marketContext) {
+    const sector = marketContext.sectorName || '';
+    
+    if (sector.includes('金融')) {
+      return `- 利率敏感性：联储政策预期对银行净息差的影响
+- 信贷质量：商业地产敞口、贷款损失拨备变化
+- 监管环境：资本充足率、压力测试结果`;
+    } else if (sector.includes('科技')) {
+      return `- 估值水平：市盈率相对历史均值的位置
+- 增长动能：云计算/AI/半导体细分景气度
+- 竞争格局：市场份额变化、定价权强弱`;
+    } else if (sector.includes('能源')) {
+      return `- 油价走势：WTI/Brent原油价格动态
+- 供需平衡：OPEC+政策、库存变化
+- 替代能源冲击：清洁能源政策影响`;
+    } else if (sector.includes('医疗')) {
+      return `- 政策风险：药价谈判、医保改革
+- 研发管线：新药审批、专利到期
+- 人口结构：老龄化趋势、医疗需求`;
+    } else {
+      return `- 宏观经济：GDP增长、消费信心
+- 行业周期：当前所处景气阶段
+- 政策导向：财政刺激、监管变化`;
+    }
   }
 
   parseVisionResponse(visionText) {

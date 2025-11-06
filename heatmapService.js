@@ -101,12 +101,13 @@ async function generateSmartHeatmap(userText) {
         setTimeout(() => reject(new Error('热力图生成超时，请稍后重试')), 35000);
       });
       
-      // 创建截图Promise
+      // 创建截图Promise（优先使用精确板块数据集）
       const screenshotPromise = captureHeatmapSmart({
         tradingViewUrl,
-        dataset: query.index,
+        dataset: query.dataset || query.index, // 精确板块优先
         region: query.region,
-        sector: query.sector !== 'AUTO' ? query.sector : undefined
+        sector: query.sector !== 'AUTO' ? query.sector : undefined,
+        sectorName: query.sectorName // 传递板块名称
       });
       
       // 使用Promise.race竞争，哪个先完成用哪个
@@ -130,7 +131,10 @@ async function generateSmartHeatmap(userText) {
       const marketContext = {
         index: query.index,
         region: query.region,
-        sector: query.sector !== 'AUTO' ? query.sector : null
+        sector: query.sector !== 'AUTO' ? query.sector : null,
+        dataset: query.dataset || null, // 精确板块数据集
+        sectorName: query.sectorName || null, // 板块中文名称
+        components: query.components || [] // 主要成分股
       };
       
       // 判断是否使用增强分析（重要市场）
