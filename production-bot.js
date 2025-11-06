@@ -79,7 +79,7 @@ function apiCall(method, params = {}, timeout = 35000) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': data.length
+        'Content-Length': Buffer.byteLength(data, 'utf8')
       },
       timeout
     };
@@ -128,6 +128,7 @@ async function handleMessage(message) {
   const userId = message.from.id;
   
   console.log(`\n📨 [${new Date().toISOString()}] Message from ${userId}: "${text}"`);
+  console.log(`   chatId=${chatId}, userId=${userId}`);
   messagesProcessed++;
   
   try {
@@ -138,13 +139,20 @@ async function handleMessage(message) {
       console.log('🎨 热力图请求检测到');
       
       // 发送处理中提示
-      await apiCall('sendMessage', {
+      console.log(`   发送提示消息到 chatId=${chatId}`);
+      const msgParams = {
         chat_id: chatId,
         text: '🎨 正在生成热力图...'
-      });
+      };
+      console.log(`   参数:`, JSON.stringify(msgParams));
+      
+      await apiCall('sendMessage', msgParams);
+      console.log('✅ 提示消息已发送');
       
       // 生成热力图
+      console.log('🎨 开始生成热力图...');
       const result = await generateSmartHeatmap(text);
+      console.log(`✅ 热力图生成完成，buffer大小: ${result.buffer?.length} bytes`);
       
       if (result.buffer) {
         // 准备 multipart/form-data
@@ -267,18 +275,29 @@ async function handleMessage(message) {
     }
   } catch (error) {
     console.error(`❌ 处理消息失败:`, error.message);
-    console.error(error.stack);
+    console.error(`❌ 错误堆栈:`, error.stack);
     
     try {
       await apiCall('sendMessage', {
         chat_id: chatId,
-        text: '⚠️ 处理失败，请重试'
+        text: `⚠️ 处理失败: ${error.message}`
       });
     } catch (e) {
       console.error('❌ 无法发送错误消息:', e.message);
     }
   }
 }
+
+// ===== Global error handlers =====
+process.on('uncaughtException', (err) => {
+  console.error('💥 UNCAUGHT EXCEPTION:', err);
+  console.error(err.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 UNHANDLED REJECTION:', reason);
+  console.error(promise);
+});
 
 // ===== Polling Loop =====
 let offset = 0;
