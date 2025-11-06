@@ -1,0 +1,104 @@
+{
+  "name": "Capture TradingView Heatmap via Browserless",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "capture_heatmap",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "005207c9-d2ef-4a32-a7c5-404570674eab",
+      "name": "Receive Heatmap Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "capture_heatmap"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://production-sfo.browserless.io/screenshot",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "=2TMzNi35TJJeWU224644fc99c283e89b6fca512cc40ffeb6"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"={{$json.url}}\",\n  \"options\": {\n    \"fullPage\": true,\n    \"type\": \"png\",\n    \"viewport\": { \"width\": 1920, \"height\": 1080 }\n  },\n  \"gotoOptions\": { \"waitUntil\": \"networkidle0\", \"timeout\": 25000 }\n}\n",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "c5d1221e-bdd0-4fcd-ad70-9fddf7ba5ecb",
+      "name": "Browserless Screenshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "binary",
+        "options": {}
+      },
+      "id": "f1042ebb-28fb-4837-a035-efa8142e4964",
+      "name": "Return Image to Replit",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Heatmap Request": {
+      "main": [
+        [
+          {
+            "node": "Browserless Screenshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Browserless Screenshot": {
+      "main": [
+        [
+          {
+            "node": "Return Image to Replit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7e6485da-636c-49b1-b293-b0b63e1c4bb4",
+  "meta": {
+    "instanceId": "e55566bfe54f88b404d502841707ce3b88351798d04a45b88b4e50f6ca391fb1"
+  },
+  "id": "94XFa6PjmmbNI3a6",
+  "tags": []
+}
