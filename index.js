@@ -4703,6 +4703,7 @@ if (TELEGRAM_TOKEN) {
   // 错误捕获
   bot.catch((err) => {
     console.error('[TG] Error:', err.message);
+    console.error('[TG] Stack:', err.stack);
   });
   
   // 处理文本消息
@@ -4750,7 +4751,12 @@ if (TELEGRAM_TOKEN) {
       }
     } catch (error) {
       console.error('[TG] Handler error:', error.message);
-      await ctx.reply('⚠️ 处理失败，请重试');
+      console.error('[TG] Handler stack:', error.stack);
+      try {
+        await ctx.reply('⚠️ 处理失败，请重试');
+      } catch (e) {
+        console.error('[TG] Failed to send error message:', e.message);
+      }
     }
   });
   
