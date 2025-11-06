@@ -1,12 +1,11 @@
 /**
- * 架构调整#021 - JSON数据流模式
- * N8n返回市场数据JSON，不再返回图片
+ * 诊断模式#023 - 检查N8n返回的JSON结构
  */
 
 const fetch = require('node-fetch');
 
 async function captureHeatmapSmart({ tradingViewUrl }) {
-  console.log(`\n🧠 [JSON数据模式] 请求市场数据: ${tradingViewUrl}`);
+  console.log(`\n🔍 [诊断模式] 检查N8n返回结构`);
   
   try {
     const n8nWebhook = process.env.N8N_HEATMAP_WEBHOOK || 'https://qian.app.n8n.cloud/webhook/capture_heatmap';
@@ -30,24 +29,49 @@ async function captureHeatmapSmart({ tradingViewUrl }) {
       throw new Error(`n8n_http_${response.status}`);
     }
     
-    const jsonData = await response.json();
-    console.log('✅ [N8n JSON响应]', JSON.stringify(jsonData, null, 2));
+    // 先不解析，直接查看原始响应
+    const rawResponse = await response.text();
+    console.log('📦 [N8n原始响应]', rawResponse);
     
-    if (!jsonData.market_data) {
-      throw new Error('N8n返回的JSON缺少market_data字段');
+    // 尝试解析JSON
+    let jsonData;
+    try {
+      jsonData = JSON.parse(rawResponse);
+      console.log('✅ [JSON解析成功]', JSON.stringify(jsonData, null, 2));
+    } catch (parseError) {
+      console.log('❌ [JSON解析失败]', parseError.message);
+      return {
+        success: false,
+        error: 'N8n返回的不是JSON格式',
+        raw_data: rawResponse.substring(0, 200)
+      };
     }
     
-    return {
-      success: true,
-      data_type: 'json',
-      market_data: jsonData.market_data,
-      analysis_ready: true,
-      elapsed_ms: jsonData.elapsed_ms || 0
-    };
+    // 检查JSON结构
+    console.log('🔍 [JSON键列表]', Object.keys(jsonData));
+    
+    // 根据实际结构调整
+    if (jsonData.market_data) {
+      return { success: true, market_data: jsonData.market_data };
+    } else if (jsonData.data) {
+      return { success: true, market_data: jsonData.data };
+    } else if (jsonData.screenshot) {
+      return { 
+        success: false, 
+        error: 'N8n仍返回图片模式数据',
+        screenshot_url: jsonData.screenshot 
+      };
+    } else {
+      return { 
+        success: false, 
+        error: '无法识别的JSON结构',
+        full_response: jsonData 
+      };
+    }
     
   } catch (error) {
-    console.error(`❌ [JSON数据获取错误]`, error.message);
-    throw new Error(`市场数据获取失败: ${error.message}`);
+    console.error(`❌ [诊断错误]`, error.message);
+    return { success: false, error: error.message };
   }
 }
 
