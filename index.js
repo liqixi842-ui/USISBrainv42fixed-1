@@ -1,6 +1,6 @@
 // ====== USIS Brain · v5.0（Telegram Bot + n8n 热力图） ======
 
-// Global error handlers
+// Global error handlers（不退出进程，保持应用运行）
 process.on('unhandledRejection', (err) => {
   console.error('[ERROR] UnhandledRejection:', err.message);
   console.error(err.stack);
@@ -8,7 +8,6 @@ process.on('unhandledRejection', (err) => {
 process.on('uncaughtException', (err) => {
   console.error('[ERROR] UncaughtException:', err.message);
   console.error(err.stack);
-  process.exit(1);
 });
 
 const express = require("express");

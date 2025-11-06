@@ -35,9 +35,9 @@ async function generateSmartHeatmap(userText) {
     
     // 2️⃣ 使用可插拔Provider系统截图（n8n → Browserless）
     try {
-      // 创建超时Promise（25秒）
+      // 创建超时Promise（35秒，略长于Provider的30秒）
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('热力图生成超时，请稍后重试')), 25000);
+        setTimeout(() => reject(new Error('热力图生成超时，请稍后重试')), 35000);
       });
       
       // 创建截图Promise
