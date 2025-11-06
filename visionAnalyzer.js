@@ -181,6 +181,107 @@ ${this.getSectorSpecificDrivers(marketContext)}
     return sectors;
   }
 
+  async analyzeStockChart(imageBuffer, marketContext) {
+    try {
+      const base64Image = imageBuffer.toString('base64');
+      
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+        model: 'gpt-4o',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: this.buildStockChartPrompt(marketContext)
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`,
+                detail: 'high'
+              }
+            }
+          ]
+        }],
+        max_tokens: 2000,
+        temperature: 0.1
+      }, {
+        headers: {
+          'Authorization': `Bearer ${this.openaiApiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const rawAnalysis = response.data.choices[0].message.content;
+      
+      return {
+        rawAnalysis: rawAnalysis,
+        confidence: 0.85,
+        timestamp: new Date().toISOString()
+      };
+      
+    } catch (error) {
+      console.error('Stock chart vision analysis failed:', error);
+      throw new Error(`K线图视觉分析失败: ${error.message}`);
+    }
+  }
+
+  buildStockChartPrompt(marketContext) {
+    const symbol = marketContext.symbol || 'N/A';
+    const currentPrice = marketContext.currentPrice || 'N/A';
+    const changePercent = marketContext.changePercent || 0;
+    
+    return `作为专业技术分析师，对${symbol}的K线图进行深度技术分析。
+
+## 当前市场状态
+
+股票代码: ${symbol}
+当前价格: $${currentPrice}
+涨跌幅: ${changePercent >= 0 ? '+' : ''}${changePercent}%
+
+## 技术分析框架
+
+请基于图表提供以下分析（使用标准Markdown格式）：
+
+### I. 趋势识别
+- 主要趋势方向（上涨/下跌/盘整）
+- 趋势强度评估（1-10分）
+- 趋势持续性判断
+
+### II. 关键价格水平
+- 重要支撑位（具体价格）
+- 重要阻力位（具体价格）
+- 突破/跌破信号
+
+### III. 技术形态分析
+- K线形态（如吞没、十字星、锤子线等）
+- 图表形态（如头肩顶、双底、三角形等）
+- 缺口分析
+
+### IV. 技术指标解读
+- 均线系统（MA5/MA10/MA20等交叉情况）
+- 布林带位置（上轨/中轨/下轨）
+- MACD状态（金叉/死叉、柱状图趋势）
+- 成交量特征（放量/缩量）
+
+### V. 交易信号
+- 买入信号强度（1-10分）
+- 卖出信号强度（1-10分）
+- 持仓建议
+
+### VI. 风险评估
+- 技术面风险等级（1=低风险 到 5=高风险）
+- 短期波动预期
+- 止损位建议
+
+【输出要求】
+1. 使用标准Markdown格式（## ### -）
+2. 每个观点必须引用图表具体特征
+3. 提供量化评分和具体价格位
+4. 保持简洁专业的表达
+5. 避免模糊表述，给出明确判断`;
+  }
+
   extractMetricsFromInstitutionalText(text) {
     const metrics = {};
     

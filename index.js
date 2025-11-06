@@ -37,6 +37,9 @@ const { generateWithGPT5, wrapAsV31Synthesis } = require("./gpt5Brain"); // 🆕
 const { extractHeatmapQuery, extractHeatmapQueryRulesOnly, buildTradingViewURL, generateHeatmapSummary, generateCaption, generateDebugReport } = require("./heatmapIntentParser");
 // 🆕 v5.0: 热力图服务（独立模块，避免循环依赖）
 const { generateSmartHeatmap } = require("./heatmapService");
+// 🆕 v5.0: 个股图表服务（K线图分析）
+const { generateStockChart, formatStockData } = require("./stockChartService");
+const { generateStockAnalysis } = require("./gpt5Brain");
 
 const app = express();
 app.use(express.json());
@@ -3932,6 +3935,59 @@ app.post("/brain/orchestrate", async (req, res) => {
       }
     }
     
+    // 4.8. 🆕 v5.0: 个股图表生成（K线分析）
+    let stockChartData = null;
+    const needStockChart = symbols.length === 1 && // 仅单个股票
+                           (intent.mode === 'diagnose' || 
+                            /图|chart|走势|K线|技术|形态|支撑|阻力|趋势/.test(text || ''));
+    
+    if (needStockChart) {
+      try {
+        console.log(`📈 [v5.0] 启动个股图表分析: ${symbols[0]}`);
+        
+        const chartResult = await generateStockChart(symbols[0], {
+          interval: intent.timeHorizon === '2h' ? '5' : 'D',
+          requestId: reqId
+        });
+        
+        if (chartResult.ok) {
+          stockChartData = {
+            buffer: chartResult.buffer,    // 🆕 实际截图buffer（用于Telegram发送）
+            chartURL: chartResult.chartURL,
+            stockData: chartResult.stockData,
+            chartAnalysis: chartResult.chartAnalysis,
+            provider: chartResult.provider,
+            elapsed_ms: chartResult.elapsed_ms
+          };
+          
+          console.log(`✅ 个股图表生成成功 (provider: ${chartResult.provider}, ${chartResult.elapsed_ms}ms)`);
+          tasks.push('generate_stock_chart');
+          
+          // 如果有Vision分析结果，尝试生成综合报告
+          if (chartResult.chartAnalysis && chartResult.stockData) {
+            try {
+              const analysisResult = await generateStockAnalysis(
+                chartResult.stockData,
+                chartResult.chartAnalysis,
+                { mode: intent.mode, scene: scene }
+              );
+              
+              if (analysisResult.success) {
+                stockChartData.comprehensiveAnalysis = analysisResult.text;
+                console.log(`✅ 个股综合分析生成成功 (${analysisResult.model})`);
+              }
+            } catch (err) {
+              console.warn(`⚠️  个股综合分析失败: ${err.message}`);
+            }
+          }
+        } else {
+          console.warn(`⚠️  个股图表生成失败: ${chartResult.error || 'unknown'}`);
+        }
+      } catch (error) {
+        console.error('❌ 个股图表生成错误:', error.message);
+      }
+    }
+    
     // 5. 🆕 v4.0: GPT-5单核生成（替换多AI并行投票）
     console.log(`🧠 [v4.0] 使用GPT-5单核引擎生成分析...`);
     const gpt5Result = await generateWithGPT5({
@@ -4191,6 +4247,20 @@ app.post("/brain/orchestrate", async (req, res) => {
       });
     }
     
+    // 🆕 v5.0: 个股图表action
+    if (stockChartData && stockChartData.chartURL) {
+      actions_v2.push({
+        type: 'send_stock_chart',
+        symbol: symbols[0],
+        chartURL: stockChartData.chartURL,
+        provider: stockChartData.provider,
+        caption: stockChartData.comprehensiveAnalysis 
+          ? `📈 ${symbols[0]} K线技术分析\n\n${stockChartData.comprehensiveAnalysis.substring(0, 800)}...`
+          : stockChartData.chartAnalysis || `${symbols[0]} K线走势图`
+      });
+      console.log(`✅ 个股图表action已添加 (provider: ${stockChartData.provider})`);
+    }
+    
     console.log(`🎬 最终actions数组:`, JSON.stringify(actions_v2, null, 2));
 
     // v2 标准响应（符合GPT v3.1 MVP Schema）
@@ -4236,6 +4306,10 @@ app.post("/brain/orchestrate", async (req, res) => {
       summary: finalSummary,
       caption: finalSummary,
       actions: actions_v2,
+      
+      // 🆕 v5.0: 个股图表数据
+      stock_chart: stockChartData,
+      
       media: {
         charts: chartUrls  // 图表URL列表（可选兼容字段）
       },
@@ -4574,6 +4648,62 @@ app.get("/heatmap/test", (req, res) => {
 });
 
 // 🆕 测试热力图API端点
+// 🆕 v5.0: 个股图表测试端点
+app.get("/api/test-stock-chart", async (req, res) => {
+  try {
+    const symbol = req.query.symbol || 'AAPL';
+    console.log(`\n📈 [Test Stock Chart] 测试个股: ${symbol}`);
+    
+    // 生成个股图表
+    const chartResult = await generateStockChart(symbol, {
+      interval: req.query.interval || 'D'
+    });
+    
+    if (!chartResult.ok) {
+      return res.status(500).json({
+        ok: false,
+        error: chartResult.error || '图表生成失败'
+      });
+    }
+    
+    // 格式化股票数据
+    const stockDataText = formatStockData(chartResult.stockData);
+    
+    // 生成综合分析
+    let finalAnalysis = chartResult.chartAnalysis;
+    if (chartResult.stockData) {
+      try {
+        const analysisResult = await generateStockAnalysis(
+          chartResult.stockData,
+          chartResult.chartAnalysis
+        );
+        finalAnalysis = analysisResult.text || chartResult.chartAnalysis;
+      } catch (err) {
+        console.log(`⚠️  综合分析失败: ${err.message}`);
+      }
+    }
+    
+    res.json({
+      ok: true,
+      symbol: symbol,
+      chartURL: chartResult.chartURL,
+      stockData: stockDataText,
+      chartAnalysis: chartResult.chartAnalysis,
+      finalAnalysis: finalAnalysis,
+      provider: chartResult.provider,
+      elapsed_ms: chartResult.elapsed_ms,
+      meta: chartResult.meta
+    });
+    
+  } catch (error) {
+    console.error(`❌ 个股图表测试失败:`, error);
+    res.status(500).json({
+      ok: false,
+      error: error.message
+    });
+  }
+});
+
 app.get("/api/test-heatmap", async (req, res) => {
   try {
     const market = req.query.market || 'US';
@@ -4767,6 +4897,37 @@ if (TELEGRAM_TOKEN) {
         });
         
         const data = await response.json();
+        
+        // 🆕 v5.0: 检查是否有个股图表需要发送
+        if (data.stock_chart && data.stock_chart.buffer) {
+          console.log('📈 检测到个股图表，准备发送buffer...');
+          try {
+            // 重建Buffer（处理JSON序列化: {type:'Buffer', data:[...]}）
+            let chartBuffer;
+            if (data.stock_chart.buffer.type === 'Buffer' && Array.isArray(data.stock_chart.buffer.data)) {
+              chartBuffer = Buffer.from(data.stock_chart.buffer.data);
+            } else if (Buffer.isBuffer(data.stock_chart.buffer)) {
+              chartBuffer = data.stock_chart.buffer;
+            } else {
+              throw new Error('Invalid buffer format');
+            }
+            
+            // 发送图表截图
+            await sendDocumentBuffer(
+              TELEGRAM_TOKEN, 
+              chatId, 
+              chartBuffer,
+              `${data.symbols?.[0] || 'stock'}_chart.png`,
+              data.stock_chart.comprehensiveAnalysis || data.stock_chart.chartAnalysis || '个股K线分析'
+            );
+            console.log('✅ 个股图表已发送');
+          } catch (chartError) {
+            console.error('❌ 发送个股图表失败:', chartError.message);
+            // 降级：仅发送文本分析
+          }
+        }
+        
+        // 发送文本分析
         await telegramAPI('sendMessage', { 
           chat_id: chatId, 
           text: data.final_text || data.final_analysis || '分析完成' 

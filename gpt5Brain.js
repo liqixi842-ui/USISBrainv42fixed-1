@@ -339,6 +339,82 @@ function estimateCost(modelId, usage) {
 }
 
 /**
+ * 🆕 生成个股综合分析（基础数据 + 图表技术分析）
+ * @param {Object} stockData - 股票基础数据
+ * @param {string} chartAnalysis - Vision AI的技术分析
+ * @param {Object} context - 附加上下文
+ * @returns {Promise<Object>} 综合分析结果
+ */
+async function generateStockAnalysis(stockData, chartAnalysis, context = {}) {
+  const startTime = Date.now();
+  
+  console.log(`\n📊 [Stock Analysis] 生成${stockData.symbol}综合报告`);
+  
+  // 构建系统提示词
+  const systemPrompt = `你是一位资深股票分析师，擅长综合基本面和技术面分析。请基于提供的数据生成专业的个股分析报告。
+
+【输出要求】
+1. 使用标准Markdown格式（## ### -）
+2. 结合实时数据和技术分析给出结论
+3. 提供具体的数值和价格位
+4. 保持客观中立的专业态度
+5. 避免绝对化判断，注明风险提示`;
+
+  // 构建用户提示词
+  const userPrompt = `请为${stockData.symbol}生成综合分析报告：
+
+## 基础数据
+
+**代码**: ${stockData.symbol || 'N/A'}
+**公司**: ${stockData.companyName || 'N/A'}
+**交易所**: ${stockData.exchange || 'N/A'}
+**当前价**: $${stockData.c?.toFixed(2) || 'N/A'}
+**涨跌额**: ${stockData.d >= 0 ? '+' : ''}${stockData.d?.toFixed(2) || 0}
+**涨跌幅**: ${stockData.dp >= 0 ? '+' : ''}${stockData.dp?.toFixed(2) || 0}%
+**开盘价**: $${stockData.o?.toFixed(2) || 'N/A'}
+**最高价**: $${stockData.h?.toFixed(2) || 'N/A'}
+**最低价**: $${stockData.l?.toFixed(2) || 'N/A'}
+**昨收价**: $${stockData.pc?.toFixed(2) || 'N/A'}
+
+## 图表技术分析
+
+${chartAnalysis || '暂无技术分析'}
+
+## 请输出以下内容
+
+### I. 行情概览
+- 当日走势特征
+- 与昨收价对比分析
+- 日内波动幅度评估
+
+### II. 技术面综合判断
+- 结合图表分析给出趋势判断
+- 关键支撑阻力位确认
+- 交易信号强度评估
+
+### III. 操作建议
+- 适合的交易策略（买入/观望/卖出）
+- 建议入场价位和仓位
+- 止损止盈设置建议
+
+### IV. 风险提示
+- 主要风险因素
+- 需要关注的市场变化
+- 投资者适用性说明
+
+【注意】保持简洁专业，突出关键信息`;
+
+  // 调用GPT-5生成报告
+  const result = await callModelWithFallback({
+    systemPrompt,
+    userPrompt,
+    requestStartTime: startTime
+  });
+  
+  return result;
+}
+
+/**
  * 兼容层：包装成synthesizeAIOutputs格式
  */
 function wrapAsV31Synthesis(gpt5Result) {
@@ -356,5 +432,6 @@ function wrapAsV31Synthesis(gpt5Result) {
 
 module.exports = {
   generateWithGPT5,
+  generateStockAnalysis,
   wrapAsV31Synthesis
 };
