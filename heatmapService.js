@@ -1,9 +1,11 @@
-// 热力图服务模块 - v5.0
+// 热力图服务模块 - v5.0 Vision Upgrade
 // 独立模块，避免循环依赖
+// 新增：GPT-4 Vision视觉分析能力
 
 const { extractHeatmapQueryRulesOnly, buildTradingViewURL, generateHeatmapSummary, generateCaption } = require("./heatmapIntentParser");
 const { captureHeatmapSmart } = require('./screenshotProviders');
 const { generateWithGPT5 } = require('./gpt5Brain');
+const VisionAnalysisService = require('./visionAnalysis');
 
 /**
  * 生成AI市场分析 - 基于可观察热力图特征
@@ -118,8 +120,47 @@ async function generateSmartHeatmap(userText) {
       
       console.log(`✅ [Smart Heatmap] 完成 (${elapsed}ms, provider=${result.provider})`);
       
-      // 生成AI市场分析
-      const marketAnalysis = await generateMarketAnalysis(query.index, userText);
+      // 🆕 v5.0: 视觉AI分析（基于真实图像内容）
+      let marketAnalysis;
+      let analysisMetadata = {};
+      
+      try {
+        const visionService = new VisionAnalysisService(process.env.OPENAI_API_KEY);
+        const marketContext = {
+          index: query.index,
+          region: query.region,
+          sector: query.sector
+        };
+        
+        // 检查是否应该使用视觉分析（成本优化）
+        const useVision = visionService.shouldUseVisionAnalysis('standard', query.index);
+        
+        if (useVision) {
+          console.log('👁️  [Vision Mode] 启用视觉AI分析');
+          const visionResult = await visionService.analyzeHeatmapVision(
+            result.buffer,
+            marketContext
+          );
+          marketAnalysis = visionResult.text;
+          analysisMetadata = visionResult.metadata;
+        } else {
+          console.log('📝 [Text Mode] 使用文本模式分析');
+          const fallbackResult = await visionService.analyzeHeatmapFallback(
+            marketContext,
+            { generateWithGPT5 }
+          );
+          marketAnalysis = fallbackResult.text;
+          analysisMetadata = fallbackResult.metadata;
+        }
+        
+      } catch (visionError) {
+        console.log('⚠️  [Vision Fallback] 视觉分析失败，切换到文本模式');
+        console.log(`   错误: ${visionError.message}`);
+        
+        // 降级到旧的文本分析
+        marketAnalysis = await generateMarketAnalysis(query.index, userText);
+        analysisMetadata = { analysis_type: 'text_legacy', error: visionError.message };
+      }
       
       return {
         ok: true,
@@ -132,7 +173,8 @@ async function generateSmartHeatmap(userText) {
           expected_region: query.region,
           locale: query.locale,
           sector: query.sector,
-          debug: query.debug
+          debug: query.debug,
+          analysis: analysisMetadata
         },
         elapsed_ms: elapsed,
         caption: marketAnalysis,
