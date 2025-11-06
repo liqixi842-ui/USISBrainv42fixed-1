@@ -1,0 +1,166 @@
+这完全能代码化。n8n 不超时，是因为它“天生自带一整套工程化护栏”：队列→限流→超时→重试→退避→熔断→资源回收→独立沙箱。你把流程搬到 Replit 后变“一锅端单进程”，只要某一步卡住（429/网络慢/截图服务卡住/Chrome没关），整条链就一起超时。
+
+下面给你一份“把 n8n 的隐式能力→显式代码”的即插即用最小补丁。不改业务逻辑，只加调度壳子就能稳。
+
+你需要补齐的 5 个机制（一眼对照 n8n）
+
+串行队列 + 并发阈值（默认 1，必要时 2）
+
+每步硬超时（例如 25s，超时立刻中止）
+
+指数退避重试（对 429/5xx/网络超时生效，最多 2 次）
+
+熔断器（某 provider 连续失败→冷却 60–120s）
+
+资源回收（Browserless/puppeteer 上下文与页面确保 finally 关闭）
+
+一段可直接放进项目的调度壳：runner.js
+// runner.js —— n8n风格执行壳
+const DEFAULT_TIMEOUT_MS = parseInt(process.env.TASK_TIMEOUT_MS || '25000', 10);
+const MAX_RETRIES        = parseInt(process.env.TASK_MAX_RETRIES || '2', 10);
+const COOL_DOWN_MS       = parseInt(process.env.PROVIDER_COOLDOWN_MS || '90000', 10);
+const CONCURRENCY        = parseInt(process.env.TASK_CONCURRENCY || '1', 10);
+
+const state = new Map(); // provider -> { fails, until }
+
+function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
+function backoff(attempt){ return 800 * (2 ** attempt) + Math.floor(Math.random()*300); }
+
+function isRateLimit(e){ return /429|rate|Too Many/i.test(String(e)); }
+function isRetryable(e){
+  const msg = String(e);
+  return isRateLimit(e) || /5\d\d|timeout|ETIMEDOUT|ECONNRESET|ENOTFOUND/i.test(msg);
+}
+
+async function withTimeout(promise, ms = DEFAULT_TIMEOUT_MS){
+  let t;
+  const timeout = new Promise((_,rej)=> t = setTimeout(()=> rej(new Error('timeout')), ms));
+  try { return await Promise.race([promise, timeout]); }
+  finally { clearTimeout(t); }
+}
+
+function circuitOpen(provider){
+  const s = state.get(provider);
+  return s && s.until && Date.now() < s.until;
+}
+function noteFailure(provider){
+  const s = state.get(provider) || { fails:0, until:0 };
+  s.fails += 1;
+  if (s.fails >= 3) s.until = Date.now() + COOL_DOWN_MS;
+  state.set(provider, s);
+}
+function noteSuccess(provider){ state.set(provider, { fails:0, until:0 }); }
+
+// 简易串行队列
+let running = 0;
+const queue = [];
+async function enqueue(fn){
+  if (running >= CONCURRENCY){
+    await new Promise(res => queue.push(res));
+  }
+  running++;
+  try { return await fn(); }
+  finally{
+    running--;
+    const next = queue.shift();
+    if (next) next();
+  }
+}
+
+// 统一执行器：带超时、重试、熔断
+async function runWithGuards(provider, taskFn){
+  if (circuitOpen(provider)) throw new Error(`${provider}_circuit_open`);
+
+  let lastErr;
+  for (let i=0; i<=MAX_RETRIES; i++){
+    try{
+      const res = await withTimeout(taskFn());
+      noteSuccess(provider);
+      return res;
+    }catch(e){
+      lastErr = e;
+      if (!isRetryable(e) || i === MAX_RETRIES){
+        noteFailure(provider);
+        break;
+      }
+      const wait = backoff(i);
+      await sleep(wait);
+    }
+  }
+  throw lastErr;
+}
+
+module.exports = { enqueue, runWithGuards };
+
+在你的 screenshotProviders.js 里这样用
+const { enqueue, runWithGuards } = require('./runner');
+
+// 例：Screenshot SaaS（主路径）
+async function captureViaScreenshotN8N({ url, dataset }) {
+  return runWithGuards('screenshot', async () => {
+    // 这里放你现有的 fetch 截图逻辑，别忘了：delay=6000、full_page=true、block_ads=true
+    // 最后 return { buffer, elapsed_ms, validation:'saas-waited' }
+  });
+}
+
+// 例：Browserless（备用）
+async function captureViaBrowserless(opts){
+  return runWithGuards('browserless', async () => {
+    // 这里放你已有的 hardCleanAndGoto + ensureDataset + screenshot
+    // finally 里关闭 page/context/browser，避免泄露
+  });
+}
+
+// 例：QuickChart（保底）
+async function captureViaQuickChart(opts){
+  return runWithGuards('quickchart', async () => {
+    // 你已有的 quickchart fetch
+  });
+}
+
+// 主调度：串行 + 有序回退
+async function captureHeatmapSmart({ tradingViewUrl, dataset }){
+  return enqueue(async () => {
+    try { return { provider:'screenshot', ...(await captureViaScreenshotN8N({ url:tradingViewUrl, dataset })) }; }
+    catch(_e1){
+      try { return { provider:'browserless', ...(await captureViaBrowserless({ url:tradingViewUrl, dataset })) }; }
+      catch(_e2){
+        return { provider:'quickchart', ...(await captureViaQuickChart({ dataset })) };
+      }
+    }
+  });
+}
+
+module.exports = { captureHeatmapSmart };
+
+资源回收（Browserless 分支务必加）
+async function captureViaBrowserless({ url, dataset }){
+  const { browser, context, page } = await openIncognito(); // 你现有封装
+  const start = Date.now();
+  try {
+    await hardCleanAndGoto(page, url);
+    const ok = await ensureDataset(page, dataset);
+    if (!ok) throw new Error('dataset_not_applied');
+    const buffer = await page.screenshot({ type:'jpeg', quality:90, fullPage:true });
+    return { buffer, elapsed_ms: Date.now()-start, validation:'dom-strong' };
+  } finally {
+    try { await page.close({ runBeforeUnload:false }); } catch {}
+    try { await context.close(); } catch {}
+    try { await browser.close(); } catch {}
+  }
+}
+
+环境变量（可不改代码直接调参）
+# 并发与时序
+TASK_CONCURRENCY=1
+TASK_TIMEOUT_MS=25000
+TASK_MAX_RETRIES=2
+PROVIDER_COOLDOWN_MS=90000
+
+一句话结论
+
+为什么 n8n 不超时？ 因为它给你“隐式开了保险箱”。
+
+能不能代码化？ 能，而且你已经有业务代码了，只差上面这层“调度壳”。
+
+加上 runner.js + 在 provider 外层套 runWithGuards/enqueue，你的 Replit 就会像 n8n 一样：串行、有超时、有重试、有熔断、有回收，不再“执行到一半卡死”。

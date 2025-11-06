@@ -1,7 +1,8 @@
-// 🎯 Screenshot Provider System - v4.3 (Hybrid Strategy)
-// 三层回退架构：Browserless(DOM强校验) → ScreenshotAPI(长延迟+轻校验) → QuickChart(保底)
+// 🎯 Screenshot Provider System - v4.3.1 (n8n Style)
+// 三层回退架构 + n8n风格调度壳（串行队列+超时+重试+熔断+资源回收）
 
 const fetch = require('node-fetch');
+const { enqueue, runWithGuards } = require('./runner');
 
 // ========================================
 // 数据集标签映射
@@ -344,74 +345,58 @@ export default async function ({ page, context }) {
 }
 
 // ========================================
-// Provider 2: ScreenshotN8N (n8n风格 - 长延迟+元素等待+重试)
+// Provider 2: ScreenshotN8N (n8n风格 - 长延迟+元素等待)
 // ========================================
 async function captureViaScreenshotN8N({ url, dataset }) {
-  const start = Date.now();
-  console.log(`\n📸 [ScreenshotN8N] n8n风格截图: ${url}`);
-  
-  const ep = process.env.SCREENSHOT_API_ENDPOINT || 'https://shot.screenshotapi.net/screenshot';
-  const key = process.env.SCREENSHOT_API_KEY;
-  
-  if (!ep || !key) {
-    throw new Error('screenshot_api_not_configured');
-  }
-  
-  // n8n核心策略：长延迟 + 元素等待 + 网络静默
-  const params = new URLSearchParams({
-    token: key,                    // 或access_key，根据供应商
-    url,
-    full_page: 'true',
-    viewport_width: '1920',
-    viewport_height: '1080',
-    device_scale_factor: '2',      // 高清
-    block_ads: 'true',
-    block_cookie_banners: 'true',
-    delay: '7000',                 // 7秒延迟，给TradingView充足时间
-    ttl: '600',                    // 10分钟缓存
-    wait_for_event: 'load',
-    output: 'image',
-    file_type: 'png'
-  });
-  
-  // 尝试添加元素选择器（如果供应商支持）
-  // element: '.tv-heatmap,.heatmap,.treemap,[data-name*="heatmap"]'
-  
-  // 三次重试 + 指数退避
-  let lastErr;
-  for (let i = 0; i < 3; i++) {
-    try {
-      const resp = await fetch(`${ep}?${params.toString()}`, { timeout: 25000 });
-      
-      if (!resp.ok) {
-        throw new Error(`screenshot_http_${resp.status}`);
-      }
-      
-      const buf = await resp.buffer();
-      
-      // 轻量验证：避免1x1空图
-      if (!buf || buf.length < 60000) {
-        throw new Error('screenshot_too_small');
-      }
-      
-      const elapsed = Date.now() - start;
-      console.log(`✅ [ScreenshotN8N] 成功 (${elapsed}ms, ${buf.length} bytes, retry=${i})`);
-      
-      return {
-        buffer: buf,
-        elapsed_ms: elapsed,
-        validation: 'saas-waited'
-      };
-    } catch (e) {
-      lastErr = e;
-      const backoff = jitter(800 * Math.pow(2, i));
-      console.warn(`⚠️  [ScreenshotN8N] 重试${i + 1}/3失败: ${e.message}, 退避${backoff}ms`);
-      await sleep(backoff);
-      continue;
+  return runWithGuards('screenshot', async () => {
+    const start = Date.now();
+    console.log(`\n📸 [ScreenshotN8N] ${url.substring(0, 80)}...`);
+    
+    const ep = process.env.SCREENSHOT_API_ENDPOINT || 'https://shot.screenshotapi.net/screenshot';
+    const key = process.env.SCREENSHOT_API_KEY;
+    
+    if (!ep || !key) {
+      throw new Error('screenshot_api_not_configured');
     }
-  }
-  
-  throw lastErr || new Error('screenshot_failed');
+    
+    // ScreenshotAPI.net优化参数（平衡速度和质量）
+    const params = new URLSearchParams({
+      token: key.trim(),
+      url,
+      output: 'image',
+      file_type: 'png',
+      full_page: 'false',          // 关闭全页截图加快速度
+      width: '1920',
+      height: '1080',
+      delay: '6000',               // 6秒延迟给TradingView充足时间
+      wait_for_event: 'load',
+      block_ads: 'true',
+      block_cookie_banners: 'true',
+      fresh: 'false'
+    });
+    
+    const resp = await fetch(`${ep}?${params.toString()}`);
+    
+    if (!resp.ok) {
+      throw new Error(`screenshot_http_${resp.status}`);
+    }
+    
+    const buf = await resp.buffer();
+    
+    // 轻量验证：避免1x1空图
+    if (!buf || buf.length < 60000) {
+      throw new Error('screenshot_too_small');
+    }
+    
+    const elapsed = Date.now() - start;
+    console.log(`✅ [ScreenshotN8N] 成功 (${elapsed}ms, ${buf.length} bytes)`);
+    
+    return {
+      buffer: buf,
+      elapsed_ms: elapsed,
+      validation: 'saas-waited'
+    };
+  });
 }
 
 // ========================================
@@ -525,29 +510,25 @@ async function captureQuickChart({ dataset, region }) {
 }
 
 // ========================================
-// 主入口：n8n风格优先（截图SaaS → Browserless → QuickChart）
+// 主入口：n8n风格串行调度（队列+超时+熔断）
 // ========================================
 async function captureHeatmapSmart({ tradingViewUrl, dataset, region, sector }) {
-  console.log(`\n🚀 [Smart Router] n8n风格路由：优先截图SaaS`);
-  console.log(`   - ScreenshotAPI可用: ${!!process.env.SCREENSHOT_API_KEY}`);
-  console.log(`   - Browserless可用: ${!!process.env.BROWSERLESS_API_KEY}`);
-  
-  // n8n顺序：截图SaaS → Browserless增强 → QuickChart保底
-  const providers = ['screenshot_n8n', 'browserless', 'quickchart'];
-  const errors = [];
-  
-  for (const p of providers) {
-    try {
-      if (p === 'screenshot_n8n' && process.env.SCREENSHOT_API_KEY) {
-        const r = await captureViaScreenshotN8N({
-          url: tradingViewUrl,
-          dataset
-        });
+  return enqueue(async () => {
+    console.log(`\n🚀 [Smart Router] n8n风格调度：${dataset}`);
+    
+    // Tier 1: Screenshot SaaS（主路径）
+    if (process.env.SCREENSHOT_API_KEY) {
+      try {
+        const r = await captureViaScreenshotN8N({ url: tradingViewUrl, dataset });
         return { provider: 'screenshot', ...r };
+      } catch (e) {
+        console.warn(`⚠️  [screenshot] 失败: ${e.message.substring(0, 80)}`);
       }
-      
-      if (p === 'browserless' && process.env.BROWSERLESS_API_KEY) {
-        console.log(`\n📸 [Browserless] 尝试DOM增强截图（非必需）`);
+    }
+    
+    // Tier 2: Browserless（DOM增强，非必需）
+    if (process.env.BROWSERLESS_API_KEY) {
+      try {
         const r = await captureBrowserless({
           tradingViewUrl,
           dataset,
@@ -556,24 +537,15 @@ async function captureHeatmapSmart({ tradingViewUrl, dataset, region, sector }) 
           apiKey: process.env.BROWSERLESS_API_KEY
         });
         return { provider: 'browserless', ...r };
+      } catch (e) {
+        console.warn(`⚠️  [browserless] 失败: ${e.message.substring(0, 80)}`);
       }
-      
-      if (p === 'quickchart') {
-        const r = await captureQuickChart({
-          dataset,
-          region
-        });
-        return { provider: 'quickchart', ...r };
-      }
-    } catch (error) {
-      console.warn(`⚠️  [${p}] 失败，继续回退: ${error.message.substring(0, 100)}`);
-      errors.push({ provider: p, error: error.message });
-      continue;
     }
-  }
-  
-  // 所有provider都失败
-  throw new Error(`all_providers_failed: ${JSON.stringify(errors)}`);
+    
+    // Tier 3: QuickChart（保底）
+    const r = await captureQuickChart({ dataset, region });
+    return { provider: 'quickchart', ...r };
+  });
 }
 
 module.exports = {
