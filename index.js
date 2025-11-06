@@ -4644,9 +4644,49 @@ const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
 if (TELEGRAM_TOKEN) {
   const https = require('https');
+  const FormData = require('form-data');
   
   console.log('🤖 启动 Telegram Bot (Manual Polling)...');
   logf('TG: Starting manual polling');
+  
+  // ===== Telegram Document Sender (safe multipart) =====
+  async function sendDocumentBuffer(token, chatId, buffer, filename, caption = '') {
+    if (!Buffer.isBuffer(buffer)) {
+      throw new Error('sendDocumentBuffer: buffer must be a Buffer');
+    }
+    if (buffer.length > 45 * 1024 * 1024) {
+      throw new Error(`file too large: ${(buffer.length/1024/1024).toFixed(2)}MB`);
+    }
+
+    const form = new FormData();
+    form.append('chat_id', String(chatId));
+    form.append('caption', caption.slice(0, 1000));
+    form.append('document', buffer, { filename: filename || 'heatmap.png', contentType: 'image/png' });
+
+    console.log(`[TG] sendDocument: ${filename}, ${(buffer.length/1024).toFixed(2)}KB`);
+    
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+      method: 'POST',
+      headers: form.getHeaders(),
+      body: form,
+      timeout: 45000,
+    });
+
+    const text = await res.text();
+    console.log('[TG] sendDocument status:', res.status, 'len:', text.length);
+    
+    if (!res.ok) {
+      throw new Error(`sendDocument failed ${res.status}: ${text}`);
+    }
+    
+    try {
+      const json = JSON.parse(text);
+      if (!json.ok) throw new Error(json.description || 'telegram ok=false');
+      return json;
+    } catch (e) {
+      throw new Error(`sendDocument non-json: ${text.slice(0, 200)}`);
+    }
+  }
   
   // Telegram API 调用
   function telegramAPI(method, params = {}, timeout = 35000) {
@@ -4711,48 +4751,11 @@ if (TELEGRAM_TOKEN) {
         const result = await generateSmartHeatmap(text);
         
         if (result.buffer) {
-          // 使用 multipart/form-data 发送文档
-          const boundary = '----WebKitFormBoundary' + Math.random().toString(36);
-          const parts = [
-            `--${boundary}\r\nContent-Disposition: form-data; name="document"; filename="heatmap.png"\r\nContent-Type: image/png\r\n\r\n`,
-            result.buffer,
-            `\r\n--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${chatId}\r\n`,
-            `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${result.caption.slice(0, 1000)}\r\n`,
-            `--${boundary}--\r\n`
-          ];
-          
-          const bufferParts = parts.map(p => Buffer.isBuffer(p) ? p : Buffer.from(p, 'utf-8'));
-          const bodyBuffer = Buffer.concat(bufferParts);
-          
-          await new Promise((resolve, reject) => {
-            const req = https.request({
-              hostname: 'api.telegram.org',
-              port: 443,
-              path: `/bot${TELEGRAM_TOKEN}/sendDocument`,
-              method: 'POST',
-              headers: {
-                'Content-Type': `multipart/form-data; boundary=${boundary}`,
-                'Content-Length': bodyBuffer.length
-              },
-              timeout: 60000
-            }, (res) => {
-              let body = '';
-              res.on('data', chunk => body += chunk);
-              res.on('end', () => {
-                try {
-                  const result = JSON.parse(body);
-                  result.ok ? resolve(result) : reject(new Error(result.description));
-                } catch (e) { reject(e); }
-              });
-            });
-            req.on('error', reject);
-            req.on('timeout', () => { req.destroy(); reject(new Error('sendDocument timeout')); });
-            req.write(bodyBuffer);
-            req.end();
-          });
+          // 使用安全的 sendDocumentBuffer (form-data自动处理Content-Length)
+          await sendDocumentBuffer(TELEGRAM_TOKEN, chatId, result.buffer, 'heatmap.png', result.caption || '');
           
           if (result.summary) {
-            await telegramAPI('sendMessage', { chat_id: chatId, text: result.summary });
+            await telegramAPI('sendMessage', { chat_id: chatId, text: result.summary.slice(0, 4000) });
           }
           console.log('✅ 热力图已发送');
           logf('TG: heatmap sent');
