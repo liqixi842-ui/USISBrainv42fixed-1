@@ -4690,17 +4690,10 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
 });
 
-// ====== Telegram Bot v4.5 (防崩溃版) ======
-const { startTelegramBot } = require('./telegram');
-
-// 启动 Telegram Bot（单例模式，防重启风暴）
-const orchestrateUrl = `http://localhost:${PORT}/brain/orchestrate`;
-startTelegramBot({ orchestrateUrl });
-
-// 心跳日志（可选，用于监控进程活跃度）
-setInterval(() => {
-  console.log('[HEARTBEAT]', new Date().toISOString());
-}, 60000);
-
-console.log('[BOOT] ✅ USIS Brain v4.5 ready');
+// ====== HTTP API Ready ======
+console.log('[BOOT] ✅ USIS Brain v4.5 ready (HTTP API mode)');
+console.log('📡 使用方式:');
+console.log(`   curl -X POST http://localhost:${PORT}/brain/orchestrate \\`);
+console.log('     -H "Content-Type: application/json" \\');
+console.log('     -d \'{"text":"日本大盘热力图","user_id":"test"}\'');
 
