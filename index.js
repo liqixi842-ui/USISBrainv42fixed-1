@@ -1,26 +1,14 @@
 // ====== USIS Brain · v5.0（Telegram Bot + n8n 热力图） ======
 
-// --- CRASH BLACKBOX (must be first) ---
-const fs = require('fs');
-const logf = (msg) => {
-  try { fs.writeFileSync('/tmp/usis-brain.log', `[${new Date().toISOString()}] ${msg}\n`, { flag: 'a' }); } catch {}
-};
-process.on('beforeExit', (code) => logf(`beforeExit ${code}`));
-process.on('exit', (code) => logf(`exit ${code}`));
-process.on('SIGINT', () => { logf('SIGINT'); });
-process.on('SIGTERM', () => { logf('SIGTERM'); });
-process.on('SIGHUP', () => { logf('SIGHUP'); });
-process.on('uncaughtExceptionMonitor', (err, origin) => logf(`uncaughtExceptionMonitor ${origin}: ${err?.stack || err}`));
-process.on('uncaughtException', (err) => { logf(`uncaughtException: ${err?.stack || err}`); });
-process.on('unhandledRejection', (r) => { logf(`unhandledRejection: ${r?.stack || r}`); });
-logf('USIS Brain v5 booting...');
-
-// ===== Global hardeners =====
+// Global error handlers
 process.on('unhandledRejection', (err) => {
-  console.error('[FATAL] UnhandledRejection:', err);
+  console.error('[ERROR] UnhandledRejection:', err.message);
+  console.error(err.stack);
 });
 process.on('uncaughtException', (err) => {
-  console.error('[FATAL] UncaughtException:', err);
+  console.error('[ERROR] UncaughtException:', err.message);
+  console.error(err.stack);
+  process.exit(1);
 });
 
 const express = require("express");
@@ -4647,7 +4635,6 @@ if (TELEGRAM_TOKEN) {
   const FormData = require('form-data');
   
   console.log('🤖 启动 Telegram Bot (Manual Polling)...');
-  logf('TG: Starting manual polling');
   
   // ===== Telegram Document Sender (safe multipart) =====
   async function sendDocumentBuffer(token, chatId, buffer, filename, caption = '') {
@@ -4739,7 +4726,6 @@ if (TELEGRAM_TOKEN) {
     const userId = message.from.id;
     
     console.log(`\n📨 [TG] Message from ${userId}: "${text}"`);
-    logf(`TG: msg from ${userId}: ${text.slice(0,80)}`);
     
     try {
       const isHeatmap = text.includes('热力图') || text.toLowerCase().includes('heatmap');
@@ -4758,7 +4744,6 @@ if (TELEGRAM_TOKEN) {
             await telegramAPI('sendMessage', { chat_id: chatId, text: result.summary.slice(0, 4000) });
           }
           console.log('✅ 热力图已发送');
-          logf('TG: heatmap sent');
         }
       } else {
         console.log('🧠 常规分析');
@@ -4785,7 +4770,6 @@ if (TELEGRAM_TOKEN) {
       }
     } catch (error) {
       console.error('[TG] Error:', error.message);
-      logf(`TG: error: ${error.message}`);
       try {
         await telegramAPI('sendMessage', { 
           chat_id: chatId, 
@@ -4820,7 +4804,6 @@ if (TELEGRAM_TOKEN) {
       }
     } catch (e) {
       console.error('[TG] Poll error:', e.message);
-      logf(`TG: poll error: ${e.message}`);
     } finally {
       polling = false;
       setTimeout(pollTelegram, 1000);
@@ -4831,7 +4814,6 @@ if (TELEGRAM_TOKEN) {
   setTimeout(() => {
     console.log('✅ Telegram Bot 已启动（手动轮询）');
     console.log('💬 现在可以在 Telegram 里直接发消息了');
-    logf('TG: polling started');
     pollTelegram();
   }, 2000);
   
