@@ -50,17 +50,34 @@ async function captureHeatmapSmart({ tradingViewUrl }) {
     // 检查JSON结构
     console.log('🔍 [JSON键列表]', Object.keys(jsonData));
     
-    // 根据实际结构调整
-    if (jsonData.market_data) {
-      return { success: true, market_data: jsonData.market_data };
-    } else if (jsonData.data) {
-      return { success: true, market_data: jsonData.data };
-    } else if (jsonData.screenshot) {
-      return { 
-        success: false, 
-        error: 'N8n仍返回图片模式数据',
-        screenshot_url: jsonData.screenshot 
+    // n8n返回ScreenshotAPI的JSON响应，包含screenshot URL
+    if (jsonData.screenshot) {
+      console.log(`📥 [下载截图] ${jsonData.screenshot}`);
+      
+      const imgController = new AbortController();
+      const imgTimeoutId = setTimeout(() => imgController.abort(), 15000);
+      
+      const imgRes = await fetch(jsonData.screenshot, {
+        signal: imgController.signal
+      });
+      
+      clearTimeout(imgTimeoutId);
+      
+      if (!imgRes.ok) {
+        throw new Error(`图片下载失败: ${imgRes.status}`);
+      }
+      
+      const buffer = Buffer.from(await imgRes.arrayBuffer());
+      console.log(`✅ [截图成功] ${(buffer.length / 1024).toFixed(2)} KB`);
+      
+      return {
+        success: true,
+        provider: 'n8n-screenshotapi',
+        validation: 'json-url',
+        buffer: buffer
       };
+    } else if (jsonData.market_data) {
+      return { success: true, market_data: jsonData.market_data };
     } else {
       return { 
         success: false, 
