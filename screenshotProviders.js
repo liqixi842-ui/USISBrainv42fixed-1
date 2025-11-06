@@ -22,15 +22,32 @@ async function captureViaScreenshotSaaS({ url }) {
   const start = Date.now();
   console.log(`\n📸 [Screenshot SaaS] ${url.substring(0, 80)}...`);
   
-  const endpoint = process.env.SCREENSHOT_API_ENDPOINT;
+  const endpoint = process.env.SCREENSHOT_API_ENDPOINT || 'https://shot.screenshotapi.net/screenshot';
   const key = process.env.SCREENSHOT_API_KEY;
   
-  if (!endpoint || !key) {
+  if (!key) {
     throw new Error('screenshot_api_not_configured');
   }
   
-  // ScreenshotOne 参数格式
-  const params = {
+  // 根据服务商选择参数格式
+  const isScreenshotAPI = endpoint.includes('screenshotapi.net');
+  
+  const params = isScreenshotAPI ? {
+    // ScreenshotAPI.net 参数格式
+    token: key.trim(),
+    url,
+    output: 'image',
+    file_type: 'png',
+    full_page: 'true',
+    width: '1920',
+    height: '1080',
+    delay: '3000',                // 3秒延迟（最小有效延迟）
+    wait_for_event: 'load',
+    block_ads: 'true',
+    block_cookie_banners: 'true',
+    fresh: 'true'                 // 强制刷新确保最新数据
+  } : {
+    // ScreenshotOne 参数格式
     access_key: key,
     url,
     full_page: 'true',
@@ -39,11 +56,11 @@ async function captureViaScreenshotSaaS({ url }) {
     device_scale_factor: '2',
     block_ads: 'true',
     block_cookie_banners: 'true',
-    delay: '8000',    // 8秒延迟给TradingView充足渲染时间
+    delay: '3000',
     ttl: '600'
   };
   
-  const res = await fetch(`${endpoint}?${qs(params)}`, { timeout: 25000 });
+  const res = await fetch(`${endpoint}?${qs(params)}`, { timeout: 60000 });  // 60秒超时
   
   if (!res.ok) {
     throw new Error(`screenshot_http_${res.status}`);
