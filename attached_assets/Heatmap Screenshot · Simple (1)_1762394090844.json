@@ -1,0 +1,139 @@
+{
+  "name": "Heatmap Screenshot · Simple",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "capture_heatmap",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "cf3f00cc-3a05-444a-8527-ac859fbbd942",
+      "name": "🛎️ Receive Heatmap Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        16
+      ],
+      "webhookId": "82309c37-dc5c-47fe-afd6-214954f321eb"
+    },
+    {
+      "parameters": {
+        "url": "https://api.screenshotone.com/take",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_key",
+              "value": "=HHBYB5H-4CT4970-MVZEKM2-EMEWEXX"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.url }}"
+            },
+            {
+              "name": "full_page",
+              "value": "true"
+            },
+            {
+              "name": "delay",
+              "value": "12000"
+            },
+            {
+              "name": "viewport_width",
+              "value": "1920"
+            },
+            {
+              "name": "viewport_height",
+              "value": "1080"
+            },
+            {
+              "name": "device_scale_factor",
+              "value": "2"
+            },
+            {
+              "name": "block_ads",
+              "value": "true"
+            },
+            {
+              "name": "block_cookie_banners",
+              "value": "true"
+            },
+            {
+              "name": "ttl",
+              "value": "600"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "8d08e42d-b8a5-4ae9-9bd5-1a54a374dab9",
+      "name": "📸 Call Screenshot API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        464,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "binary",
+        "responseDataSource": "set",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "6739be76-d318-4786-9666-2b24dea366c7",
+      "name": "📤 Return Image to Replit",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        688,
+        16
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "🛎️ Receive Heatmap Request": {
+      "main": [
+        [
+          {
+            "node": "📸 Call Screenshot API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📸 Call Screenshot API": {
+      "main": [
+        [
+          {
+            "node": "📤 Return Image to Replit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7ee53f06-24f9-4fa6-9a0b-df12114855b1",
+  "meta": {
+    "instanceId": "e55566bfe54f88b404d502841707ce3b88351798d04a45b88b4e50f6ca391fb1"
+  },
+  "id": "6b5aB4pWgkPKnpXg",
+  "tags": []
+}
