@@ -134,6 +134,16 @@ class EnhancedDataBroker {
   }
 
   calculateMarketBreadth(components) {
+    if (!components || components.length === 0) {
+      return {
+        advances: 0,
+        declines: 0,
+        unchanged: 0,
+        advanceDeclineRatio: 0,
+        advancePercentage: 0
+      };
+    }
+    
     const advances = components.filter(c => c.change > 0).length;
     const declines = components.filter(c => c.change < 0).length;
     const unchanged = components.filter(c => c.change === 0).length;
@@ -150,6 +160,15 @@ class EnhancedDataBroker {
   calculateTechnicalIndicators(components) {
     const changes = components.map(c => c.changePercent).filter(Boolean);
     
+    if (!changes || changes.length === 0) {
+      return {
+        averageChange: 0,
+        maxGain: 0,
+        maxLoss: 0,
+        volatility: 0
+      };
+    }
+    
     return {
       averageChange: changes.reduce((a, b) => a + b, 0) / changes.length,
       maxGain: Math.max(...changes),
@@ -162,7 +181,10 @@ class EnhancedDataBroker {
     const symbolMap = {
       'IBEX35': ['SAN.MC', 'BBVA.MC', 'ITX.MC', 'TEF.MC', 'REP.MC', 'CABK.MC', 'ENG.MC', 'IAG.MC', 'FER.MC', 'GRF.MC'],
       'NIKKEI225': ['7203.T', '6758.T', '6861.T', '8306.T', '9433.T', '9984.T', '9432.T', '7267.T', '4502.T', '6098.T'],
-      'DAX': ['SAP.DE', 'SIE.DE', 'ALV.DE', 'DTE.DE', 'ADS.DE', 'VOW3.DE', 'DBK.DE', 'BMW.DE', 'BAYN.DE', 'BAS.DE']
+      'DAX40': ['SAP.DE', 'SIE.DE', 'ALV.DE', 'DTE.DE', 'ADS.DE', 'VOW3.DE', 'DBK.DE', 'BMW.DE', 'BAYN.DE', 'BAS.DE'],
+      'SPX500': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK.B', 'JPM', 'V'],
+      'NASDAQ100': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'AVGO', 'COST', 'NFLX'],
+      'HSI': ['0700.HK', '9988.HK', '0941.HK', '0388.HK', '2318.HK', '1299.HK', '0005.HK', '9618.HK', '1398.HK', '3690.HK']
     };
     
     return symbolMap[index] || [];
@@ -218,6 +240,10 @@ class EnhancedDataBroker {
   }
 
   calculateVolatility(changes) {
+    if (!changes || changes.length === 0) {
+      return 0;
+    }
+    
     const mean = changes.reduce((a, b) => a + b, 0) / changes.length;
     const variance = changes.reduce((acc, val) => acc + Math.pow(val - mean, 2), 0) / changes.length;
     return Math.sqrt(variance);
