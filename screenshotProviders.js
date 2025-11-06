@@ -43,12 +43,43 @@ async function captureViaN8N(url, webhookUrl) {
     }
 
     const contentType = res.headers.get('content-type');
-    if (!contentType || !contentType.includes('image/png')) {
-      console.error(`❌ [n8n] 错误的Content-Type: ${contentType}`);
+    let buf;
+    
+    // 兼容两种返回格式：PNG binary 或 JSON (含screenshot URL)
+    if (contentType && contentType.includes('application/json')) {
+      console.log(`📋 [n8n] 返回JSON格式，提取screenshot URL...`);
+      const jsonData = await res.json();
+      
+      if (!jsonData.screenshot) {
+        console.error(`❌ [n8n] JSON中无screenshot字段:`, jsonData);
+        throw new Error('n8n_no_screenshot_url');
+      }
+      
+      // 下载实际图片
+      console.log(`📥 [n8n] 下载图片: ${jsonData.screenshot}`);
+      const imgController = new AbortController();
+      const imgTimeoutId = setTimeout(() => imgController.abort(), 15000);
+      
+      const imgRes = await fetch(jsonData.screenshot, {
+        signal: imgController.signal
+      });
+      
+      clearTimeout(imgTimeoutId);
+      
+      if (!imgRes.ok) {
+        throw new Error(`图片下载失败: ${imgRes.status}`);
+      }
+      
+      buf = Buffer.from(await imgRes.arrayBuffer());
+      
+    } else if (contentType && contentType.includes('image/png')) {
+      console.log(`🖼️  [n8n] 直接返回PNG`);
+      buf = Buffer.from(await res.arrayBuffer());
+      
+    } else {
+      console.error(`❌ [n8n] 不支持的Content-Type: ${contentType}`);
       throw new Error('n8n_invalid_content_type');
     }
-
-    const buf = Buffer.from(await res.arrayBuffer());
     
     if (!buf || buf.length < 20000) {
       throw new Error('n8n_small_image');
