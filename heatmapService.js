@@ -34,12 +34,21 @@ async function generateSmartHeatmap(userText) {
   
   // 2️⃣ 使用可插拔Provider系统截图（n8n → Browserless）
   try {
-    const result = await captureHeatmapSmart({
+    // 创建超时Promise（25秒）
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('热力图生成超时，请稍后重试')), 25000);
+    });
+    
+    // 创建截图Promise
+    const screenshotPromise = captureHeatmapSmart({
       tradingViewUrl,
       dataset: query.index,
       region: query.region,
       sector: query.sector !== 'AUTO' ? query.sector : undefined
     });
+    
+    // 使用Promise.race竞争，哪个先完成用哪个
+    const result = await Promise.race([screenshotPromise, timeoutPromise]);
     
     const elapsed = Date.now() - startTime;
     
