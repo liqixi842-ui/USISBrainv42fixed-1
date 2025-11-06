@@ -1,65 +1,118 @@
 /**
- * Screenshot Provider System - v5.0 Pure n8n
+ * Screenshot Provider System - v5.1 Browserless Direct
  * 
- * 全部截图交给 n8n 完成
- * Replit 不再运行 Browserless、ScreenshotAPI 或 QuickChart
- * 
- * 流程：Replit → n8n → ScreenshotOne → 返回图片
+ * 直接调用 Browserless API，不经过 n8n
+ * 简单、可靠、无需复杂配置
  */
 
 const fetch = require('node-fetch');
 
 /**
- * 调用 n8n Webhook 获取截图
+ * 使用 Browserless Function API + Puppeteer 脚本切换数据集并截图
  * @param {string} url - TradingView URL
+ * @param {string} dataset - 数据集 (例如: NIKKEI225, SPX500, IBEX35)
  * @returns {Promise<{provider: string, validation: string, elapsed_ms: number, buffer: Buffer}>}
  */
-async function captureViaN8N(url) {
-  const hook = process.env.N8N_HEATMAP_WEBHOOK;
-  if (!hook) {
-    throw new Error('n8n_webhook_not_configured');
+async function captureViaBrowserlessPuppeteer(url, dataset) {
+  const apiKey = process.env.BROWSERLESS_API_KEY;
+  if (!apiKey) {
+    throw new Error('browserless_api_key_missing');
   }
 
   const start = Date.now();
-  console.log(`\n📸 [n8n] 调用 Webhook: ${url.substring(0, 80)}...`);
+  console.log(`\n📸 [Browserless/Puppeteer] 切换到 ${dataset} 并截图...`);
   
-  const res = await fetch(hook, {
+  const endpoint = `https://production-sfo.browserless.io/function?token=${apiKey}`;
+  
+  // Puppeteer 脚本：点击切换数据集
+  const puppeteerCode = `
+    module.exports = async ({ page }) => {
+      const targetDataset = '${dataset}';
+      
+      // 1. 访问页面
+      await page.goto('${url}', { waitUntil: 'networkidle0' });
+      
+      // 2. 等待热力图加载
+      await page.waitForSelector('[data-name="legend-sources-item"]', { timeout: 10000 });
+      
+      // 3. 点击数据集下拉菜单
+      const datasetButton = await page.$('[data-name="legend-sources-item"]');
+      if (datasetButton) {
+        await datasetButton.click();
+        await page.waitForTimeout(1000);
+        
+        // 4. 查找并点击目标数据集
+        const options = await page.$$('[data-name="legend-source-item"]');
+        for (const option of options) {
+          const text = await option.evaluate(el => el.textContent);
+          if (text && text.includes(targetDataset)) {
+            await option.click();
+            await page.waitForTimeout(3000);
+            break;
+          }
+        }
+      }
+      
+      // 5. 截图
+      const screenshot = await page.screenshot({
+        fullPage: true,
+        type: 'png'
+      });
+      
+      return screenshot.toString('base64');
+    };
+  `;
+  
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
-    timeout: 60000  // 60秒超时
+    body: JSON.stringify({
+      code: puppeteerCode
+    }),
+    timeout: 60000
   });
 
   if (!res.ok) {
-    throw new Error(`n8n_http_${res.status}`);
+    const errorText = await res.text();
+    console.error(`❌ [Browserless/Puppeteer] HTTP ${res.status}: ${errorText.substring(0, 200)}`);
+    throw new Error(`browserless_puppeteer_http_${res.status}`);
   }
 
-  const buf = await res.buffer();
+  const base64Data = await res.text();
+  const buf = Buffer.from(base64Data, 'base64');
   
-  // 验证图片不为空
   if (!buf || buf.length < 20000) {
-    throw new Error('n8n_small_image');
+    throw new Error('browserless_small_image');
   }
 
   const elapsed = Date.now() - start;
-  console.log(`✅ [n8n] 成功 (${elapsed}ms, ${(buf.length / 1024).toFixed(2)} KB)`);
+  console.log(`✅ [Browserless/Puppeteer] 成功 (${elapsed}ms, ${(buf.length / 1024).toFixed(2)} KB)`);
 
   return {
-    provider: 'n8n',
-    validation: 'ok',
+    provider: 'browserless-puppeteer',
+    validation: 'dom-interaction',
     elapsed_ms: elapsed,
     buffer: buf
   };
 }
 
 /**
- * 主入口：智能热力图截图（v5.0 纯 n8n）
+ * 从 URL 中提取 dataset 参数
+ */
+function extractDataset(url) {
+  const match = url.match(/dataset=([^&]+)/);
+  return match ? match[1] : 'SPX500';
+}
+
+/**
+ * 主入口：智能热力图截图
  * @param {Object} params
  * @param {string} params.tradingViewUrl - TradingView 热力图 URL
  * @returns {Promise<{provider: string, validation: string, elapsed_ms: number, buffer: Buffer}>}
  */
 async function captureHeatmapSmart({ tradingViewUrl }) {
-  return captureViaN8N(tradingViewUrl);
+  const dataset = extractDataset(tradingViewUrl);
+  return captureViaBrowserlessPuppeteer(tradingViewUrl, dataset);
 }
 
 module.exports = {
