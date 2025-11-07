@@ -117,6 +117,21 @@ function startTelegramBot({ orchestrateUrl }) {
       
       console.log(`\n📨 [TG] 收到消息: "${text}" (用户: ${userId}, chat: ${chatType})`);
       
+      // ✅ 群组消息过滤：只响应@提及或回复机器人的消息
+      if (chatType === 'group' || chatType === 'supergroup') {
+        const botUsername = ctx.botInfo?.username;
+        const isMentioned = text.includes(`@${botUsername}`);
+        const isReply = ctx.message?.reply_to_message?.from?.is_bot && 
+                        ctx.message?.reply_to_message?.from?.id === ctx.botInfo?.id;
+        
+        if (!isMentioned && !isReply) {
+          console.log(`⏭️ [TG] 群组消息，未@提及，跳过处理`);
+          return; // 不处理普通群组消息
+        }
+        
+        console.log(`✅ [TG] 群组消息，已@提及或回复机器人，继续处理`);
+      }
+      
       // 🎨 热力图请求特殊处理
       if (isHeatmapRequest(text)) {
         await handleHeatmapRequest(ctx, text);
