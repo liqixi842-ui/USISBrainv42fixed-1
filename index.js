@@ -1628,25 +1628,18 @@ const Memory = {
 
 // Symbol Extraction - 从文本中提取股票代码（支持交易所后缀和中文名称）
 function extractSymbols(text = "") {
-  // 🇺🇸 美股中文名称映射（全球知名科技公司）
+  // 🇺🇸 美股中文名称映射（全球知名科技公司 + 主要蓝筹股）
   const usStockNames = {
     '苹果': 'AAPL', 'apple': 'AAPL',
     '特斯拉': 'TSLA', 'tesla': 'TSLA',
     '微软': 'MSFT', 'microsoft': 'MSFT',
-    '谷歌': 'GOOGL', 'google': 'GOOGL',
+    '谷歌': 'GOOGL', 'google': 'GOOGL', '字母表': 'GOOGL', 'alphabet': 'GOOGL',
     '亚马逊': 'AMZN', 'amazon': 'AMZN',
     '英伟达': 'NVDA', 'nvidia': 'NVDA',
     '脸书': 'META', 'facebook': 'META', 'meta': 'META',
     '奈飞': 'NFLX', 'netflix': 'NFLX',
     '英特尔': 'INTC', 'intel': 'INTC',
     '高通': 'QCOM', 'qualcomm': 'QCOM',
-    '阿里巴巴': 'BABA', 'alibaba': 'BABA',
-    '京东': 'JD', 'jd': 'JD',
-    '百度': 'BIDU', 'baidu': 'BIDU',
-    '拼多多': 'PDD', 'pinduoduo': 'PDD',
-    '蔚来': 'NIO', 'nio': 'NIO',
-    '小鹏': 'XPEV', 'xpeng': 'XPEV',
-    '理想': 'LI', 'li auto': 'LI',
     '台积电': 'TSM', 'tsmc': 'TSM',
     '可口可乐': 'KO', 'coca cola': 'KO', 'coke': 'KO',
     '迪士尼': 'DIS', 'disney': 'DIS',
@@ -1661,26 +1654,158 @@ function extractSymbols(text = "") {
     '强生': 'JNJ', 'johnson': 'JNJ',
     '沃尔玛': 'WMT', 'walmart': 'WMT',
     '家得宝': 'HD', 'home depot': 'HD',
-    'amd': 'AMD',
-    '超微': 'AMD'
+    'amd': 'AMD', '超微': 'AMD',
+    '埃克森': 'XOM', 'exxon': 'XOM',
+    '雪佛龙': 'CVX', 'chevron': 'CVX',
+    '宝洁': 'PG', 'procter': 'PG',
+    '维萨': 'V', 'visa': 'V',
+    '万事达': 'MA', 'mastercard': 'MA',
+    '伯克希尔': 'BRK.B', 'berkshire': 'BRK.B',
+    '联合健康': 'UNH', 'unitedhealth': 'UNH',
+    '礼来': 'LLY', 'eli lilly': 'LLY',
+    '艾伯维': 'ABBV', 'abbvie': 'ABBV',
+    '美国银行': 'BAC', 'bank of america': 'BAC'
   };
   
-  // 🇪🇸 西班牙股票中文名称映射（常见蓝筹股）
-  const spanishStockNames = {
+  // 🇨🇳 中国概念股（美股上市 + 港股）
+  const chineseStockNames = {
+    '阿里巴巴': 'BABA', 'alibaba': 'BABA',
+    '京东': 'JD', 'jd': 'JD',
+    '百度': 'BIDU', 'baidu': 'BIDU',
+    '拼多多': 'PDD', 'pinduoduo': 'PDD',
+    '蔚来': 'NIO', 'nio': 'NIO',
+    '小鹏': 'XPEV', 'xpeng': 'XPEV',
+    '理想': 'LI', 'li auto': 'LI',
+    '网易': 'NTES', 'netease': 'NTES',
+    '腾讯': '0700.HK', 'tencent': '0700.HK',
+    '美团': '3690.HK', 'meituan': '3690.HK',
+    '小米': '1810.HK', 'xiaomi': '1810.HK',
+    '比亚迪': '1211.HK', 'byd': '1211.HK',
+    '中国移动': '0941.HK', 'china mobile': '0941.HK',
+    '工商银行': '1398.HK', 'icbc': '1398.HK',
+    '建设银行': '0939.HK', 'ccb': '0939.HK',
+    '中国平安': '2318.HK', 'ping an': '2318.HK'
+  };
+  
+  // 🇪🇺 欧洲主要股票
+  const europeanStockNames = {
+    // 🇬🇧 英国
+    '汇丰': 'HSBC', 'hsbc': 'HSBC',
+    '壳牌': 'SHEL', 'shell': 'SHEL',
+    '英国石油': 'BP', 'bp': 'BP',
+    '阿斯利康': 'AZN', 'astrazeneca': 'AZN',
+    '联合利华': 'UL', 'unilever': 'UL',
+    '帝亚吉欧': 'DEO', 'diageo': 'DEO',
+    
+    // 🇩🇪 德国
+    '西门子': 'SIEGY', 'siemens': 'SIEGY',
+    'sap': 'SAP',
+    '大众': 'VWAGY', 'volkswagen': 'VWAGY',
+    '宝马': 'BMWYY', 'bmw': 'BMWYY',
+    '戴姆勒': 'DDAIF', 'daimler': 'DDAIF',
+    '拜耳': 'BAYRY', 'bayer': 'BAYRY',
+    '巴斯夫': 'BASFY', 'basf': 'BASFY',
+    '阿迪达斯': 'ADDYY', 'adidas': 'ADDYY',
+    
+    // 🇫🇷 法国
+    '路威酩轩': 'LVMUY', 'lvmh': 'LVMUY',
+    '欧莱雅': 'LRLCY', 'loreal': 'LRLCY',
+    '道达尔': 'TTE', 'totalenergies': 'TTE',
+    '赛诺菲': 'SNY', 'sanofi': 'SNY',
+    '空客': 'EADSY', 'airbus': 'EADSY',
+    '达能': 'DANOY', 'danone': 'DANOY',
+    
+    // 🇳🇱 荷兰
+    'asml': 'ASML',
+    '壳牌荷兰': 'SHEL', 
+    '飞利浦': 'PHG', 'philips': 'PHG',
+    '海因肯': 'HEINY', 'heineken': 'HEINY',
+    
+    // 🇨🇭 瑞士
+    '雀巢': 'NSRGY', 'nestle': 'NSRGY',
+    '诺华': 'NVS', 'novartis': 'NVS',
+    '罗氏': 'RHHBY', 'roche': 'RHHBY',
+    'abb': 'ABB',
+    
+    // 🇪🇸 西班牙
     '电力公司': 'IBE.MC', 'iberdrola': 'IBE.MC',
     '西班牙电信': 'TEF.MC', 'telefonica': 'TEF.MC',
     '桑坦德': 'SAN.MC', 'santander': 'SAN.MC',
     '毕尔巴鄂': 'BBVA.MC', 'bbva': 'BBVA.MC',
     'inditex': 'ITX.MC', 'zara': 'ITX.MC',
-    'repsol': 'REP.MC', '雷普索尔': 'REP.MC',
-    'naturgy': 'NTGY.MC', '天然气': 'NTGY.MC',
-    'endesa': 'ELE.MC', '恩德萨': 'ELE.MC',
-    'ferrovial': 'FER.MC', '费罗维亚': 'FER.MC',
-    'aena': 'AENA.MC', '机场': 'AENA.MC'
+    'repsol': 'REP.MC', '雷普索尔': 'REP.MC'
+  };
+  
+  // 🇯🇵 日本主要股票
+  const japaneseStockNames = {
+    '丰田': 'TM', 'toyota': 'TM',
+    '索尼': 'SONY', 'sony': 'SONY',
+    '本田': 'HMC', 'honda': 'HMC',
+    '日产': 'NSANY', 'nissan': 'NSANY',
+    '任天堂': 'NTDOY', 'nintendo': 'NTDOY',
+    '软银': 'SFTBY', 'softbank': 'SFTBY',
+    '三菱': 'MSBHF', 'mitsubishi': 'MSBHF',
+    '日立': 'HTHIY', 'hitachi': 'HTHIY',
+    '松下': 'PCRFY', 'panasonic': 'PCRFY',
+    '佳能': 'CAJ', 'canon': 'CAJ',
+    '东芝': 'TOSYY', 'toshiba': 'TOSYY'
+  };
+  
+  // 🇰🇷 韩国主要股票
+  const koreanStockNames = {
+    '三星': 'SSNLF', 'samsung': 'SSNLF',
+    '现代': 'HYMTF', 'hyundai': 'HYMTF',
+    'lg': 'LPL',
+    'sk海力士': 'HXSCL', 'sk hynix': 'HXSCL'
+  };
+  
+  // 🌏 其他亚洲市场
+  const otherAsianStockNames = {
+    // 🇸🇬 新加坡
+    'dbs': 'DBSDY', 'dbs bank': 'DBSDY',
+    
+    // 🇮🇳 印度
+    '信实工业': 'RELIANCE.NS', 'reliance': 'RELIANCE.NS',
+    'tcs': 'TCS.NS',
+    'infosys': 'INFY',
+    'hdfc': 'HDB'
+  };
+  
+  // 🌎 拉美主要股票
+  const latinAmericaStockNames = {
+    // 🇧🇷 巴西
+    '淡水河谷': 'VALE', 'vale': 'VALE',
+    '巴西石油': 'PBR', 'petrobras': 'PBR',
+    
+    // 🇲🇽 墨西哥
+    '美洲电信': 'AMX', 'america movil': 'AMX'
+  };
+  
+  // 🌍 其他全球公司
+  const globalStockNames = {
+    // 🇦🇺 澳大利亚
+    'bhp': 'BHP',
+    '力拓': 'RIO', 'rio tinto': 'RIO',
+    
+    // 🇨🇦 加拿大
+    '加拿大皇家银行': 'RY', 'rbc': 'RY',
+    '丰业银行': 'BNS', 'scotiabank': 'BNS',
+    
+    // 🇿🇦 南非
+    '纳斯帕斯': 'NPSNY', 'naspers': 'NPSNY'
   };
   
   // 合并所有映射
-  const allStockNames = { ...usStockNames, ...spanishStockNames };
+  const allStockNames = { 
+    ...usStockNames, 
+    ...chineseStockNames,
+    ...europeanStockNames,
+    ...japaneseStockNames,
+    ...koreanStockNames,
+    ...otherAsianStockNames,
+    ...latinAmericaStockNames,
+    ...globalStockNames
+  };
   
   const lowerText = text.toLowerCase();
   const symbols = [];
