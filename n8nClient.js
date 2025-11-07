@@ -119,8 +119,15 @@ class N8NClient {
       }
 
       const result = await response.json();
-      console.log(`✅ 工作流创建成功: ${result.data.name} (ID: ${result.data.id})`);
-      return { ok: true, workflow: result.data };
+      
+      // 兼容不同的N8N API响应格式
+      const workflow = result.data || result;
+      if (!workflow || !workflow.id) {
+        throw new Error('API返回了无效的工作流数据');
+      }
+      
+      console.log(`✅ 工作流创建成功: ${workflow.name} (ID: ${workflow.id})`);
+      return { ok: true, workflow };
     } catch (error) {
       console.error('❌ 创建工作流失败:', error.message);
       return { ok: false, error: error.message };
@@ -266,7 +273,6 @@ class N8NClient {
     // 创建新工作流
     const workflowDefinition = {
       name: 'Stock Analysis Screenshot',
-      active: true,
       nodes: [
         {
           parameters: {
