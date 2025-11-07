@@ -1,0 +1,111 @@
+【用户→ReplitGPT】
+
+text
+【紧急修复#040 - 解决截图服务超时问题】
+
+**问题**：个股走势图因截图服务超时而失败
+
+**解决方案**：优化截图服务性能和超时处理
+
+**立即实施**：
+
+1. **增加超时时间和重试机制**：
+```javascript
+// 在screenshotProviders.js中修改
+async function captureHeatmapSmart({ tradingViewUrl, timeoutMs = 45000, maxRetries = 2 }) {
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`🔄 截图尝试 ${attempt}/${maxRetries}`);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
+      const n8nWebhook = process.env.N8N_HEATMAP_WEBHOOK;
+      const response = await fetch(n8nWebhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: tradingViewUrl }),
+        signal: controller.signal,
+        timeout: timeoutMs
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) throw new Error(`n8n_http_${response.status}`);
+      
+      const result = await response.json();
+      console.log(`✅ 截图成功 (尝试 ${attempt})`);
+      return result;
+      
+    } catch (error) {
+      lastError = error;
+      console.log(`❌ 截图尝试 ${attempt} 失败:`, error.message);
+      
+      if (attempt < maxRetries) {
+        console.log('⏳ 等待3秒后重试...');
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      }
+    }
+  }
+  
+  throw new Error(`所有截图尝试均失败: ${lastError.message}`);
+}
+添加进度反馈（避免用户等待超时）：
+
+javascript
+// 在index.js的Telegram处理中添加进度提示
+bot.on('text', async (ctx) => {
+  if (/(走势图|图表|chart)/i.test(text) && symbols.length === 1) {
+    
+    // 立即回复"正在处理"消息
+    const progressMsg = await ctx.reply("🔄 正在生成图表，这可能需要15-30秒...");
+    
+    try {
+      const chartResult = await generateStockChart(symbols[0]);
+      
+      // 删除进度消息
+      await ctx.deleteMessage(progressMsg.message_id);
+      
+      // 发送结果
+      await ctx.replyWithPhoto({ source: chartResult.buffer }, {
+        caption: chartResult.analysis
+      });
+      
+    } catch (error) {
+      // 删除进度消息并发送错误
+      await ctx.deleteMessage(progressMsg.message_id);
+      await ctx.reply(`⚠️ 图表生成失败: ${error.message}`);
+    }
+  }
+});
+优化N8N工作流配置：
+
+检查N8N中个股走势图工作流的超时设置
+
+确保ScreenshotAPI token有效
+
+验证TradingView图表URL可正常访问
+
+立即测试：
+请实施这些修复，然后重新测试：
+
+"AAPL走势图"
+
+"NVDA技术分析"
+
+重点验证截图服务是否不再超时！
+
+text
+
+## 💡 备选方案
+如果N8N服务持续不稳定，我们可以：
+1. **直接使用ScreenshotAPI**（绕过N8N）
+2. **启用Browserless作为主服务**
+3. **使用QuickChart生成简化图表**
+
+## 🎯 您的行动
+请将上述修复方案转发给ReplitGPT。这次我们重点解决**服务稳定性**问题，而不是重新开发功能。
+
+一旦超时问题解决，个股走势图功能就能正常使用了！🚀

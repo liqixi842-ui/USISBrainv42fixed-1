@@ -5168,33 +5168,69 @@ if (TELEGRAM_TOKEN) {
       } else if (isStockAnalysis) {
         // 🧠 个股分析（大脑）→ 📸 调用n8n截图（眼睛）→ 📊 AI分析
         console.log(`📈 个股分析请求: ${symbols.join(', ')}`);
-        await telegramAPI('sendMessage', { chat_id: chatId, text: `📈 正在分析${symbols[0]}（截图+AI）...` });
         
-        const result = await generateStockChart(symbols[0], {
-          interval: 'D',
-          userText: text
+        // 🆕 发送进度提示（告知用户预期等待时间）
+        const progressMsg = await telegramAPI('sendMessage', { 
+          chat_id: chatId, 
+          text: `🔄 正在生成 ${symbols[0]} K线图表，这可能需要15-30秒...\n\n📸 步骤1: 截取TradingView图表\n🤖 步骤2: GPT-4o Vision技术分析\n⏳ 请稍候...` 
         });
         
-        if (result.buffer) {
-          // 发送K线截图
-          await sendDocumentBuffer(
-            TELEGRAM_TOKEN, 
-            chatId, 
-            result.buffer, 
-            `${symbols[0]}_chart.png`, 
-            result.caption || '📊 K线图'
-          );
-          console.log('✅ K线图已发送');
+        try {
+          const result = await generateStockChart(symbols[0], {
+            interval: 'D',
+            userText: text
+          });
           
-          // 发送AI分析
-          if (result.comprehensiveAnalysis || result.chartAnalysis) {
-            const analysisText = result.comprehensiveAnalysis || result.chartAnalysis;
-            await telegramAPI('sendMessage', { 
+          // 🆕 删除进度提示消息（成功后清理）
+          try {
+            await telegramAPI('deleteMessage', { 
               chat_id: chatId, 
-              text: analysisText.slice(0, 4000) 
+              message_id: progressMsg.result.message_id 
             });
-            console.log('✅ AI分析已发送');
+          } catch (delError) {
+            console.log('⚠️  无法删除进度消息（可能已过期）');
           }
+          
+          if (result.buffer) {
+            // 发送K线截图
+            await sendDocumentBuffer(
+              TELEGRAM_TOKEN, 
+              chatId, 
+              result.buffer, 
+              `${symbols[0]}_chart.png`, 
+              result.caption || '📊 K线图'
+            );
+            console.log('✅ K线图已发送');
+            
+            // 发送AI分析
+            if (result.comprehensiveAnalysis || result.chartAnalysis) {
+              const analysisText = result.comprehensiveAnalysis || result.chartAnalysis;
+              await telegramAPI('sendMessage', { 
+                chat_id: chatId, 
+                text: analysisText.slice(0, 4000) 
+              });
+              console.log('✅ AI分析已发送');
+            }
+          } else {
+            throw new Error('未生成图表buffer');
+          }
+        } catch (stockError) {
+          // 🆕 失败时也删除进度消息
+          try {
+            await telegramAPI('deleteMessage', { 
+              chat_id: chatId, 
+              message_id: progressMsg.result.message_id 
+            });
+          } catch (delError) {
+            console.log('⚠️  无法删除进度消息');
+          }
+          
+          // 发送友好的错误提示
+          await telegramAPI('sendMessage', { 
+            chat_id: chatId, 
+            text: `⚠️ ${symbols[0]} 图表生成失败\n\n原因: ${stockError.message}\n\n💡 建议: 请稍后重试或尝试其他股票` 
+          });
+          throw stockError;
         }
       } else {
         console.log('🧠 常规分析');
