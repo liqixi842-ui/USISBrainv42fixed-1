@@ -3,6 +3,10 @@
 USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with real-time data integration from sources like Finnhub, SEC, and FRED. Key features include semantic intent parsing, **global stock discovery with 150+ stocks across 10+ markets**, anti-hallucination data validation, intelligent model routing for specialized analysis (e.g., Chinese financial analysis via DeepSeek), **fully automated N8N workflow management**, Vision AI chart analysis, and authoritative, data-backed investment recommendations. The system is built for deployment on Replit's Autoscale platform and aims to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
 
 ## Recent Updates (Nov 2025)
+- ✅ **Hybrid Symbol Resolution Stack**: 3-tier intelligent validation system:
+    1. Static mapping (authoritative, instant): SAB→SAB.MC, handles ambiguous tickers
+    2. Finnhub API with smart scoring (description match, exchange preference, security type)
+    3. Graceful degradation when API unavailable
 - ✅ **Intelligent Stock Analysis (Not Workflow Nodes)**: Removed hardcoded stock lists; system now queries Finnhub API in real-time to identify any stock's exchange (CVX→"NEW YORK STOCK EXCHANGE"→NYSE:CVX), making it a true intelligent analyst instead of a rule-based workflow executor
 - ✅ **Global Stock Coverage Expansion**: Extended from 44 to 150+ stocks across Americas, Europe, Asia-Pacific, and emerging markets
 - ✅ **N8N Full API Automation**: Implemented automatic workflow creation, health monitoring (5-min intervals), and self-healing capabilities

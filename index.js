@@ -1874,6 +1874,127 @@ function extractSymbols(text = "") {
   return allSymbols;
 }
 
+// 🧠 Intelligent Symbol Validation - 智能验证和修正股票符号（混合策略）
+async function validateAndFixSymbols(symbols = [], contextHints = {}) {
+  if (symbols.length === 0) return [];
+  
+  console.log(`\n🧠 [智能验证] 开始验证 ${symbols.length} 个符号...`);
+  
+  const validatedSymbols = [];
+  const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
+  
+  // 🎯 Phase 1: 静态映射表（最权威、最快）
+  const STATIC_SYMBOL_MAP = {
+    // 西班牙主要股票
+    'sab': 'SAB.MC', 'sabadell': 'SAB.MC',
+    'san': 'SAN.MC', 'santander': 'SAN.MC',
+    'bbva': 'BBVA.MC',
+    'tef': 'TEF.MC', 'telefonica': 'TEF.MC',
+    'ibe': 'IBE.MC', 'iberdrola': 'IBE.MC',
+    'rep': 'REP.MC', 'repsol': 'REP.MC',
+    'itx': 'ITX.MC', 'inditex': 'ITX.MC',
+    // 常见歧义符号
+    'baba': 'BABA', // 默认美股ADR而非9988.HK
+    'tencent': '0700.HK'
+  };
+  
+  if (!FINNHUB_KEY) {
+    console.log('⚠️  FINNHUB_API_KEY未配置，仅使用静态映射');
+    return symbols.map(s => STATIC_SYMBOL_MAP[s.toLowerCase()] || s);
+  }
+  
+  for (const symbol of symbols) {
+    const lowerSymbol = symbol.toLowerCase();
+    
+    // 📍 优先级1：静态映射（权威源）
+    if (STATIC_SYMBOL_MAP[lowerSymbol]) {
+      const mapped = STATIC_SYMBOL_MAP[lowerSymbol];
+      validatedSymbols.push(mapped);
+      console.log(`   📚 ${symbol} → ${mapped} (静态映射)`);
+      continue;
+    }
+    
+    // 📍 优先级2：已有交易所前缀，直接通过
+    if (symbol.includes('.') || symbol.includes(':')) {
+      validatedSymbols.push(symbol);
+      console.log(`   ✓ ${symbol} - 已含交易所后缀`);
+      continue;
+    }
+    
+    // 📍 优先级3：Finnhub API查询 + 智能评分
+    try {
+      const url = `https://finnhub.io/api/v1/search?q=${encodeURIComponent(symbol)}&token=${FINNHUB_KEY}`;
+      const response = await fetch(url, { timeout: 5000 });
+      
+      if (!response.ok) {
+        validatedSymbols.push(symbol);
+        console.log(`   ⚠️  ${symbol} - API失败，保持原样`);
+        continue;
+      }
+      
+      const data = await response.json();
+      const results = data.result || [];
+      
+      if (results.length === 0) {
+        validatedSymbols.push(symbol);
+        console.log(`   ⚠️  ${symbol} - 无匹配，保持原样`);
+        continue;
+      }
+      
+      // 🎯 智能评分算法
+      const scored = results.map(r => {
+        let score = 0;
+        const sym = (r.symbol || r.displaySymbol || '').toUpperCase();
+        const desc = (r.description || '').toLowerCase();
+        const type = (r.type || '').toLowerCase();
+        
+        // ✅ 评分规则1：精确符号匹配（最高优先级）
+        if (sym === symbol.toUpperCase()) score += 100;
+        
+        // ✅ 评分规则2：优先Common Stock
+        if (type.includes('common stock')) score += 30;
+        
+        // ✅ 评分规则3：description包含原始查询词（词汇匹配）
+        if (desc.includes(symbol.toLowerCase())) score += 20;
+        
+        // ✅ 评分规则4：交易所偏好（根据上下文）
+        const exchange = sym.split('.')[1] || sym.split(':')[0];
+        if (contextHints.preferredExchange) {
+          if (exchange === contextHints.preferredExchange) score += 15;
+        }
+        
+        // ✅ 评分规则5：符号长度偏好（短符号优先，避免奇怪的后缀）
+        if (sym.length <= 6) score += 10;
+        
+        return { ...r, symbol: sym, score };
+      });
+      
+      // 排序并选择最佳匹配
+      scored.sort((a, b) => b.score - a.score);
+      const bestMatch = scored[0];
+      
+      const fixedSymbol = bestMatch.symbol;
+      const description = bestMatch.description || '';
+      const confidence = bestMatch.score / 100; // 归一化到0-1
+      
+      if (fixedSymbol !== symbol) {
+        console.log(`   🔧 ${symbol} → ${fixedSymbol} (${description}, 置信度: ${confidence.toFixed(2)})`);
+      } else {
+        console.log(`   ✓ ${symbol} - 验证通过 (${description})`);
+      }
+      
+      validatedSymbols.push(fixedSymbol);
+      
+    } catch (error) {
+      validatedSymbols.push(symbol);
+      console.log(`   ❌ ${symbol} - 错误: ${error.message}，保持原样`);
+    }
+  }
+  
+  console.log(`✅ [智能验证] 完成: ${validatedSymbols.join(', ')}\n`);
+  return validatedSymbols;
+}
+
 // Detect Actions - 检测用户需要的"器官"操作（Brain给N8N下指令）
 function detectActions(text = "", symbols = []) {
   const t = text.toLowerCase();
@@ -3825,7 +3946,9 @@ app.post("/brain/orchestrate", async (req, res) => {
       
       // 降级：使用旧的extractSymbols和understandIntent
       const extractedSymbols = extractSymbols(text);
-      symbols = providedSymbols.length > 0 ? providedSymbols : extractedSymbols;
+      // 🧠 智能验证和修正符号
+      const validatedSymbols = await validateAndFixSymbols(extractedSymbols);
+      symbols = providedSymbols.length > 0 ? providedSymbols : validatedSymbols;
       semanticIntent = null;
     }
     
@@ -4221,8 +4344,10 @@ app.post("/brain/orchestrate", async (req, res) => {
       console.log(`🔍 检测到分析关键词但无符号，尝试从文本识别公司名...`);
       // 公司名可能被extractSymbols遗漏，重新检查文本
       const retrySymbols = extractSymbols(text);
-      if (retrySymbols.length === 1) {
-        symbols = retrySymbols;
+      // 🧠 智能验证和修正重试的符号
+      const validatedRetrySymbols = await validateAndFixSymbols(retrySymbols);
+      if (validatedRetrySymbols.length === 1) {
+        symbols = validatedRetrySymbols;
         needStockChart = true;
         console.log(`✅ 从文本重新识别到符号: ${symbols[0]}`);
       }
