@@ -330,15 +330,90 @@ async function fetchQuoteFromAlphaVantage(symbol) {
 }
 
 /**
+ * 🌐 符号格式转换：为不同API provider准备正确的符号格式
+ */
+function convertSymbolForProvider(symbol, provider) {
+  // Alpha Vantage专用格式转换
+  if (provider === 'alphavantage') {
+    // 如果有交易所前缀（BME:GRF），转换为Alpha Vantage格式
+    if (symbol.includes(':')) {
+      const [exchange, ticker] = symbol.split(':');
+      
+      // 🔧 交易所代码到Alpha Vantage后缀的映射
+      // 使用resolveSymbols的标准化格式（EPA, LSE等）
+      const EXCHANGE_TO_SUFFIX = {
+        // 欧洲主要交易所
+        'BME': 'MC',      // 马德里证券交易所 → .MC
+        'EPA': 'PA',      // 巴黎泛欧交易所 → .PA
+        'LSE': 'L',       // 伦敦证券交易所 → .L
+        'FRA': 'F',       // 法兰克福证券交易所 → .F
+        'XETRA': 'DE',    // 德国XETRA → .DE
+        'MIL': 'MI',      // 米兰证券交易所 → .MI
+        'AMS': 'AS',      // 阿姆斯特丹泛欧交易所 → .AS
+        'SIX': 'SW',      // 瑞士证券交易所 → .SW
+        'BRU': 'BR',      // 布鲁塞尔泛欧交易所 → .BR
+        'VIE': 'VI',      // 维也纳证券交易所 → .VI
+        
+        // 亚太交易所
+        'HKEX': 'HK',     // 香港交易所 → .HK
+        'SSE': 'SS',      // 上海证券交易所 → .SS
+        'SZSE': 'SZ',     // 深圳证券交易所 → .SZ
+        'TSE': 'T',       // 东京证券交易所 → .T
+        'JPX': 'T',       // 日本交易所集团 → .T
+        'JP': 'T',        // 日本（通用代码）→ .T
+        'SGX': 'SI',      // 新加坡交易所 → .SI
+        'KRX': 'KS',      // 韩国交易所 → .KS
+        'KS': 'KS',       // 韩国（通用代码）→ .KS
+        'ASX': 'AX',      // 澳大利亚证券交易所 → .AX
+        'BSE': 'BO',      // 孟买证券交易所 → .BO
+        'NSE': 'NS',      // 印度国家证券交易所 → .NS
+        'TWO': 'TWO',     // 台湾柜买中心 → .TWO
+        'TWSE': 'TW',     // 台湾证券交易所 → .TW
+        
+        // 北美交易所
+        'TSX': 'TO',      // 多伦多证券交易所 → .TO
+        'TSXV': 'V',      // 多伦多创业板 → .V
+        'NYSE': '',       // 纽约证券交易所（无后缀）
+        'NASDAQ': '',     // 纳斯达克（无后缀）
+        'OTC': '',        // 美国场外交易（无后缀或.O/.PK）
+        'OTCQB': '',      // OTC QB市场
+        'OTCQX': ''       // OTC QX市场
+      };
+      
+      const suffix = EXCHANGE_TO_SUFFIX[exchange];
+      if (suffix !== undefined) {
+        // suffix为空字符串时（NYSE, NASDAQ），直接返回ticker
+        return suffix ? `${ticker}.${suffix}` : ticker;
+      }
+      
+      // 未知交易所，记录警告并返回纯ticker
+      console.warn(`   ⚠️  [Symbol Convert] 未知交易所代码: ${exchange}，使用纯ticker: ${ticker}`);
+      return ticker;
+    }
+    
+    // 无前缀，直接返回（美国主板股票或已有后缀的符号）
+    return symbol;
+  }
+  
+  // Finnhub使用原始符号（保持交易所前缀）
+  return symbol;
+}
+
+/**
  * 获取单个股票报价（智能降级：Finnhub → Alpha Vantage）
  */
 async function fetchSingleQuote(symbol) {
   let quote = null;
   let source = null;
   
+  console.log(`   🔍 [Symbol Resolution] 原始符号: ${symbol}`);
+  
   // 策略1: 优先使用Finnhub
   if (FINNHUB_KEY) {
-    const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`;
+    const finnhubSymbol = convertSymbolForProvider(symbol, 'finnhub');
+    console.log(`   📊 [Finnhub] 使用符号: ${finnhubSymbol}`);
+    
+    const url = `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${FINNHUB_KEY}`;
     const fetchTime = Date.now();
     
     try {
@@ -350,7 +425,7 @@ async function fetchSingleQuote(symbol) {
       
       const data = await response.json();
       
-      // 验证数据有效性
+      // 🔧 修复：c===0 视为硬失败（Finnhub免费版不支持），触发降级
       if (data.c && data.c !== 0) {
         // 计算新鲜度评分（基于时间戳）
         const dataAge = Date.now() - (data.t * 1000);
@@ -381,6 +456,9 @@ async function fetchSingleQuote(symbol) {
         };
         
         return { quote, source };
+      } else {
+        // ⚠️ Finnhub返回c=0（不支持该股票），显式触发降级
+        throw new Error(`Finnhub不支持${finnhubSymbol}（返回c=0，可能是OTC/ADR/欧洲股票）`);
       }
       
     } catch (error) {
@@ -388,12 +466,17 @@ async function fetchSingleQuote(symbol) {
     }
   }
   
-  // 策略2: 降级到Alpha Vantage
+  // 策略2: 降级到Alpha Vantage（全球股票支持）
   if (ALPHA_VANTAGE_KEY && !quote) {
-    console.log(`   🔄 [降级] 使用Alpha Vantage获取${symbol}报价`);
+    const alphaSymbol = convertSymbolForProvider(symbol, 'alphavantage');
+    console.log(`   🔄 [降级] Alpha Vantage使用符号: ${alphaSymbol}`);
+    
     try {
-      const alphaResult = await fetchQuoteFromAlphaVantage(symbol);
+      // ✅ 使用provider专用格式调用Alpha Vantage
+      const alphaResult = await fetchQuoteFromAlphaVantage(alphaSymbol);
       if (alphaResult.quote) {
+        // 修正quote中的symbol为原始值（保持一致性）
+        alphaResult.quote.symbol = symbol;
         return alphaResult;
       }
     } catch (error) {

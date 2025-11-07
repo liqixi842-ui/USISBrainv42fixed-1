@@ -2111,66 +2111,15 @@ async function validateAndFixSymbols(symbols = [], contextHints = {}) {
       );
       
       if (needsUserChoice) {
-        // 🔍 Finnhub免费版只支持美国股票/OTC - 使用白名单策略
-        // 支持的格式：AAPL, TSLA (无后缀美股), 或特定OTC后缀
-        const supportedCandidates = topCandidates.filter(c => {
-          const sym = c.symbol;
-          
-          // ✅ 规则1：无后缀（美国主板股票如AAPL, TSLA）
-          if (!sym.includes('.') && !sym.includes(':')) return true;
-          
-          // ✅ 规则2：OTC后缀（美国场外交易）
-          const otcSuffixes = ['.O', '.PK', '.PINK'];
-          if (otcSuffixes.some(suffix => sym.endsWith(suffix))) return true;
-          
-          // ✅ 规则3：香港交易所（Finnhub免费版支持）
-          if (sym.endsWith('.HK') || sym.match(/^\d{4}\.HK$/)) return true;
-          
-          // ❌ 其他所有带后缀的（欧洲、亚洲其他市场等）都拒绝
-          return false;
-        });
-        
-        // 🎯 智能映射：如果过滤后为空，查找对应的ADR代码
-        const ADR_MAP = {
-          'BANCO DE SABADELL': 'BNDSY',
-          'BANCO SANTANDER': 'SAN',
-          'BBVA': 'BBVXF',
-          'TELEFONICA': 'TEF',
-          'IBERDROLA': 'IBDRY',
-          'REPSOL': 'REPYY',
-          'INDITEX': 'IDEXY'
-        };
-        
-        if (supportedCandidates.length === 0) {
-          // 尝试查找ADR映射
-          for (const candidate of topCandidates) {
-            const descUpper = (candidate.description || '').toUpperCase();
-            for (const [key, adr] of Object.entries(ADR_MAP)) {
-              if (descUpper.includes(key)) {
-                supportedCandidates.push({
-                  symbol: adr,
-                  description: `${candidate.description} (US ADR)`,
-                  type: 'ADR',
-                  score: candidate.score
-                });
-                break;
-              }
-            }
-          }
-        }
-        
-        if (supportedCandidates.length === 0) {
-          console.log(`   ⚠️  ${symbol} - 所有候选都不受支持，使用原始符号`);
-          validatedSymbols.push(symbol);
-          continue;
-        }
+        // 🌐 全球股票支持：多API级联策略（Finnhub → Alpha Vantage）
+        // 所有候选都可以尝试，由dataBroker自动降级处理
         
         // 返回特殊标记，让调用方处理用户选择
-        console.log(`   ❓ ${symbol} - 发现${supportedCandidates.length}个可用匹配，需要用户选择`);
+        console.log(`   ❓ ${symbol} - 发现${topCandidates.length}个匹配，需要用户选择`);
         validatedSymbols.push({
           _needsChoice: true,
           originalSymbol: symbol,
-          candidates: supportedCandidates.slice(0, 12).map(c => ({
+          candidates: topCandidates.slice(0, 12).map(c => ({
             symbol: c.symbol,
             description: c.description,
             type: c.type,
