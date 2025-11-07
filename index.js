@@ -4842,12 +4842,104 @@ app.get("/api/test-heatmap", async (req, res) => {
   }
 });
 
+// ====== 🆕 v6.0: n8n专用API（纯分析，不截图） ======
+app.post("/brain/analyze_no_screenshot", async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    const {
+      text = "",
+      symbols: providedSymbols = [],
+      mode = "intraday",
+      lang = "zh",
+      user_id = "n8n_user",
+      chart_url = null  // n8n传入的截图URL（可选）
+    } = req.body || {};
+    
+    console.log(`\n🔵 [n8n API] 收到纯分析请求: "${text}"`);
+    console.log(`   符号: ${providedSymbols.join(', ') || '无'}`);
+    console.log(`   语言: ${lang}`);
+    
+    // 1. 智能意图理解
+    let symbols = providedSymbols;
+    if (symbols.length === 0 && text) {
+      try {
+        const semanticIntent = await parseUserIntent(text, []);
+        const resolvedSymbols = await resolveSymbols(semanticIntent);
+        symbols = resolvedSymbols;
+        console.log(`🎯 智能识别股票: ${symbols.join(', ')}`);
+      } catch (err) {
+        console.warn(`⚠️  意图解析失败，使用简单提取`);
+        const { extractSymbols } = require('./utils');
+        symbols = extractSymbols(text);
+      }
+    }
+    
+    // 2. 获取市场数据（如果有股票代码）
+    let marketData = { quotes: {}, news: [], metadata: { dataQuality: { overallScore: 0 } } };
+    if (symbols.length > 0) {
+      try {
+        marketData = await fetchMarketData(symbols, ['quote', 'profile', 'metrics', 'news']);
+        console.log(`✅ 数据采集成功 (质量: ${(marketData.metadata.dataQuality.overallScore * 100).toFixed(0)}%)`);
+      } catch (err) {
+        console.error(`❌ 数据采集失败:`, err.message);
+      }
+    }
+    
+    // 3. v6.0多语言AI分析
+    let analysisResult;
+    const isChinese = /[\u4e00-\u9fa5]/.test(text);
+    
+    if (isChinese && symbols.length > 0) {
+      console.log(`🇨🇳 [v6.0] 中文输入 → DeepSeek分析`);
+      const MultiLanguageAnalyzer = require('./multiLanguageAnalyzer');
+      const analyzer = new MultiLanguageAnalyzer();
+      analysisResult = await analyzer.smartAnalyze(text, marketData, { mode, scene: 'private' });
+    } else {
+      console.log(`🧠 [v6.0] 英文输入 → GPT-4o分析`);
+      analysisResult = await generateWithGPT5({
+        text,
+        marketData,
+        semanticIntent: { mode, lang, intentType: 'analysis' },
+        mode,
+        scene: 'private',
+        symbols
+      });
+    }
+    
+    // 4. 组合结果
+    const response = {
+      success: true,
+      final_text: analysisResult.text,
+      symbols: symbols,
+      ai_model: analysisResult.model,
+      language: isChinese ? 'zh' : 'en',
+      cost_usd: analysisResult.cost_usd || 0,
+      chart_url: chart_url,  // 回传n8n提供的截图URL
+      market_data: marketData,
+      response_time_ms: Date.now() - startTime
+    };
+    
+    console.log(`✅ [n8n API] 分析完成 (${response.ai_model}, ${response.response_time_ms}ms, $${response.cost_usd.toFixed(4)})`);
+    res.json(response);
+    
+  } catch (error) {
+    console.error(`❌ [n8n API] 错误:`, error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      final_text: "分析失败，请稍后重试"
+    });
+  }
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 USIS Brain v5.0 online on port ${PORT} 🆕 [Data-Driven Institutional Analysis]`);
+  console.log(`🚀 USIS Brain v6.0 online on port ${PORT} 🆕 [Multi-AI + n8n Integration]`);
   console.log(`📍 Listening on 0.0.0.0:${PORT}`);
   console.log(`🔗 Health check available at http://0.0.0.0:${PORT}/health`);
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
+  console.log(`🔵 n8n API available at http://0.0.0.0:${PORT}/brain/analyze_no_screenshot`);
 });
 
 // ====== Telegram Bot v5.0 (手动轮询 - Replit兼容) ======

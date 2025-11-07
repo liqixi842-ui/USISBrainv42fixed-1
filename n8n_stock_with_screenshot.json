@@ -1,0 +1,200 @@
+{
+  "name": "USIS Brain v6.0 - Stock Analysis with Screenshot",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "stock_analysis_full",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-input",
+      "name": "📥 接收股票分析请求",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "stock_analysis_full",
+      "notes": "接收参数: {text, symbols, lang}"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 从请求中提取股票代码\nconst body = $json.body || {};\nconst text = body.text || '';\nconst providedSymbols = body.symbols || [];\n\n// 简单的股票代码提取（支持常见格式）\nlet symbols = providedSymbols;\nif (symbols.length === 0) {\n  const matches = text.match(/\\b[A-Z]{1,5}\\b/g) || [];\n  symbols = matches.filter(s => s.length >= 2 && s.length <= 5);\n}\n\n// 如果还是没有，尝试中文提取\nif (symbols.length === 0) {\n  const companyMap = {\n    '特斯拉': 'TSLA',\n    '苹果': 'AAPL',\n    '微软': 'MSFT',\n    '谷歌': 'GOOGL',\n    '亚马逊': 'AMZN',\n    'tesla': 'TSLA',\n    'apple': 'AAPL'\n  };\n  \n  for (const [cn, en] of Object.entries(companyMap)) {\n    if (text.toLowerCase().includes(cn.toLowerCase())) {\n      symbols.push(en);\n      break;\n    }\n  }\n}\n\nconst primarySymbol = symbols[0] || 'AAPL';\nconst exchange = primarySymbol.includes(':') ? '' : 'NASDAQ:';\n\nreturn [{\n  json: {\n    ...body,\n    symbols: symbols,\n    primary_symbol: primarySymbol,\n    tradingview_url: `https://www.tradingview.com/chart/?symbol=${exchange}${primarySymbol}&interval=D`\n  }\n}];"
+      },
+      "id": "extract-symbol",
+      "name": "📊 提取股票代码",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://shot.screenshotapi.net/screenshot",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "HHBYB5H-4CT4970-MVZEKM2-EMEWEXX"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.tradingview_url }}"
+            },
+            {
+              "name": "fresh",
+              "value": "true"
+            },
+            {
+              "name": "output",
+              "value": "json"
+            },
+            {
+              "name": "width",
+              "value": "1200"
+            },
+            {
+              "name": "height",
+              "value": "800"
+            },
+            {
+              "name": "delay",
+              "value": "3000"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "screenshot-chart",
+      "name": "📸 截图个股K线图",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [480, 0],
+      "notes": "使用ScreenshotAPI稳定截图"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5000/brain/analyze_no_screenshot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  text: $json.text,\n  symbols: $json.symbols,\n  lang: $json.lang || 'zh',\n  mode: $json.mode || 'intraday',\n  user_id: $json.user_id || 'n8n',\n  chart_url: 'screenshot_in_previous_node'\n}) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "call-brain-analysis",
+      "name": "🧠 调用USIS Brain AI分析",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [480, 200],
+      "notes": "v6.0多AI引擎：中文→DeepSeek，英文→GPT-4o"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "id": "merge-results",
+      "name": "🔀 合并截图+分析",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [720, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 合并截图和分析结果\nconst chartData = $input.first();\nconst analysisData = $input.all()[1] ? $input.all()[1].json : {};\n\nreturn [{\n  json: {\n    // AI分析文本\n    analysis_text: analysisData.final_text || '分析失败',\n    \n    // 截图二进制数据\n    chart_binary: chartData.binary || null,\n    \n    // 元数据\n    symbols: analysisData.symbols || [],\n    ai_model: analysisData.ai_model || 'unknown',\n    language: analysisData.language || 'zh',\n    cost_usd: analysisData.cost_usd || 0,\n    response_time_ms: analysisData.response_time_ms || 0,\n    \n    // 市场数据（可选）\n    market_data: analysisData.market_data || null\n  },\n  binary: chartData.binary || null\n}];"
+      },
+      "id": "format-final-output",
+      "name": "📦 格式化最终输出",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "return-to-client",
+      "name": "📤 返回结果（JSON+Binary）",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1200, 100]
+    }
+  ],
+  "connections": {
+    "📥 接收股票分析请求": {
+      "main": [[
+        { "node": "📊 提取股票代码", "type": "main", "index": 0 }
+      ]]
+    },
+    "📊 提取股票代码": {
+      "main": [[
+        { "node": "📸 截图个股K线图", "type": "main", "index": 0 },
+        { "node": "🧠 调用USIS Brain AI分析", "type": "main", "index": 0 }
+      ]]
+    },
+    "📸 截图个股K线图": {
+      "main": [[
+        { "node": "🔀 合并截图+分析", "type": "main", "index": 0 }
+      ]]
+    },
+    "🧠 调用USIS Brain AI分析": {
+      "main": [[
+        { "node": "🔀 合并截图+分析", "type": "main", "index": 1 }
+      ]]
+    },
+    "🔀 合并截图+分析": {
+      "main": [[
+        { "node": "📦 格式化最终输出", "type": "main", "index": 0 }
+      ]]
+    },
+    "📦 格式化最终输出": {
+      "main": [[
+        { "node": "📤 返回结果（JSON+Binary）", "type": "main", "index": 0 }
+      ]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "usis-brain-v6-n8n-screenshot"
+  },
+  "tags": []
+}
