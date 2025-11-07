@@ -1971,8 +1971,28 @@ async function validateAndFixSymbols(symbols = [], contextHints = {}) {
       
       // 排序并选择最佳匹配
       scored.sort((a, b) => b.score - a.score);
-      const bestMatch = scored[0];
       
+      // 🆕 检查是否需要用户确认（多个高分候选）
+      const topCandidates = scored.filter(s => s.score >= scored[0].score * 0.7); // 得分≥最高分70%的候选
+      const needsUserChoice = topCandidates.length > 1 && contextHints.interactive;
+      
+      if (needsUserChoice) {
+        // 返回特殊标记，让调用方处理用户选择
+        console.log(`   ❓ ${symbol} - 发现${topCandidates.length}个高分匹配，需要用户选择`);
+        validatedSymbols.push({
+          _needsChoice: true,
+          originalSymbol: symbol,
+          candidates: topCandidates.slice(0, 12).map(c => ({
+            symbol: c.symbol,
+            description: c.description,
+            type: c.type,
+            score: c.score
+          }))
+        });
+        continue;
+      }
+      
+      const bestMatch = scored[0];
       const fixedSymbol = bestMatch.symbol;
       const description = bestMatch.description || '';
       const confidence = bestMatch.score / 100; // 归一化到0-1
@@ -5533,14 +5553,56 @@ if (TELEGRAM_TOKEN) {
         // 🧠 个股分析（大脑）→ 📸 调用n8n截图（眼睛）→ 📊 AI分析
         console.log(`📈 个股分析请求: ${symbols.join(', ')}`);
         
+        // 🆕 智能验证符号（交互式模式）
+        const validatedSymbols = await validateAndFixSymbols(symbols, { interactive: true });
+        
+        // 🆕 检测是否需要用户选择
+        if (validatedSymbols[0] && validatedSymbols[0]._needsChoice) {
+          const choice = validatedSymbols[0];
+          console.log(`🎯 需要用户选择: ${choice.originalSymbol} 有 ${choice.candidates.length} 个匹配`);
+          
+          // 创建Inline Keyboard（最多12个按钮，每行2个）
+          const keyboard = [];
+          for (let i = 0; i < Math.min(choice.candidates.length, 12); i += 2) {
+            const row = [];
+            const c1 = choice.candidates[i];
+            row.push({
+              text: `${c1.symbol} - ${c1.description.slice(0, 30)}`,
+              callback_data: `stock:${c1.symbol}`
+            });
+            
+            if (i + 1 < choice.candidates.length) {
+              const c2 = choice.candidates[i + 1];
+              row.push({
+                text: `${c2.symbol} - ${c2.description.slice(0, 30)}`,
+                callback_data: `stock:${c2.symbol}`
+              });
+            }
+            keyboard.push(row);
+          }
+          
+          await telegramAPI('sendMessage', {
+            chat_id: chatId,
+            text: `❓ 找到 "${choice.originalSymbol}" 的 ${choice.candidates.length} 个匹配项，请选择您要分析的股票：`,
+            reply_markup: {
+              inline_keyboard: keyboard
+            }
+          });
+          
+          return; // 等待用户选择，不继续执行
+        }
+        
+        // 正常流程：继续分析
+        const finalSymbol = validatedSymbols[0];
+        
         // 🆕 发送进度提示（告知用户预期等待时间）
         const progressMsg = await telegramAPI('sendMessage', { 
           chat_id: chatId, 
-          text: `🔄 正在生成 ${symbols[0]} K线图表，这可能需要15-30秒...\n\n📸 步骤1: 截取TradingView图表\n🤖 步骤2: GPT-4o Vision技术分析\n⏳ 请稍候...` 
+          text: `🔄 正在生成 ${finalSymbol} K线图表，这可能需要15-30秒...\n\n📸 步骤1: 截取TradingView图表\n🤖 步骤2: GPT-4o Vision技术分析\n⏳ 请稍候...` 
         });
         
         try {
-          const result = await generateStockChart(symbols[0], {
+          const result = await generateStockChart(finalSymbol, {
             interval: 'D',
             userText: text
           });
@@ -5663,6 +5725,94 @@ if (TELEGRAM_TOKEN) {
     }
   }
   
+  // 🆕 处理用户点击按钮（Callback Query）
+  async function handleCallbackQuery(callbackQuery) {
+    const chatId = callbackQuery.message.chat.id;
+    const messageId = callbackQuery.message.message_id;
+    const data = callbackQuery.data; // 格式: "stock:SAB.MC"
+    const userId = callbackQuery.from.id;
+    
+    console.log(`\n🔘 [TG] Callback from ${userId}: "${data}"`);
+    
+    try {
+      // 确认收到点击（移除按钮上的loading状态）
+      await telegramAPI('answerCallbackQuery', { 
+        callback_query_id: callbackQuery.id,
+        text: '✅ 已选择'
+      });
+      
+      // 解析callback_data
+      if (data.startsWith('stock:')) {
+        const selectedSymbol = data.substring(6); // 移除"stock:"前缀
+        console.log(`📊 用户选择股票: ${selectedSymbol}`);
+        
+        // 更新原消息，显示用户选择
+        await telegramAPI('editMessageText', {
+          chat_id: chatId,
+          message_id: messageId,
+          text: `✅ 已选择: ${selectedSymbol}\n\n🔄 正在生成K线图表...`
+        });
+        
+        // 执行股票分析
+        try {
+          const progressMsg = await telegramAPI('sendMessage', { 
+            chat_id: chatId, 
+            text: `🔄 正在生成 ${selectedSymbol} K线图表，这可能需要15-30秒...\n\n📸 步骤1: 截取TradingView图表\n🤖 步骤2: GPT-4o Vision技术分析\n⏳ 请稍候...` 
+          });
+          
+          const result = await generateStockChart(selectedSymbol, {
+            interval: 'D',
+            userText: `解析${selectedSymbol}`
+          });
+          
+          // 删除进度消息
+          try {
+            await telegramAPI('deleteMessage', { 
+              chat_id: chatId, 
+              message_id: progressMsg.result.message_id 
+            });
+          } catch (e) {
+            console.log('⚠️  无法删除进度消息');
+          }
+          
+          if (result.buffer) {
+            // 发送K线截图
+            await sendDocumentBuffer(
+              TELEGRAM_TOKEN, 
+              chatId, 
+              result.buffer, 
+              `${selectedSymbol}_chart.png`, 
+              result.caption || '📊 K线图'
+            );
+            console.log('✅ K线图已发送');
+            
+            // 发送AI分析
+            if (result.comprehensiveAnalysis || result.chartAnalysis) {
+              const analysisText = result.comprehensiveAnalysis || result.chartAnalysis;
+              await telegramAPI('sendMessage', { 
+                chat_id: chatId, 
+                text: analysisText.slice(0, 4000) 
+              });
+              console.log('✅ AI分析已发送');
+            }
+          }
+        } catch (stockError) {
+          console.error('❌ 股票分析失败:', stockError.message);
+          await telegramAPI('sendMessage', { 
+            chat_id: chatId, 
+            text: `⚠️ ${selectedSymbol} 分析失败\n\n原因: ${stockError.message}\n\n💡 建议: 请稍后重试` 
+          });
+        }
+      }
+    } catch (error) {
+      console.error('[TG] Callback error:', error.message);
+      await telegramAPI('sendMessage', { 
+        chat_id: chatId, 
+        text: `⚠️ 处理失败: ${error.message}` 
+      });
+    }
+  }
+  
   // 轮询循环
   let offset = 0;
   let polling = false;
@@ -5679,8 +5829,15 @@ if (TELEGRAM_TOKEN) {
         
         for (const update of result.result) {
           offset = update.update_id + 1;
+          
+          // 处理普通消息
           if (update.message && update.message.text) {
             await handleTelegramMessage(update.message);
+          }
+          
+          // 🆕 处理按钮点击（callback_query）
+          if (update.callback_query) {
+            await handleCallbackQuery(update.callback_query);
           }
         }
       }
