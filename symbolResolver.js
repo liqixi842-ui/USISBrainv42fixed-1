@@ -58,12 +58,21 @@ async function resolveSymbols(intent) {
     console.log(`   🔍 查找公司: ${companyName}`);
     
     try {
+      // 优先尝试静态映射（更快、更准确）
+      const staticResults = lookupStatic(companyName);
+      if (staticResults.length > 0) {
+        symbols.push(staticResults[0].symbol);
+        console.log(`   ✓ 静态映射找到: ${staticResults[0].symbol}`);
+        continue;
+      }
+      
+      // 如果静态映射失败，尝试Finnhub API
       const resolvedSymbols = await lookupSymbol(companyName, intent.exchange);
       
       if (resolvedSymbols.length > 0) {
         const bestMatch = selectBestMatch(resolvedSymbols, intent.exchange, companyName);
         symbols.push(bestMatch.symbol);
-        console.log(`   ✓ 找到符号: ${bestMatch.symbol} (${bestMatch.description})`);
+        console.log(`   ✓ Finnhub找到: ${bestMatch.symbol} (${bestMatch.description})`);
       } else {
         console.log(`   ⚠️  未找到符号: ${companyName}`);
       }
@@ -227,21 +236,21 @@ function selectBestMatch(matches, exchangeHint, originalQuery) {
  * 这不是主要方法，只是在Finnhub失败时的备用
  */
 const STATIC_SYMBOL_MAP = {
-  // 西班牙主要股票
-  'grifols': 'GRF.MC',
-  'sabadell': 'SAB.MC',
-  'santander': 'SAN.MC',
-  'bbva': 'BBVA.MC',
-  'telefonica': 'TEF.MC',
-  'iberdrola': 'IBE.MC',
-  'repsol': 'REP.MC',
-  'inditex': 'ITX.MC',
+  // 西班牙主要股票（使用美国OTC ADR代码，Finnhub免费版不支持欧洲交易所）
+  'grifols': 'GRFS',        // Grifols ADR (OTC)
+  'sabadell': 'BNDSY',      // Banco de Sabadell ADR (OTC)
+  'santander': 'SAN',       // Banco Santander (NYSE)
+  'bbva': 'BBVXF',          // BBVA ADR (OTC)
+  'telefonica': 'TEF',      // Telefonica (NYSE)
+  'iberdrola': 'IBDRY',     // Iberdrola ADR (OTC)
+  'repsol': 'REPYY',        // Repsol ADR (OTC)
+  'inditex': 'IDEXY',       // Inditex ADR (OTC)
   
   // 中文名称映射
-  '电力公司': 'IBE.MC',
-  '西班牙电信': 'TEF.MC',
-  '桑坦德': 'SAN.MC',
-  '毕尔巴鄂': 'BBVA.MC',
+  '电力公司': 'IBDRY',
+  '西班牙电信': 'TEF',
+  '桑坦德': 'SAN',
+  '毕尔巴鄂': 'BBVXF',
   
   // 美国常见股票
   'apple': 'AAPL',
