@@ -1856,11 +1856,17 @@ function extractSymbols(text = "") {
     '罗氏': 'RHHBY', 'roche': 'RHHBY',
     'abb': 'ABB',
     
-    // 🇪🇸 西班牙
+    // 🇪🇸 西班牙（完整公司名称优先，避免歧义）
+    'banco de sabadell sa': 'SAB.MC',   // 完整公司名 → 马德里交易所
+    'banco de sabadell': 'SAB.MC',      // 西班牙Sabadell银行
+    'banco santander sa': 'SAN.MC',     // 完整公司名
+    'banco santander': 'SAN.MC',        // 桑坦德银行
+    'banco bilbao vizcaya': 'BBVA.MC',  // BBVA完整名
     '电力公司': 'IBE.MC', 'iberdrola': 'IBE.MC',
     '西班牙电信': 'TEF.MC', 'telefonica': 'TEF.MC',
     '桑坦德': 'SAN.MC', 'santander': 'SAN.MC',
     '毕尔巴鄂': 'BBVA.MC', 'bbva': 'BBVA.MC',
+    'sabadell': 'SAB.MC',               // 短名称
     'inditex': 'ITX.MC', 'zara': 'ITX.MC',
     'repsol': 'REP.MC', '雷普索尔': 'REP.MC'
   };
