@@ -27,9 +27,27 @@ function buildStockChartURL(symbol, options = {}) {
   
   // 如果没有交易所前缀，根据常见股票添加
   if (!normalizedSymbol.includes(':')) {
-    // 美股默认NASDAQ，可以根据需要调整
-    if (/^[A-Z]{1,5}$/.test(normalizedSymbol)) {
-      normalizedSymbol = `NASDAQ:${normalizedSymbol}`;
+    // NYSE上市的股票（传统大型公司、金融、能源）
+    const nyseStocks = [
+      'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS',  // 金融
+      'XOM', 'CVX', 'COP', 'SLB',            // 能源
+      'WMT', 'HD', 'KO', 'PEP', 'MCD', 'NKE', 'DIS', // 消费
+      'JNJ', 'UNH', 'PFE', 'ABBV', 'TMO', 'ABT', 'LLY', // 医疗
+      'PG', 'MA', 'V',                        // 其他蓝筹
+      'T', 'VZ',                              // 电信
+      'BA', 'CAT', 'GE', 'MMM',              // 工业
+      'BHP', 'RIO', 'VALE', 'PBR', 'AMX',    // 国际ADR
+      'BRK.B', 'BRK.A'                        // 伯克希尔
+    ];
+    
+    if (/^[A-Z]{1,5}(\.[A-Z])?$/.test(normalizedSymbol)) {
+      const baseSymbol = normalizedSymbol.split('.')[0];
+      if (nyseStocks.includes(normalizedSymbol) || nyseStocks.includes(baseSymbol)) {
+        normalizedSymbol = `NYSE:${normalizedSymbol}`;
+      } else {
+        // 默认NASDAQ（科技股为主）
+        normalizedSymbol = `NASDAQ:${normalizedSymbol}`;
+      }
     }
   }
   

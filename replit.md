@@ -6,6 +6,7 @@ USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System des
 - ✅ **Global Stock Coverage Expansion**: Extended from 44 to 150+ stocks across Americas, Europe, Asia-Pacific, and emerging markets
 - ✅ **N8N Full API Automation**: Implemented automatic workflow creation, health monitoring (5-min intervals), and self-healing capabilities
 - ✅ **Symbol Disambiguation Algorithm**: Longest-match-first strategy prevents conflicts between dual-listed stocks (e.g., BABA vs 9988.HK)
+- ✅ **TradingView Exchange Routing**: Accurate NYSE/NASDAQ mapping for US stocks (CVX→NYSE:CVX, AAPL→NASDAQ:AAPL) fixes "invalid symbol" errors
 
 # User Preferences
 
