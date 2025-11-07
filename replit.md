@@ -3,10 +3,13 @@
 USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with real-time data integration from sources like Finnhub, SEC, and FRED. Key features include semantic intent parsing, **global stock discovery with 150+ stocks across 10+ markets**, anti-hallucination data validation, intelligent model routing for specialized analysis (e.g., Chinese financial analysis via DeepSeek), **fully automated N8N workflow management**, Vision AI chart analysis, and authoritative, data-backed investment recommendations. The system is built for deployment on Replit's Autoscale platform and aims to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
 
 ## Recent Updates (Nov 2025)
-- ✅ **TRUE Global Stock Support via Multi-API Cascade** (Nov 7, 2025):
-    - **Provider-Specific Symbol Conversion**: Intelligent format adaptation for each API (Finnhub uses exchange prefixes like `BME:GRF`, Alpha Vantage uses suffixes like `GRF.MC`)
+- ✅ **3-Tier Global Stock API Cascade** (Nov 7, 2025):
+    - **Enhanced Provider Chain**: Finnhub (US stocks) → Twelve Data (global markets) → Alpha Vantage (backup)
+    - **Provider-Specific Symbol Conversion**: Intelligent format adaptation for each API (Finnhub: `BME:GRF`, Twelve Data: `symbol=SAB&exchange=BME`, Alpha Vantage: `GRF.MC`)
     - **30+ Exchange Coverage**: Comprehensive mapping for Europe (BME, EPA, LSE, FRA, MIL, etc.), Asia-Pacific (SSE, SZSE, HKEX, TSE, SGX, etc.), and North America (TSX, TSXV, NYSE, NASDAQ, OTC)
-    - **Automatic Failover**: When Finnhub returns `c===0` (unsupported stock), system automatically cascades to Alpha Vantage with correct symbol format
+    - **Automatic Failover**: When Finnhub returns `c===0` (unsupported stock), system automatically cascades through Twelve Data to Alpha Vantage with correct symbol formats
+    - **Smart Capability Caching**: Detects Twelve Data free-tier limitations (403/401 errors) and skips provider on subsequent requests to optimize latency
+    - **US Share-Class Protection**: Preserves tickers like `BRK.B`, `BRK.A` (not split into exchange mappings)
     - **No Hardcoded Limitations**: All global stocks can be analyzed dynamically without whitelists or blacklists
 - ✅ **Smart Interactive Symbol Selection**: When ambiguous symbols detected (e.g., SAB), system returns all valid options via Telegram inline keyboard for user selection
     - API-driven candidate discovery (no static mappings for short codes)
@@ -48,10 +51,15 @@ The v6.0 pipeline processes user input through language detection, semantic inte
     - **Asia-Pacific**: 11 Japan (TM, SONY), 4 Korea (SSNLF, HYMTF), 17 China/HK (BABA, 0700.HK), 4 other (INFY, DBSDY)
     - **Other**: 5 global stocks (BHP, RIO, RY, BNS, NPSNY)
     - **Disambiguation**: Longest-match-first algorithm resolves dual-listed stocks (e.g., '阿里巴巴'→BABA, '阿里港股'→9988.HK)
-- **Multi-Dimensional Data Broker with Multi-API Cascade**: 
-    - **Dual-Provider Architecture**: Finnhub (primary) → Alpha Vantage (fallback) for true global coverage
-    - **Provider-Specific Symbol Format**: Automatically converts symbols for each API (e.g., `BME:GRF` for Finnhub, `GRF.MC` for Alpha Vantage)
-    - **Smart Failover**: Detects Finnhub limitations (`c===0`) and automatically cascades to Alpha Vantage
+- **Multi-Dimensional Data Broker with 3-Tier API Cascade**: 
+    - **Triple-Provider Architecture**: Finnhub (US primary) → Twelve Data (global markets) → Alpha Vantage (backup/fallback)
+    - **Provider-Specific Symbol Format**: Automatically converts symbols for each API:
+        - Finnhub: Exchange prefix format (`BME:SAB`, `NYSE:AAPL`)
+        - Twelve Data: Query parameter format (`symbol=SAB&exchange=BME`)
+        - Alpha Vantage: Suffix format (`SAB.MC`, `AAPL`)
+    - **Smart Symbol Conversion**: Handles colon format (`BME:SAB`), dot-suffix format (`SAB.MC`, `RY.TO`), and preserves US share-class tickers (`BRK.B`)
+    - **Intelligent Failover**: Detects Finnhub limitations (`c===0`) and cascades through Twelve Data to Alpha Vantage with correct symbol formats
+    - **Capability Caching**: When Twelve Data returns tier-limit errors (403/401/404), system sets `providerCapabilityCache.twelvedata_tier_limited = true` and skips provider on all subsequent requests
     - **30+ Exchange Support**: Europe (BME, EPA, LSE, FRA, etc.), Asia-Pacific (SSE, SZSE, HKEX, TSE, SGX, etc.), North America (TSX, TSXV, NYSE, NASDAQ, OTC)
     - **120s Cache TTL**: Optimized API call efficiency with data provenance and completeness scoring
 - **ImpactRank Algorithm**: Proprietary 4-dimensional news scoring (urgency × relevance × authority × freshness).
@@ -104,7 +112,9 @@ A pure rule-based parser supports 21 global indices with multi-language region d
 - **Mistral API**: For Mistral Large.
 - **Perplexity API**: For Sonar Pro.
 - **DeepL API**: For professional translation.
-- **Finnhub API**: Real-time quotes, news, and symbol lookup.
+- **Finnhub API**: Real-time quotes, news, and symbol lookup (primary data source for US stocks).
+- **Twelve Data API**: Global stock market data (Europe, Canada, Asia-Pacific). Free tier: 800 calls/day for US stocks; paid plans ($29+/month) required for international markets.
+- **Alpha Vantage API**: Backup global stock data (US + Canada support on free tier).
 - **FRED API**: Federal Reserve Economic Data.
 - **SEC EDGAR API**: Company financial filings.
 - **Browserless API**: Cloud headless browser for screenshots.
