@@ -2,7 +2,7 @@
 // 类似heatmapService，但专注于个股K线图分析
 // 复用screenshotProviders三层截图系统
 
-const { captureHeatmapSmart } = require('./screenshotProviders');
+const { captureStockChartSmart } = require('./screenshotProviders');  // 🆕 使用专用函数
 const VisionAnalyzer = require('./visionAnalyzer');
 const { fetchMarketData } = require('./dataBroker');
 
@@ -77,13 +77,11 @@ async function generateStockChart(symbol, options = {}) {
       console.log(`⚠️  [Market Data] 跳过: ${dataError.message}`);
     }
     
-    // 3️⃣ 使用智能截图服务（复用热力图系统）
+    // 3️⃣ 使用个股专用截图服务（调用N8N stock_analysis_full）
     try {
-      const screenshotResult = await captureHeatmapSmart({
+      const screenshotResult = await captureStockChartSmart({
         tradingViewUrl: chartURL,
-        dataset: symbol,
-        region: 'AUTO',
-        sector: undefined
+        symbol: symbol
       });
       
       console.log(`✅ [Screenshot] 成功 (provider=${screenshotResult.provider})`);
