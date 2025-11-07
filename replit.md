@@ -40,12 +40,15 @@ The system orchestrates 6 AI models:
 - **Mistral Large**: For fast, multilingual reasoning.
 - **Perplexity Sonar Pro**: For real-time search-enhanced analysis.
 
-## Heatmap System (Screenshot Architecture)
-A three-tier screenshot architecture ensures stability and graceful degradation:
-- **Tier 1 - ScreenshotN8N (Primary)**: SaaS-based screenshot with delays and element waiting.
-- **Tier 2 - Browserless (Enhancement)**: Cloud-based headless Chromium for more complex UI interactions.
+## Screenshot Architecture
+A multi-tier screenshot architecture ensures stability and graceful degradation:
+- **N8N Webhook Integration**: Dedicated stock_analysis_full webhook endpoint for individual stock chart screenshots. N8N only handles screenshot capture via ScreenshotAPI and returns binary data; AI analysis is performed by USIS Brain after receiving the screenshot to avoid circular dependencies and deadlocks.
+- **Heatmap System - Tier 1 (Primary)**: SaaS-based N8N screenshot with delays and element waiting for market heatmaps.
+- **Tier 2 - Browserless (Enhancement)**: Cloud-based headless Chromium for complex UI interactions.
 - **Tier 3 - QuickChart (Fallback)**: Generates simplified bar charts when other services fail.
 A pure rule-based parser supports 21 global indices with multi-language region detection and sector filtering.
+
+**Critical Architecture Note**: The stock screenshot workflow is intentionally simplified to prevent deadlocks. N8N webhooks must NOT call back to USIS Brain APIs during execution, as USIS Brain is waiting for the webhook response, creating a circular wait condition.
 
 # External Dependencies
 

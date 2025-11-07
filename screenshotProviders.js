@@ -144,14 +144,46 @@ async function captureStockChartSmart({ tradingViewUrl, symbol, timeoutMs = 4500
       // 处理返回的binary数据
       let buffer;
       if (jsonData.chart_binary) {
-        // 如果是base64编码
+        const binaryType = typeof jsonData.chart_binary;
+        const isBufferLike = jsonData.chart_binary && jsonData.chart_binary.type === 'Buffer';
+        console.log(`🔍 [Binary检测] 类型=${binaryType}, isBuffer=${Buffer.isBuffer(jsonData.chart_binary)}, isBufferLike=${isBufferLike}`);
+        
+        // 方式1: 如果是base64字符串
         if (typeof jsonData.chart_binary === 'string') {
+          console.log(`📝 [Binary] Base64字符串 (长度: ${jsonData.chart_binary.length})`);
           buffer = Buffer.from(jsonData.chart_binary, 'base64');
-        } else if (jsonData.chart_binary.type === 'Buffer' && Array.isArray(jsonData.chart_binary.data)) {
+        } 
+        // 方式2: 如果是Buffer对象序列化形式 {type: 'Buffer', data: [...]}
+        else if (jsonData.chart_binary.type === 'Buffer' && Array.isArray(jsonData.chart_binary.data)) {
+          console.log(`📦 [Binary] Buffer对象序列化 (data长度: ${jsonData.chart_binary.data.length})`);
           buffer = Buffer.from(jsonData.chart_binary.data);
-        } else {
+        } 
+        // 方式3: 如果已经是Buffer实例
+        else if (Buffer.isBuffer(jsonData.chart_binary)) {
+          console.log(`✅ [Binary] 已是Buffer实例`);
           buffer = jsonData.chart_binary;
         }
+        // 方式4: 尝试作为ArrayBuffer或Uint8Array处理
+        else if (jsonData.chart_binary instanceof ArrayBuffer || jsonData.chart_binary instanceof Uint8Array) {
+          console.log(`🔢 [Binary] ArrayBuffer/Uint8Array`);
+          buffer = Buffer.from(jsonData.chart_binary);
+        }
+        // 未知格式
+        else {
+          console.error('❌ [Binary] 未知格式:', {
+            type: binaryType,
+            constructor: jsonData.chart_binary?.constructor?.name,
+            keys: Object.keys(jsonData.chart_binary || {}).slice(0, 5)
+          });
+          throw new Error(`不支持的binary格式: ${binaryType}`);
+        }
+        
+        // 最终验证
+        if (!Buffer.isBuffer(buffer)) {
+          throw new Error(`buffer转换失败，结果不是Buffer实例`);
+        }
+        
+        console.log(`✅ [Binary] 转换成功，大小: ${(buffer.length / 1024).toFixed(2)} KB`);
       } else if (jsonData.screenshot) {
         // 下载截图URL
         console.log(`📥 下载截图: ${jsonData.screenshot.substring(0, 80)}...`);
