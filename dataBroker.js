@@ -6,6 +6,7 @@ const fetch = require("node-fetch");
 
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
 const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_API_KEY;
+const TWELVE_DATA_KEY = process.env.TWELVE_DATA_API_KEY;
 
 // 🆕 v4.2: 软超时配置（环境变量可控）
 const SLOW_SOURCE_TIMEOUT = parseInt(process.env.SLOW_SOURCE_TIMEOUT_MS) || 7000;
@@ -255,6 +256,86 @@ async function fetchQuotes(symbols) {
 }
 
 /**
+ * 🌍 从Twelve Data获取实时股价（全球股票支持：欧洲、加拿大、亚洲）
+ */
+async function fetchQuoteFromTwelveData(symbol) {
+  if (!TWELVE_DATA_KEY) {
+    throw new Error("TWELVE_DATA_API_KEY not configured");
+  }
+  
+  const url = `https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`;
+  const fetchTime = Date.now();
+  
+  try {
+    const response = await fetch(url, { timeout: 10000 });
+    
+    if (!response.ok) {
+      throw new Error(`Twelve Data API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // 检查错误响应
+    if (data.status === 'error' || data.code === 400) {
+      throw new Error(data.message || 'Symbol not found in Twelve Data');
+    }
+    
+    // 验证数据有效性
+    if (!data.close || !data.symbol) {
+      throw new Error(`No quote data from Twelve Data for ${symbol}`);
+    }
+    
+    const currentPrice = parseFloat(data.close);
+    const change = parseFloat(data.change);
+    const changePercent = parseFloat(data.percent_change);
+    const previousClose = parseFloat(data.previous_close);
+    const high = parseFloat(data.high);
+    const low = parseFloat(data.low);
+    const open = parseFloat(data.open);
+    
+    const quote = {
+      symbol: symbol,
+      currentPrice: currentPrice,
+      change: change,
+      changePercent: changePercent,
+      high: high,
+      low: low,
+      open: open,
+      previousClose: previousClose,
+      timestamp: Date.now(),
+      source: 'twelvedata',
+      freshnessScore: 1.0,
+      dataAgeMinutes: 0
+    };
+    
+    const source = {
+      provider: 'twelvedata',
+      endpoint: '/quote',
+      symbol: symbol,
+      timestamp: fetchTime,
+      freshnessMinutes: 0,
+      status: 'success'
+    };
+    
+    return { quote, source };
+    
+  } catch (error) {
+    console.error(`   ❌ Twelve Data quote失败 (${symbol}):`, error.message);
+    
+    const source = {
+      provider: 'twelvedata',
+      endpoint: '/quote',
+      symbol: symbol,
+      timestamp: fetchTime,
+      status: 'failed',
+      error: error.message
+    };
+    
+    return { quote: null, source };
+  }
+}
+
+/**
  * 🆕 从Alpha Vantage获取实时股价（备用数据源）
  */
 async function fetchQuoteFromAlphaVantage(symbol) {
@@ -333,6 +414,47 @@ async function fetchQuoteFromAlphaVantage(symbol) {
  * 🌐 符号格式转换：为不同API provider准备正确的符号格式
  */
 function convertSymbolForProvider(symbol, provider) {
+  // Twelve Data专用格式转换（支持全球股票）
+  if (provider === 'twelvedata') {
+    // Twelve Data使用后缀格式（与Alpha Vantage相同）
+    if (symbol.includes(':')) {
+      const [exchange, ticker] = symbol.split(':');
+      
+      // 🌍 Twelve Data交易所后缀映射
+      const EXCHANGE_TO_SUFFIX = {
+        // 欧洲主要交易所
+        'BME': 'MC',      // 马德里证券交易所 → SAB.MC
+        'EPA': 'PA',      // 巴黎泛欧交易所 → ORA.PA
+        'LSE': 'L',       // 伦敦证券交易所 → AZN.L
+        'FRA': 'F',       // 法兰克福证券交易所 → SAP.F
+        'XETRA': 'DE',    // 德国XETRA → SAP.DE
+        'MIL': 'MI',      // 米兰证券交易所 → ENI.MI
+        'AMS': 'AS',      // 阿姆斯特丹泛欧交易所 → PHIA.AS
+        
+        // 北美交易所
+        'TSX': 'TO',      // 多伦多证券交易所 → RY.TO
+        'TSXV': 'V',      // 多伦多创业板 → XXX.V
+        'NYSE': '',       // 纽约证券交易所（无后缀）
+        'NASDAQ': '',     // 纳斯达克（无后缀）
+        
+        // 亚太交易所
+        'HKEX': 'HK',     // 香港交易所 → 0700.HK
+        'TSE': 'T',       // 东京证券交易所 → 7203.T
+        'ASX': 'AX'       // 澳大利亚证券交易所 → BHP.AX
+      };
+      
+      const suffix = EXCHANGE_TO_SUFFIX[exchange];
+      if (suffix !== undefined) {
+        return suffix ? `${ticker}.${suffix}` : ticker;
+      }
+      
+      console.warn(`   ⚠️  [Twelve Data Convert] 未知交易所代码: ${exchange}，使用纯ticker: ${ticker}`);
+      return ticker;
+    }
+    
+    return symbol;
+  }
+  
   // Alpha Vantage专用格式转换
   if (provider === 'alphavantage') {
     // 如果有交易所前缀（BME:GRF），转换为Alpha Vantage格式
@@ -400,7 +522,7 @@ function convertSymbolForProvider(symbol, provider) {
 }
 
 /**
- * 获取单个股票报价（智能降级：Finnhub → Alpha Vantage）
+ * 获取单个股票报价（智能3层降级：Finnhub → Twelve Data → Alpha Vantage）
  */
 async function fetchSingleQuote(symbol) {
   let quote = null;
@@ -408,7 +530,7 @@ async function fetchSingleQuote(symbol) {
   
   console.log(`   🔍 [Symbol Resolution] 原始符号: ${symbol}`);
   
-  // 策略1: 优先使用Finnhub
+  // 策略1: 优先使用Finnhub（美国主板股票）
   if (FINNHUB_KEY) {
     const finnhubSymbol = convertSymbolForProvider(symbol, 'finnhub');
     console.log(`   📊 [Finnhub] 使用符号: ${finnhubSymbol}`);
@@ -425,7 +547,7 @@ async function fetchSingleQuote(symbol) {
       
       const data = await response.json();
       
-      // 🔧 修复：c===0 视为硬失败（Finnhub免费版不支持），触发降级
+      // 🔧 修复：c===0 视为硬失败（Finnhub不支持），触发降级
       if (data.c && data.c !== 0) {
         // 计算新鲜度评分（基于时间戳）
         const dataAge = Date.now() - (data.t * 1000);
@@ -458,24 +580,38 @@ async function fetchSingleQuote(symbol) {
         return { quote, source };
       } else {
         // ⚠️ Finnhub返回c=0（不支持该股票），显式触发降级
-        throw new Error(`Finnhub不支持${finnhubSymbol}（返回c=0，可能是OTC/ADR/欧洲股票）`);
+        throw new Error(`Finnhub不支持${finnhubSymbol}（返回c=0，可能是欧洲/加拿大/OTC股票）`);
       }
       
     } catch (error) {
-      console.warn(`   ⚠️  Finnhub失败，尝试Alpha Vantage降级: ${error.message}`);
+      console.warn(`   ⚠️  Finnhub失败，尝试Twelve Data降级: ${error.message}`);
     }
   }
   
-  // 策略2: 降级到Alpha Vantage（全球股票支持）
+  // 策略2: 降级到Twelve Data（欧洲、加拿大、全球股票）
+  if (TWELVE_DATA_KEY && !quote) {
+    const twelveSymbol = convertSymbolForProvider(symbol, 'twelvedata');
+    console.log(`   🌍 [降级] Twelve Data使用符号: ${twelveSymbol}`);
+    
+    try {
+      const twelveResult = await fetchQuoteFromTwelveData(twelveSymbol);
+      if (twelveResult.quote) {
+        twelveResult.quote.symbol = symbol;
+        return twelveResult;
+      }
+    } catch (error) {
+      console.error(`   ❌ Twelve Data降级失败:`, error.message);
+    }
+  }
+  
+  // 策略3: 降级到Alpha Vantage（加拿大、部分全球股票）
   if (ALPHA_VANTAGE_KEY && !quote) {
     const alphaSymbol = convertSymbolForProvider(symbol, 'alphavantage');
     console.log(`   🔄 [降级] Alpha Vantage使用符号: ${alphaSymbol}`);
     
     try {
-      // ✅ 使用provider专用格式调用Alpha Vantage
       const alphaResult = await fetchQuoteFromAlphaVantage(alphaSymbol);
       if (alphaResult.quote) {
-        // 修正quote中的symbol为原始值（保持一致性）
         alphaResult.quote.symbol = symbol;
         return alphaResult;
       }
@@ -484,7 +620,7 @@ async function fetchSingleQuote(symbol) {
     }
   }
   
-  // 策略3: 所有数据源都失败
+  // 策略4: 所有数据源都失败
   const fetchTime = Date.now();
   source = {
     provider: 'none',
@@ -492,7 +628,7 @@ async function fetchSingleQuote(symbol) {
     symbol: symbol,
     timestamp: fetchTime,
     status: 'failed',
-    error: 'All data sources failed'
+    error: 'All data sources failed (Finnhub, Twelve Data, Alpha Vantage)'
   };
   
   return { quote: null, source };
