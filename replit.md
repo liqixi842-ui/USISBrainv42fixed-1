@@ -5,9 +5,10 @@ USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System des
 ## Recent Updates (Nov 2025)
 - ✅ **Interactive Symbol Selection**: When ambiguous symbols (e.g., SAB with 12 matches) are detected, system returns clickable Telegram inline keyboard for user confirmation instead of auto-guessing
 - ✅ **Hybrid Symbol Resolution Stack**: 3-tier intelligent validation system:
-    1. Static mapping (authoritative, instant): SAB→SAB.MC, handles ambiguous tickers
+    1. Static mapping (authoritative, instant): SAB→BNDSY (ADR), handles ambiguous tickers
     2. Finnhub API with smart scoring (description match, exchange preference, security type)
     3. Graceful degradation when API unavailable
+- ✅ **Finnhub Free Tier Optimization**: European stocks now map to US OTC ADR equivalents (SAB→BNDSY, BBVA→BBVXF, etc.) to bypass Finnhub's restricted European exchange access
 - ✅ **Intelligent Stock Analysis (Not Workflow Nodes)**: Removed hardcoded stock lists; system now queries Finnhub API in real-time to identify any stock's exchange (CVX→"NEW YORK STOCK EXCHANGE"→NYSE:CVX), making it a true intelligent analyst instead of a rule-based workflow executor
 - ✅ **Global Stock Coverage Expansion**: Extended from 44 to 150+ stocks across Americas, Europe, Asia-Pacific, and emerging markets
 - ✅ **N8N Full API Automation**: Implemented automatic workflow creation, health monitoring (5-min intervals), and self-healing capabilities

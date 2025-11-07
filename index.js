@@ -1885,14 +1885,14 @@ async function validateAndFixSymbols(symbols = [], contextHints = {}) {
   
   // 🎯 Phase 1: 静态映射表（最权威、最快）
   const STATIC_SYMBOL_MAP = {
-    // 西班牙主要股票
-    'sab': 'SAB.MC', 'sabadell': 'SAB.MC',
-    'san': 'SAN.MC', 'santander': 'SAN.MC',
-    'bbva': 'BBVA.MC',
-    'tef': 'TEF.MC', 'telefonica': 'TEF.MC',
-    'ibe': 'IBE.MC', 'iberdrola': 'IBE.MC',
-    'rep': 'REP.MC', 'repsol': 'REP.MC',
-    'itx': 'ITX.MC', 'inditex': 'ITX.MC',
+    // 西班牙主要股票（使用美国OTC ADR代码，Finnhub免费版不支持欧洲交易所）
+    'sab': 'BNDSY', 'sabadell': 'BNDSY',  // Banco de Sabadell ADR
+    'san': 'SAN', 'santander': 'SAN',     // Banco Santander (NYSE上市)
+    'bbva': 'BBVXF',                       // BBVA ADR (OTC)
+    'tef': 'TEF', 'telefonica': 'TEF',    // Telefonica ADR (NYSE上市)
+    'ibe': 'IBDRY', 'iberdrola': 'IBDRY', // Iberdrola ADR
+    'rep': 'REPYY', 'repsol': 'REPYY',    // Repsol ADR
+    'itx': 'IDEXY', 'inditex': 'IDEXY',   // Inditex ADR
     // 常见歧义符号
     'baba': 'BABA', // 默认美股ADR而非9988.HK
     'tencent': '0700.HK'
