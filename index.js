@@ -2111,12 +2111,54 @@ async function validateAndFixSymbols(symbols = [], contextHints = {}) {
       );
       
       if (needsUserChoice) {
+        // 🔍 过滤掉Finnhub免费版不支持的交易所
+        const unsupportedExchanges = ['.MC', '.PA', '.DE', '.MI', '.L', '.F', '.SW', '.AS', '.BR', '.CO'];
+        const supportedCandidates = topCandidates.filter(c => {
+          const sym = c.symbol;
+          return !unsupportedExchanges.some(ex => sym.endsWith(ex));
+        });
+        
+        // 🎯 智能映射：如果过滤后为空，查找对应的ADR代码
+        const ADR_MAP = {
+          'BANCO DE SABADELL': 'BNDSY',
+          'BANCO SANTANDER': 'SAN',
+          'BBVA': 'BBVXF',
+          'TELEFONICA': 'TEF',
+          'IBERDROLA': 'IBDRY',
+          'REPSOL': 'REPYY',
+          'INDITEX': 'IDEXY'
+        };
+        
+        if (supportedCandidates.length === 0) {
+          // 尝试查找ADR映射
+          for (const candidate of topCandidates) {
+            const descUpper = (candidate.description || '').toUpperCase();
+            for (const [key, adr] of Object.entries(ADR_MAP)) {
+              if (descUpper.includes(key)) {
+                supportedCandidates.push({
+                  symbol: adr,
+                  description: `${candidate.description} (US ADR)`,
+                  type: 'ADR',
+                  score: candidate.score
+                });
+                break;
+              }
+            }
+          }
+        }
+        
+        if (supportedCandidates.length === 0) {
+          console.log(`   ⚠️  ${symbol} - 所有候选都不受支持，使用原始符号`);
+          validatedSymbols.push(symbol);
+          continue;
+        }
+        
         // 返回特殊标记，让调用方处理用户选择
-        console.log(`   ❓ ${symbol} - 发现${topCandidates.length}个高分匹配，需要用户选择`);
+        console.log(`   ❓ ${symbol} - 发现${supportedCandidates.length}个可用匹配，需要用户选择`);
         validatedSymbols.push({
           _needsChoice: true,
           originalSymbol: symbol,
-          candidates: topCandidates.slice(0, 12).map(c => ({
+          candidates: supportedCandidates.slice(0, 12).map(c => ({
             symbol: c.symbol,
             description: c.description,
             type: c.type,

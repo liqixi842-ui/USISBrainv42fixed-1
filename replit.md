@@ -3,12 +3,16 @@
 USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with real-time data integration from sources like Finnhub, SEC, and FRED. Key features include semantic intent parsing, **global stock discovery with 150+ stocks across 10+ markets**, anti-hallucination data validation, intelligent model routing for specialized analysis (e.g., Chinese financial analysis via DeepSeek), **fully automated N8N workflow management**, Vision AI chart analysis, and authoritative, data-backed investment recommendations. The system is built for deployment on Replit's Autoscale platform and aims to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
 
 ## Recent Updates (Nov 2025)
-- ✅ **Interactive Symbol Selection**: When ambiguous symbols (e.g., SAB with 12 matches) are detected, system returns clickable Telegram inline keyboard for user confirmation instead of auto-guessing
+- ✅ **Smart Interactive Symbol Selection**: When ambiguous symbols detected (e.g., SAB), system auto-filters unsupported exchanges and returns only valid options via Telegram inline keyboard
+    - Removes short-code static mapping (e.g., 'sab') to force API-driven selection
+    - Filters out Finnhub-unsupported exchanges (.MC, .PA, .DE, .MI, .L, etc.)
+    - Auto-suggests ADR equivalents when European stocks detected (Sabadell→BNDSY)
+    - Prevents user from selecting invalid options that would fail analysis
 - ✅ **Hybrid Symbol Resolution Stack**: 3-tier intelligent validation system:
-    1. Static mapping (authoritative, instant): SAB→BNDSY (ADR), handles ambiguous tickers
-    2. Finnhub API with smart scoring (description match, exchange preference, security type)
+    1. Static mapping (full names only): 'sabadell'→BNDSY, 'santander'→SAN
+    2. Finnhub API with smart scoring + exchange filtering
     3. Graceful degradation when API unavailable
-- ✅ **Finnhub Free Tier Optimization**: European stocks now map to US OTC ADR equivalents (SAB→BNDSY, BBVA→BBVXF, etc.) to bypass Finnhub's restricted European exchange access
+- ✅ **Finnhub Free Tier Optimization**: Auto-filters European exchanges and suggests US OTC ADR equivalents to bypass Finnhub's restricted European exchange access
 - ✅ **Intelligent Stock Analysis (Not Workflow Nodes)**: Removed hardcoded stock lists; system now queries Finnhub API in real-time to identify any stock's exchange (CVX→"NEW YORK STOCK EXCHANGE"→NYSE:CVX), making it a true intelligent analyst instead of a rule-based workflow executor
 - ✅ **Global Stock Coverage Expansion**: Extended from 44 to 150+ stocks across Americas, Europe, Asia-Pacific, and emerging markets
 - ✅ **N8N Full API Automation**: Implemented automatic workflow creation, health monitoring (5-min intervals), and self-healing capabilities
