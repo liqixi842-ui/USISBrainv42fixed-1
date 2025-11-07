@@ -235,7 +235,132 @@ if (TWITTER_BEARER) {
 }
 
 // ---- Health
-app.get("/", (_req, res) => res.status(200).send("OK"));
+app.get("/", (_req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>USIS Brain v6.0 - 运行中</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 650px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    h1 {
+      margin: 0 0 10px 0;
+      font-size: 2.5em;
+      text-align: center;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    .status {
+      display: inline-block;
+      background: #10b981;
+      color: white;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 0.9em;
+      margin-bottom: 25px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .info {
+      background: rgba(255, 255, 255, 0.15);
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 15px;
+      transition: transform 0.2s;
+    }
+    .info:hover {
+      transform: translateY(-2px);
+      background: rgba(255, 255, 255, 0.2);
+    }
+    .info h3 {
+      margin: 0 0 12px 0;
+      font-size: 1.2em;
+      border-bottom: 2px solid rgba(255,255,255,0.3);
+      padding-bottom: 8px;
+    }
+    .info p {
+      margin: 8px 0;
+      opacity: 0.95;
+      line-height: 1.5;
+    }
+    a {
+      color: #fbbf24;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      padding: 3px 10px;
+      border-radius: 10px;
+      font-size: 0.85em;
+      margin: 3px 5px 3px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 USIS Brain v6.0</h1>
+    <center><span class="status">✅ 服务运行中</span></center>
+    
+    <div class="info">
+      <h3>💬 Telegram Bot 状态</h3>
+      <p>✅ <strong>已激活并等待消息</strong></p>
+      <p>您可以直接在Telegram中发送消息与我对话</p>
+    </div>
+    
+    <div class="info">
+      <h3>🤖 AI模型编排系统</h3>
+      <p>
+        <span class="badge">GPT-4o</span>
+        <span class="badge">Claude 3.5</span>
+        <span class="badge">Gemini 2.5</span>
+      </p>
+      <p>
+        <span class="badge">DeepSeek V3</span>
+        <span class="badge">Mistral</span>
+        <span class="badge">Perplexity</span>
+      </p>
+    </div>
+    
+    <div class="info">
+      <h3>📊 API端点</h3>
+      <p><a href="/health" target="_blank">/health</a> - 服务健康检查</p>
+      <p><a href="/brain/stats" target="_blank">/brain/stats</a> - 运行统计</p>
+      <p><a href="/api/test-heatmap" target="_blank">/api/test-heatmap</a> - 市场热力图测试</p>
+    </div>
+    
+    <div class="info">
+      <h3>🔧 最近更新 (Nov 2025)</h3>
+      <p>✅ 交互式符号选择（歧义股票Telegram按钮确认）</p>
+      <p>✅ Finnhub免费版优化（欧洲股票ADR映射）</p>
+      <p>✅ 智能API驱动的全球股票解析系统</p>
+    </div>
+  </div>
+</body>
+</html>`);
+});
 
 // 🆕 v4.2: 增强Stats端点（P50/P95延迟 + 缓存统计）
 app.get("/brain/stats", (_req, res) => {
@@ -5384,39 +5509,51 @@ app.post("/brain/analyze_no_screenshot", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, "0.0.0.0", async () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 USIS Brain v6.0 online on port ${PORT} 🆕 [Multi-AI + n8n Integration]`);
   console.log(`📍 Listening on 0.0.0.0:${PORT}`);
   console.log(`🔗 Health check available at http://0.0.0.0:${PORT}/health`);
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
   console.log(`🔵 n8n API available at http://0.0.0.0:${PORT}/brain/analyze_no_screenshot`);
   
-  // 🆕 v6.0: 初始化N8N监控
-  const { getN8NMonitor } = require('./n8nMonitor');
-  const monitor = getN8NMonitor();
-  const initResult = await monitor.initialize();
-  if (initResult.ok) {
-    console.log('✅ N8N工作流已就绪');
-    
-    // 🆕 启动定期健康检查（每5分钟）
-    setInterval(async () => {
-      const health = await monitor.checkScreenshotHealth();
-      
-      // 检查是否需要自动修复
-      const stats = monitor.getMonitorReport();
-      if (stats.needsRecovery) {
-        console.warn(`⚠️  截图服务连续失败${stats.consecutiveFailures}次，触发自动修复...`);
-        const recovery = await monitor.autoRecover();
-        if (recovery.ok) {
-          console.log(`✅ 自动修复完成: ${recovery.action}`);
-        } else {
-          console.error(`❌ 自动修复失败: ${recovery.error}`);
-        }
+  // 🆕 v6.0: 初始化N8N监控（非阻塞）
+  (async () => {
+    try {
+      console.log('🔧 [N8N Monitor] 初始化N8N工作流...');
+      const { getN8NMonitor } = require('./n8nMonitor');
+      const monitor = getN8NMonitor();
+      const initResult = await monitor.initialize();
+      if (initResult.ok) {
+        console.log('✅ N8N工作流已就绪');
+        
+        // 🆕 启动定期健康检查（每5分钟）
+        setInterval(async () => {
+          try {
+            const health = await monitor.checkScreenshotHealth();
+            
+            // 检查是否需要自动修复
+            const stats = monitor.getMonitorReport();
+            if (stats.needsRecovery) {
+              console.warn(`⚠️  截图服务连续失败${stats.consecutiveFailures}次，触发自动修复...`);
+              const recovery = await monitor.autoRecover();
+              if (recovery.ok) {
+                console.log(`✅ 自动修复完成: ${recovery.action}`);
+              } else {
+                console.error(`❌ 自动修复失败: ${recovery.error}`);
+              }
+            }
+          } catch (err) {
+            console.error('❌ [N8N Monitor] 定期健康检查失败:', err.message);
+          }
+        }, 5 * 60 * 1000);
+      } else {
+        console.warn(`⚠️  N8N初始化失败: ${initResult.error}`);
       }
-    }, 5 * 60 * 1000);
-  } else {
-    console.warn(`⚠️  N8N初始化失败: ${initResult.error}`);
-  }
+    } catch (err) {
+      console.error('❌ [N8N Monitor] 初始化异常:', err.message);
+      console.warn('⚠️  服务将继续运行，但N8N功能可能不可用');
+    }
+  })();
 });
 
 // ====== Telegram Bot v5.0 (手动轮询 - Replit兼容) ======
