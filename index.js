@@ -1669,6 +1669,7 @@ function extractSymbols(text = "") {
   
   // 🇨🇳 中国概念股（美股上市 + 港股）
   const chineseStockNames = {
+    // 美股ADR（默认）
     '阿里巴巴': 'BABA', 'alibaba': 'BABA',
     '京东': 'JD', 'jd': 'JD',
     '百度': 'BIDU', 'baidu': 'BIDU',
@@ -1677,6 +1678,9 @@ function extractSymbols(text = "") {
     '小鹏': 'XPEV', 'xpeng': 'XPEV',
     '理想': 'LI', 'li auto': 'LI',
     '网易': 'NTES', 'netease': 'NTES',
+    
+    // 港股（明确标识）
+    '阿里港股': '9988.HK', 'alibaba hk': '9988.HK',
     '腾讯': '0700.HK', 'tencent': '0700.HK',
     '美团': '3690.HK', 'meituan': '3690.HK',
     '小米': '1810.HK', 'xiaomi': '1810.HK',
@@ -1809,11 +1813,23 @@ function extractSymbols(text = "") {
   
   const lowerText = text.toLowerCase();
   const symbols = [];
+  const matchedPositions = new Set(); // 记录已匹配的文本位置，避免重复匹配
   
-  // 1. 检查中文/英文股票名称（美股+西班牙股）
-  for (const [name, symbol] of Object.entries(allStockNames)) {
-    if (lowerText.includes(name)) {
-      symbols.push(symbol);
+  // 1. 检查中文/英文股票名称（按键长度降序排序，优先匹配更具体的名称）
+  const sortedNames = Object.entries(allStockNames)
+    .sort((a, b) => b[0].length - a[0].length); // 长键优先
+  
+  for (const [name, symbol] of sortedNames) {
+    const index = lowerText.indexOf(name);
+    if (index !== -1) {
+      // 检查这个位置是否已经被更长的键匹配过
+      const positions = Array.from({ length: name.length }, (_, i) => index + i);
+      const hasOverlap = positions.some(pos => matchedPositions.has(pos));
+      
+      if (!hasOverlap) {
+        symbols.push(symbol);
+        positions.forEach(pos => matchedPositions.add(pos));
+      }
     }
   }
   
