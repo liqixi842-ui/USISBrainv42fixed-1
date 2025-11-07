@@ -5067,9 +5067,40 @@ if (TELEGRAM_TOKEN) {
           console.log('✅ 热力图已发送');
         }
       } else {
-        console.log('🧠 常规分析');
-        await telegramAPI('sendMessage', { chat_id: chatId, text: '🧠 正在分析...' });
+        console.log('🧠 常规分析 → 调用n8n完整流程');
+        await telegramAPI('sendMessage', { chat_id: chatId, text: '🧠 正在分析（截图+AI）...' });
         
+        // 🆕 调用n8n获取截图+AI分析
+        const n8nResponse = await fetch('你的n8n域名/webhook/stock_analysis_full', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text,
+            lang: 'zh',
+            user_id: `tg_${userId}`
+          })
+        });
+        
+        const n8nData = await n8nResponse.json();
+        
+        // 如果n8n返回了截图，发送截图
+        if (n8nData.chart_binary) {
+          console.log('📸 n8n返回了K线截图');
+          try {
+            const chartBuffer = Buffer.from(n8nData.chart_binary);
+            await sendDocumentBuffer(
+              TELEGRAM_TOKEN,
+              chatId,
+              chartBuffer,
+              `${n8nData.symbols?.[0] || 'stock'}_chart.png`,
+              '📊 个股K线图'
+            );
+          } catch (err) {
+            console.error('截图发送失败:', err.message);
+          }
+        }
+        
+        // 继续原有的逻辑（保持兼容）
         const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
