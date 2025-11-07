@@ -255,66 +255,70 @@ async function fetchQuotes(symbols) {
 }
 
 /**
- * 获取单个股票报价
+ * 🆕 从Alpha Vantage获取实时股价（备用数据源）
  */
-async function fetchSingleQuote(symbol) {
-  if (!FINNHUB_KEY) {
-    throw new Error("FINNHUB_API_KEY not configured");
+async function fetchQuoteFromAlphaVantage(symbol) {
+  if (!ALPHA_VANTAGE_KEY) {
+    throw new Error("ALPHA_VANTAGE_API_KEY not configured");
   }
   
-  const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`;
+  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_VANTAGE_KEY}`;
   const fetchTime = Date.now();
   
   try {
     const response = await fetch(url, { timeout: 10000 });
     
     if (!response.ok) {
-      throw new Error(`Finnhub API error: ${response.status}`);
+      throw new Error(`Alpha Vantage API error: ${response.status}`);
     }
     
     const data = await response.json();
+    const globalQuote = data['Global Quote'];
     
-    // 验证数据有效性
-    if (!data.c || data.c === 0) {
-      throw new Error(`Invalid quote data for ${symbol}`);
+    if (!globalQuote || !globalQuote['05. price']) {
+      throw new Error(`No quote data from Alpha Vantage for ${symbol}`);
     }
     
-    // 计算新鲜度评分（基于时间戳）
-    const dataAge = Date.now() - (data.t * 1000);  // data.t 是Unix时间戳（秒）
-    const freshnessScore = calculateFreshnessScore(dataAge);
+    const currentPrice = parseFloat(globalQuote['05. price']);
+    const change = parseFloat(globalQuote['09. change']);
+    const changePercent = parseFloat(globalQuote['10. change percent'].replace('%', ''));
+    const previousClose = parseFloat(globalQuote['08. previous close']);
+    const high = parseFloat(globalQuote['03. high']);
+    const low = parseFloat(globalQuote['04. low']);
+    const open = parseFloat(globalQuote['02. open']);
     
     const quote = {
       symbol: symbol,
-      currentPrice: data.c,  // current price
-      change: data.d,        // change
-      changePercent: data.dp,// change percent
-      high: data.h,          // high price of the day
-      low: data.l,           // low price of the day
-      open: data.o,          // open price of the day
-      previousClose: data.pc,// previous close price
-      timestamp: data.t * 1000,  // 转换为毫秒
-      source: 'finnhub',
-      freshnessScore: freshnessScore,
-      dataAgeMinutes: Math.floor(dataAge / 60000)
+      currentPrice: currentPrice,
+      change: change,
+      changePercent: changePercent,
+      high: high,
+      low: low,
+      open: open,
+      previousClose: previousClose,
+      timestamp: Date.now(),
+      source: 'alphavantage',
+      freshnessScore: 1.0,
+      dataAgeMinutes: 0
     };
     
     const source = {
-      provider: 'finnhub',
-      endpoint: '/quote',
+      provider: 'alphavantage',
+      endpoint: '/GLOBAL_QUOTE',
       symbol: symbol,
       timestamp: fetchTime,
-      freshnessMinutes: Math.floor(dataAge / 60000),
+      freshnessMinutes: 0,
       status: 'success'
     };
     
     return { quote, source };
     
   } catch (error) {
-    console.error(`   ❌ Finnhub quote失败 (${symbol}):`, error.message);
+    console.error(`   ❌ Alpha Vantage quote失败 (${symbol}):`, error.message);
     
     const source = {
-      provider: 'finnhub',
-      endpoint: '/quote',
+      provider: 'alphavantage',
+      endpoint: '/GLOBAL_QUOTE',
       symbol: symbol,
       timestamp: fetchTime,
       status: 'failed',
@@ -323,6 +327,92 @@ async function fetchSingleQuote(symbol) {
     
     return { quote: null, source };
   }
+}
+
+/**
+ * 获取单个股票报价（智能降级：Finnhub → Alpha Vantage）
+ */
+async function fetchSingleQuote(symbol) {
+  let quote = null;
+  let source = null;
+  
+  // 策略1: 优先使用Finnhub
+  if (FINNHUB_KEY) {
+    const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`;
+    const fetchTime = Date.now();
+    
+    try {
+      const response = await fetch(url, { timeout: 10000 });
+      
+      if (!response.ok) {
+        throw new Error(`Finnhub API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // 验证数据有效性
+      if (data.c && data.c !== 0) {
+        // 计算新鲜度评分（基于时间戳）
+        const dataAge = Date.now() - (data.t * 1000);
+        const freshnessScore = calculateFreshnessScore(dataAge);
+        
+        quote = {
+          symbol: symbol,
+          currentPrice: data.c,
+          change: data.d,
+          changePercent: data.dp,
+          high: data.h,
+          low: data.l,
+          open: data.o,
+          previousClose: data.pc,
+          timestamp: data.t * 1000,
+          source: 'finnhub',
+          freshnessScore: freshnessScore,
+          dataAgeMinutes: Math.floor(dataAge / 60000)
+        };
+        
+        source = {
+          provider: 'finnhub',
+          endpoint: '/quote',
+          symbol: symbol,
+          timestamp: fetchTime,
+          freshnessMinutes: Math.floor(dataAge / 60000),
+          status: 'success'
+        };
+        
+        return { quote, source };
+      }
+      
+    } catch (error) {
+      console.warn(`   ⚠️  Finnhub失败，尝试Alpha Vantage降级: ${error.message}`);
+    }
+  }
+  
+  // 策略2: 降级到Alpha Vantage
+  if (ALPHA_VANTAGE_KEY && !quote) {
+    console.log(`   🔄 [降级] 使用Alpha Vantage获取${symbol}报价`);
+    try {
+      const alphaResult = await fetchQuoteFromAlphaVantage(symbol);
+      if (alphaResult.quote) {
+        return alphaResult;
+      }
+    } catch (error) {
+      console.error(`   ❌ Alpha Vantage降级也失败:`, error.message);
+    }
+  }
+  
+  // 策略3: 所有数据源都失败
+  const fetchTime = Date.now();
+  source = {
+    provider: 'none',
+    endpoint: 'N/A',
+    symbol: symbol,
+    timestamp: fetchTime,
+    status: 'failed',
+    error: 'All data sources failed'
+  };
+  
+  return { quote: null, source };
 }
 
 /**

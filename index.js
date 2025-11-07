@@ -283,6 +283,25 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, status: 'ok', ts: Date.now() });
 });
 
+// 🆕 请求状态监控端点
+app.get("/health/requests", (_req, res) => {
+  const activeRequests = Array.from(requestTracker.entries()).map(([id, data]) => ({
+    requestId: id,
+    status: data.status,
+    stage: data.stage,
+    user_id: data.user_id,
+    elapsed_ms: Date.now() - data.startTime,
+    text_preview: data.text
+  }));
+  
+  res.json({
+    ok: true,
+    activeRequests: activeRequests.length,
+    requests: activeRequests,
+    timestamp: Date.now()
+  });
+});
+
 app.get("/version", (_req, res) => {
   res.json({ version: 'v4.2_fixed', status: 'stable' });
 });
@@ -3486,9 +3505,55 @@ function formatMultipleOutputs(outputs, chatType, scene) {
   }
 }
 
+// 🆕 请求状态跟踪器
+const requestTracker = new Map();
+
 // Main Orchestrator Endpoint
 app.post("/brain/orchestrate", async (req, res) => {
   const started = Date.now();
+  const reqId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  
+  // 🆕 注册请求状态（防御性text检查）
+  const textInput = req.body?.text || "default";
+  requestTracker.set(reqId, {
+    startTime: started,
+    status: 'processing',
+    stage: 'init',
+    user_id: req.body?.user_id || 'unknown',
+    text: String(textInput).slice(0, 50)
+  });
+  
+  // 🆕 确保请求完成时清理tracker（防止内存泄漏）
+  const cleanupTracker = () => {
+    requestTracker.delete(reqId);
+  };
+  
+  res.on('finish', cleanupTracker);
+  res.on('close', cleanupTracker);
+  
+  // 🆕 设置60秒超时（从15秒增加到60秒）
+  req.setTimeout(60000, () => {
+    console.error(`⏱️  [${reqId}] 请求超时（60秒）- 可能AI响应过慢`);
+    
+    // 更新tracker状态
+    if (requestTracker.has(reqId)) {
+      requestTracker.set(reqId, {
+        ...requestTracker.get(reqId),
+        status: 'timeout',
+        stage: 'timeout'
+      });
+    }
+    
+    if (!res.headersSent) {
+      res.status(504).json({
+        status: "error",
+        ok: false,
+        final_analysis: "⚠️ 分析超时，请稍后重试或使用更简单的查询。",
+        error: "Request timeout after 60 seconds"
+      });
+    }
+  });
+  
   try {
     const startTime = Date.now();
     
@@ -3509,8 +3574,16 @@ app.post("/brain/orchestrate", async (req, res) => {
       userHistory: inputUserHistory = null  // 🔧 从n8n传入的用户历史（可选）
     } = req.body || {};
     
+    // 🆕 更新请求状态
+    if (requestTracker.has(reqId)) {
+      requestTracker.set(reqId, {
+        ...requestTracker.get(reqId),
+        stage: 'parsing'
+      });
+    }
+    
     // 记录原始入参，帮助定位
-    console.log('[orchestrate] inbound', { text, chat_type, user_id, mode, budget });
+    console.log('[orchestrate] inbound', { reqId, text, chat_type, user_id, mode, budget });
     
     // 🔧 安全初始化 userHistory（防止 ReferenceError）
     let userHistory = inputUserHistory || [];
@@ -4500,12 +4573,34 @@ app.post("/brain/orchestrate", async (req, res) => {
       }
     );
     
+    // 🆕 更新请求跟踪器状态（完成）
+    if (requestTracker.has(reqId)) {
+      requestTracker.set(reqId, {
+        ...requestTracker.get(reqId),
+        status: 'completed',
+        stage: 'done',
+        completedAt: Date.now()
+      });
+    }
+    
     // 8. Response
+    // 注：cleanup由res.on('finish')自动处理，无需手动清理
     return res.json(responseV2);
     
   } catch (err) {
     console.error('[orchestrate] error', err);
     Memory.save({ error: String(err), ok: false });
+    
+    // 🆕 错误时更新请求跟踪器状态
+    if (reqId && requestTracker.has(reqId)) {
+      requestTracker.set(reqId, {
+        ...requestTracker.get(reqId),
+        status: 'error',
+        stage: 'failed',
+        error: err.message
+      });
+    }
+    // 注：cleanup由res.on('finish')自动处理
     
     // 永不抛出，让 n8n 的 Normalize_Brain_Response / IF_ErrorCheck 有稳定语义
     return res.status(200).json({
