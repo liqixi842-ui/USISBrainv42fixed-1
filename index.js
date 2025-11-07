@@ -3088,7 +3088,7 @@ async function fetchSECCIK(ticker) {
       console.log('📥 下载SEC ticker映射表...');
       const response = await fetch('https://www.sec.gov/files/company_tickers.json', {
         headers: {
-          'User-Agent': 'USIS Brain v3.1 replit-agent@example.com'
+          'User-Agent': 'USIS Brain v5.0 replit-agent@example.com'
         }
       });
       const data = await response.json();
@@ -3639,7 +3639,7 @@ app.post("/brain/orchestrate", async (req, res) => {
     if (intent.mode === 'meta') {
       console.log(`🤖 检测到Meta问题（关于AI能力），直接回复`);
       
-      const metaText = `你好！我是USIS Brain v3，一个智能市场分析助手。
+      const metaText = `你好！我是USIS Brain v5.0，一个机构级数据驱动投资分析系统。
 
 🧠 **我的核心能力：**
 1. **实时市场分析** - 盘前、盘中、盘后全天候分析
@@ -4791,7 +4791,7 @@ app.get("/api/test-heatmap", async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 USIS Brain v3 online on port ${PORT}`);
+  console.log(`🚀 USIS Brain v5.0 online on port ${PORT} 🆕 [Data-Driven Institutional Analysis]`);
   console.log(`📍 Listening on 0.0.0.0:${PORT}`);
   console.log(`🔗 Health check available at http://0.0.0.0:${PORT}/health`);
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
