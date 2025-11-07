@@ -1617,7 +1617,44 @@ const Memory = {
 
 // Symbol Extraction - 从文本中提取股票代码（支持交易所后缀和中文名称）
 function extractSymbols(text = "") {
-  // 西班牙股票中文名称映射（常见蓝筹股）
+  // 🇺🇸 美股中文名称映射（全球知名科技公司）
+  const usStockNames = {
+    '苹果': 'AAPL', 'apple': 'AAPL',
+    '特斯拉': 'TSLA', 'tesla': 'TSLA',
+    '微软': 'MSFT', 'microsoft': 'MSFT',
+    '谷歌': 'GOOGL', 'google': 'GOOGL',
+    '亚马逊': 'AMZN', 'amazon': 'AMZN',
+    '英伟达': 'NVDA', 'nvidia': 'NVDA',
+    '脸书': 'META', 'facebook': 'META', 'meta': 'META',
+    '奈飞': 'NFLX', 'netflix': 'NFLX',
+    '英特尔': 'INTC', 'intel': 'INTC',
+    '高通': 'QCOM', 'qualcomm': 'QCOM',
+    '阿里巴巴': 'BABA', 'alibaba': 'BABA',
+    '京东': 'JD', 'jd': 'JD',
+    '百度': 'BIDU', 'baidu': 'BIDU',
+    '拼多多': 'PDD', 'pinduoduo': 'PDD',
+    '蔚来': 'NIO', 'nio': 'NIO',
+    '小鹏': 'XPEV', 'xpeng': 'XPEV',
+    '理想': 'LI', 'li auto': 'LI',
+    '台积电': 'TSM', 'tsmc': 'TSM',
+    '可口可乐': 'KO', 'coca cola': 'KO', 'coke': 'KO',
+    '迪士尼': 'DIS', 'disney': 'DIS',
+    '波音': 'BA', 'boeing': 'BA',
+    '耐克': 'NKE', 'nike': 'NKE',
+    '星巴克': 'SBUX', 'starbucks': 'SBUX',
+    '麦当劳': 'MCD', 'mcdonalds': 'MCD',
+    '通用电气': 'GE', 'ge': 'GE',
+    '摩根大通': 'JPM', 'jpmorgan': 'JPM',
+    '高盛': 'GS', 'goldman': 'GS',
+    '辉瑞': 'PFE', 'pfizer': 'PFE',
+    '强生': 'JNJ', 'johnson': 'JNJ',
+    '沃尔玛': 'WMT', 'walmart': 'WMT',
+    '家得宝': 'HD', 'home depot': 'HD',
+    'amd': 'AMD',
+    '超微': 'AMD'
+  };
+  
+  // 🇪🇸 西班牙股票中文名称映射（常见蓝筹股）
   const spanishStockNames = {
     '电力公司': 'IBE.MC', 'iberdrola': 'IBE.MC',
     '西班牙电信': 'TEF.MC', 'telefonica': 'TEF.MC',
@@ -1631,11 +1668,14 @@ function extractSymbols(text = "") {
     'aena': 'AENA.MC', '机场': 'AENA.MC'
   };
   
+  // 合并所有映射
+  const allStockNames = { ...usStockNames, ...spanishStockNames };
+  
   const lowerText = text.toLowerCase();
   const symbols = [];
   
-  // 1. 检查中文/英文股票名称
-  for (const [name, symbol] of Object.entries(spanishStockNames)) {
+  // 1. 检查中文/英文股票名称（美股+西班牙股）
+  for (const [name, symbol] of Object.entries(allStockNames)) {
     if (lowerText.includes(name)) {
       symbols.push(symbol);
     }
@@ -4011,10 +4051,30 @@ app.post("/brain/orchestrate", async (req, res) => {
     }
     
     // 4.8. 🆕 v5.0: 个股图表生成（K线分析）
-    // 🎯 v6.0统一流程：所有单股分析都生成图表+视觉AI+实时数据（除非是casual chat）
+    // 🎯 v6.0统一流程：所有包含"分析"关键词的单股请求必须生成图表+视觉AI+实时数据
     let stockChartData = null;
+    
+    // 🔍 强制分析检测：包含这些关键词的必须生成图表
+    const analysisKeywords = /分析|解析|诊断|评估|研究|技术分析|chart|analyze|diagnose|evaluate|analysis/i;
+    const hasAnalysisKeyword = analysisKeywords.test(text || '');
+    
+    // 🎯 触发条件优化：
+    // 1. 有符号 + 非casual → 生成图表
+    // 2. 无符号但有分析关键词 → 尝试从公司名解析符号
     const isCasualMention = intent.mode === 'casual' || intent.confidence < 0.5;
-    const needStockChart = symbols.length === 1 && !isCasualMention; // 所有单股分析（非casual）都生成图表
+    let needStockChart = symbols.length === 1 && !isCasualMention;
+    
+    // 🆕 增强逻辑：如果是明确的分析请求但没找到符号，尝试从文本中识别公司名
+    if (!needStockChart && hasAnalysisKeyword && !isCasualMention && symbols.length === 0) {
+      console.log(`🔍 检测到分析关键词但无符号，尝试从文本识别公司名...`);
+      // 公司名可能被extractSymbols遗漏，重新检查文本
+      const retrySymbols = extractSymbols(text);
+      if (retrySymbols.length === 1) {
+        symbols = retrySymbols;
+        needStockChart = true;
+        console.log(`✅ 从文本重新识别到符号: ${symbols[0]}`);
+      }
+    }
     
     if (needStockChart) {
       try {
