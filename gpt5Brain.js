@@ -476,6 +476,13 @@ ${newsHeadlines}
 
 ## 📈 ${symbol} 投资分析报告
 
+**【市场快照】**
+📊 **现价**: $${currentPrice} (${changeSymbol}${changePercent}%)
+📈 **日内波动**: $${quote?.low?.toFixed(2) || 'N/A'} - $${quote?.high?.toFixed(2) || 'N/A'}
+💰 **市值**: ${marketCap} | **P/E**: ${peRatio}
+
+---
+
 ### 🔍 执行摘要
 【权威陈述，3-4句话直接给出核心判断】
 - 基于${symbol}当前市值${marketCap}和${changeSymbol}${changePercent}%的表现，市场对该股的定位是...
