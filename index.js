@@ -3592,8 +3592,7 @@ app.post("/brain/orchestrate", async (req, res) => {
       console.log(`⚠️  userHistory 格式无效，已重置为空数组`);
     }
     
-    // 1.5. 生成请求ID（用于日志追踪和成本关联）
-    const reqId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // 1.5. reqId已在函数开头生成（行3514），此处无需重复定义
     
     console.log(`\n🧠 [${reqId}] Orchestrator 收到请求:`);
     console.log(`   文本: "${text}"`);
