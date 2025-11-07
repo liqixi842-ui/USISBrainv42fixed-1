@@ -3,10 +3,10 @@
 USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with real-time data integration from sources like Finnhub, SEC, and FRED. Key features include semantic intent parsing, **global stock discovery with 150+ stocks across 10+ markets**, anti-hallucination data validation, intelligent model routing for specialized analysis (e.g., Chinese financial analysis via DeepSeek), **fully automated N8N workflow management**, Vision AI chart analysis, and authoritative, data-backed investment recommendations. The system is built for deployment on Replit's Autoscale platform and aims to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
 
 ## Recent Updates (Nov 2025)
+- ✅ **Intelligent Stock Analysis (Not Workflow Nodes)**: Removed hardcoded stock lists; system now queries Finnhub API in real-time to identify any stock's exchange (CVX→"NEW YORK STOCK EXCHANGE"→NYSE:CVX), making it a true intelligent analyst instead of a rule-based workflow executor
 - ✅ **Global Stock Coverage Expansion**: Extended from 44 to 150+ stocks across Americas, Europe, Asia-Pacific, and emerging markets
 - ✅ **N8N Full API Automation**: Implemented automatic workflow creation, health monitoring (5-min intervals), and self-healing capabilities
 - ✅ **Symbol Disambiguation Algorithm**: Longest-match-first strategy prevents conflicts between dual-listed stocks (e.g., BABA vs 9988.HK)
-- ✅ **TradingView Exchange Routing**: Accurate NYSE/NASDAQ mapping for US stocks (CVX→NYSE:CVX, AAPL→NASDAQ:AAPL) fixes "invalid symbol" errors
 
 # User Preferences
 
@@ -28,7 +28,12 @@ The v6.0 pipeline processes user input through language detection, semantic inte
     - Real-time news → Perplexity Sonar Pro
     - Default/fallback → OpenAI GPT-4o/GPT-4o-mini
 - **Semantic Intent Understanding**: AI-powered parsing for various market states (premarket, intraday, news).
-- **Global Stock Discovery**: Multi-language stock symbol resolution with 150+ global stocks:
+- **Intelligent Stock Analysis System**: 
+    - **API-First Approach**: Queries Finnhub `/stock/profile2` endpoint to dynamically identify exchange for any stock symbol
+    - **Smart Exchange Mapping**: Keyword-based mapping (e.g., "NEW YORK STOCK EXCHANGE" → NYSE, "NASDAQ NMS" → NASDAQ) supports global exchanges (HKEX, TSE, LSE, XETRA, TSX, etc.)
+    - **Graceful Degradation**: Falls back to default values if API query fails
+    - **Zero Hardcoding**: No predefined stock lists; handles any symbol including newly IPO'd companies
+- **Global Stock Discovery (Legacy)**: Multi-language stock symbol resolution with 150+ global stocks:
     - **Americas**: 40 US stocks (AAPL, TSLA, NVDA, etc.) + 3 Latin America (VALE, PBR, AMX)
     - **Europe**: 26 stocks across UK (HSBC, BP), Germany (SIEGY, SAP), France (LVMUY, TTE), Netherlands (ASML, PHG), Switzerland (NSRGY, NVS), Spain (IBE.MC, TEF.MC)
     - **Asia-Pacific**: 11 Japan (TM, SONY), 4 Korea (SSNLF, HYMTF), 17 China/HK (BABA, 0700.HK), 4 other (INFY, DBSDY)

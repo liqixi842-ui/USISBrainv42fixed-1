@@ -4,12 +4,40 @@
 
 const { captureStockChartSmart } = require('./screenshotProviders');  // 🆕 使用专用函数
 const VisionAnalyzer = require('./visionAnalyzer');
-const { fetchMarketData } = require('./dataBroker');
+const { fetchMarketData, fetchCompanyProfile } = require('./dataBroker');
 
 /**
- * 构建TradingView个股图表URL
- * @param {string} symbol - 股票代码（如 "AAPL", "NASDAQ:NVDA", "BME:GRF"）
+ * 智能映射Finnhub交易所名称到TradingView前缀
+ * @param {string} finnhubExchange - Finnhub返回的交易所全名（如 "NASDAQ NMS - GLOBAL MARKET", "NEW YORK STOCK EXCHANGE"）
+ * @returns {string} TradingView交易所前缀（如 "NASDAQ", "NYSE"）
+ */
+function mapExchangeToTradingView(finnhubExchange) {
+  if (!finnhubExchange) return 'NASDAQ'; // 默认NASDAQ
+  
+  const exchange = finnhubExchange.toUpperCase();
+  
+  // 🧠 智能映射：匹配关键词而非硬编码列表
+  if (exchange.includes('NASDAQ')) return 'NASDAQ';
+  if (exchange.includes('NYSE') || exchange.includes('NEW YORK')) return 'NYSE';
+  if (exchange.includes('HONG KONG') || exchange.includes('HKEX')) return 'HKEX';
+  if (exchange.includes('SHANGHAI')) return 'SSE';
+  if (exchange.includes('SHENZHEN')) return 'SZSE';
+  if (exchange.includes('TOKYO')) return 'TSE';
+  if (exchange.includes('LONDON') || exchange.includes('LSE')) return 'LSE';
+  if (exchange.includes('EURONEXT')) return 'EURONEXT';
+  if (exchange.includes('XETRA') || exchange.includes('FRANKFURT')) return 'XETRA';
+  if (exchange.includes('TORONTO') || exchange.includes('TSX')) return 'TSX';
+  
+  // 默认返回NASDAQ（最常见）
+  console.log(`   ⚠️  未识别的交易所: ${finnhubExchange}，使用NASDAQ作为默认`);
+  return 'NASDAQ';
+}
+
+/**
+ * 构建TradingView个股图表URL（智能版本 - 使用API查询交易所）
+ * @param {string} symbol - 股票代码（如 "AAPL", "CVX"）
  * @param {Object} options - 图表选项
+ * @param {string} options.exchangeInfo - 可选：Finnhub返回的交易所信息
  * @returns {string} TradingView图表URL
  */
 function buildStockChartURL(symbol, options = {}) {
@@ -19,35 +47,24 @@ function buildStockChartURL(symbol, options = {}) {
     style = '1',           // 1=蜡烛图, 0=柱状图, 9=线图
     timezone = 'America/New_York',
     studies = 'BB@tv-basicstudies,MACD@tv-basicstudies', // 布林带+MACD
-    locale = 'en'
+    locale = 'en',
+    exchangeInfo = null    // 🆕 智能分析师：使用API查询的真实交易所信息
   } = options;
   
   // 标准化symbol格式
   let normalizedSymbol = symbol.toUpperCase();
   
-  // 如果没有交易所前缀，根据常见股票添加
+  // 如果没有交易所前缀，智能添加
   if (!normalizedSymbol.includes(':')) {
-    // NYSE上市的股票（传统大型公司、金融、能源）
-    const nyseStocks = [
-      'JPM', 'BAC', 'WFC', 'C', 'GS', 'MS',  // 金融
-      'XOM', 'CVX', 'COP', 'SLB',            // 能源
-      'WMT', 'HD', 'KO', 'PEP', 'MCD', 'NKE', 'DIS', // 消费
-      'JNJ', 'UNH', 'PFE', 'ABBV', 'TMO', 'ABT', 'LLY', // 医疗
-      'PG', 'MA', 'V',                        // 其他蓝筹
-      'T', 'VZ',                              // 电信
-      'BA', 'CAT', 'GE', 'MMM',              // 工业
-      'BHP', 'RIO', 'VALE', 'PBR', 'AMX',    // 国际ADR
-      'BRK.B', 'BRK.A'                        // 伯克希尔
-    ];
-    
-    if (/^[A-Z]{1,5}(\.[A-Z])?$/.test(normalizedSymbol)) {
-      const baseSymbol = normalizedSymbol.split('.')[0];
-      if (nyseStocks.includes(normalizedSymbol) || nyseStocks.includes(baseSymbol)) {
-        normalizedSymbol = `NYSE:${normalizedSymbol}`;
-      } else {
-        // 默认NASDAQ（科技股为主）
-        normalizedSymbol = `NASDAQ:${normalizedSymbol}`;
-      }
+    if (exchangeInfo) {
+      // 🧠 智能路径：根据API返回的真实交易所信息
+      const tvExchange = mapExchangeToTradingView(exchangeInfo);
+      normalizedSymbol = `${tvExchange}:${normalizedSymbol}`;
+      console.log(`   🧠 [智能映射] ${symbol} → ${normalizedSymbol} (来源: Finnhub API)`);
+    } else {
+      // ⚠️ 降级路径：无API数据时使用默认值
+      normalizedSymbol = `NASDAQ:${normalizedSymbol}`;
+      console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
     }
   }
   
@@ -79,11 +96,23 @@ async function generateStockChart(symbol, options = {}) {
     const startTime = Date.now();
     console.log(`\n📈 [Stock Chart] 生成${symbol}走势图`);
     
-    // 1️⃣ 构建图表URL
-    const chartURL = buildStockChartURL(symbol, options);
+    // 🧠 1️⃣ 智能查询：先获取公司信息（包括交易所）
+    let exchangeInfo = null;
+    try {
+      const profileResult = await fetchCompanyProfile(symbol);
+      if (profileResult && profileResult.profile) {
+        exchangeInfo = profileResult.profile.exchange;
+        console.log(`🏦 [Exchange Info] ${symbol} 在 ${exchangeInfo} 上市`);
+      }
+    } catch (profileError) {
+      console.log(`⚠️  [Profile Lookup] 跳过: ${profileError.message}`);
+    }
+    
+    // 2️⃣ 构建图表URL（使用真实的交易所信息）
+    const chartURL = buildStockChartURL(symbol, { ...options, exchangeInfo });
     console.log(`📍 [Chart URL] ${chartURL}`);
     
-    // 2️⃣ 获取实时数据（用于上下文）
+    // 3️⃣ 获取实时数据（用于上下文）
     let stockData = null;
     try {
       const marketData = await fetchMarketData([symbol]);
@@ -95,7 +124,7 @@ async function generateStockChart(symbol, options = {}) {
       console.log(`⚠️  [Market Data] 跳过: ${dataError.message}`);
     }
     
-    // 3️⃣ 使用个股专用截图服务（调用N8N stock_analysis_full）
+    // 4️⃣ 使用个股专用截图服务（调用N8N stock_analysis_full）
     try {
       const screenshotResult = await captureStockChartSmart({
         tradingViewUrl: chartURL,
