@@ -46,7 +46,7 @@
             },
             {
               "name": "output",
-              "value": "json"
+              "value": "image"
             },
             {
               "name": "width",
@@ -66,6 +66,7 @@
           "response": {
             "response": {
               "responseFormat": "file",
+              "outputPropertyName": "data",
               "neverError": true
             }
           },
@@ -126,7 +127,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// 合并截图和分析结果\nconst chartData = $input.first();\nconst analysisData = $input.all()[1] ? $input.all()[1].json : {};\n\nreturn [{\n  json: {\n    // AI分析文本\n    analysis_text: analysisData.final_text || '分析失败',\n    \n    // 截图二进制数据\n    chart_binary: chartData.binary || null,\n    \n    // 元数据\n    symbols: analysisData.symbols || [],\n    ai_model: analysisData.ai_model || 'unknown',\n    language: analysisData.language || 'zh',\n    cost_usd: analysisData.cost_usd || 0,\n    response_time_ms: analysisData.response_time_ms || 0,\n    \n    // 市场数据（可选）\n    market_data: analysisData.market_data || null\n  },\n  binary: chartData.binary || null\n}];"
+        "jsCode": "// 合并截图和分析结果\nconst chartData = $input.first();\nconst analysisData = $input.all()[1] ? $input.all()[1].json : {};\n\n// 获取截图的binary数据\nlet chartBinary = null;\nif (chartData.binary) {\n  chartBinary = chartData.binary;\n} else if (chartData.json && chartData.json.data) {\n  // 如果binary在json.data中\n  chartBinary = chartData.json.data;\n}\n\nreturn [{\n  json: {\n    // AI分析文本\n    analysis_text: analysisData.final_text || '分析失败',\n    \n    // 截图二进制数据（base64编码或Buffer）\n    chart_binary: chartBinary,\n    \n    // 元数据\n    symbols: analysisData.symbols || [],\n    ai_model: analysisData.ai_model || 'unknown',\n    language: analysisData.language || 'zh',\n    cost_usd: analysisData.cost_usd || 0,\n    response_time_ms: analysisData.response_time_ms || 0,\n    \n    // 市场数据（可选）\n    market_data: analysisData.market_data || null\n  },\n  binary: chartBinary\n}];"
       },
       "id": "format-final-output",
       "name": "📦 格式化最终输出",
