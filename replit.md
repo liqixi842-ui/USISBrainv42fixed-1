@@ -1,6 +1,11 @@
 # Overview
 
-USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with real-time data integration from sources like Finnhub, SEC, and FRED. Key features include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing for specialized analysis (e.g., Chinese financial analysis via DeepSeek), pluggable screenshot providers, Vision AI chart analysis, and authoritative, data-backed investment recommendations. The system is built for deployment on Replit's Autoscale platform and aims to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
+USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with real-time data integration from sources like Finnhub, SEC, and FRED. Key features include semantic intent parsing, **global stock discovery with 150+ stocks across 10+ markets**, anti-hallucination data validation, intelligent model routing for specialized analysis (e.g., Chinese financial analysis via DeepSeek), **fully automated N8N workflow management**, Vision AI chart analysis, and authoritative, data-backed investment recommendations. The system is built for deployment on Replit's Autoscale platform and aims to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
+
+## Recent Updates (Nov 2025)
+- ✅ **Global Stock Coverage Expansion**: Extended from 44 to 150+ stocks across Americas, Europe, Asia-Pacific, and emerging markets
+- ✅ **N8N Full API Automation**: Implemented automatic workflow creation, health monitoring (5-min intervals), and self-healing capabilities
+- ✅ **Symbol Disambiguation Algorithm**: Longest-match-first strategy prevents conflicts between dual-listed stocks (e.g., BABA vs 9988.HK)
 
 # User Preferences
 
@@ -22,7 +27,12 @@ The v6.0 pipeline processes user input through language detection, semantic inte
     - Real-time news → Perplexity Sonar Pro
     - Default/fallback → OpenAI GPT-4o/GPT-4o-mini
 - **Semantic Intent Understanding**: AI-powered parsing for various market states (premarket, intraday, news).
-- **Global Stock Discovery**: Supports symbol lookup for any company name in any language via Finnhub.
+- **Global Stock Discovery**: Multi-language stock symbol resolution with 150+ global stocks:
+    - **Americas**: 40 US stocks (AAPL, TSLA, NVDA, etc.) + 3 Latin America (VALE, PBR, AMX)
+    - **Europe**: 26 stocks across UK (HSBC, BP), Germany (SIEGY, SAP), France (LVMUY, TTE), Netherlands (ASML, PHG), Switzerland (NSRGY, NVS), Spain (IBE.MC, TEF.MC)
+    - **Asia-Pacific**: 11 Japan (TM, SONY), 4 Korea (SSNLF, HYMTF), 17 China/HK (BABA, 0700.HK), 4 other (INFY, DBSDY)
+    - **Other**: 5 global stocks (BHP, RIO, RY, BNS, NPSNY)
+    - **Disambiguation**: Longest-match-first algorithm resolves dual-listed stocks (e.g., '阿里巴巴'→BABA, '阿里港股'→9988.HK)
 - **Multi-Dimensional Data Broker**: Fetches real-time quotes, company profiles, financial metrics, and news sentiment with 120s cache TTL and API call optimization. Includes data provenance and completeness scoring.
 - **ImpactRank Algorithm**: Proprietary 4-dimensional news scoring (urgency × relevance × authority × freshness).
 - **Institutional Analysis Framework**: Follows a 5-section report structure (Executive Summary, Quantitative Data, Investment Themes, Risk Assessment, Actionable Recommendations) with mandatory data citations, authoritative language, and specific price targets.
@@ -40,9 +50,15 @@ The system orchestrates 6 AI models:
 - **Mistral Large**: For fast, multilingual reasoning.
 - **Perplexity Sonar Pro**: For real-time search-enhanced analysis.
 
-## Screenshot Architecture
+## Screenshot Architecture & N8N Automation
 A multi-tier screenshot architecture ensures stability and graceful degradation:
 - **N8N Webhook Integration**: Dedicated stock_analysis_full webhook endpoint for individual stock chart screenshots. N8N only handles screenshot capture via ScreenshotAPI and returns binary data; AI analysis is performed by USIS Brain after receiving the screenshot to avoid circular dependencies and deadlocks.
+- **N8N Full API Automation** (n8nClient.js, n8nMonitor.js):
+    - Automatic workflow creation/activation on startup
+    - Health monitoring every 5 minutes (success rate calculation)
+    - Self-healing: Auto-restart after 3 consecutive failures (<50% success rate)
+    - Graceful degradation: N8N unavailability doesn't block main service
+    - /health endpoint includes N8N status with 30s cache
 - **Heatmap System - Tier 1 (Primary)**: SaaS-based N8N screenshot with delays and element waiting for market heatmaps.
 - **Tier 2 - Browserless (Enhancement)**: Cloud-based headless Chromium for complex UI interactions.
 - **Tier 3 - QuickChart (Fallback)**: Generates simplified bar charts when other services fail.
