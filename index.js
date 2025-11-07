@@ -4011,10 +4011,10 @@ app.post("/brain/orchestrate", async (req, res) => {
     }
     
     // 4.8. 🆕 v5.0: 个股图表生成（K线分析）
+    // 🎯 v6.0统一流程：所有单股分析都生成图表+视觉AI+实时数据（除非是casual chat）
     let stockChartData = null;
-    const needStockChart = symbols.length === 1 && // 仅单个股票
-                           (intent.mode === 'diagnose' || 
-                            /图|chart|走势|K线|技术|形态|支撑|阻力|趋势/.test(text || ''));
+    const isCasualMention = intent.mode === 'casual' || intent.confidence < 0.5;
+    const needStockChart = symbols.length === 1 && !isCasualMention; // 所有单股分析（非casual）都生成图表
     
     if (needStockChart) {
       try {
