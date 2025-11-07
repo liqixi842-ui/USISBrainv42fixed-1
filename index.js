@@ -43,6 +43,8 @@ const { extractHeatmapQuery, extractHeatmapQueryRulesOnly, buildTradingViewURL, 
 const { generateSmartHeatmap } = require("./heatmapService");
 // 🆕 v5.0: 个股图表服务（K线图分析）
 const { generateStockChart, formatStockData } = require("./stockChartService");
+// 🆕 v6.0: N8N API自动化管理
+const { getN8NClient } = require("./n8nClient");
 
 const app = express();
 app.use(express.json());
@@ -279,8 +281,17 @@ app.get("/brain/stats", (_req, res) => {
   });
 });
 
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, status: 'ok', ts: Date.now() });
+app.get("/health", async (_req, res) => {
+  // 🆕 v6.0: 包含N8N API健康状态
+  const n8nClient = getN8NClient();
+  const n8nHealth = await n8nClient.healthCheck();
+  
+  res.json({ 
+    ok: true, 
+    status: 'ok', 
+    ts: Date.now(),
+    n8n: n8nHealth
+  });
 });
 
 // 🆕 请求状态监控端点
@@ -5087,12 +5098,39 @@ app.post("/brain/analyze_no_screenshot", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, "0.0.0.0", async () => {
   console.log(`🚀 USIS Brain v6.0 online on port ${PORT} 🆕 [Multi-AI + n8n Integration]`);
   console.log(`📍 Listening on 0.0.0.0:${PORT}`);
   console.log(`🔗 Health check available at http://0.0.0.0:${PORT}/health`);
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
   console.log(`🔵 n8n API available at http://0.0.0.0:${PORT}/brain/analyze_no_screenshot`);
+  
+  // 🆕 v6.0: 初始化N8N监控
+  const { getN8NMonitor } = require('./n8nMonitor');
+  const monitor = getN8NMonitor();
+  const initResult = await monitor.initialize();
+  if (initResult.ok) {
+    console.log('✅ N8N工作流已就绪');
+    
+    // 🆕 启动定期健康检查（每5分钟）
+    setInterval(async () => {
+      const health = await monitor.checkScreenshotHealth();
+      
+      // 检查是否需要自动修复
+      const stats = monitor.getMonitorReport();
+      if (stats.needsRecovery) {
+        console.warn(`⚠️  截图服务连续失败${stats.consecutiveFailures}次，触发自动修复...`);
+        const recovery = await monitor.autoRecover();
+        if (recovery.ok) {
+          console.log(`✅ 自动修复完成: ${recovery.action}`);
+        } else {
+          console.error(`❌ 自动修复失败: ${recovery.error}`);
+        }
+      }
+    }, 5 * 60 * 1000);
+  } else {
+    console.warn(`⚠️  N8N初始化失败: ${initResult.error}`);
+  }
 });
 
 // ====== Telegram Bot v5.0 (手动轮询 - Replit兼容) ======
