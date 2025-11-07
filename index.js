@@ -2105,27 +2105,38 @@ async function validateAndFixSymbols(symbols = [], contextHints = {}) {
       scored.sort((a, b) => b.score - a.score);
       
       // 🆕 检查是否需要用户确认（多个高分候选）
-      // 策略：短代码(<5字符)强制用户选择，长名称用宽松阈值
-      const isShortSymbol = symbol.length < 5;
-      const threshold = isShortSymbol ? 0.5 : 0.7; // 短代码用50%阈值，长名称用70%
-      const topCandidates = scored.filter(s => s.score >= scored[0].score * threshold);
+      // 策略：只有在真正模糊不清时才让用户选择
+      const best = scored[0];
+      const secondBest = scored[1];
       
-      // 对于短代码，即使只有1个候选也显示（但结果>3个时才需要选择）
-      const needsUserChoice = contextHints.interactive && (
-        (isShortSymbol && scored.length >= 3) ||  // 短代码有>=3个结果就让用户选
-        (topCandidates.length > 1)                 // 或有多个高分候选
-      );
+      // ✅ 精确匹配检测（最高优先级）
+      const isExactMatch = best.score >= 100; // score=100表示精确符号匹配
+      const hasSignificantLead = !secondBest || (best.score >= secondBest.score * 2); // 领先2倍以上
+      
+      // ✅ 知名股票检测（Common Stock + 高分）
+      const isWellKnownStock = best.score >= 130 && best.type?.toLowerCase().includes('common stock');
+      
+      // 🎯 决策逻辑：
+      // 1. 精确匹配 + 显著领先 → 直接使用，不询问
+      // 2. 知名股票（高分Common Stock）→ 直接使用
+      // 3. 多个候选分数接近 → 让用户选择
+      const needsUserChoice = contextHints.interactive && 
+        !isExactMatch && 
+        !isWellKnownStock && 
+        !hasSignificantLead && 
+        scored.length >= 2;
       
       if (needsUserChoice) {
         // 🌐 全球股票支持：多API级联策略（Finnhub → Alpha Vantage）
         // 所有候选都可以尝试，由dataBroker自动降级处理
         
         // 返回特殊标记，让调用方处理用户选择
-        console.log(`   ❓ ${symbol} - 发现${topCandidates.length}个匹配，需要用户选择`);
+        const topCandidates = scored.slice(0, 12); // 取前12个候选
+        console.log(`   ❓ ${symbol} - 发现${topCandidates.length}个模糊匹配，需要用户选择`);
         validatedSymbols.push({
           _needsChoice: true,
           originalSymbol: symbol,
-          candidates: topCandidates.slice(0, 12).map(c => ({
+          candidates: topCandidates.map(c => ({
             symbol: c.symbol,
             description: c.description,
             type: c.type,
@@ -2135,18 +2146,11 @@ async function validateAndFixSymbols(symbols = [], contextHints = {}) {
         continue;
       }
       
-      const bestMatch = scored[0];
-      const fixedSymbol = bestMatch.symbol;
-      const description = bestMatch.description || '';
-      const confidence = bestMatch.score / 100; // 归一化到0-1
+      // ✅ 不需要用户选择，直接使用最佳匹配
+      console.log(`   🎯 ${symbol} → ${best.symbol} (精确:${isExactMatch}, 知名:${isWellKnownStock}, 分数:${best.score})`);
+      validatedSymbols.push(best.symbol);
+      continue;
       
-      if (fixedSymbol !== symbol) {
-        console.log(`   🔧 ${symbol} → ${fixedSymbol} (${description}, 置信度: ${confidence.toFixed(2)})`);
-      } else {
-        console.log(`   ✓ ${symbol} - 验证通过 (${description})`);
-      }
-      
-      validatedSymbols.push(fixedSymbol);
       
     } catch (error) {
       validatedSymbols.push(symbol);

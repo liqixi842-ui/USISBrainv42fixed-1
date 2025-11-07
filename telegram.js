@@ -150,7 +150,7 @@ function startTelegramBot({ orchestrateUrl }) {
       };
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 28000); // 28秒总超时
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒总超时（增加以支持复杂分析）
       
       const res = await fetch(orchestrateUrl, {
         method: 'POST',
@@ -198,7 +198,7 @@ function startTelegramBot({ orchestrateUrl }) {
       console.error('[TG] error stack:', e.stack);
       try {
         if (e.name === 'AbortError') {
-          await ctx.reply('⏱️ 处理超时（28秒），请简化请求或稍后重试');
+          await ctx.reply('⏱️ 处理超时（60秒），系统可能过载，请稍后重试');
         } else {
           await ctx.reply('🛡️ 安全模式：处理失败，进程已保护。请稍后重试。');
         }

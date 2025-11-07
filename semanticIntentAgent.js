@@ -83,11 +83,16 @@ function buildIntentPrompt() {
    - 'news': 只要新闻资讯（"给我新闻"、"两小时内新闻"、"盘前资讯"）
    - 'analysis': 只要分析（"分析一下"、"怎么看"、"技术分析"）
    - 'advice': 只要建议（"给建议"、"怎么操作"、"仓位建议"）
+   - 'hold_recommendation': 持仓建议（"续抱"、"继续持有"、"卖出时机"、"止盈止损"）
    - 'full_report': 要完整报告（默认，或明确要"全面分析"）
 6. **识别时间窗口（timeHorizon）**：新闻的时间范围
    - "2小时内"、"两小时"、"最近"、"盘前" → "2h"
    - "24小时"、"今天"、"全天" → "24h"
    - "本周"、"一周" → "7d"
+7. **识别持仓信息（positionContext）**：用户的持仓情况
+   - 买入价格（"31.51买进"、"成本30美元"）→ extractedPrice: 31.51
+   - 持仓意图（"续抱"、"继续持有"、"何时卖出"）→ holdingIntent: true
+   - 盈亏状况（"被套"、"盈利中"、"亏损"）→ profitStatus: "loss"/"profit"
 
 **关键原则**：
 - 使用语义理解，不要依赖关键词匹配
@@ -121,24 +126,35 @@ US, Spain, HK, CN, EU, UK, JP, Global
 {
   "intentType": "stock_query",
   "entities": [
-    {"type": "company", "value": "Grifols", "normalizedValue": "Grifols S.A.", "confidence": 0.9}
+    {"type": "symbol", "value": "DKNG", "normalizedValue": "DKNG", "confidence": 0.95}
   ],
   "mode": "intraday",
-  "exchange": "Spain",
+  "exchange": "US",
   "sector": null,
   "actions": ["fetch_quotes", "fetch_news"],
-  "responseMode": "full_report",
+  "responseMode": "hold_recommendation",
   "timeHorizon": "2h",
+  "positionContext": {
+    "buyPrice": 31.51,
+    "holdingIntent": true,
+    "profitStatus": "unknown"
+  },
   "confidence": 0.9,
-  "reasoning": "用户询问Grifols公司，这是西班牙的生物制药公司，需要获取股票报价和新闻"
+  "reasoning": "用户持有DKNG股票，成本31.51美元，询问是否应该续抱"
 }
 
 **responseMode示例**：
 - "AAPL 新闻" → responseMode="news", timeHorizon="2h"
 - "分析TSLA" → responseMode="analysis"
 - "给我西班牙热力图和建议" → responseMode="advice"
+- "DKNG 31.51买进，给续抱建议" → responseMode="hold_recommendation", positionContext={buyPrice:31.51, holdingIntent:true}
 - "IBEX35 全面分析" → responseMode="full_report"
-- "两小时内影响IBEX的新闻" → responseMode="news", timeHorizon="2h"`;
+- "两小时内影响IBEX的新闻" → responseMode="news", timeHorizon="2h"
+
+**持仓场景识别示例**：
+- "NVDA 500美元买的，现在怎么办" → positionContext={buyPrice:500, holdingIntent:true}
+- "TSLA被套了，何时止损" → positionContext={profitStatus:"loss", holdingIntent:true}
+- "AAPL盈利20%，继续持有还是卖出" → positionContext={profitStatus:"profit", holdingIntent:true}`;
 }
 
 /**
@@ -190,6 +206,7 @@ function normalizeIntent(rawIntent) {
     actions: rawIntent.actions || [],
     responseMode: normalizeResponseMode(rawIntent.responseMode),
     timeHorizon: rawIntent.timeHorizon || '2h',
+    positionContext: rawIntent.positionContext || null,
     confidence: rawIntent.confidence || 0.5,
     reasoning: rawIntent.reasoning || '',
     language: detectLanguage(rawIntent)
@@ -211,6 +228,7 @@ function normalizeResponseMode(mode) {
     'news': ['news', 'news_only', '新闻', '资讯'],
     'analysis': ['analysis', 'analysis_only', '分析', '观点', '看法'],
     'advice': ['advice', 'advice_only', '建议', '推荐', '操作'],
+    'hold_recommendation': ['hold_recommendation', 'hold', 'holding', '续抱', '持仓', '继续持有', '卖出时机'],
     'full_report': ['full_report', 'full', 'complete', '完整', '全面']
   };
   

@@ -13,6 +13,9 @@
  * @property {string|null} exchange - 交易所提示: 'US', 'Spain', 'HK', 'CN', 'EU', null
  * @property {string|null} sector - 行业/板块: 'energy', 'technology', 'financials', 'healthcare', etc.
  * @property {Array<string>} actions - 需要执行的动作: ['fetch_quotes', 'fetch_news', 'generate_heatmap', 'generate_chart']
+ * @property {string} responseMode - 响应模式: 'news', 'analysis', 'advice', 'hold_recommendation', 'full_report'
+ * @property {string} timeHorizon - 时间窗口: '2h', '24h', '7d'
+ * @property {Object|null} positionContext - 持仓信息: {buyPrice: number, holdingIntent: boolean, profitStatus: string}
  * @property {number} confidence - 置信度 (0-1)
  * @property {string} reasoning - AI的推理过程（用于调试）
  * @property {string} language - 用户语言: 'zh', 'en', 'es'
@@ -202,6 +205,7 @@ function createIntent({
   actions = [],
   responseMode = 'full_report',
   timeHorizon = '2h',
+  positionContext = null,
   confidence = 0.5,
   reasoning = '',
   language = 'zh'
@@ -215,6 +219,7 @@ function createIntent({
     actions,
     responseMode,
     timeHorizon,
+    positionContext,
     confidence,
     reasoning,
     language
