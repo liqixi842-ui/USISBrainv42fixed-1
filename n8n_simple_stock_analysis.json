@@ -1,0 +1,77 @@
+{
+  "name": "USIS Brain v6.0 - Simple Stock Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "usis_analyze",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-input",
+      "name": "📥 接收分析请求",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "usis_analyze"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5000/brain/orchestrate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "call-brain",
+      "name": "🧠 调用USIS Brain v6.0",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "return-result",
+      "name": "📤 返回分析结果",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [560, 0]
+    }
+  ],
+  "connections": {
+    "📥 接收分析请求": {
+      "main": [[{ "node": "🧠 调用USIS Brain v6.0", "type": "main", "index": 0 }]]
+    },
+    "🧠 调用USIS Brain v6.0": {
+      "main": [[{ "node": "📤 返回分析结果", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "usis-brain-v6-simple"
+  },
+  "tags": []
+}
