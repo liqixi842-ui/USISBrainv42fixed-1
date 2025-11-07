@@ -1,13 +1,30 @@
 # Overview
 
-USIS Brain v5.0 is an Institutional-Grade Data-Driven Financial Analysis System with multi-dimensional real-time data integration and GPT-5 powered professional investment research capabilities. The system evolved from "general knowledge commentary" to "data-driven institutional analysis" with Goldman Sachs-style structured reporting framework. It combines proprietary real-time data integration (Finnhub quotes+profiles+metrics+news, SEC, FRED) and algorithmic scoring (ImpactRank) with GPT-5's natural language generation capabilities. Features include semantic intent parsing, global stock discovery, anti-hallucination data validation, pluggable screenshot providers with automatic fallback, Vision AI chart analysis, and authoritative data-backed investment recommendations. Designed for deployment on Replit's Autoscale platform.
+USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System with intelligent model orchestration, multilingual capabilities, and data-driven professional investment research. The system combines 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with proprietary real-time data integration (Finnhub quotes+profiles+metrics+news, SEC, FRED) and algorithmic scoring (ImpactRank). Features include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, specialized Chinese financial analysis via DeepSeek, pluggable screenshot providers with automatic fallback, Vision AI chart analysis, and authoritative data-backed investment recommendations. Designed for deployment on Replit's Autoscale platform.
 
 **Architecture Evolution**: 
 - v3.1 (multi-AI voting) → v4.0 (GPT-5 single-core generation) 
 - v4.3 (Browserless/ScreenshotAPI/QuickChart three-tier screenshot system)
 - v5.0 (Data-Driven Institutional Analysis with multi-dimensional data integration)
+- v6.0 (Multi-AI Orchestration with multilingual capabilities and specialized model routing)
 
-**v5.0 Major Upgrades**:
+**v6.0 Major Upgrades** 🆕:
+- **Multi-AI Orchestration**: Unified provider architecture supporting 6 AI models with intelligent routing
+  - OpenAI GPT-4o/GPT-4o-mini (baseline + cost optimization)
+  - Claude 3.5 Sonnet (long-form depth analysis, 200K context)
+  - Gemini 2.5 Flash (ultra-fast summarization, 1M context, ultra-low cost)
+  - DeepSeek V3 (specialized Chinese financial analysis, A-share expertise)
+  - Mistral Large (fast reasoning, multilingual support)
+  - Perplexity Sonar Pro (real-time search-enhanced analysis)
+- **Multilingual Intelligence**: 
+  - Automatic Chinese input detection → DeepSeek routing
+  - DeepL professional translation for cross-language reports
+  - Specialized Chinese financial terminology handling
+- **Intelligent Model Routing**: Task-based model selection (language, depth, speed, cost)
+- **Cost Optimization**: Per-model token tracking and cost monitoring
+- **Automatic Fallback**: OpenAI GPT-4o-mini as emergency backup for all providers
+
+**v5.0 Foundation**:
 - Multi-dimensional data integration: company profiles, financial metrics, technical indicators
 - Institutional-grade analysis framework (Executive Summary → Quantitative Data → Investment Themes → Risk Assessment → Actionable Recommendations)
 - Authoritative language style with mandatory data citations
@@ -15,7 +32,10 @@ USIS Brain v5.0 is an Institutional-Grade Data-Driven Financial Analysis System 
 - Deep Vision AI integration (chart patterns + fundamental data fusion)
 - API call optimization (reuses existing marketData to avoid duplicates)
 
-**Performance**: Response time ↓67% (16s→5s), Cost ↓87% ($0.06→$0.0075)
+**Performance**: 
+- v6.0 Chinese Analysis: Response time ~4-6s (DeepSeek), Cost ~$0.002/request
+- v5.0 Baseline: Response time ↓67% (16s→5s), Cost ↓87% ($0.06→$0.0075)
+
 **Core IP Preserved**: ImpactRank algorithm, real-time data pipelines, Compliance Guard, pure rule-based heatmap parser
 
 # User Preferences
@@ -29,10 +49,17 @@ Preferred communication style: Simple, everyday language.
 - **Module System**: CommonJS
 - **API Design**: RESTful JSON API with standardized responses, versioning (`USIS.v3`), multilingual output, model voting details, confidence scores, and semantic tagging.
 
-## Core Architecture (v5.0 Data-Driven Pipeline)
+## Core Architecture (v6.0 Multi-AI Pipeline)
 
-**v5.0 Institutional Analysis Pipeline**:
-User Input → **Semantic Intent Agent** → **Symbol Resolver** (Finnhub Lookup) → **Multi-Dimensional Data Broker** (quotes + profiles + metrics + news) → **GPT-5 Institutional Brain** (data-driven generation) → **Compliance Guard** → Professional Report Formatting → Cost Tracking
+**v6.0 Intelligent Analysis Pipeline**:
+User Input → **Language Detection** → **Semantic Intent Agent** → **Symbol Resolver** (Finnhub Lookup) → **Multi-Dimensional Data Broker** (quotes + profiles + metrics + news) → **Intelligent Model Router** (selects optimal AI) → **Multi-AI Provider** (6 models) → **Compliance Guard** → Professional Report Formatting → Cost Tracking
+
+**v6.0 Model Routing Logic**:
+- Chinese input + stock symbols → **DeepSeek V3** (specialized Chinese financial analysis)
+- Long-form depth analysis → **Claude 3.5 Sonnet** (200K context)
+- Fast summarization → **Gemini 2.5 Flash** (1M context, ultra-low cost)
+- Real-time news → **Perplexity Sonar Pro** (search-enhanced)
+- Default/fallback → **OpenAI GPT-4o/GPT-4o-mini**
 
 **Key Components**:
 - **Semantic Intent Understanding**: AI-powered intent parsing (premarket/intraday/postmarket/news/diagnose)
@@ -72,7 +99,16 @@ User Input → **Semantic Intent Agent** → **Symbol Resolver** (Finnhub Lookup
 - Evolution from "general knowledge commentary" → "data-driven institutional analysis"
 
 ## AI Models
-**v4.0**: Uses OpenAI GPT-5 as the single-core generation engine for all analysis and synthesis tasks.
+**v6.0** 🆕: Multi-AI orchestration with intelligent routing across 6 models:
+- **OpenAI GPT-4o**: Baseline general analysis (128K context, $0.0025/$0.01 per 1K tokens)
+- **OpenAI GPT-4o-mini**: Cost-optimized fallback ($0.00015/$0.0006 per 1K tokens)
+- **Claude 3.5 Sonnet**: Long-form depth analysis (200K context, $0.003/$0.015 per 1K tokens)
+- **Gemini 2.5 Flash**: Ultra-fast summarization (1M context, $0.00001/$0.00004 per 1K tokens)
+- **DeepSeek V3**: Chinese financial analysis specialist (64K context, $0.00027/$0.0011 per 1K tokens)
+- **Mistral Large**: Fast multilingual reasoning (128K context, $0.002/$0.006 per 1K tokens)
+- **Perplexity Sonar Pro**: Real-time search-enhanced analysis (127K context, $0.001/$0.001 per 1K tokens)
+
+**v4.0-v5.0**: Uses OpenAI GPT-5 as the single-core generation engine for all analysis and synthesis tasks.
 **v3.1 (legacy)**: Supported 9 AI models with dynamic selection based on complexity (deprecated in v4.0).
 
 ## Data Sources
