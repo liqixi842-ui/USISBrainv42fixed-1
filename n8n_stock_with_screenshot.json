@@ -82,7 +82,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// 提取binary数据为base64\nconst binaryData = $binary?.data?.data || $binary?.data || null;\nconst symbols = $json.symbols || [];\n\nreturn [{\n  json: {\n    chart_binary: binaryData,\n    symbols: symbols,\n    success: true\n  }\n}];"
+        "jsCode": "// 读取binary数据并转换为base64\nconst symbols = $json.symbols || [];\n\n// N8N binary数据需要通过特殊方式读取\nlet base64Data = null;\nif ($binary && $binary.data) {\n  // 获取binary buffer并转换为base64\n  const binaryBuffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n  base64Data = binaryBuffer.toString('base64');\n}\n\nreturn [{\n  json: {\n    chart_binary: base64Data,\n    symbols: symbols,\n    success: !!base64Data\n  }\n}];"
       },
       "id": "format-response",
       "name": "📦 格式化响应",
