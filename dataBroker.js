@@ -15,6 +15,11 @@ const SLOW_SOURCE_TIMEOUT = parseInt(process.env.SLOW_SOURCE_TIMEOUT_MS) || 7000
 const CACHE_TTL = parseInt(process.env.CACHE_TTL) || 120; // 默认120秒
 const dataCache = new Map();
 
+// 🔒 Provider能力缓存（避免重复尝试已知受限的provider）
+const providerCapabilityCache = {
+  twelvedata_tier_limited: false // Twelve Data免费版受限标记
+};
+
 /**
  * 🆕 v4.2: 缓存辅助函数
  */
@@ -257,25 +262,61 @@ async function fetchQuotes(symbols) {
 
 /**
  * 🌍 从Twelve Data获取实时股价（全球股票支持：欧洲、加拿大、亚洲）
+ * @param {string} symbol - 纯股票代码（如SAB、RY）
+ * @param {string} exchange - 交易所代码（如BME、TSX），可选
  */
-async function fetchQuoteFromTwelveData(symbol) {
+async function fetchQuoteFromTwelveData(symbol, exchange = null) {
   if (!TWELVE_DATA_KEY) {
     throw new Error("TWELVE_DATA_API_KEY not configured");
   }
   
-  const url = `https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`;
+  // 构建URL（使用exchange参数而非后缀格式）
+  let url = `https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`;
+  if (exchange) {
+    url += `&exchange=${exchange}`;
+  }
+  
   const fetchTime = Date.now();
   
   try {
     const response = await fetch(url, { timeout: 10000 });
     
-    if (!response.ok) {
-      throw new Error(`Twelve Data API error: ${response.status}`);
-    }
-    
+    // ⚠️ 始终解析JSON body，即使HTTP状态码非200（Twelve Data付费限制返回403/401 JSON）
     const data = await response.json();
     
-    // 检查错误响应
+    // 🔒 优先检查付费计划限制（Twelve Data实际返回403/401或404）
+    const isTierLimited = (
+      (data.status === 'error') &&
+      (data.code === 404 || data.code === 403 || data.code === 401 || response.status === 403 || response.status === 401) &&
+      data.message && (
+        data.message.includes('Pro plan') ||
+        data.message.includes('Grow plan') ||
+        data.message.toLowerCase().includes('paid account') ||
+        data.message.toLowerCase().includes('upgrade') ||
+        data.message.toLowerCase().includes('available starting')
+      )
+    );
+    
+    if (isTierLimited) {
+      // 🔒 返回特殊标记，而非抛出异常（让调用方设置能力缓存）
+      console.warn(`   🔒 [Tier Limit] Twelve Data限制检测: ${data.message}`);
+      const source = {
+        provider: 'twelvedata',
+        endpoint: '/quote',
+        symbol: symbol,
+        timestamp: fetchTime,
+        status: 'tier_limited',
+        error: data.message
+      };
+      return { quote: null, source, tierLimited: true };
+    }
+    
+    // 检查HTTP错误（排除已处理的tier限制）
+    if (!response.ok) {
+      throw new Error(`Twelve Data API error: ${response.status} - ${data.message || 'Unknown error'}`);
+    }
+    
+    // 检查其他错误响应
     if (data.status === 'error' || data.code === 400) {
       throw new Error(data.message || 'Symbol not found in Twelve Data');
     }
@@ -412,47 +453,91 @@ async function fetchQuoteFromAlphaVantage(symbol) {
 
 /**
  * 🌐 符号格式转换：为不同API provider准备正确的符号格式
+ * @returns {Object} - { symbol: string, exchange?: string }
  */
 function convertSymbolForProvider(symbol, provider) {
-  // Twelve Data专用格式转换（支持全球股票）
+  // Twelve Data专用格式转换（使用exchange参数，不用后缀）
   if (provider === 'twelvedata') {
-    // Twelve Data使用后缀格式（与Alpha Vantage相同）
+    // 处理冒号格式（BME:SAB）
     if (symbol.includes(':')) {
       const [exchange, ticker] = symbol.split(':');
       
-      // 🌍 Twelve Data交易所后缀映射
-      const EXCHANGE_TO_SUFFIX = {
+      // 🌍 Twelve Data交易所代码映射
+      const EXCHANGE_MAP = {
         // 欧洲主要交易所
-        'BME': 'MC',      // 马德里证券交易所 → SAB.MC
-        'EPA': 'PA',      // 巴黎泛欧交易所 → ORA.PA
-        'LSE': 'L',       // 伦敦证券交易所 → AZN.L
-        'FRA': 'F',       // 法兰克福证券交易所 → SAP.F
-        'XETRA': 'DE',    // 德国XETRA → SAP.DE
-        'MIL': 'MI',      // 米兰证券交易所 → ENI.MI
-        'AMS': 'AS',      // 阿姆斯特丹泛欧交易所 → PHIA.AS
+        'BME': 'BME',      // 马德里证券交易所
+        'EPA': 'Euronext', // 巴黎泛欧交易所
+        'LSE': 'LSE',      // 伦敦证券交易所
+        'FRA': 'FSX',      // 法兰克福证券交易所
+        'XETRA': 'XETRA',  // 德国XETRA
+        'MIL': 'MTA',      // 米兰证券交易所
+        'AMS': 'Euronext', // 阿姆斯特丹泛欧交易所
         
         // 北美交易所
-        'TSX': 'TO',      // 多伦多证券交易所 → RY.TO
-        'TSXV': 'V',      // 多伦多创业板 → XXX.V
-        'NYSE': '',       // 纽约证券交易所（无后缀）
-        'NASDAQ': '',     // 纳斯达克（无后缀）
+        'TSX': 'TSX',      // 多伦多证券交易所
+        'TSXV': 'TSXV',    // 多伦多创业板
+        'NYSE': 'NYSE',    // 纽约证券交易所
+        'NASDAQ': 'NASDAQ',// 纳斯达克
         
         // 亚太交易所
-        'HKEX': 'HK',     // 香港交易所 → 0700.HK
-        'TSE': 'T',       // 东京证券交易所 → 7203.T
-        'ASX': 'AX'       // 澳大利亚证券交易所 → BHP.AX
+        'HKEX': 'HKEX',    // 香港交易所
+        'TSE': 'TSE',      // 东京证券交易所
+        'ASX': 'ASX'       // 澳大利亚证券交易所
       };
       
-      const suffix = EXCHANGE_TO_SUFFIX[exchange];
-      if (suffix !== undefined) {
-        return suffix ? `${ticker}.${suffix}` : ticker;
+      const mappedExchange = EXCHANGE_MAP[exchange];
+      if (mappedExchange) {
+        return { symbol: ticker, exchange: mappedExchange };
       }
       
-      console.warn(`   ⚠️  [Twelve Data Convert] 未知交易所代码: ${exchange}，使用纯ticker: ${ticker}`);
-      return ticker;
+      console.warn(`   ⚠️  [Twelve Data Convert] 未知交易所代码: ${exchange}，使用纯ticker`);
+      return { symbol: ticker };
     }
     
-    return symbol;
+    // 🔧 处理点后缀格式（SAB.MC, RY.TO, BP.L）
+    if (symbol.includes('.')) {
+      const [ticker, suffix] = symbol.split('.');
+      
+      // ⚠️ 检测美国股票类别后缀（BRK.B, BRK.A, PR.X等），直接保留原样
+      const US_SHARE_CLASS_PATTERN = /^[A-Z]$|^PR$/; // 单字母或PR
+      if (US_SHARE_CLASS_PATTERN.test(suffix)) {
+        console.log(`   🇺🇸 [Twelve Data Convert] 检测到美国股票类别: ${symbol}，保持原样`);
+        return { symbol }; // 不拆分，直接返回
+      }
+      
+      // 后缀到Twelve Data交易所的映射
+      const SUFFIX_TO_EXCHANGE = {
+        // 欧洲
+        'MC': 'BME',       // 马德里 → .MC
+        'PA': 'Euronext',  // 巴黎 → .PA
+        'L': 'LSE',        // 伦敦 → .L
+        'F': 'FSX',        // 法兰克福 → .F
+        'DE': 'XETRA',     // XETRA → .DE
+        'MI': 'MTA',       // 米兰 → .MI
+        'AS': 'Euronext',  // 阿姆斯特丹 → .AS
+        
+        // 北美
+        'TO': 'TSX',       // 多伦多 → .TO
+        'V': 'TSXV',       // 多伦多创业板 → .V
+        
+        // 亚太
+        'HK': 'HKEX',      // 香港 → .HK
+        'T': 'TSE',        // 东京 → .T
+        'AX': 'ASX'        // 澳大利亚 → .AX
+      };
+      
+      const mappedExchange = SUFFIX_TO_EXCHANGE[suffix];
+      if (mappedExchange) {
+        return { symbol: ticker, exchange: mappedExchange };
+      }
+      
+      // 未知后缀，保留原样（可能是其他类型的股票代码）
+      console.warn(`   ⚠️  [Twelve Data Convert] 未知后缀: ${suffix}，保持原样: ${symbol}`);
+      return { symbol };
+    }
+    
+    // 无前缀/后缀，直接返回（美国主板股票）
+    return { symbol };
   }
   
   // Alpha Vantage专用格式转换
@@ -589,19 +674,28 @@ async function fetchSingleQuote(symbol) {
   }
   
   // 策略2: 降级到Twelve Data（欧洲、加拿大、全球股票）
-  if (TWELVE_DATA_KEY && !quote) {
-    const twelveSymbol = convertSymbolForProvider(symbol, 'twelvedata');
-    console.log(`   🌍 [降级] Twelve Data使用符号: ${twelveSymbol}`);
+  // 🔒 如果已知免费版受限，跳过Twelve Data直接尝试Alpha Vantage
+  if (TWELVE_DATA_KEY && !quote && !providerCapabilityCache.twelvedata_tier_limited) {
+    const { symbol: twelveSymbol, exchange } = convertSymbolForProvider(symbol, 'twelvedata');
+    console.log(`   🌍 [降级] Twelve Data使用符号: ${twelveSymbol}${exchange ? ` (exchange: ${exchange})` : ''}`);
     
     try {
-      const twelveResult = await fetchQuoteFromTwelveData(twelveSymbol);
-      if (twelveResult.quote) {
+      const twelveResult = await fetchQuoteFromTwelveData(twelveSymbol, exchange);
+      
+      // 🔒 检测到tier限制，设置全局标记并继续降级
+      if (twelveResult.tierLimited) {
+        console.warn(`   🔒 [Capability Cache] Twelve Data免费版受限，后续请求将跳过`);
+        providerCapabilityCache.twelvedata_tier_limited = true;
+        // 不返回，继续尝试Alpha Vantage
+      } else if (twelveResult.quote) {
         twelveResult.quote.symbol = symbol;
         return twelveResult;
       }
     } catch (error) {
       console.error(`   ❌ Twelve Data降级失败:`, error.message);
     }
+  } else if (providerCapabilityCache.twelvedata_tier_limited) {
+    console.log(`   ⏭️  [Skip] Twelve Data已知受限，直接尝试Alpha Vantage`);
   }
   
   // 策略3: 降级到Alpha Vantage（加拿大、部分全球股票）
