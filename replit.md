@@ -3,16 +3,15 @@
 USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with real-time data integration from sources like Finnhub, SEC, and FRED. Key features include semantic intent parsing, **global stock discovery with 150+ stocks across 10+ markets**, anti-hallucination data validation, intelligent model routing for specialized analysis (e.g., Chinese financial analysis via DeepSeek), **fully automated N8N workflow management**, Vision AI chart analysis, and authoritative, data-backed investment recommendations. The system is built for deployment on Replit's Autoscale platform and aims to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
 
 ## Recent Updates (Nov 2025)
-- ✅ **Smart Interactive Symbol Selection**: When ambiguous symbols detected (e.g., SAB), system auto-filters unsupported exchanges and returns only valid options via Telegram inline keyboard
-    - Removes short-code static mapping (e.g., 'sab') to force API-driven selection
-    - Filters out Finnhub-unsupported exchanges (.MC, .PA, .DE, .MI, .L, etc.)
-    - Auto-suggests ADR equivalents when European stocks detected (Sabadell→BNDSY)
-    - Prevents user from selecting invalid options that would fail analysis
-- ✅ **Hybrid Symbol Resolution Stack**: 3-tier intelligent validation system:
-    1. Static mapping (full names only): 'sabadell'→BNDSY, 'santander'→SAN
-    2. Finnhub API with smart scoring + exchange filtering
-    3. Graceful degradation when API unavailable
-- ✅ **Finnhub Free Tier Optimization**: Auto-filters European exchanges and suggests US OTC ADR equivalents to bypass Finnhub's restricted European exchange access
+- ✅ **TRUE Global Stock Support via Multi-API Cascade** (Nov 7, 2025):
+    - **Provider-Specific Symbol Conversion**: Intelligent format adaptation for each API (Finnhub uses exchange prefixes like `BME:GRF`, Alpha Vantage uses suffixes like `GRF.MC`)
+    - **30+ Exchange Coverage**: Comprehensive mapping for Europe (BME, EPA, LSE, FRA, MIL, etc.), Asia-Pacific (SSE, SZSE, HKEX, TSE, SGX, etc.), and North America (TSX, TSXV, NYSE, NASDAQ, OTC)
+    - **Automatic Failover**: When Finnhub returns `c===0` (unsupported stock), system automatically cascades to Alpha Vantage with correct symbol format
+    - **No Hardcoded Limitations**: All global stocks can be analyzed dynamically without whitelists or blacklists
+- ✅ **Smart Interactive Symbol Selection**: When ambiguous symbols detected (e.g., SAB), system returns all valid options via Telegram inline keyboard for user selection
+    - API-driven candidate discovery (no static mappings for short codes)
+    - Multi-market support (European, Asian, OTC, ADR all available)
+    - Smart scoring algorithm prioritizes exact matches and Common Stock types
 - ✅ **Intelligent Stock Analysis (Not Workflow Nodes)**: Removed hardcoded stock lists; system now queries Finnhub API in real-time to identify any stock's exchange (CVX→"NEW YORK STOCK EXCHANGE"→NYSE:CVX), making it a true intelligent analyst instead of a rule-based workflow executor
 - ✅ **Global Stock Coverage Expansion**: Extended from 44 to 150+ stocks across Americas, Europe, Asia-Pacific, and emerging markets
 - ✅ **N8N Full API Automation**: Implemented automatic workflow creation, health monitoring (5-min intervals), and self-healing capabilities
@@ -49,7 +48,12 @@ The v6.0 pipeline processes user input through language detection, semantic inte
     - **Asia-Pacific**: 11 Japan (TM, SONY), 4 Korea (SSNLF, HYMTF), 17 China/HK (BABA, 0700.HK), 4 other (INFY, DBSDY)
     - **Other**: 5 global stocks (BHP, RIO, RY, BNS, NPSNY)
     - **Disambiguation**: Longest-match-first algorithm resolves dual-listed stocks (e.g., '阿里巴巴'→BABA, '阿里港股'→9988.HK)
-- **Multi-Dimensional Data Broker**: Fetches real-time quotes, company profiles, financial metrics, and news sentiment with 120s cache TTL and API call optimization. Includes data provenance and completeness scoring.
+- **Multi-Dimensional Data Broker with Multi-API Cascade**: 
+    - **Dual-Provider Architecture**: Finnhub (primary) → Alpha Vantage (fallback) for true global coverage
+    - **Provider-Specific Symbol Format**: Automatically converts symbols for each API (e.g., `BME:GRF` for Finnhub, `GRF.MC` for Alpha Vantage)
+    - **Smart Failover**: Detects Finnhub limitations (`c===0`) and automatically cascades to Alpha Vantage
+    - **30+ Exchange Support**: Europe (BME, EPA, LSE, FRA, etc.), Asia-Pacific (SSE, SZSE, HKEX, TSE, SGX, etc.), North America (TSX, TSXV, NYSE, NASDAQ, OTC)
+    - **120s Cache TTL**: Optimized API call efficiency with data provenance and completeness scoring
 - **ImpactRank Algorithm**: Proprietary 4-dimensional news scoring (urgency × relevance × authority × freshness).
 - **Institutional Analysis Framework**: Follows a 5-section report structure (Executive Summary, Quantitative Data, Investment Themes, Risk Assessment, Actionable Recommendations) with mandatory data citations, authoritative language, and specific price targets.
 - **Vision AI Integration**: Analyzes chart patterns and fuses with fundamental data.
