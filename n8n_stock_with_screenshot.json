@@ -82,7 +82,7 @@
     },
     {
       "parameters": {
-        "url": "http://localhost:5000/brain/analyze_no_screenshot",
+        "url": "https://be5f54bc-7f5c-4e6d-bda7-196ae8475f74-00-1elilbahtopcb.sisko.replit.dev/brain/analyze_no_screenshot",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
