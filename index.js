@@ -1,4 +1,4 @@
-// ====== USIS Brain · v5.0（Telegram Bot + n8n 热力图） ======
+// ====== USIS Brain · v6.0（多AI模型 + 多语言分析 + 数据驱动投研） ======
 
 // Global error handlers（不退出进程，保持应用运行）
 process.on('unhandledRejection', (err) => {
@@ -32,6 +32,10 @@ const { validateResponse, generateCorrectionSuggestion } = require("./compliance
 const { fetchAndRankNews, formatNewsOutput } = require("./newsBroker");
 const { formatResponse, validateOutputCompliance, extractStructuredContent } = require("./responseFormatter");
 const { generateWithGPT5, wrapAsV31Synthesis } = require("./gpt5Brain"); // 🆕 v4.0: GPT-5单核引擎
+
+// 🆕 v6.0: 多AI模型与多语言分析引擎
+const MultiLanguageAnalyzer = require('./multiLanguageAnalyzer');
+const { getMultiAIProvider } = require('./multiAiProvider');
 
 // 🆕 v4.3: 智能热力图解析器
 const { extractHeatmapQuery, extractHeatmapQueryRulesOnly, buildTradingViewURL, generateHeatmapSummary, generateCaption, generateDebugReport } = require("./heatmapIntentParser");
@@ -4029,17 +4033,66 @@ app.post("/brain/orchestrate", async (req, res) => {
       }
     }
     
-    // 5. 🆕 v4.0: GPT-5单核生成（替换多AI并行投票）
-    console.log(`🧠 [v4.0] 使用GPT-5单核引擎生成分析...`);
-    const gpt5Result = await generateWithGPT5({
-      text,
-      marketData,
-      semanticIntent: semanticIntent,
-      mode: intent.mode,
-      scene,
-      symbols,
-      rankedNews: rankedNews  // 传递ImpactRank排序后的新闻
-    });
+    // 5. 🆕 v6.0: 智能多语言分析（根据输入语言自动路由模型）
+    let gpt5Result;
+    
+    try {
+      // 检测是否为中文输入或需要多语言处理
+      const isChinese = /[\u4e00-\u9fa5]/.test(text);
+      
+      if (isChinese && symbols.length > 0) {
+        console.log(`🇨🇳 [v6.0] 检测到中文输入，启动DeepSeek多语言分析`);
+        
+        const multiLangAnalyzer = new MultiLanguageAnalyzer();
+        const analysisResult = await multiLangAnalyzer.smartAnalyze(
+          text,
+          marketData,
+          { mode: intent.mode, scene: scene }
+        );
+        
+        // 转换为v5.0兼容格式
+        gpt5Result = {
+          success: analysisResult.success,
+          text: analysisResult.text,
+          model: analysisResult.model,
+          usage: analysisResult.usage,
+          cost_usd: analysisResult.cost_usd,
+          debug: {
+            language: analysisResult.language,
+            modelReason: analysisResult.modelReason,
+            provider: analysisResult.provider
+          }
+        };
+        
+        console.log(`✅ [v6.0] 多语言分析完成 (${analysisResult.model}, 语言: ${analysisResult.language})`);
+        
+      } else {
+        // 非中文或无股票代码 → 使用原有GPT-5引擎
+        console.log(`🧠 [v4.0] 使用GPT-5单核引擎生成分析...`);
+        gpt5Result = await generateWithGPT5({
+          text,
+          marketData,
+          semanticIntent: semanticIntent,
+          mode: intent.mode,
+          scene,
+          symbols,
+          rankedNews: rankedNews  // 传递ImpactRank排序后的新闻
+        });
+      }
+    } catch (multiLangError) {
+      console.warn(`⚠️  [v6.0] 多语言分析失败，降级到GPT-5:`, multiLangError.message);
+      
+      // 降级到GPT-5引擎
+      gpt5Result = await generateWithGPT5({
+        text,
+        marketData,
+        semanticIntent: semanticIntent,
+        mode: intent.mode,
+        scene,
+        symbols,
+        rankedNews: rankedNews
+      });
+    }
     
     // 6. 兼容v3.1格式（保持后续逻辑不变）
     const synthesis = wrapAsV31Synthesis(gpt5Result);

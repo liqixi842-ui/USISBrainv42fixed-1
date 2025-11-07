@@ -45,6 +45,24 @@ class MultiAIProvider {
         features: ['中文财经', 'A股分析', '本土化术语', '成本极低']
       },
       
+      // Claude 3.5 Sonnet（长文深度分析）
+      'claude-3-5-sonnet': {
+        provider: 'anthropic',
+        endpoint: 'https://api.anthropic.com/v1/messages',
+        costPer1kTokens: { input: 0.003, output: 0.015 },
+        maxTokens: 200000,
+        features: ['长文分析', '深度研究', '逻辑推理', '代码理解']
+      },
+      
+      // Gemini 2.5 Flash（快速摘要）
+      'gemini-2.5-flash': {
+        provider: 'google',
+        endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent',
+        costPer1kTokens: { input: 0.00001, output: 0.00004 },
+        maxTokens: 1000000,
+        features: ['超长上下文', '快速摘要', '多模态', '成本极低']
+      },
+      
       // Mistral Large（快速推理）
       'mistral-large-latest': {
         provider: 'mistral',
@@ -176,6 +194,17 @@ class MultiAIProvider {
    * 调用特定提供商的API
    */
   async callProvider(provider, endpoint, apiKey, model, messages, options) {
+    // Anthropic Claude特殊处理
+    if (provider === 'anthropic') {
+      return this.callAnthropicAPI(endpoint, apiKey, model, messages, options);
+    }
+
+    // Google Gemini特殊处理
+    if (provider === 'google') {
+      return this.callGoogleAPI(endpoint, apiKey, model, messages, options);
+    }
+
+    // OpenAI兼容格式（OpenAI, DeepSeek, Mistral, Perplexity）
     const requestBody = {
       model: model,
       messages: messages,
@@ -214,6 +243,107 @@ class MultiAIProvider {
         total_tokens: data.usage?.total_tokens || 0
       },
       citations: data.citations || [] // Perplexity专属
+    };
+  }
+
+  /**
+   * 调用Anthropic Claude API
+   */
+  async callAnthropicAPI(endpoint, apiKey, model, messages, options) {
+    // 转换消息格式
+    const systemMessage = messages.find(msg => msg.role === 'system');
+    const userMessages = messages.filter(msg => msg.role !== 'system');
+
+    const requestBody = {
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: options.maxTokens || 4096,
+      temperature: options.temperature || 0.7,
+      messages: userMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+    };
+
+    if (systemMessage) {
+      requestBody.system = systemMessage.content;
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Claude API调用失败 (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    return {
+      content: data.content[0].text,
+      usage: {
+        prompt_tokens: data.usage.input_tokens,
+        completion_tokens: data.usage.output_tokens,
+        total_tokens: data.usage.input_tokens + data.usage.output_tokens
+      }
+    };
+  }
+
+  /**
+   * 调用Google Gemini API
+   */
+  async callGoogleAPI(endpoint, apiKey, model, messages, options) {
+    // 转换消息格式为Gemini格式
+    const contents = messages.filter(msg => msg.role !== 'system').map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }]
+    }));
+
+    // System指令放在generationConfig中
+    const systemInstruction = messages.find(msg => msg.role === 'system');
+
+    const requestBody = {
+      contents: contents,
+      generationConfig: {
+        temperature: options.temperature || 0.7,
+        maxOutputTokens: options.maxTokens || 2048
+      }
+    };
+
+    if (systemInstruction) {
+      requestBody.systemInstruction = {
+        parts: [{ text: systemInstruction.content }]
+      };
+    }
+
+    const response = await fetch(`${endpoint}?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API调用失败 (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    return {
+      content: data.candidates[0].content.parts[0].text,
+      usage: {
+        prompt_tokens: data.usageMetadata?.promptTokenCount || 0,
+        completion_tokens: data.usageMetadata?.candidatesTokenCount || 0,
+        total_tokens: data.usageMetadata?.totalTokenCount || 0
+      }
     };
   }
 
