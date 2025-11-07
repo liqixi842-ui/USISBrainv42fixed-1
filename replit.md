@@ -3,6 +3,21 @@
 USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with real-time data integration from sources like Finnhub, SEC, and FRED. Key features include semantic intent parsing, **global stock discovery with 150+ stocks across 10+ markets**, anti-hallucination data validation, intelligent model routing for specialized analysis (e.g., Chinese financial analysis via DeepSeek), **fully automated N8N workflow management**, Vision AI chart analysis, and authoritative, data-backed investment recommendations. The system is built for deployment on Replit's Autoscale platform and aims to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
 
 ## Recent Updates (Nov 2025)
+- ✅ **Intelligent Symbol Disambiguation v2.0** (Nov 7, 2025):
+    - **Smart Precision Matching**: NVDA, AAPL等知名股票直接识别，不再误触发选择界面
+    - **3-Tier Confidence Algorithm**: 精确匹配(score≥100) → 知名股票(score≥130+Common Stock) → 显著领先(2倍分数差距)
+    - **Graceful Ambiguity Handling**: 只有真正模糊的短代码(如SAB)才触发用户选择
+    - **Zero False Positives**: 消除知名股票的不必要交互，提升用户体验
+- ✅ **Semantic Intent Understanding v3.0** (Nov 7, 2025):
+    - **Position Context Awareness**: 识别持仓场景（"DKNG 31.51买进，给续抱建议"）
+    - **Buy Price Extraction**: 自动提取买入价格（31.51、500美元等）
+    - **Holding Intent Detection**: 识别续抱、止损、卖出时机等意图
+    - **Profit Status Recognition**: 区分盈利、亏损、被套等状态
+    - **New Response Mode**: hold_recommendation模式专门处理持仓建议
+- ✅ **Timeout & Stability Improvements** (Nov 7, 2025):
+    - **Extended Timeout**: Telegram超时从28秒提升至60秒，支持复杂分析
+    - **Socket Hang Up Fix**: 解决长时间分析导致的连接断开问题
+    - **Better Error Messages**: 更友好的超时错误提示
 - ✅ **3-Tier Global Stock API Cascade** (Nov 7, 2025):
     - **Enhanced Provider Chain**: Finnhub (US stocks) → Twelve Data (global markets) → Alpha Vantage (backup)
     - **Provider-Specific Symbol Conversion**: Intelligent format adaptation for each API (Finnhub: `BME:GRF`, Twelve Data: `symbol=SAB&exchange=BME`, Alpha Vantage: `GRF.MC`)
