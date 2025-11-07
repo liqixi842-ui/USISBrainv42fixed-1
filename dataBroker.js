@@ -399,6 +399,180 @@ async function fetchNews(symbol) {
 }
 
 /**
+ * 🆕 v5.0: 获取公司概况（市值、行业、PE等）
+ * Endpoint: /stock/profile2
+ */
+async function fetchCompanyProfile(symbol) {
+  if (!FINNHUB_KEY) {
+    return { profile: null, source: null };
+  }
+  
+  try {
+    // 先查缓存（公司信息变化慢，缓存时间长）
+    const cacheKey = getCacheKey('profile', symbol);
+    const cached = getFromCache(cacheKey);
+    
+    if (cached) {
+      console.log(`   💾 [Cache Hit] ${symbol} 公司概况命中缓存`);
+      return cached;
+    }
+    
+    const url = `https://finnhub.io/api/v1/stock/profile2?symbol=${symbol}&token=${FINNHUB_KEY}`;
+    const fetchTime = Date.now();
+    
+    const response = await fetch(url, { timeout: 10000 });
+    
+    if (!response.ok) {
+      throw new Error(`Finnhub profile API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // 验证数据有效性
+    if (!data || !data.ticker) {
+      throw new Error(`Invalid profile data for ${symbol}`);
+    }
+    
+    const profile = {
+      symbol: data.ticker,
+      companyName: data.name,
+      country: data.country,
+      currency: data.currency,
+      exchange: data.exchange,
+      ipo: data.ipo,
+      marketCapitalization: data.marketCapitalization, // 市值（百万美元）
+      shareOutstanding: data.shareOutstanding, // 流通股数（百万）
+      logo: data.logo,
+      phone: data.phone,
+      weburl: data.weburl,
+      finnhubIndustry: data.finnhubIndustry, // 行业分类
+      source: 'finnhub'
+    };
+    
+    const source = {
+      provider: 'finnhub',
+      endpoint: '/stock/profile2',
+      symbol: symbol,
+      timestamp: fetchTime,
+      status: 'success'
+    };
+    
+    const result = { profile, source };
+    
+    // 存入缓存（公司信息TTL可以更长）
+    setCache(cacheKey, result);
+    
+    return result;
+    
+  } catch (error) {
+    console.error(`   ⚠️  获取公司概况失败 (${symbol}):`, error.message);
+    
+    const source = {
+      provider: 'finnhub',
+      endpoint: '/stock/profile2',
+      symbol: symbol,
+      timestamp: Date.now(),
+      status: 'failed',
+      error: error.message
+    };
+    
+    return { profile: null, source };
+  }
+}
+
+/**
+ * 🆕 v5.0: 获取基本面和技术指标
+ * Endpoint: /stock/metric
+ */
+async function fetchStockMetrics(symbol) {
+  if (!FINNHUB_KEY) {
+    return { metrics: null, source: null };
+  }
+  
+  try {
+    // 先查缓存
+    const cacheKey = getCacheKey('metrics', symbol);
+    const cached = getFromCache(cacheKey);
+    
+    if (cached) {
+      console.log(`   💾 [Cache Hit] ${symbol} 指标数据命中缓存`);
+      return cached;
+    }
+    
+    const url = `https://finnhub.io/api/v1/stock/metric?symbol=${symbol}&metric=all&token=${FINNHUB_KEY}`;
+    const fetchTime = Date.now();
+    
+    const response = await fetch(url, { timeout: 10000 });
+    
+    if (!response.ok) {
+      throw new Error(`Finnhub metrics API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // 提取关键指标
+    const metrics = {
+      symbol: symbol,
+      // 估值指标
+      peRatio: data.metric?.peBasicExclExtraTTM || data.metric?.peNormalizedAnnual,
+      pbRatio: data.metric?.pbAnnual,
+      psRatio: data.metric?.psTTM,
+      dividendYield: data.metric?.dividendYieldIndicatedAnnual,
+      
+      // 盈利能力
+      profitMargin: data.metric?.netProfitMarginTTM,
+      roa: data.metric?.roaTTM, // 资产回报率
+      roe: data.metric?.roeTTM, // 净资产收益率
+      
+      // 成长性
+      revenueGrowth: data.metric?.revenueGrowthTTMYoy, // 同比增长
+      epsGrowth: data.metric?.epsGrowthTTMYoy,
+      
+      // 技术指标 (52周高低点等)
+      high52Week: data.metric?.['52WeekHigh'],
+      low52Week: data.metric?.['52WeekLow'],
+      priceRelativeToSP500: data.metric?.['52WeekPriceReturnDaily'], // 相对S&P500表现
+      beta: data.metric?.beta,
+      
+      // 其他
+      averageVolume: data.metric?.['10DayAverageTradingVolume'],
+      
+      source: 'finnhub',
+      timestamp: fetchTime
+    };
+    
+    const source = {
+      provider: 'finnhub',
+      endpoint: '/stock/metric',
+      symbol: symbol,
+      timestamp: fetchTime,
+      status: 'success'
+    };
+    
+    const result = { metrics, source };
+    
+    // 存入缓存
+    setCache(cacheKey, result);
+    
+    return result;
+    
+  } catch (error) {
+    console.error(`   ⚠️  获取指标数据失败 (${symbol}):`, error.message);
+    
+    const source = {
+      provider: 'finnhub',
+      endpoint: '/stock/metric',
+      symbol: symbol,
+      timestamp: Date.now(),
+      status: 'failed',
+      error: error.message
+    };
+    
+    return { metrics: null, source };
+  }
+}
+
+/**
  * 计算数据新鲜度评分
  * @param {number} dataAgeMs - 数据年龄（毫秒）
  * @returns {number} - 新鲜度评分 (0-1)
@@ -535,8 +709,81 @@ function validateDataForAnalysis(marketData) {
   };
 }
 
+/**
+ * 🆕 v5.0: 数据驱动分析 - 并行获取多维度数据
+ * @param {string} symbol - 股票代码
+ * @returns {Promise<Object>} 包含报价、公司概况、指标、新闻的完整数据包
+ */
+async function fetchDataDrivenAnalysis(symbol) {
+  console.log(`\n📈 [Data-Driven Analysis] 获取${symbol}多维数据...`);
+  
+  const startTime = Date.now();
+  
+  // 并行获取所有维度数据
+  const [quoteResult, profileResult, metricsResult, newsResult] = await Promise.all([
+    (async () => {
+      try {
+        const marketData = await fetchMarketData([symbol], ['quote']);
+        return marketData.quotes[symbol] || null;
+      } catch (err) {
+        console.error(`  ⚠️  实时报价获取失败: ${err.message}`);
+        return null;
+      }
+    })(),
+    
+    fetchCompanyProfile(symbol).catch(err => {
+      console.error(`  ⚠️  公司概况获取失败: ${err.message}`);
+      return { profile: null, source: null };
+    }),
+    
+    fetchStockMetrics(symbol).catch(err => {
+      console.error(`  ⚠️  指标数据获取失败: ${err.message}`);
+      return { metrics: null, source: null };
+    }),
+    
+    fetchNews(symbol).catch(err => {
+      console.error(`  ⚠️  新闻数据获取失败: ${err.message}`);
+      return { news: [], sources: [] };
+    })
+  ]);
+  
+  const elapsed = Date.now() - startTime;
+  
+  // 计算数据完整性
+  const dataCompleteness = {
+    hasQuote: !!quoteResult,
+    hasProfile: !!profileResult.profile,
+    hasMetrics: !!metricsResult.metrics,
+    hasNews: newsResult.news.length > 0,
+    completenessScore: [
+      !!quoteResult,
+      !!profileResult.profile,
+      !!metricsResult.metrics,
+      newsResult.news.length > 0
+    ].filter(Boolean).length / 4
+  };
+  
+  console.log(`✅ [Data-Driven Analysis] 完成 (${elapsed}ms, 完整度: ${(dataCompleteness.completenessScore * 100).toFixed(0)}%)`);
+  
+  return {
+    symbol: symbol,
+    quote: quoteResult,
+    profile: profileResult.profile,
+    metrics: metricsResult.metrics,
+    news: newsResult.news,
+    metadata: {
+      timestamp: Date.now(),
+      elapsed_ms: elapsed,
+      completeness: dataCompleteness
+    }
+  };
+}
+
 module.exports = {
   fetchMarketData,
   validateDataForAnalysis,
-  calculateFreshnessScore
+  calculateFreshnessScore,
+  fetchCompanyProfile,
+  fetchStockMetrics,
+  fetchDataDrivenAnalysis
 };

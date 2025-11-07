@@ -3963,21 +3963,62 @@ app.post("/brain/orchestrate", async (req, res) => {
           console.log(`✅ 个股图表生成成功 (provider: ${chartResult.provider}, ${chartResult.elapsed_ms}ms)`);
           tasks.push('generate_stock_chart');
           
-          // 如果有Vision分析结果，尝试生成综合报告
-          if (chartResult.chartAnalysis && chartResult.stockData) {
+          // 🆕 v5.0: 数据驱动分析（获取多维度数据）
+          if (chartResult.chartAnalysis) {
             try {
-              const analysisResult = await generateStockAnalysis(
-                chartResult.stockData,
+              console.log(`📊 [v5.0] 启动数据驱动分析: ${symbols[0]}`);
+              
+              // 🎯 优化：仅获取缺失的数据（profile + metrics），复用已有的quote和news
+              const { fetchCompanyProfile, fetchStockMetrics } = require('./dataBroker');
+              
+              const [profileResult, metricsResult] = await Promise.all([
+                fetchCompanyProfile(symbols[0]).catch(() => ({ profile: null, source: null })),
+                fetchStockMetrics(symbols[0]).catch(() => ({ metrics: null, source: null }))
+              ]);
+              
+              // 构建数据包（复用marketData中的quote和news）
+              const dataPackage = {
+                symbol: symbols[0],
+                quote: marketData.quotes[symbols[0]] || chartResult.stockData,
+                profile: profileResult.profile,
+                metrics: metricsResult.metrics,
+                news: marketData.news || [],
+                metadata: {
+                  timestamp: Date.now(),
+                  completeness: {
+                    hasQuote: !!(marketData.quotes[symbols[0]] || chartResult.stockData),
+                    hasProfile: !!profileResult.profile,
+                    hasMetrics: !!metricsResult.metrics,
+                    hasNews: marketData.news && marketData.news.length > 0,
+                    completenessScore: [
+                      !!(marketData.quotes[symbols[0]] || chartResult.stockData),
+                      !!profileResult.profile,
+                      !!metricsResult.metrics,
+                      marketData.news && marketData.news.length > 0
+                    ].filter(Boolean).length / 4
+                  }
+                }
+              };
+              
+              console.log(`📦 数据完整度: ${(dataPackage.metadata.completeness.completenessScore * 100).toFixed(0)}%`);
+              
+              // 调用新版数据驱动分析
+              const { generateDataDrivenStockAnalysis } = require('./gpt5Brain');
+              const analysisResult = await generateDataDrivenStockAnalysis(
+                dataPackage,
                 chartResult.chartAnalysis,
                 { mode: intent.mode, scene: scene }
               );
               
               if (analysisResult.success) {
                 stockChartData.comprehensiveAnalysis = analysisResult.text;
-                console.log(`✅ 个股综合分析生成成功 (${analysisResult.model})`);
+                stockChartData.dataCompleteness = dataPackage.metadata.completeness.completenessScore;
+                console.log(`✅ [v5.0] 数据驱动分析完成 (${analysisResult.model}, 成本: $${analysisResult.cost_usd?.toFixed(4) || '0.00'})`);
               }
             } catch (err) {
-              console.warn(`⚠️  个股综合分析失败: ${err.message}`);
+              console.warn(`⚠️  数据驱动分析失败: ${err.message}`);
+              console.warn(`   降级：使用Vision分析作为备选`);
+              stockChartData.comprehensiveAnalysis = chartResult.chartAnalysis;
             }
           }
         } else {

@@ -339,70 +339,36 @@ function estimateCost(modelId, usage) {
 }
 
 /**
- * 🆕 生成个股综合分析（基础数据 + 图表技术分析）
- * @param {Object} stockData - 股票基础数据
- * @param {string} chartAnalysis - Vision AI的技术分析
+ * 🆕 v5.0: 生成数据驱动的机构级个股分析
+ * @param {Object} dataPackage - 完整数据包（来自fetchDataDrivenAnalysis）
+ * @param {string} chartAnalysis - Vision AI的技术分析（可选）
  * @param {Object} context - 附加上下文
- * @returns {Promise<Object>} 综合分析结果
+ * @returns {Promise<Object>} 机构级分析结果
  */
-async function generateStockAnalysis(stockData, chartAnalysis, context = {}) {
+async function generateDataDrivenStockAnalysis(dataPackage, chartAnalysis, context = {}) {
   const startTime = Date.now();
+  const symbol = dataPackage.symbol;
   
-  console.log(`\n📊 [Stock Analysis] 生成${stockData.symbol}综合报告`);
+  console.log(`\n📊 [Data-Driven Stock Analysis] 生成${symbol}机构级报告`);
   
-  // 构建系统提示词
-  const systemPrompt = `你是一位资深股票分析师，擅长综合基本面和技术面分析。请基于提供的数据生成专业的个股分析报告。
+  // 构建系统提示词 - 机构级分析师角色
+  const systemPrompt = `你是高盛(Goldman Sachs)股票研究部的首席分析师，专注于提供数据驱动的投资建议。
 
-【输出要求】
-1. 使用标准Markdown格式（## ### -）
-2. 结合实时数据和技术分析给出结论
-3. 提供具体的数值和价格位
-4. 保持客观中立的专业态度
-5. 避免绝对化判断，注明风险提示`;
+【核心原则】
+1. 数据至上：每个判断必须有数据支撑
+2. 量化优先：优先使用具体数值和百分比
+3. 权威表述：避免"可能"、"或许"等防御性措辞，直接陈述基于数据的判断
+4. 结构清晰：采用机构投研报告格式
+5. 可执行性：提供具体的操作建议和价格位
 
-  // 构建用户提示词
-  const userPrompt = `请为${stockData.symbol}生成综合分析报告：
+【禁止行为】
+- 禁止编造任何未在数据中提供的数字
+- 禁止使用"根据历史经验"等模糊表述
+- 禁止提供无法验证的主观评论
+- 禁止使用过多免责声明干扰核心结论`;
 
-## 基础数据
-
-**代码**: ${stockData.symbol || 'N/A'}
-**公司**: ${stockData.companyName || 'N/A'}
-**交易所**: ${stockData.exchange || 'N/A'}
-**当前价**: $${stockData.c?.toFixed(2) || 'N/A'}
-**涨跌额**: ${stockData.d >= 0 ? '+' : ''}${stockData.d?.toFixed(2) || 0}
-**涨跌幅**: ${stockData.dp >= 0 ? '+' : ''}${stockData.dp?.toFixed(2) || 0}%
-**开盘价**: $${stockData.o?.toFixed(2) || 'N/A'}
-**最高价**: $${stockData.h?.toFixed(2) || 'N/A'}
-**最低价**: $${stockData.l?.toFixed(2) || 'N/A'}
-**昨收价**: $${stockData.pc?.toFixed(2) || 'N/A'}
-
-## 图表技术分析
-
-${chartAnalysis || '暂无技术分析'}
-
-## 请输出以下内容
-
-### I. 行情概览
-- 当日走势特征
-- 与昨收价对比分析
-- 日内波动幅度评估
-
-### II. 技术面综合判断
-- 结合图表分析给出趋势判断
-- 关键支撑阻力位确认
-- 交易信号强度评估
-
-### III. 操作建议
-- 适合的交易策略（买入/观望/卖出）
-- 建议入场价位和仓位
-- 止损止盈设置建议
-
-### IV. 风险提示
-- 主要风险因素
-- 需要关注的市场变化
-- 投资者适用性说明
-
-【注意】保持简洁专业，突出关键信息`;
+  // 构建用户提示词 - 数据驱动结构
+  const userPrompt = buildDataDrivenPrompt(dataPackage, chartAnalysis, context);
 
   // 调用GPT-5生成报告
   const result = await callModelWithFallback({
@@ -412,6 +378,187 @@ ${chartAnalysis || '暂无技术分析'}
   });
   
   return result;
+}
+
+/**
+ * 🆕 v5.0: 构建数据驱动提示词（机构级投研模板）
+ */
+function buildDataDrivenPrompt(dataPackage, chartAnalysis, context) {
+  const { symbol, quote, profile, metrics, news } = dataPackage;
+  
+  // 计算关键指标
+  const marketCap = profile?.marketCapitalization 
+    ? `$${(profile.marketCapitalization / 1000).toFixed(2)}B` 
+    : 'N/A';
+  
+  const currentPrice = quote?.currentPrice?.toFixed(2) || 'N/A';
+  const changePercent = quote?.changePercent?.toFixed(2) || 0;
+  const changeSymbol = quote?.changePercent >= 0 ? '+' : '';
+  
+  // 估值水平判断
+  const peRatio = metrics?.peRatio?.toFixed(2) || 'N/A';
+  const pbRatio = metrics?.pbRatio?.toFixed(2) || 'N/A';
+  
+  // 盈利能力
+  const profitMargin = metrics?.profitMargin 
+    ? `${(metrics.profitMargin * 100).toFixed(1)}%` 
+    : 'N/A';
+  const roe = metrics?.roe 
+    ? `${(metrics.roe * 100).toFixed(1)}%` 
+    : 'N/A';
+  
+  // 成长性
+  const revenueGrowth = metrics?.revenueGrowth 
+    ? `${(metrics.revenueGrowth * 100).toFixed(1)}%` 
+    : 'N/A';
+  
+  // 52周区间
+  const high52Week = metrics?.high52Week?.toFixed(2) || 'N/A';
+  const low52Week = metrics?.low52Week?.toFixed(2) || 'N/A';
+  
+  // 当前价格在52周区间的位置
+  let pricePosition = 'N/A';
+  if (quote?.currentPrice && metrics?.high52Week && metrics?.low52Week) {
+    const range = metrics.high52Week - metrics.low52Week;
+    const position = (quote.currentPrice - metrics.low52Week) / range;
+    pricePosition = `${(position * 100).toFixed(1)}%`;
+  }
+  
+  // 新闻摘要
+  const newsHeadlines = news?.slice(0, 3).map((n, i) => `${i+1}. ${n.headline}`).join('\n') || '暂无近期新闻';
+  
+  return `基于以下实时数据为${symbol}生成机构级投资分析报告：
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 **核心数据** (数据来源: Finnhub实时API)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+### 基本信息
+- **股票代码**: ${symbol}
+- **公司名称**: ${profile?.companyName || 'N/A'}
+- **行业分类**: ${profile?.finnhubIndustry || 'N/A'}
+- **交易所**: ${profile?.exchange || 'N/A'}
+- **市值**: ${marketCap}
+
+### 实时行情
+- **当前价格**: $${currentPrice}
+- **涨跌幅**: ${changeSymbol}${changePercent}%
+- **开盘价**: $${quote?.open?.toFixed(2) || 'N/A'}
+- **日内高低**: $${quote?.high?.toFixed(2) || 'N/A'} / $${quote?.low?.toFixed(2) || 'N/A'}
+- **昨收**: $${quote?.previousClose?.toFixed(2) || 'N/A'}
+
+### 估值指标
+- **市盈率(P/E)**: ${peRatio}
+- **市净率(P/B)**: ${pbRatio}
+- **盈利能力(净利润率)**: ${profitMargin}
+- **股东回报(ROE)**: ${roe}
+
+### 成长性指标
+- **营收增长(YoY)**: ${revenueGrowth}
+- **EPS增长(YoY)**: ${metrics?.epsGrowth ? `${(metrics.epsGrowth * 100).toFixed(1)}%` : 'N/A'}
+
+### 技术指标
+- **52周高点**: $${high52Week}
+- **52周低点**: $${low52Week}
+- **当前位置**: ${pricePosition} (在52周区间内)
+- **Beta系数**: ${metrics?.beta?.toFixed(2) || 'N/A'}
+
+${chartAnalysis ? `### Vision AI技术分析\n${chartAnalysis}\n` : ''}
+
+### 近期新闻
+${newsHeadlines}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 **分析要求** (机构投研报告格式)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+请按照以下结构生成**数据驱动**的分析报告：
+
+## 📈 ${symbol} 投资分析报告
+
+### 🔍 执行摘要
+【权威陈述，3-4句话直接给出核心判断】
+- 基于${symbol}当前市值${marketCap}和${changeSymbol}${changePercent}%的表现，市场对该股的定位是...
+- 估值水平显示...（引用P/E=${peRatio}）
+- 核心投资逻辑...
+
+### 📊 量化数据分析
+
+**市场表现**
+- 当日表现: 数据显示${symbol}报收$${currentPrice}，${changeSymbol}${changePercent}%...
+- 历史区间: 当前价格位于52周区间的${pricePosition}位置，距离高点$${high52Week}...
+
+**估值水平**
+- P/E=${peRatio}，相对行业均值...（给出判断：高估/合理/低估）
+- 盈利质量: 净利润率${profitMargin}，ROE=${roe}，显示公司...
+
+**成长性**
+- 营收增长${revenueGrowth}，指标显示...
+- EPS增长趋势...
+
+${chartAnalysis ? '**技术面**\n- 图表显示...\n- 关键价格位...\n' : ''}
+
+### 🎯 投资主题
+【基于数据提炼2-3个核心主题】
+1. **主题1**: （数据支撑）
+2. **主题2**: （数据支撑）
+
+### ⚠️ 风险评估
+【量化风险，给出具体监控指标】
+- **风险1**: （具体数据 + 影响程度）
+- **风险2**: （监控指标）
+
+### 💡 操作建议
+
+**目标价位**: 基于当前估值${peRatio}倍P/E和行业对标...
+**建议仓位**: （具体百分比）
+**入场策略**: 
+- 激进型: $XX - $XX
+- 稳健型: $XX - $XX
+**止损位**: $XX（理由：技术支撑/估值下限）
+
+**投资时间框架**: 短期(1-3月) / 中期(3-6月)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  **重要提示**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. **严格使用提供的数据**：所有数值必须来自上述数据，禁止编造
+2. **权威表述**：使用"数据显示"、"指标证实"、"财报反映"等确定性表述
+3. **具体量化**：避免"可能上涨"，改为"基于XX指标，目标价位$XX"
+4. **可执行性**：给出具体价格位和仓位建议
+
+请立即生成报告：`;
+}
+
+/**
+ * 🔄 v5.0兼容层：旧版generateStockAnalysis（已废弃，保留向后兼容）
+ * 建议使用generateDataDrivenStockAnalysis
+ */
+async function generateStockAnalysis(stockData, chartAnalysis, context = {}) {
+  console.warn('⚠️  [Deprecated] 使用旧版generateStockAnalysis，建议升级到generateDataDrivenStockAnalysis');
+  
+  // 简单包装为新格式
+  const dataPackage = {
+    symbol: stockData.symbol,
+    quote: {
+      currentPrice: stockData.c,
+      changePercent: stockData.dp,
+      change: stockData.d,
+      open: stockData.o,
+      high: stockData.h,
+      low: stockData.l,
+      previousClose: stockData.pc
+    },
+    profile: {
+      companyName: stockData.companyName,
+      exchange: stockData.exchange
+    },
+    metrics: null,
+    news: []
+  };
+  
+  return generateDataDrivenStockAnalysis(dataPackage, chartAnalysis, context);
 }
 
 /**
@@ -432,6 +579,7 @@ function wrapAsV31Synthesis(gpt5Result) {
 
 module.exports = {
   generateWithGPT5,
-  generateStockAnalysis,
+  generateStockAnalysis, // 旧版（兼容）
+  generateDataDrivenStockAnalysis, // 🆕 v5.0新版
   wrapAsV31Synthesis
 };
