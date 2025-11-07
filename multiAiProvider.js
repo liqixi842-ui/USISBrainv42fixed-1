@@ -134,6 +134,24 @@ class MultiAIProvider {
    */
   async generate(modelName, messages, options = {}) {
     const startTime = Date.now();
+    const recursionDepth = options._recursionDepth || 0;
+    
+    // 🔒 防止无限递归（最多允许2次降级）
+    if (recursionDepth > 2) {
+      const errorMsg = '所有AI模型都不可用（API密钥缺失或服务故障）';
+      console.error(`❌ [MultiAI] ${errorMsg}`);
+      return {
+        success: false,
+        text: '❌ 系统暂时不可用，请检查API密钥配置或稍后重试',
+        model: 'error',
+        provider: 'none',
+        error: errorMsg,
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        cost_usd: 0,
+        elapsed_ms: Date.now() - startTime
+      };
+    }
+    
     const modelConfig = this.models[modelName];
     
     if (!modelConfig) {
@@ -144,8 +162,8 @@ class MultiAIProvider {
     const apiKey = this.apiKeys[provider];
 
     if (!apiKey) {
-      console.warn(`⚠️  [MultiAI] ${provider} API密钥未配置，降级到默认模型`);
-      return this.fallbackGenerate(messages, options);
+      console.warn(`⚠️  [MultiAI] ${provider} API密钥未配置，降级到默认模型 (递归深度: ${recursionDepth})`);
+      return this.fallbackGenerate(messages, { ...options, _recursionDepth: recursionDepth + 1 });
     }
 
     try {
@@ -180,10 +198,11 @@ class MultiAIProvider {
     } catch (error) {
       console.error(`❌ [MultiAI] ${modelName} 调用失败:`, error.message);
       
-      // 降级处理
-      if (modelName !== 'gpt-4o-mini') {
-        console.log(`🔄 [MultiAI] 降级到备用模型`);
-        return this.fallbackGenerate(messages, options);
+      // 降级处理（避免无限递归）
+      const recursionDepth = options._recursionDepth || 0;
+      if (modelName !== 'gpt-4o-mini' && recursionDepth < 2) {
+        console.log(`🔄 [MultiAI] 降级到备用模型 (递归深度: ${recursionDepth})`);
+        return this.fallbackGenerate(messages, { ...options, _recursionDepth: recursionDepth + 1 });
       }
       
       throw error;
@@ -349,9 +368,11 @@ class MultiAIProvider {
 
   /**
    * 降级到备用模型（OpenAI GPT-4o-mini）
+   * 🔒 递归深度已在options中传递，防止无限循环
    */
   async fallbackGenerate(messages, options) {
-    console.log('🛡️  [MultiAI] 使用备用模型: gpt-4o-mini');
+    const recursionDepth = options._recursionDepth || 0;
+    console.log(`🛡️  [MultiAI] 使用备用模型: gpt-4o-mini (递归深度: ${recursionDepth})`);
     return this.generate('gpt-4o-mini', messages, options);
   }
 
