@@ -2009,18 +2009,19 @@ async function validateAndFixSymbols(symbols = [], contextHints = {}) {
   const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
   
   // 🎯 Phase 1: 静态映射表（最权威、最快）
+  // ⚠️ 注意：只映射**明确无歧义**的全名，短代码应该通过API查询后让用户选择
   const STATIC_SYMBOL_MAP = {
-    // 西班牙主要股票（使用美国OTC ADR代码，Finnhub免费版不支持欧洲交易所）
-    'sab': 'BNDSY', 'sabadell': 'BNDSY',  // Banco de Sabadell ADR
-    'san': 'SAN', 'santander': 'SAN',     // Banco Santander (NYSE上市)
-    'bbva': 'BBVXF',                       // BBVA ADR (OTC)
-    'tef': 'TEF', 'telefonica': 'TEF',    // Telefonica ADR (NYSE上市)
-    'ibe': 'IBDRY', 'iberdrola': 'IBDRY', // Iberdrola ADR
-    'rep': 'REPYY', 'repsol': 'REPYY',    // Repsol ADR
-    'itx': 'IDEXY', 'inditex': 'IDEXY',   // Inditex ADR
-    // 常见歧义符号
-    'baba': 'BABA', // 默认美股ADR而非9988.HK
-    'tencent': '0700.HK'
+    // 西班牙主要股票（仅全名映射，ADR优先）
+    'sabadell': 'BNDSY',      // Banco de Sabadell 全名 → ADR
+    'santander': 'SAN',       // Banco Santander 全名 → NYSE
+    'telefonica': 'TEF',      // Telefonica 全名 → NYSE
+    'iberdrola': 'IBDRY',     // Iberdrola 全名 → ADR
+    'repsol': 'REPYY',        // Repsol 全名 → ADR
+    'inditex': 'IDEXY',       // Inditex 全名 → ADR
+    // 其他明确的全名映射
+    'tencent': '0700.HK',
+    'alibaba': 'BABA'
+    // ❌ 不再包含短代码如 sab, bbva, ibe 等 - 让API查询后用户选择
   };
   
   if (!FINNHUB_KEY) {
@@ -2098,8 +2099,16 @@ async function validateAndFixSymbols(symbols = [], contextHints = {}) {
       scored.sort((a, b) => b.score - a.score);
       
       // 🆕 检查是否需要用户确认（多个高分候选）
-      const topCandidates = scored.filter(s => s.score >= scored[0].score * 0.7); // 得分≥最高分70%的候选
-      const needsUserChoice = topCandidates.length > 1 && contextHints.interactive;
+      // 策略：短代码(<5字符)强制用户选择，长名称用宽松阈值
+      const isShortSymbol = symbol.length < 5;
+      const threshold = isShortSymbol ? 0.5 : 0.7; // 短代码用50%阈值，长名称用70%
+      const topCandidates = scored.filter(s => s.score >= scored[0].score * threshold);
+      
+      // 对于短代码，即使只有1个候选也显示（但结果>3个时才需要选择）
+      const needsUserChoice = contextHints.interactive && (
+        (isShortSymbol && scored.length >= 3) ||  // 短代码有>=3个结果就让用户选
+        (topCandidates.length > 1)                 // 或有多个高分候选
+      );
       
       if (needsUserChoice) {
         // 返回特殊标记，让调用方处理用户选择
