@@ -2111,11 +2111,23 @@ async function validateAndFixSymbols(symbols = [], contextHints = {}) {
       );
       
       if (needsUserChoice) {
-        // 🔍 过滤掉Finnhub免费版不支持的交易所
-        const unsupportedExchanges = ['.MC', '.PA', '.DE', '.MI', '.L', '.F', '.SW', '.AS', '.BR', '.CO'];
+        // 🔍 Finnhub免费版只支持美国股票/OTC - 使用白名单策略
+        // 支持的格式：AAPL, TSLA (无后缀美股), 或特定OTC后缀
         const supportedCandidates = topCandidates.filter(c => {
           const sym = c.symbol;
-          return !unsupportedExchanges.some(ex => sym.endsWith(ex));
+          
+          // ✅ 规则1：无后缀（美国主板股票如AAPL, TSLA）
+          if (!sym.includes('.') && !sym.includes(':')) return true;
+          
+          // ✅ 规则2：OTC后缀（美国场外交易）
+          const otcSuffixes = ['.O', '.PK', '.PINK'];
+          if (otcSuffixes.some(suffix => sym.endsWith(suffix))) return true;
+          
+          // ✅ 规则3：香港交易所（Finnhub免费版支持）
+          if (sym.endsWith('.HK') || sym.match(/^\d{4}\.HK$/)) return true;
+          
+          // ❌ 其他所有带后缀的（欧洲、亚洲其他市场等）都拒绝
+          return false;
         });
         
         // 🎯 智能映射：如果过滤后为空，查找对应的ADR代码
