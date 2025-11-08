@@ -5632,6 +5632,9 @@ if (TELEGRAM_TOKEN) {
     }
   }
   
+  // 🆕 v3.2: 临时缓存用户的持仓信息（用于callback恢复）
+  const userPositionContextCache = new Map(); // key: userId, value: {positionContext, timestamp}
+  
   // Telegram API 调用
   function telegramAPI(method, params = {}, timeout = 35000) {
     return new Promise((resolve, reject) => {
@@ -5719,6 +5722,13 @@ if (TELEGRAM_TOKEN) {
           positionContext = semanticIntent.positionContext || null;
           if (positionContext && positionContext.buyPrice) {
             console.log(`💼 检测到持仓信息: 买入成本 $${positionContext.buyPrice}`);
+            
+            // 🆕 缓存持仓信息（5分钟有效期）用于callback恢复
+            userPositionContextCache.set(userId, {
+              positionContext: positionContext,
+              timestamp: Date.now()
+            });
+            console.log(`💾 已缓存用户${userId}的持仓信息`);
           }
         } catch (intentError) {
           console.log(`⚠️ 意图解析失败（将使用通用分析）: ${intentError.message}`);
@@ -5932,12 +5942,21 @@ if (TELEGRAM_TOKEN) {
             text: `🔄 正在生成 ${selectedSymbol} K线图表，这可能需要15-30秒...\n\n📸 步骤1: 截取TradingView图表\n🤖 步骤2: GPT-4o Vision技术分析\n⏳ 请稍候...` 
           });
           
-          // 🆕 v3.2: 尝试从用户消息历史中恢复positionContext
-          // （callback无法直接获取原始消息，这里做简化处理）
+          // 🆕 v3.2: 从缓存中恢复持仓信息
+          let positionContext = null;
+          const cached = userPositionContextCache.get(userId);
+          if (cached && (Date.now() - cached.timestamp) < 5 * 60 * 1000) {
+            // 5分钟内有效
+            positionContext = cached.positionContext;
+            console.log(`💼 从缓存恢复持仓信息: 买入成本 $${positionContext.buyPrice}`);
+          } else {
+            console.log(`⚠️ 缓存已过期或不存在，使用通用分析`);
+          }
+          
           const result = await generateStockChart(selectedSymbol, {
             interval: 'D',
             userText: `解析${selectedSymbol}`,
-            positionContext: null  // callback场景暂无持仓信息
+            positionContext: positionContext  // 🆕 v3.2: 从缓存恢复持仓信息
           });
           
           // 删除进度消息
