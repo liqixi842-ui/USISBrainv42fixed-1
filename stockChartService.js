@@ -116,10 +116,9 @@ async function generateStockChart(symbol, options = {}) {
     let stockData = null;
     try {
       const marketData = await fetchMarketData([symbol]);
-      stockData = marketData.quotes && marketData.quotes.length > 0 
-        ? marketData.quotes[0] 
-        : null;
-      console.log(`📊 [Market Data] ${stockData ? '已获取' : '获取失败'}`);
+      // 🔧 修复：quotes是对象，不是数组
+      stockData = marketData.quotes ? marketData.quotes[symbol] : null;
+      console.log(`📊 [Market Data] ${stockData ? `已获取 (price=$${stockData.currentPrice})` : '获取失败'}`);
     } catch (dataError) {
       console.log(`⚠️  [Market Data] 跳过: ${dataError.message}`);
     }
@@ -143,8 +142,8 @@ async function generateStockChart(symbol, options = {}) {
         
         const marketContext = {
           symbol: symbol,
-          currentPrice: stockData?.c || 'N/A',
-          changePercent: stockData?.dp || 0,
+          currentPrice: stockData?.currentPrice || 'N/A',  // 🔧 修复：使用包装后的字段
+          changePercent: stockData?.changePercent || 0,    // 🔧 修复：使用包装后的字段
           companyName: stockData?.name || symbol,
           exchange: stockData?.exchange || 'N/A',
           positionContext: options.positionContext || null  // 🆕 v3.2: 持仓信息
