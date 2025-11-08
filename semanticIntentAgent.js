@@ -154,7 +154,15 @@ US, Spain, HK, CN, EU, UK, JP, Global
 **持仓场景识别示例**：
 - "NVDA 500美元买的，现在怎么办" → positionContext={buyPrice:500, holdingIntent:true}
 - "TSLA被套了，何时止损" → positionContext={profitStatus:"loss", holdingIntent:true}
-- "AAPL盈利20%，继续持有还是卖出" → positionContext={profitStatus:"profit", holdingIntent:true}`;
+- "AAPL盈利20%，继续持有还是卖出" → positionContext={profitStatus:"profit", holdingIntent:true}
+- "NFLX 1093买入，给出操作建议" → positionContext={buyPrice:1093, holdingIntent:true}
+- "成本价30，现在该不该卖" → positionContext={buyPrice:30, holdingIntent:true}
+- "亏了10%，要不要割肉" → positionContext={profitStatus:"loss", holdingIntent:true}
+
+**同义词映射**：
+- 买入、买进、建仓、入场 → 都表示买入
+- 操作建议、续抱建议、持仓建议、交易建议 → 都是hold_recommendation
+- 卖出时机、止盈止损、何时出场 → 都是持仓建议场景`;
 }
 
 /**
