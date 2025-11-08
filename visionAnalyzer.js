@@ -230,15 +230,38 @@ ${this.getSectorSpecificDrivers(marketContext)}
     const symbol = marketContext.symbol || 'N/A';
     const currentPrice = marketContext.currentPrice || 'N/A';
     const changePercent = marketContext.changePercent || 0;
+    const positionContext = marketContext.positionContext || null;
     
-    return `作为专业技术分析师，对${symbol}的K线图进行深度技术分析。
+    let prompt = `作为专业技术分析师，对${symbol}的K线图进行深度技术分析。
 
 ## 当前市场状态
 
 股票代码: ${symbol}
 当前价格: $${currentPrice}
 涨跌幅: ${changePercent >= 0 ? '+' : ''}${changePercent}%
+`;
 
+    // 🆕 v3.2: 持仓信息（个性化分析关键）
+    if (positionContext && positionContext.buyPrice) {
+      const buyPrice = positionContext.buyPrice;
+      let profitLoss = 'N/A';
+      let profitPercent = 'N/A';
+      
+      if (currentPrice !== 'N/A' && typeof currentPrice === 'number') {
+        profitLoss = (currentPrice - buyPrice).toFixed(2);
+        profitPercent = (((currentPrice - buyPrice) / buyPrice) * 100).toFixed(2);
+      }
+      
+      prompt += `
+⚠️ **重要：用户持仓信息**
+买入成本: $${buyPrice}
+当前盈亏: ${profitLoss !== 'N/A' ? (profitLoss >= 0 ? '+$' : '-$') + Math.abs(profitLoss) : 'N/A'}
+盈亏比例: ${profitPercent !== 'N/A' ? (profitPercent >= 0 ? '+' : '') + profitPercent + '%' : 'N/A'}
+持仓意图: ${positionContext.holdingIntent ? '询问操作建议（续抱/止盈/止损）' : '一般查询'}
+`;
+    }
+
+    prompt += `
 ## 技术分析框架
 
 请基于图表提供以下分析（使用标准Markdown格式）：
@@ -266,8 +289,22 @@ ${this.getSectorSpecificDrivers(marketContext)}
 
 ### V. 交易信号
 - 买入信号强度（1-10分）
-- 卖出信号强度（1-10分）
-- 持仓建议
+- 卖出信号强度（1-10分）`;
+
+    // 🆕 个性化持仓建议
+    if (positionContext && positionContext.buyPrice) {
+      prompt += `
+- **持仓操作建议**（基于买入成本$${positionContext.buyPrice}）:
+  * 明确说明：继续持有/部分止盈/全部止盈/止损
+  * 止盈位建议：具体价格
+  * 止损位建议：具体价格
+  * 风险收益比分析`;
+    } else {
+      prompt += `
+- 持仓建议（通用）`;
+    }
+
+    prompt += `
 
 ### VI. 风险评估
 - 技术面风险等级（1=低风险 到 5=高风险）
@@ -280,6 +317,8 @@ ${this.getSectorSpecificDrivers(marketContext)}
 3. 提供量化评分和具体价格位
 4. 保持简洁专业的表达
 5. 避免模糊表述，给出明确判断`;
+    
+    return prompt;
   }
 
   extractMetricsFromInstitutionalText(text) {

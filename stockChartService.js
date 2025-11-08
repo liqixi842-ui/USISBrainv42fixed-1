@@ -146,7 +146,8 @@ async function generateStockChart(symbol, options = {}) {
           currentPrice: stockData?.c || 'N/A',
           changePercent: stockData?.dp || 0,
           companyName: stockData?.name || symbol,
-          exchange: stockData?.exchange || 'N/A'
+          exchange: stockData?.exchange || 'N/A',
+          positionContext: options.positionContext || null  // 🆕 v3.2: 持仓信息
         };
         
         const visualAnalysis = await visionAnalyzer.analyzeStockChart(

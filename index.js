@@ -5712,6 +5712,18 @@ if (TELEGRAM_TOKEN) {
         // 🧠 个股分析（大脑）→ 📸 调用n8n截图（眼睛）→ 📊 AI分析
         console.log(`📈 个股分析请求: ${symbols.join(', ')}`);
         
+        // 🆕 v3.2: 解析意图以获取持仓信息
+        let positionContext = null;
+        try {
+          const semanticIntent = await parseUserIntent(text, []);
+          positionContext = semanticIntent.positionContext || null;
+          if (positionContext && positionContext.buyPrice) {
+            console.log(`💼 检测到持仓信息: 买入成本 $${positionContext.buyPrice}`);
+          }
+        } catch (intentError) {
+          console.log(`⚠️ 意图解析失败（将使用通用分析）: ${intentError.message}`);
+        }
+        
         // 🆕 智能验证符号（交互式模式）
         const validatedSymbols = await validateAndFixSymbols(symbols, { interactive: true });
         
@@ -5763,7 +5775,8 @@ if (TELEGRAM_TOKEN) {
         try {
           const result = await generateStockChart(finalSymbol, {
             interval: 'D',
-            userText: text
+            userText: text,
+            positionContext: positionContext  // 🆕 v3.2: 传递持仓信息
           });
           
           // 🆕 删除进度提示消息（成功后清理）
@@ -5919,9 +5932,12 @@ if (TELEGRAM_TOKEN) {
             text: `🔄 正在生成 ${selectedSymbol} K线图表，这可能需要15-30秒...\n\n📸 步骤1: 截取TradingView图表\n🤖 步骤2: GPT-4o Vision技术分析\n⏳ 请稍候...` 
           });
           
+          // 🆕 v3.2: 尝试从用户消息历史中恢复positionContext
+          // （callback无法直接获取原始消息，这里做简化处理）
           const result = await generateStockChart(selectedSymbol, {
             interval: 'D',
-            userText: `解析${selectedSymbol}`
+            userText: `解析${selectedSymbol}`,
+            positionContext: null  // callback场景暂无持仓信息
           });
           
           // 删除进度消息
