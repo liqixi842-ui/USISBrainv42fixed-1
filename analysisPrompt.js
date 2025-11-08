@@ -184,6 +184,7 @@ function buildQueryPrompt(userQuery, intent) {
   prompt += `**解析的意图**:\n`;
   prompt += `- 意图类型: ${intent.intentType}\n`;
   prompt += `- 分析模式: ${intent.mode}\n`;
+  prompt += `- 响应模式: ${intent.responseMode || 'full_report'}\n`;
   
   if (intent.entities && intent.entities.length > 0) {
     prompt += `- 识别的实体: ${intent.entities.map(e => `${e.value}(${e.type})`).join(', ')}\n`;
@@ -195,6 +196,27 @@ function buildQueryPrompt(userQuery, intent) {
   
   if (intent.sector) {
     prompt += `- 行业板块: ${intent.sector}\n`;
+  }
+  
+  // 🆕 v3.2: 持仓信息（个性化分析关键）
+  if (intent.positionContext && intent.positionContext.buyPrice) {
+    prompt += `\n⚠️ **重要：用户持仓信息**（必须基于此提供个性化建议）:\n`;
+    prompt += `- 买入成本: $${intent.positionContext.buyPrice}\n`;
+    
+    if (intent.positionContext.holdingIntent) {
+      prompt += `- 持仓意图: 询问续抱、止盈、止损建议\n`;
+    }
+    
+    if (intent.positionContext.profitStatus) {
+      prompt += `- 当前状态: ${intent.positionContext.profitStatus === 'profit' ? '盈利' : intent.positionContext.profitStatus === 'loss' ? '亏损' : '未知'}\n`;
+    }
+    
+    prompt += `\n📊 **你的任务**：\n`;
+    prompt += `1. 计算当前价格相对于买入成本的盈亏情况（使用上方实时数据中的当前价格）\n`;
+    prompt += `2. 基于技术分析和市场数据，给出明确的操作建议（继续持有、部分止盈、或止损）\n`;
+    prompt += `3. 提供具体的止盈位、止损位建议\n`;
+    prompt += `4. 分析当前持仓的风险收益比\n`;
+    prompt += `\n`;
   }
   
   prompt += `\n请基于上方提供的实时数据进行分析。\n`;
