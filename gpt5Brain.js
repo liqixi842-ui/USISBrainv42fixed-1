@@ -361,11 +361,17 @@ async function generateDataDrivenStockAnalysis(dataPackage, chartAnalysis, conte
 4. 结构清晰：采用机构投研报告格式
 5. 可执行性：提供具体的操作建议和价格位
 
+【支撑压力位使用规则】🎯
+- 如果数据中包含"技术分析 - 支撑/压力位"，你必须直接引用其中的具体价格
+- 不要说"我没有数据"或"无法给出精确价位"——数据已经在下方提供了
+- 不要给理论框架或"如果你提供数据"的回答——直接使用已有数据
+
 【禁止行为】
 - 禁止编造任何未在数据中提供的数字
 - 禁止使用"根据历史经验"等模糊表述
 - 禁止提供无法验证的主观评论
-- 禁止使用过多免责声明干扰核心结论`;
+- 禁止使用过多免责声明干扰核心结论
+- 禁止在已有支撑压力位数据时说"我没有实时数据"`;
 
   // 构建用户提示词 - 数据驱动结构
   const userPrompt = buildDataDrivenPrompt(dataPackage, chartAnalysis, context);
@@ -385,6 +391,38 @@ async function generateDataDrivenStockAnalysis(dataPackage, chartAnalysis, conte
  */
 function buildDataDrivenPrompt(dataPackage, chartAnalysis, context) {
   const { symbol, quote, profile, metrics, news } = dataPackage;
+  
+  // 🎯 计算技术分析：支撑压力位
+  let technicalLevelsText = '';
+  if (quote && quote.currentPrice) {
+    try {
+      const { calculateSupportResistance } = require('./technicalLevels');
+      const technicalLevels = calculateSupportResistance(quote);
+      if (technicalLevels) {
+        console.log(`✅ [Technical Levels] ${symbol} 支撑压力位已计算并注入到prompt`);
+        
+        const resistances = technicalLevels.resistances.map((r, i) => 
+          `  ${i+1}. $${r.price.toFixed(2)} (+${r.distance}%) - ${r.type}`
+        ).join('\n');
+        
+        const supports = technicalLevels.supports.map((s, i) => 
+          `  ${i+1}. $${s.price.toFixed(2)} (-${s.distance}%) - ${s.type}`
+        ).join('\n');
+        
+        technicalLevelsText = '\n### 技术分析 - 支撑/压力位 (Pivot Points算法)\n' +
+          '- **当前价格**: $' + technicalLevels.current.toFixed(2) + '\n\n' +
+          '**📈 压力位 (Resistance Levels)**:\n' + resistances + '\n\n' +
+          '**📉 支撑位 (Support Levels)**:\n' + supports + '\n\n' +
+          '**🎯 关键价位**:\n' +
+          '- Pivot Point: $' + technicalLevels.pivot.main.toFixed(2) + '\n' +
+          '- R1: $' + technicalLevels.pivot.r1.toFixed(2) + ' | S1: $' + technicalLevels.pivot.s1.toFixed(2) + '\n' +
+          '- R2: $' + technicalLevels.pivot.r2.toFixed(2) + ' | S2: $' + technicalLevels.pivot.s2.toFixed(2) + '\n' +
+          '- 今日高: $' + technicalLevels.keyLevels.todayHigh.toFixed(2) + ' | 今日低: $' + technicalLevels.keyLevels.todayLow.toFixed(2) + '\n';
+      }
+    } catch (err) {
+      console.warn(`[Technical Levels] 计算失败: ${err.message}`);
+    }
+  }
   
   // 计算关键指标
   const marketCap = profile?.marketCapitalization 
@@ -463,6 +501,7 @@ function buildDataDrivenPrompt(dataPackage, chartAnalysis, context) {
 - **当前位置**: ${pricePosition} (在52周区间内)
 - **Beta系数**: ${metrics?.beta?.toFixed(2) || 'N/A'}
 
+${technicalLevelsText}
 ${chartAnalysis ? `### Vision AI技术分析\n${chartAnalysis}\n` : ''}
 
 ### 近期新闻

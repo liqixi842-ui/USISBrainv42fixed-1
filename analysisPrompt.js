@@ -144,6 +144,7 @@ function buildDataPrompt(marketData) {
           try {
             const technicalLevels = technicalLevelsModule.calculateSupportResistance(quote);
             if (technicalLevels) {
+              console.log(`✅ [Technical Levels] ${symbol} 支撑压力位已计算: 支撑${technicalLevels.supports.length}个, 压力${technicalLevels.resistances.length}个`);
               dataPrompt += `\n  ⚡ **技术分析 - 支撑/压力位（基于Pivot Points算法）**:\n`;
               dataPrompt += `  当前价格: $${technicalLevels.current.toFixed(2)}\n\n`;
               
