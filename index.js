@@ -4435,7 +4435,7 @@ app.post("/brain/orchestrate", async (req, res) => {
     let stockChartData = null;
     
     // 🔍 强制分析检测：包含这些关键词的必须生成图表
-    const analysisKeywords = /分析|解析|诊断|评估|研究|技术分析|chart|analyze|diagnose|evaluate|analysis/i;
+    const analysisKeywords = /分析|解析|诊断|评估|研究|技术分析|支撑|压力|阻力|建议|买卖点|进出场|chart|analyze|diagnose|evaluate|analysis|support|resistance|recommendation/i;
     const hasAnalysisKeyword = analysisKeywords.test(text || '');
     
     // 🎯 触发条件优化：
