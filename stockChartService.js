@@ -24,6 +24,36 @@ const retryHelper = new RetryHelper({
   jitter: 250
 });
 
+// 🚨 NFLX专用：失败计数器和强制降级
+const nflxFailureTracker = {
+  count: 0,
+  lastReset: Date.now(),
+  MAX_FAILURES: 3,
+  RESET_INTERVAL: 300000 // 5分钟重置计数
+};
+
+function shouldForceNFLXFallback(symbol) {
+  if (symbol !== 'NFLX') return false;
+  
+  // 定期重置计数器
+  if (Date.now() - nflxFailureTracker.lastReset > nflxFailureTracker.RESET_INTERVAL) {
+    nflxFailureTracker.count = 0;
+    nflxFailureTracker.lastReset = Date.now();
+  }
+  
+  return nflxFailureTracker.count >= nflxFailureTracker.MAX_FAILURES;
+}
+
+function recordNFLXFailure() {
+  nflxFailureTracker.count++;
+  console.warn(`🚨 NFLX失败计数: ${nflxFailureTracker.count}/${nflxFailureTracker.MAX_FAILURES}`);
+}
+
+function recordNFLXSuccess() {
+  nflxFailureTracker.count = 0;
+  console.log(`✅ NFLX成功，重置失败计数`);
+}
+
 /**
  * 智能映射Finnhub交易所名称到TradingView前缀
  * @param {string} finnhubExchange - Finnhub返回的交易所全名（如 "NASDAQ NMS - GLOBAL MARKET", "NEW YORK STOCK EXCHANGE"）
@@ -122,6 +152,24 @@ async function generateStockChart(symbol, options = {}) {
 
   try {
     console.log(`\n📈 [Stock Chart v6.0] 生成${symbol}走势图（深度可靠性增强）`);
+    
+    // 🚨 NFLX快速通道：强制降级检查
+    if (shouldForceNFLXFallback(symbol)) {
+      console.warn(`🔄 [NFLX快速通道] 检测到连续失败，强制使用基础分析`);
+      diagnostics.fallback = true;
+      diagnostics.fallbackReason = 'nflx_repeated_failures';
+      
+      // 仍然尝试获取基础数据
+      let stockData = null;
+      try {
+        const marketData = await fetchMarketData([symbol]);
+        stockData = marketData.quotes ? marketData.quotes[symbol] : null;
+      } catch (dataError) {
+        console.error(`❌ [NFLX快速通道] 数据获取失败: ${dataError.message}`);
+      }
+      
+      return buildFallbackResponse(symbol, stockData, options.positionContext, diagnostics, startTime);
+    }
     
     // ===== PHASE 1: 数据获取 (10s timeout) =====
     const phase1Start = Date.now();
@@ -278,6 +326,11 @@ async function generateStockChart(symbol, options = {}) {
     
     console.log(`NFLX_SUMMARY|${symbol}|data=success|chart=success|vision=${diagnostics.phases.visionAI?.status || 'skipped'}|duration=${diagnostics.totalDuration}|fallback=${diagnostics.fallback}`);
     
+    // 🚨 NFLX成功记录
+    if (symbol === 'NFLX') {
+      recordNFLXSuccess();
+    }
+    
     return {
       ok: true,
       symbol,
@@ -298,6 +351,11 @@ async function generateStockChart(symbol, options = {}) {
     diagnostics.totalDuration = Date.now() - startTime;
     console.error(`🔥 [Stock Chart Service Error] ${error.message}`);
     console.error(`NFLX_SUMMARY|${symbol}|data=${diagnostics.phases.dataFetch?.status || 'unknown'}|chart=${diagnostics.phases.screenshot?.status || 'unknown'}|vision=${diagnostics.phases.visionAI?.status || 'unknown'}|duration=${diagnostics.totalDuration}|fallback=${diagnostics.fallback}|error=${error.message}`);
+    
+    // 🚨 NFLX失败记录
+    if (symbol === 'NFLX') {
+      recordNFLXFailure();
+    }
     
     throw error;
   }
