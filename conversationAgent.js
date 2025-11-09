@@ -64,23 +64,26 @@ function isHelpRequest(text) {
 }
 
 /**
- * 判断是否为系统命令（严格匹配，避免误判）
+ * 判断是否为系统命令（超严格匹配，避免误判金融术语）
  */
 function isSystemCommand(text) {
   const lowerText = text.toLowerCase().trim();
   
-  // 严格匹配完整命令（避免误判金融术语）
+  // 完整的系统命令列表（必须精确匹配）
   const exactCommands = [
-    '清除记忆', '清空历史', '重置', 'reset', 
-    'clear memory', 'clear history', 'reset memory'
+    // 中文命令
+    '清除记忆', '清空历史', '重置', '重置记忆', '清除历史',
+    // 英文命令（多词组合）
+    'clear memory', 'clear history', 'reset memory', 'reset history',
+    'delete memory', 'delete history', 'erase memory', 'erase history'
   ];
   
-  // 检查是否完全匹配或以命令开头（后跟空格）
+  // 只接受完全匹配（包括末尾感叹号/问号）
   return exactCommands.some(cmd => {
     const lowerCmd = cmd.toLowerCase();
     return lowerText === lowerCmd || 
            lowerText === lowerCmd + '!' || 
-           lowerText.startsWith(lowerCmd + ' ');
+           lowerText === lowerCmd + '?';
   });
 }
 
