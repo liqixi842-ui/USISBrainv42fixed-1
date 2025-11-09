@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
-echo "[USIS Brain] hard reload @$(date)"
-echo -n "[USIS Brain] git rev: " && git rev-parse --short HEAD || true
+
+echo "[USIS Brain] 安全重启 @$(date)"
+echo -n "[USIS Brain] git版本: " && git rev-parse --short HEAD
+
+# 彻底清理旧进程
+echo "🔄 清理旧进程..."
 pkill -9 node 2>/dev/null || true
-sleep 1
-# 若要更稳：短期改用 4o-turbo 做主脑
+pkill -9 telegram 2>/dev/null || true
+sleep 3
+
+# 设置环境
 export PRIMARY_MODEL=${PRIMARY_MODEL:-gpt-4o-turbo}
-# 🎉 62GB环境无需堆限制 - 全功能运行
-NODE_ENV=production node index.js
+export ENABLE_DB=true
+export ENABLE_TELEGRAM=true  
+export NODE_ENV=production
+
+echo "✅ 启动完整功能服务器..."
+node index.js
