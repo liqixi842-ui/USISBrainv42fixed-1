@@ -48,6 +48,8 @@ const { generateStockChart, formatStockData } = require("./stockChartService");
 const getN8NClient = () => require("./n8nClient").getN8NClient();
 // 🆕 v2.0: 智能对话状态管理
 const { dialogueManager } = require("./dialogueManager");
+// 🆕 v6.2: 智能对话系统（处理greeting/help/casual对话）
+const { handleConversation, isGreeting, isHelpRequest, isSystemCommand } = require("./conversationAgent");
 
 const app = express();
 app.use(express.json());
@@ -5680,6 +5682,62 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
     console.log(`\n📨 [TG] Message from ${userId}: "${text}"`);
     
     try {
+      // 🆕 v6.2: 优先检测对话类意图（greeting/help/casual）
+      if (isGreeting(text) || isHelpRequest(text) || isSystemCommand(text)) {
+        console.log('💬 检测到对话类意图，路由到对话系统');
+        
+        // 获取用户历史（用于个性化对话）
+        let userHistory = [];
+        if (ENABLE_DB) {
+          try {
+            const dbPool = getPool();
+            const result = await dbPool.query(
+              'SELECT * FROM user_memory WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 5',
+              [`tg_${userId}`]
+            );
+            userHistory = result.rows;
+          } catch (dbError) {
+            console.log('⚠️  数据库查询失败，使用空历史:', dbError.message);
+          }
+        }
+        
+        // 调用对话系统
+        let intentType = 'casual';
+        if (isGreeting(text)) intentType = 'greeting';
+        else if (isHelpRequest(text)) intentType = 'help';
+        else if (isSystemCommand(text)) intentType = 'meta';
+        
+        const conversationResponse = await handleConversation(text, intentType, userHistory);
+        
+        // 处理系统命令（清除记忆）
+        if (conversationResponse.type === 'system' && conversationResponse.action === 'clear_memory') {
+          if (ENABLE_DB) {
+            try {
+              const dbPool = getPool();
+              await dbPool.query('DELETE FROM user_memory WHERE user_id = $1', [`tg_${userId}`]);
+              console.log(`✅ 已清除用户 ${userId} 的记忆`);
+            } catch (dbError) {
+              console.log('⚠️  清除记忆失败:', dbError.message);
+            }
+          }
+        }
+        
+        // 发送响应
+        let responseText = conversationResponse.text;
+        if (conversationResponse.suggestions && conversationResponse.suggestions.length > 0) {
+          responseText += `\n\n💡 **建议尝试**：\n${conversationResponse.suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
+        }
+        
+        await telegramAPI('sendMessage', { 
+          chat_id: chatId, 
+          text: responseText,
+          parse_mode: 'Markdown'
+        });
+        
+        console.log('✅ 对话响应已发送');
+        return; // 不继续执行分析流程
+      }
+      
       const isHeatmap = text.includes('热力图') || text.toLowerCase().includes('heatmap');
       
       // 🆕 检测个股分析请求（类似热力图判断）
