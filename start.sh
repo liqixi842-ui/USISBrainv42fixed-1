@@ -6,6 +6,5 @@ pkill -9 node 2>/dev/null || true
 sleep 1
 # 若要更稳：短期改用 4o-turbo 做主脑
 export PRIMARY_MODEL=${PRIMARY_MODEL:-gpt-4o-turbo}
-# 🛡️ 内存保护：512MB堆限制（懒加载优化后足够）
-export NODE_OPTIONS="--max-old-space-size=512"
+# 🎉 62GB环境无需堆限制 - 全功能运行
 NODE_ENV=production node index.js
