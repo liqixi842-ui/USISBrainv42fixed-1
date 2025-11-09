@@ -5697,8 +5697,16 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 90000);
         
+        // 🎯 v6.1修复：生产环境使用外部URL，开发环境使用localhost
+        const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
+        const baseURL = isProduction 
+          ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+          : `http://localhost:${PORT}`;
+        
+        console.log(`🔗 [Telegram] 调用orchestrate: ${baseURL}/brain/orchestrate (生产=${isProduction})`);
+        
         try {
-          const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
+          const response = await fetch(`${baseURL}/brain/orchestrate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

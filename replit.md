@@ -118,9 +118,16 @@ A multi-tier screenshot architecture ensures stability and graceful degradation.
 
 # Recent Changes
 
+## 2025-11-09: Critical Production Fix
+- **Fixed**: Cloud Run deployment socket hang up error (Telegram Bot now uses external URL instead of localhost in production)
+- **Fixed**: Missing technical analysis in Chinese requests (added Pivot Points calculation to multiLanguageAnalyzer)
+- **Fixed**: "未包含技术图表分析" warning removed from all code paths
+- **Architecture**: Telegram Bot auto-detects production environment via REPLIT_DEPLOYMENT=1
+- **Verified**: Test endpoint `/test/v6-1-fix` returns specific support/resistance prices
+- **Status**: Ready for republish to Cloud Run
+
 ## 2025-11-09: Stability & Cleanup Update
 - **Fixed**: Socket hang up errors by adding timeout protection to AI calls
 - **Fixed**: Duplicate bot responses (single process management)
 - **Cleaned**: Removed 40 test files, 5 test endpoints, 364 lines of redundant code
 - **Verified**: All core features working (stock analysis, heatmap, conversation)
-- **Status**: System stable and ready for production use
