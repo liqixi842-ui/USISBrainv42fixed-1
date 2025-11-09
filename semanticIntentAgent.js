@@ -21,6 +21,10 @@ async function parseUserIntent(userText, userHistory = []) {
   const userPrompt = buildUserPrompt(userText, userHistory);
   
   try {
+    // 🛡️ 创建AbortController进行15秒超时保护
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    
     // 调用GPT-4o-mini进行快速意图理解
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -37,8 +41,11 @@ async function parseUserIntent(userText, userHistory = []) {
         response_format: { type: "json_object" },
         temperature: 0.3,  // 低温度确保稳定输出
         max_tokens: 1000
-      })
+      }),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       throw new Error(`OpenAI API error: ${response.status}`);
