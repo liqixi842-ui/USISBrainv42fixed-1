@@ -3920,19 +3920,50 @@ function formatMultipleOutputs(outputs, chatType, scene) {
 // 🆕 请求状态跟踪器
 const requestTracker = new Map();
 
-// 🎯 v6.2核心逻辑提取：runOrchestrator（可被Express和Telegram直接调用）
-async function runOrchestrator(payload) {
+// Main Orchestrator Endpoint
+app.post("/brain/orchestrate", async (req, res) => {
   const started = Date.now();
   const reqId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   
   // 🆕 注册请求状态（防御性text检查）
-  const textInput = payload?.text || "default";
+  const textInput = req.body?.text || "default";
   requestTracker.set(reqId, {
     startTime: started,
     status: 'processing',
     stage: 'init',
-    user_id: payload?.user_id || 'unknown',
+    user_id: req.body?.user_id || 'unknown',
     text: String(textInput).slice(0, 50)
+  });
+  
+  // 🆕 确保请求完成时清理tracker（防止内存泄漏）
+  const cleanupTracker = () => {
+    requestTracker.delete(reqId);
+  };
+  
+  res.on('finish', cleanupTracker);
+  res.on('close', cleanupTracker);
+  
+  // 🆕 设置60秒超时（从15秒增加到60秒）
+  req.setTimeout(60000, () => {
+    console.error(`⏱️  [${reqId}] 请求超时（60秒）- 可能AI响应过慢`);
+    
+    // 更新tracker状态
+    if (requestTracker.has(reqId)) {
+      requestTracker.set(reqId, {
+        ...requestTracker.get(reqId),
+        status: 'timeout',
+        stage: 'timeout'
+      });
+    }
+    
+    if (!res.headersSent) {
+      res.status(504).json({
+        status: "error",
+        ok: false,
+        final_analysis: "⚠️ 分析超时，请稍后重试或使用更简单的查询。",
+        error: "Request timeout after 60 seconds"
+      });
+    }
   });
   
   try {
@@ -3953,7 +3984,7 @@ async function runOrchestrator(payload) {
       lang = "zh",
       budget = "low",          // 🆕 预算控制：low | medium | high | unlimited（N8N传入或环境变量）
       userHistory: inputUserHistory = null  // 🔧 从n8n传入的用户历史（可选）
-    } = payload || {};
+    } = req.body || {};
     
     // 🆕 更新请求状态
     if (requestTracker.has(reqId)) {
@@ -4404,17 +4435,8 @@ async function runOrchestrator(payload) {
     let stockChartData = null;
     
     // 🔍 强制分析检测：包含这些关键词的必须生成图表
-    const analysisKeywords = /分析|解析|诊断|评估|研究|技术分析|支撑|压力|阻力|建议|买卖点|进出场|chart|analyze|diagnose|evaluate|analysis|support|resistance|recommendation/i;
+    const analysisKeywords = /分析|解析|诊断|评估|研究|技术分析|chart|analyze|diagnose|evaluate|analysis/i;
     const hasAnalysisKeyword = analysisKeywords.test(text || '');
-    
-    // 🎯 强制启用实时数据：如果检测到技术分析关键词，必须获取市场数据
-    if (hasAnalysisKeyword && symbols.length > 0) {
-      console.log(`🎯 检测到技术分析关键词，强制启用实时数据模式`);
-      intent.requiresRealtimeData = true;
-      if (semanticIntent) {
-        semanticIntent.requiresRealtimeData = true;
-      }
-    }
     
     // 🎯 触发条件优化：
     // 1. 有符号 + 非casual → 生成图表
@@ -4528,60 +4550,47 @@ async function runOrchestrator(payload) {
     let gpt5Result;
     
     try {
-      // 🎯 v6.1优先级：如果已经有包含技术分析的完整分析（stockChartData.comprehensiveAnalysis），直接使用它
-      if (stockChartData && stockChartData.comprehensiveAnalysis) {
-        console.log(`✅ [v6.1] 使用数据驱动分析结果（已包含技术分析）`);
-        gpt5Result = {
-          success: true,
-          text: stockChartData.comprehensiveAnalysis,
-          model: 'data-driven-analysis',
-          cost_usd: 0.002, // 估算值
-          debug: { source: 'stock-chart-comprehensive-analysis' }
-        };
-      }
       // 检测是否为中文输入或需要多语言处理
-      else {
-        const isChinese = /[\u4e00-\u9fa5]/.test(text);
+      const isChinese = /[\u4e00-\u9fa5]/.test(text);
+      
+      if (isChinese && symbols.length > 0) {
+        console.log(`🇨🇳 [v6.0] 检测到中文输入，启动DeepSeek多语言分析`);
         
-        if (isChinese && symbols.length > 0) {
-          console.log(`🇨🇳 [v6.0] 检测到中文输入，启动DeepSeek多语言分析`);
-          
-          const multiLangAnalyzer = new MultiLanguageAnalyzer();
-          const analysisResult = await multiLangAnalyzer.smartAnalyze(
-            text,
-            marketData,
-            { mode: intent.mode, scene: scene }
-          );
-          
-          // 转换为v5.0兼容格式
-          gpt5Result = {
-            success: analysisResult.success,
-            text: analysisResult.text,
-            model: analysisResult.model,
-            usage: analysisResult.usage,
-            cost_usd: analysisResult.cost_usd,
-            debug: {
-              language: analysisResult.language,
-              modelReason: analysisResult.modelReason,
-              provider: analysisResult.provider
-            }
-          };
-          
-          console.log(`✅ [v6.0] 多语言分析完成 (${analysisResult.model}, 语言: ${analysisResult.language})`);
-          
-        } else {
-          // 非中文或无股票代码 → 使用原有GPT-5引擎
-          console.log(`🧠 [v4.0] 使用GPT-5单核引擎生成分析...`);
-          gpt5Result = await generateWithGPT5({
-            text,
-            marketData,
-            semanticIntent: semanticIntent,
-            mode: intent.mode,
-            scene,
-            symbols,
-            rankedNews: rankedNews  // 传递ImpactRank排序后的新闻
-          });
-        }
+        const multiLangAnalyzer = new MultiLanguageAnalyzer();
+        const analysisResult = await multiLangAnalyzer.smartAnalyze(
+          text,
+          marketData,
+          { mode: intent.mode, scene: scene }
+        );
+        
+        // 转换为v5.0兼容格式
+        gpt5Result = {
+          success: analysisResult.success,
+          text: analysisResult.text,
+          model: analysisResult.model,
+          usage: analysisResult.usage,
+          cost_usd: analysisResult.cost_usd,
+          debug: {
+            language: analysisResult.language,
+            modelReason: analysisResult.modelReason,
+            provider: analysisResult.provider
+          }
+        };
+        
+        console.log(`✅ [v6.0] 多语言分析完成 (${analysisResult.model}, 语言: ${analysisResult.language})`);
+        
+      } else {
+        // 非中文或无股票代码 → 使用原有GPT-5引擎
+        console.log(`🧠 [v4.0] 使用GPT-5单核引擎生成分析...`);
+        gpt5Result = await generateWithGPT5({
+          text,
+          marketData,
+          semanticIntent: semanticIntent,
+          mode: intent.mode,
+          scene,
+          symbols,
+          rankedNews: rankedNews  // 传递ImpactRank排序后的新闻
+        });
       }
     } catch (multiLangError) {
       console.warn(`⚠️  [v6.0] 多语言分析失败，降级到GPT-5:`, multiLangError.message);
@@ -5016,9 +5025,8 @@ async function runOrchestrator(payload) {
     }
     
     // 8. Response
-    // 清理跟踪器
-    requestTracker.delete(reqId);
-    return responseV2;
+    // 注：cleanup由res.on('finish')自动处理，无需手动清理
+    return res.json(responseV2);
     
   } catch (err) {
     console.error('[orchestrate] error', err);
@@ -5033,12 +5041,10 @@ async function runOrchestrator(payload) {
         error: err.message
       });
     }
-    
-    // 清理跟踪器
-    requestTracker.delete(reqId);
+    // 注：cleanup由res.on('finish')自动处理
     
     // 永不抛出，让 n8n 的 Normalize_Brain_Response / IF_ErrorCheck 有稳定语义
-    return {
+    return res.status(200).json({
       status: 'error',
       ok: false,
       error: String(err && err.message || err),
@@ -5047,36 +5053,6 @@ async function runOrchestrator(payload) {
       actions: [],
       symbols: [],
       elapsed_ms: Date.now() - started
-    };
-  }
-}
-
-// Main Orchestrator Endpoint (HTTP wrapper)
-app.post("/brain/orchestrate", async (req, res) => {
-  // 🆕 设置60秒超时
-  req.setTimeout(60000, () => {
-    console.error(`⏱️  请求超时（60秒）`);
-    if (!res.headersSent) {
-      res.status(504).json({
-        status: "error",
-        ok: false,
-        final_analysis: "⚠️ 分析超时，请稍后重试或使用更简单的查询。",
-        error: "Request timeout after 60 seconds"
-      });
-    }
-  });
-  
-  try {
-    const result = await runOrchestrator(req.body);
-    return res.json(result);
-  } catch (err) {
-    console.error('[orchestrate] wrapper error', err);
-    return res.status(200).json({
-      status: 'error',
-      ok: false,
-      error: String(err && err.message || err),
-      final_text: '⚠️ 系统临时故障，稍后再试',
-      final_analysis: '⚠️ 系统临时故障，稍后再试'
     });
   }
 });
@@ -5226,117 +5202,12 @@ app.post("/brain/analyze_no_screenshot", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-// 🧪 测试端点：验证技术分析修复
-app.get('/test/technical-analysis', async (req, res) => {
-  try {
-    const { calculateSupportResistance } = require('./technicalLevels');
-    
-    // 模拟AAPL报价数据
-    const mockQuote = {
-      currentPrice: 226.89,
-      previousClose: 226.96,
-      open: 227.20,
-      high: 228.50,
-      low: 225.80
-    };
-    
-    const result = calculateSupportResistance(mockQuote);
-    
-    res.json({
-      success: true,
-      quote: mockQuote,
-      technicalLevels: result,
-      message: '✅ 技术分析计算正常工作！支撑压力位已成功生成。'
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      stack: error.stack
-    });
-  }
-});
-
-// 🧪 测试端点2：验证v6.1修复逻辑
-app.get('/test/v6-1-fix', async (req, res) => {
-  try {
-    // 模拟stockChartData.comprehensiveAnalysis存在的情况
-    const mockStockChartData = {
-      comprehensiveAnalysis: `## 📈 AAPL 投资分析报告
-
-**【市场快照】**
-📊 **现价**: $268.47 (-0.48%)
-📈 **日内波动**: $266.77 - $272.29
-💰 **市值**: $4100.5B | **P/E**: 35.2
-
-### 技术分析 - 支撑/压力位 (Pivot Points算法)
-- **当前价格**: $268.47
-
-**📈 压力位 (Resistance Levels)**:
-  1. $270.25 (+0.66%) - R1 Pivot
-  2. $272.80 (+1.61%) - R2 Pivot
-  3. $269.50 (+0.38%) - 今日高点
-
-**📉 支撑位 (Support Levels)**:
-  1. $266.50 (-0.73%) - S1 Pivot
-  2. $264.20 (-1.59%) - S2 Pivot
-  3. $266.77 (-0.63%) - 今日低点
-
-**🎯 关键价位**:
-- Pivot Point: $268.38
-- R1: $270.25 | S1: $266.50
-- R2: $272.80 | S2: $264.20
-
-### 投资建议
-基于当前技术分析，建议关注以下价位...`
-    };
-    
-    // 模拟v6.1逻辑判断
-    let gpt5Result;
-    if (mockStockChartData && mockStockChartData.comprehensiveAnalysis) {
-      console.log(`✅ [v6.1测试] 使用数据驱动分析结果（已包含技术分析）`);
-      gpt5Result = {
-        success: true,
-        text: mockStockChartData.comprehensiveAnalysis,
-        model: 'data-driven-analysis',
-        cost_usd: 0.002,
-        debug: { source: 'stock-chart-comprehensive-analysis' }
-      };
-    } else {
-      gpt5Result = {
-        success: false,
-        text: '❌ stockChartData不存在，会走原有逻辑',
-        model: 'fallback'
-      };
-    }
-    
-    res.json({
-      success: true,
-      message: '✅ v6.1修复逻辑测试通过！',
-      testScenario: 'stockChartData.comprehensiveAnalysis存在',
-      result: gpt5Result,
-      verification: {
-        hasSpecificPrices: /\$\d+\.\d+/.test(gpt5Result.text),
-        hasTechnicalAnalysis: /技术分析|支撑|压力/.test(gpt5Result.text),
-        hasBadPhrases: /由于您未提供|市场数据暂缺/.test(gpt5Result.text)
-      }
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      stack: error.stack
-    });
-  }
-});
-
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 USIS Brain v6.0 online on port ${PORT} 🆕 [Multi-AI + n8n Integration]`);
   console.log(`📍 Listening on 0.0.0.0:${PORT}`);
   console.log(`🔗 Health check available at http://0.0.0.0:${PORT}/health`);
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
   console.log(`🔵 n8n API available at http://0.0.0.0:${PORT}/brain/analyze_no_screenshot`);
-  console.log(`🧪 Technical analysis test: http://0.0.0.0:${PORT}/test/technical-analysis`);
   
   // 🛡️ v6.1: N8N监控已禁用（节省内存 ~200MB）
   console.log('⚠️  N8N监控已禁用以节省内存');
@@ -5401,10 +5272,8 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
   // 🆕 v3.2: 临时缓存用户的持仓信息（用于callback恢复）
   const userPositionContextCache = new Map(); // key: userId, value: {positionContext, timestamp}
   
-  // Telegram API 调用（修复版 - 正确的超时处理）
+  // Telegram API 调用
   function telegramAPI(method, params = {}, timeout = 35000) {
-    console.log(`🌐 [TG API] Calling ${method}, timeout=${timeout}ms, params=`, JSON.stringify(params).slice(0, 100));
-    
     return new Promise((resolve, reject) => {
       const data = JSON.stringify(params);
       const options = {
@@ -5415,21 +5284,14 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(data, 'utf8')
-        }
-        // ❌ 不要在这里设置timeout，它不工作！
+        },
+        timeout
       };
 
-      console.log(`📤 [TG API] Sending request to ${options.hostname}${options.path}`);
-      
       const req = https.request(options, (res) => {
-        console.log(`📥 [TG API] Got response, status=${res.statusCode}`);
         let body = '';
-        res.on('data', chunk => {
-          body += chunk;
-          console.log(`📦 [TG API] Received ${chunk.length} bytes`);
-        });
+        res.on('data', chunk => body += chunk);
         res.on('end', () => {
-          console.log(`✅ [TG API] Response complete, body length=${body.length}`);
           try {
             const result = JSON.parse(body);
             if (!result.ok) {
@@ -5443,24 +5305,14 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         });
       });
 
-      // ✅ 正确的超时处理：使用req.setTimeout()并手动destroy()
-      req.setTimeout(timeout, () => {
-        console.log(`⏱️  [TG] ${method} timeout after ${timeout}ms, destroying request`);
+      req.on('error', reject);
+      req.on('timeout', () => {
         req.destroy();
-        reject(new Error(`Timeout for ${method} after ${timeout}ms`));
-      });
-
-      req.on('error', (err) => {
-        console.log(`❌ [TG API] Request error:`, err.message);
-        if (!req.destroyed) {
-          reject(err);
-        }
-        // 如果是destroy导致的error，已经在setTimeout中reject了
+        reject(new Error(`Timeout for ${method}`));
       });
 
       req.write(data);
       req.end();
-      console.log(`📨 [TG API] Request sent`);
     });
   }
   
@@ -5695,15 +5547,27 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         console.log('🧠 常规分析');
         await telegramAPI('sendMessage', { chat_id: chatId, text: '🧠 正在分析...' });
         
-        // 🎯 v6.2修复：直接调用runOrchestrator（同进程，无网络依赖）
+        // 🆕 v6.2: 添加超时控制（90秒，长于orchestrate的60秒）
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 90000);
+        
         try {
-          const data = await runOrchestrator({
-            text,
-            user_id: `tg_${userId}`,
-            chat_type: message.chat.type,
-            mode: 'auto',
-            budget: 'low'
+          const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text,
+              user_id: `tg_${userId}`,
+              chat_type: message.chat.type,
+              mode: 'auto',
+              budget: 'low'
+            }),
+            signal: controller.signal
           });
+          
+          clearTimeout(timeoutId);
+        
+          const data = await response.json();
           
           // 🆕 v5.0: 检查是否有个股图表需要发送
           if (data.stock_chart && data.stock_chart.buffer) {
@@ -5740,9 +5604,10 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
             text: data.final_text || data.final_analysis || '分析完成' 
           });
           console.log('✅ 分析结果已发送');
-        } catch (orchestrateError) {
-          console.error('❌ Orchestrate执行失败:', orchestrateError.message);
-          throw new Error(`分析请求失败: ${orchestrateError.message}`);
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          console.error('❌ Orchestrate请求失败:', fetchError.message);
+          throw new Error(`分析请求失败: ${fetchError.message}`);
         }
       }
     } catch (error) {
@@ -5863,16 +5728,11 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
   let polling = false;
   
   async function pollTelegram() {
-    if (polling) {
-      console.log('⚠️  [TG] Polling already in progress, skipping');
-      return;
-    }
+    if (polling) return;
     polling = true;
-    console.log('🔄 [TG] Starting poll... (offset:', offset, ')');
     
     try {
       const result = await telegramAPI('getUpdates', { offset, timeout: 25 }, 35000);
-      console.log('✅ [TG] getUpdates success, got', result.result?.length || 0, 'updates');
       
       if (result.result && result.result.length > 0) {
         console.log(`📬 [TG] Got ${result.result.length} updates`);
@@ -5892,7 +5752,7 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         }
       }
     } catch (e) {
-      console.error('❌ [TG] Poll error:', e.message, e.stack);
+      console.error('[TG] Poll error:', e.message);
     } finally {
       polling = false;
       setTimeout(pollTelegram, 1000);

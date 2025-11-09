@@ -68,22 +68,23 @@ function buildSystemPrompt(mode, language) {
 1. **禁止使用任何训练数据**
    - 你不得使用任何来自训练数据集的股票价格、指数值、或市场数据
    - 你的分析必须100%基于下方"📊 实时市场数据"部分提供的数据
+   - 如果数据中没有某个值，你必须明确说"数据未提供"，绝不能猜测或使用历史知识
 
-2. **强制使用已提供的技术分析数据** 🎯
-   - 如果数据中包含"⚡ 技术分析 - 支撑/压力位"部分，你必须直接引用其中的具体价格
-   - 当用户询问支撑压力位时，直接给出数据中列出的具体数字（如：支撑位$260.00, $255.50；压力位$275.00, $280.50）
-   - 不要说"我没有数据"或"无法给出精确价位"——数据已经在下方提供了
-   - 不要给"框架式"或"如果你提供数据"的回答——直接使用已有数据
-
-3. **强制数据引用**
+2. **强制数据引用**
    - 当你提到任何数字（价格、涨跌幅、指数值）时，必须确保该数字存在于提供的数据中
-   - 直接使用数据中的具体数字，不要猜测或使用模糊表述
+   - 例如：不要说"标普500在4300点"，除非数据中明确提供了这个值
+   - 例如：不要说"IBEX35指数为8000点"，除非数据中明确提供了这个值
 
-4. **数据缺失时的处理**
-   - 只有当数据真的不存在时，才说"数据未提供"
-   - 技术分析数据（支撑压力位、Pivot Points）通常已自动计算并包含在数据中
+3. **数据缺失时的处理**
+   - 如果请求的股票数据未能获取，你必须明确告知用户"无法获取XX的实时数据"
+   - 不要用任何理由编造数据（即使是"大约"、"估计"、"通常"等表述也不允许）
+   - 如果数据质量评分低于60%，建议用户稍后重试
 
-你的目标是提供准确、可靠、基于真实数据的分析，直接给出具体数字，不要给理论框架。`;
+4. **数据来源追踪**
+   - 数据中包含了来源和时间戳信息
+   - 如果数据年龄超过60分钟，提醒用户数据可能不是最新的
+
+你的目标是提供准确、可靠、基于真实数据的分析，而不是基于猜测或训练数据的"可能性"分析。`;
 }
 
 /**
@@ -110,14 +111,6 @@ function buildDataPrompt(marketData) {
   
   dataPrompt += `\n`;
   
-  // 🆕 技术分析模块（支撑压力位计算）
-  let technicalLevelsModule = null;
-  try {
-    technicalLevelsModule = require('./technicalLevels');
-  } catch (err) {
-    console.warn('[Technical Levels] 模块加载失败，跳过技术分析');
-  }
-  
   // 2. 股票报价数据
   if (Object.keys(quotes).length > 0) {
     dataPrompt += `**股票报价数据** (以下是完整的可用数据):\n\n`;
@@ -138,43 +131,6 @@ function buildDataPrompt(marketData) {
         dataPrompt += `  - 数据年龄: ${quote.dataAgeMinutes}分钟\n`;
         dataPrompt += `  - 数据来源: ${quote.source}\n`;
         dataPrompt += `  - 新鲜度评分: ${(quote.freshnessScore * 100).toFixed(0)}%\n`;
-        
-        // 🎯 技术分析：自动计算支撑压力位
-        if (technicalLevelsModule) {
-          try {
-            const technicalLevels = technicalLevelsModule.calculateSupportResistance(quote);
-            if (technicalLevels) {
-              console.log(`✅ [Technical Levels] ${symbol} 支撑压力位已计算: 支撑${technicalLevels.supports.length}个, 压力${technicalLevels.resistances.length}个`);
-              dataPrompt += `\n  ⚡ **技术分析 - 支撑/压力位（基于Pivot Points算法）**:\n`;
-              dataPrompt += `  当前价格: $${technicalLevels.current.toFixed(2)}\n\n`;
-              
-              // 压力位（从低到高）
-              if (technicalLevels.resistances && technicalLevels.resistances.length > 0) {
-                dataPrompt += `  📈 压力位（Resistance Levels）:\n`;
-                technicalLevels.resistances.forEach((r, i) => {
-                  dataPrompt += `     ${i + 1}. $${r.price.toFixed(2)} (+${r.distance}%) - ${r.type}\n`;
-                });
-              }
-              
-              // 支撑位（从高到低）
-              if (technicalLevels.supports && technicalLevels.supports.length > 0) {
-                dataPrompt += `  📉 支撑位（Support Levels）:\n`;
-                technicalLevels.supports.forEach((s, i) => {
-                  dataPrompt += `     ${i + 1}. $${s.price.toFixed(2)} (-${s.distance}%) - ${s.type}\n`;
-                });
-              }
-              
-              dataPrompt += `\n  🎯 关键价位:\n`;
-              dataPrompt += `     Pivot Point: $${technicalLevels.pivot.main.toFixed(2)}\n`;
-              dataPrompt += `     R1: $${technicalLevels.pivot.r1.toFixed(2)} | S1: $${technicalLevels.pivot.s1.toFixed(2)}\n`;
-              dataPrompt += `     R2: $${technicalLevels.pivot.r2.toFixed(2)} | S2: $${technicalLevels.pivot.s2.toFixed(2)}\n`;
-              dataPrompt += `     今日高: $${technicalLevels.keyLevels.todayHigh.toFixed(2)} | 今日低: $${technicalLevels.keyLevels.todayLow.toFixed(2)}\n`;
-              dataPrompt += `\n`;
-            }
-          } catch (techErr) {
-            console.warn(`[Technical Levels] 计算失败: ${techErr.message}`);
-          }
-        }
       } else {
         dataPrompt += `  ⚠️ 数据不可用（API调用失败或数据源暂时不可访问）\n`;
       }
