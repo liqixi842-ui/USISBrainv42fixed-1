@@ -3,8 +3,26 @@
 // 复用screenshotProviders三层截图系统
 // 🆕 v6.0: 分阶段超时、结构化诊断日志、渐进式降级
 
-const { captureStockChartSmart } = require('./screenshotProviders');
-const VisionAnalyzer = require('./visionAnalyzer');
+// 🛡️ v6.1: 延迟加载Chromium依赖（防止启动时OOM - 节省600MB内存）
+let _captureStockChartSmart = null;
+let _VisionAnalyzer = null;
+
+function loadScreenshotProvider() {
+  if (!_captureStockChartSmart) {
+    ({ captureStockChartSmart: _captureStockChartSmart } = require('./screenshotProviders'));
+    console.log('🔄 [LazyLoad] screenshotProviders已加载');
+  }
+  return _captureStockChartSmart;
+}
+
+function loadVisionAnalyzer() {
+  if (!_VisionAnalyzer) {
+    _VisionAnalyzer = require('./visionAnalyzer');
+    console.log('🔄 [LazyLoad] VisionAnalyzer已加载');
+  }
+  return _VisionAnalyzer;
+}
+
 const { fetchMarketData, fetchCompanyProfile } = require('./dataBroker');
 const { runWithTimeout, RetryHelper } = require('./utils/asyncTools');
 
@@ -237,7 +255,7 @@ async function generateStockChart(symbol, options = {}) {
       screenshotResult = await runWithTimeout('Phase2-Screenshot', async () => {
         return await retryHelper.execute(
           `captureScreenshot-${symbol}`,
-          () => captureStockChartSmart({ tradingViewUrl: chartURL, symbol }),
+          () => loadScreenshotProvider()({ tradingViewUrl: chartURL, symbol }),
           { timeout: TIMEOUTS.SCREENSHOT }
         );
       }, TIMEOUTS.SCREENSHOT);
@@ -274,7 +292,8 @@ async function generateStockChart(symbol, options = {}) {
     
     try {
       const visionResult = await runWithTimeout('Phase3-VisionAI', async () => {
-        const visionAnalyzer = new VisionAnalyzer();
+        const VisionAnalyzerClass = loadVisionAnalyzer();
+        const visionAnalyzer = new VisionAnalyzerClass();
         const marketContext = {
           symbol,
           currentPrice: stockData?.currentPrice || 'N/A',

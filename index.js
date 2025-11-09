@@ -35,16 +35,17 @@ const { generateWithGPT5, wrapAsV31Synthesis } = require("./gpt5Brain"); // 🆕
 
 // 🆕 v6.0: 多AI模型与多语言分析引擎
 const MultiLanguageAnalyzer = require('./multiLanguageAnalyzer');
-const { getMultiAIProvider } = require('./multiAiProvider');
+// 🛡️ v6.1: 懒加载多AI Provider（节省内存）
+const getMultiAIProvider = () => require('./multiAiProvider').getMultiAIProvider();
 
 // 🆕 v4.3: 智能热力图解析器
 const { extractHeatmapQuery, extractHeatmapQueryRulesOnly, buildTradingViewURL, generateHeatmapSummary, generateCaption, generateDebugReport } = require("./heatmapIntentParser");
-// 🆕 v5.0: 热力图服务（独立模块，避免循环依赖）
-const { generateSmartHeatmap } = require("./heatmapService");
+// 🛡️ v6.1: 懒加载热力图服务（节省内存）
+const generateSmartHeatmap = (...args) => require("./heatmapService").generateSmartHeatmap(...args);
 // 🆕 v5.0: 个股图表服务（K线图分析）
 const { generateStockChart, formatStockData } = require("./stockChartService");
-// 🆕 v6.0: N8N API自动化管理
-const { getN8NClient } = require("./n8nClient");
+// 🛡️ v6.1: 懒加载N8N Client（节省内存）
+const getN8NClient = () => require("./n8nClient").getN8NClient();
 // 🆕 v2.0: 智能对话状态管理
 const { dialogueManager } = require("./dialogueManager");
 
