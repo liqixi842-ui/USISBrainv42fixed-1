@@ -352,6 +352,7 @@ async function generateStockChart(symbol, options = {}) {
     
     return {
       ok: true,
+      success: true,
       symbol,
       buffer: screenshotResult.buffer,
       chartURL,
@@ -392,6 +393,7 @@ function buildFallbackResponse(symbol, stockData, positionContext, diagnostics, 
   
   return {
     ok: true,
+    success: false,
     symbol,
     buffer: null,
     chartURL: null,
