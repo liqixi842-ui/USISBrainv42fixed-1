@@ -13,7 +13,7 @@ process.on('uncaughtException', (err) => {
 const express = require("express");
 const fetch = require("node-fetch");
 const { Pool } = require("pg");
-const { Telegraf } = require('telegraf');
+// 🛡️ v6.1: Telegraf moved to conditional loading (see line ~5575)
 
 // 🆕 ScreenshotAPI配置（自动去除前后空格）
 const SCREENSHOT_API_KEY = (process.env.SCREENSHOT_API_KEY || '').trim();
@@ -5572,6 +5572,8 @@ app.listen(PORT, "0.0.0.0", () => {
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
 if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
+  // 🛡️ v6.1: 懒加载Telegraf（节省~200MB内存）
+  const { Telegraf } = require('telegraf');
   const https = require('https');
   const FormData = require('form-data');
   
