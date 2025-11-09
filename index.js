@@ -52,20 +52,35 @@ const { dialogueManager } = require("./dialogueManager");
 const app = express();
 app.use(express.json());
 
-// PostgreSQL Database Connection
-if (!process.env.DATABASE_URL) {
-  console.error("⚠️  DATABASE_URL not found - memory persistence disabled");
-}
+// 🛡️ v6.1: Feature Flags (Dev环境内存优化)
+const ENABLE_DB = process.env.ENABLE_DB !== 'false'; // 默认启用
+const ENABLE_TELEGRAM = process.env.ENABLE_TELEGRAM !== 'false'; // 默认启用
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+console.log(`🏴 Feature Flags: DB=${ENABLE_DB}, Telegram=${ENABLE_TELEGRAM}`);
+
+// PostgreSQL Database Connection (Lazy Loading)
+let pool = null;
+function getPool() {
+  if (!ENABLE_DB) {
+    throw new Error('Database disabled (ENABLE_DB=false)');
+  }
+  if (!pool) {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL not found");
+    }
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+    console.log('🔄 [LazyLoad] PostgreSQL连接池已创建');
+  }
+  return pool;
+}
 
 // Initialize database table with retry logic for Neon auto-wake
 async function initDatabase() {
-  if (!process.env.DATABASE_URL) {
-    console.log("ℹ️  Skipping database initialization (no DATABASE_URL)");
+  if (!ENABLE_DB || !process.env.DATABASE_URL) {
+    console.log("ℹ️  Skipping database initialization (disabled or no URL)");
     return;
   }
 
@@ -5541,50 +5556,14 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
   console.log(`🔵 n8n API available at http://0.0.0.0:${PORT}/brain/analyze_no_screenshot`);
   
-  // 🆕 v6.0: 初始化N8N监控（非阻塞）
-  (async () => {
-    try {
-      console.log('🔧 [N8N Monitor] 初始化N8N工作流...');
-      const { getN8NMonitor } = require('./n8nMonitor');
-      const monitor = getN8NMonitor();
-      const initResult = await monitor.initialize();
-      if (initResult.ok) {
-        console.log('✅ N8N工作流已就绪');
-        
-        // 🆕 启动定期健康检查（每5分钟）
-        setInterval(async () => {
-          try {
-            const health = await monitor.checkScreenshotHealth();
-            
-            // 检查是否需要自动修复
-            const stats = monitor.getMonitorReport();
-            if (stats.needsRecovery) {
-              console.warn(`⚠️  截图服务连续失败${stats.consecutiveFailures}次，触发自动修复...`);
-              const recovery = await monitor.autoRecover();
-              if (recovery.ok) {
-                console.log(`✅ 自动修复完成: ${recovery.action}`);
-              } else {
-                console.error(`❌ 自动修复失败: ${recovery.error}`);
-              }
-            }
-          } catch (err) {
-            console.error('❌ [N8N Monitor] 定期健康检查失败:', err.message);
-          }
-        }, 5 * 60 * 1000);
-      } else {
-        console.warn(`⚠️  N8N初始化失败: ${initResult.error}`);
-      }
-    } catch (err) {
-      console.error('❌ [N8N Monitor] 初始化异常:', err.message);
-      console.warn('⚠️  服务将继续运行，但N8N功能可能不可用');
-    }
-  })();
+  // 🛡️ v6.1: N8N监控已禁用（节省内存 ~200MB）
+  console.log('⚠️  N8N监控已禁用以节省内存');
 });
 
 // ====== Telegram Bot v5.0 (手动轮询 - Replit兼容) ======
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-if (TELEGRAM_TOKEN) {
+if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
   const https = require('https');
   const FormData = require('form-data');
   
