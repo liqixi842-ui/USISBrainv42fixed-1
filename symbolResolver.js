@@ -254,21 +254,71 @@ const STATIC_SYMBOL_MAP = {
   'repsol': 'REPYY',        // Repsol ADR (OTC)
   'inditex': 'IDEXY',       // Inditex ADR (OTC)
   
-  // 中文名称映射
+  // 西班牙中文名称映射
   '电力公司': 'IBDRY',
   '西班牙电信': 'TEF',
   '桑坦德': 'SAN',
   '毕尔巴鄂': 'BBVXF',
   
-  // 美国常见股票
+  // 美国常见股票（英文+中文）
   'apple': 'AAPL',
   'microsoft': 'MSFT',
   'tesla': 'TSLA',
   'nvidia': 'NVDA',
+  '特斯拉': 'TSLA',
+  '微软': 'MSFT',
+  '谷歌': 'GOOGL', 'google': 'GOOGL', '字母表': 'GOOGL', 'alphabet': 'GOOGL',
+  '亚马逊': 'AMZN', 'amazon': 'AMZN',
+  '英伟达': 'NVDA',
+  '脸书': 'META', 'facebook': 'META', 'meta': 'META',
+  '奈飞': 'NFLX', 'netflix': 'NFLX',
+  '英特尔': 'INTC', 'intel': 'INTC',
+  '高通': 'QCOM', 'qualcomm': 'QCOM',
+  '台积电': 'TSM', 'tsmc': 'TSM',
+  '可口可乐': 'KO', 'coca cola': 'KO', 'coke': 'KO',
+  '迪士尼': 'DIS', 'disney': 'DIS',
+  '波音': 'BA', 'boeing': 'BA',
+  '耐克': 'NKE', 'nike': 'NKE',
+  '星巴克': 'SBUX', 'starbucks': 'SBUX',
+  '麦当劳': 'MCD', 'mcdonalds': 'MCD',
+  '通用电气': 'GE', 'ge': 'GE',
+  '摩根大通': 'JPM', 'jpmorgan': 'JPM',
+  '高盛': 'GS', 'goldman': 'GS',
+  '辉瑞': 'PFE', 'pfizer': 'PFE',
+  '强生': 'JNJ', 'johnson': 'JNJ',
+  '沃尔玛': 'WMT', 'walmart': 'WMT',
+  '家得宝': 'HD', 'home depot': 'HD',
+  'amd': 'AMD', '超微': 'AMD',
+  '埃克森': 'XOM', 'exxon': 'XOM',
+  '雪佛龙': 'CVX', 'chevron': 'CVX',
+  '宝洁': 'PG', 'procter': 'PG',
+  '维萨': 'V', 'visa': 'V',
+  '万事达': 'MA', 'mastercard': 'MA',
+  '伯克希尔': 'BRK.B', 'berkshire': 'BRK.B',
+  '联合健康': 'UNH', 'unitedhealth': 'UNH',
+  '礼来': 'LLY', 'eli lilly': 'LLY',
+  '艾伯维': 'ABBV', 'abbvie': 'ABBV',
+  '美国银行': 'BAC', 'bank of america': 'BAC',
   
-  // 香港常见股票
-  'tencent': '0700.HK',
-  'alibaba': '9988.HK'
+  // 香港常见股票（英文+中文）
+  'tencent': '0700.HK', '腾讯': '0700.HK',
+  'alibaba': '9988.HK', '阿里巴巴': '9988.HK',
+  '小米': '1810.HK', 'xiaomi': '1810.HK',
+  '美团': '3690.HK', 'meituan': '3690.HK',
+  '京东': '9618.HK', 'jd': '9618.HK',
+  '比亚迪': '1211.HK', 'byd': '1211.HK',
+  '中国移动': '0941.HK',
+  '中国电信': '0728.HK',
+  '中国联通': '0762.HK',
+  '工商银行': '1398.HK',
+  '建设银行': '0939.HK',
+  '中国银行': '3988.HK',
+  '农业银行': '1288.HK',
+  '中国平安': '2318.HK',
+  '中国人寿': '2628.HK',
+  '中石油': '0857.HK',
+  '中石化': '0386.HK',
+  '中国神华': '1088.HK'
 };
 
 /**
