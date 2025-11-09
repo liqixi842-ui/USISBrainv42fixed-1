@@ -92,6 +92,7 @@ function buildSystemPrompt(mode, language) {
  */
 function buildDataPrompt(marketData) {
   const { quotes, news, metadata } = marketData;
+  const { calculateSupportResistance, formatLevelsForPrompt } = require('./technicalLevels');
   
   let dataPrompt = `\n========================================\n`;
   dataPrompt += `📊 实时市场数据（这是你唯一可以使用的数据源）\n`;
@@ -131,6 +132,12 @@ function buildDataPrompt(marketData) {
         dataPrompt += `  - 数据年龄: ${quote.dataAgeMinutes}分钟\n`;
         dataPrompt += `  - 数据来源: ${quote.source}\n`;
         dataPrompt += `  - 新鲜度评分: ${(quote.freshnessScore * 100).toFixed(0)}%\n`;
+        
+        // 🆕 添加技术分析数据（支撑压力位）
+        const technicalLevels = calculateSupportResistance(quote);
+        if (technicalLevels) {
+          dataPrompt += formatLevelsForPrompt(technicalLevels);
+        }
       } else {
         dataPrompt += `  ⚠️ 数据不可用（API调用失败或数据源暂时不可访问）\n`;
       }
