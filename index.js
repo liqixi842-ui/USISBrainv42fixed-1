@@ -4030,18 +4030,24 @@ app.post("/brain/orchestrate", async (req, res) => {
         }
       }
       
-      // Step 1: AI理解用户意图
-      semanticIntent = await parseUserIntent(text, userHistory);
+      // Step 1: AI理解用户意图（带5秒超时保护）
+      semanticIntent = await Promise.race([
+        parseUserIntent(text, userHistory),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Intent parsing timeout after 5s')), 5000))
+      ]);
       
-      // Step 2: 智能解析股票代码
-      const resolvedSymbols = await resolveSymbols(semanticIntent);
+      // Step 2: 智能解析股票代码（带3秒超时保护）
+      const resolvedSymbols = await Promise.race([
+        resolveSymbols(semanticIntent),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Symbol resolution timeout after 3s')), 3000))
+      ]);
       symbols = providedSymbols.length > 0 ? providedSymbols : resolvedSymbols;
       
       console.log(`🎯 意图识别: ${semanticIntent.intentType} → ${semanticIntent.mode} (置信度: ${semanticIntent.confidence.toFixed(2)})`);
       console.log(`   股票: ${symbols.join(', ') || '无'}`);
       
     } catch (error) {
-      console.error(`⚠️  智能意图理解失败，使用降级逻辑:`, error.message);
+      console.error(`⚠️  智能意图理解失败（${error.message}），使用降级逻辑`);
       
       // 降级：使用旧的extractSymbols和understandIntent
       const extractedSymbols = extractSymbols(text);
