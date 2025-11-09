@@ -1,5 +1,6 @@
 // visionAnalyzer.js - 新增视觉分析模块
 const axios = require('axios');
+const { formatMarkdownToChinese } = require('./responseFormatter');
 
 class VisionAnalyzer {
   constructor() {
@@ -34,12 +35,26 @@ class VisionAnalyzer {
         headers: {
           'Authorization': `Bearer ${this.openaiApiKey}`,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 30000 // 30秒超时
       });
 
-      return this.parseVisionResponse(response.data.choices[0].message.content);
+      const visionContent = response.data.choices[0].message.content;
+      
+      // 🔧 P0 FIX: 格式化热力图分析输出
+      const formattedContent = formatMarkdownToChinese(visionContent, { addEmoji: true });
+      
+      return this.parseVisionResponse(formattedContent);
     } catch (error) {
-      console.error('Vision analysis failed:', error);
+      console.error('[Vision AI] Heatmap analysis error:', {
+        index: marketContext?.index,
+        error: error.message,
+        code: error.code
+      });
+      
+      if (error.code === 'ECONNABORTED') {
+        throw new Error(`热力图分析超时，请稍后重试`);
+      }
       throw new Error(`视觉分析失败: ${error.message}`);
     }
   }
@@ -185,6 +200,7 @@ ${this.getSectorSpecificDrivers(marketContext)}
     try {
       const base64Image = imageBuffer.toString('base64');
       
+      // 🔧 P0 FIX: 30秒超时保护，防止长时间等待
       const response = await axios.post('https://api.openai.com/v1/chat/completions', {
         model: 'gpt-4o',
         messages: [{
@@ -209,19 +225,33 @@ ${this.getSectorSpecificDrivers(marketContext)}
         headers: {
           'Authorization': `Bearer ${this.openaiApiKey}`,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 30000 // 30秒超时
       });
 
       const rawAnalysis = response.data.choices[0].message.content;
       
+      // 🔧 P0 FIX: 强制格式化Vision AI输出，确保使用【】和•符号
+      const formattedAnalysis = formatMarkdownToChinese(rawAnalysis, { addEmoji: true });
+      
       return {
-        rawAnalysis: rawAnalysis,
+        rawAnalysis: formattedAnalysis,
         confidence: 0.85,
         timestamp: new Date().toISOString()
       };
       
     } catch (error) {
-      console.error('Stock chart vision analysis failed:', error);
+      console.error('[Vision AI] Stock chart analysis error:', {
+        symbol: marketContext?.symbol,
+        error: error.message,
+        code: error.code,
+        timeout: error.code === 'ECONNABORTED'
+      });
+      
+      // 🔧 P0 FIX: 优雅降级，避免整个服务崩溃
+      if (error.code === 'ECONNABORTED') {
+        throw new Error(`K线图分析超时，请稍后重试`);
+      }
       throw new Error(`K线图视觉分析失败: ${error.message}`);
     }
   }
