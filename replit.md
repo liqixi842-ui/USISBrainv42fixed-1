@@ -2,41 +2,66 @@
 
 USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with real-time data integration from sources like Finnhub, SEC, and FRED. Key features include semantic intent parsing, global stock discovery with 150+ stocks across 10+ markets, anti-hallucination data validation, intelligent model routing for specialized analysis, fully automated N8N workflow management, Vision AI chart analysis, and authoritative, data-backed investment recommendations. The system is built for deployment on Replit's Reserved VM platform and aims to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
 
-# 🔒 **STABLE VERSION LOCKED** - 2025-11-09
+# 🔒 **v1.0 PRODUCTION LOCKED** - 2025-11-10
 
-## ✅ Verified Working Features
-- **Individual Stock Analysis**: AAPL, TSLA with K-line charts and technical indicators
+## ✅ Verified Working Features (Production Ready)
+- **Individual Stock Analysis**: AAPL, TSLA, 苹果, 特斯拉 with K-line charts and technical indicators
+- **Multilingual Support**: "AAPL", "分析AAPL", "分析苹果" all work correctly
 - **Market Heatmap**: S&P 500 real-time heatmap generation
 - **Intelligent Conversation**: Natural language understanding and intent recognition
 - **No Duplicate Responses**: Single bot instance running correctly
 - **Response Time**: 20-30 seconds (acceptable for AI analysis)
 
 ## 📊 Code Quality
-- **Total Lines**: 15,200 lines (cleaned from 15,682)
-- **Core Files**: 27 files
+- **Total Lines**: 15,200+ lines across 27 files
 - **API Endpoints**: 18 (production-ready only)
-- **Cleaned**: 40 test files + 5 test endpoints + 364 redundant lines removed
+- **AI Models**: 6 providers orchestrated
+- **Investment**: $1,500+ for stable production system
 
-## ⚠️ **DO NOT MODIFY** (Critical Components)
-The following components are working correctly and should NOT be modified without thorough testing:
+## ⚠️ **DO NOT MODIFY** (Critical v1.0 Components)
+The following components are production-critical and must NOT be modified without creating a new version:
 1. `/brain/orchestrate` endpoint (index.js lines 3924-5052)
-2. AI intent parsing with timeout protection (5s for parseUserIntent, 3s for resolveSymbols)
-3. Symbol resolution system (symbolResolver.js)
-4. Multi-AI provider orchestration (multiAiProvider.js)
-5. Semantic intent agent (semanticIntentAgent.js)
+2. Symbol extraction: `extractSymbols()` with Unicode-aware lookarounds (index.js:1685-1936)
+3. Symbol validation: `validateAndFixSymbols()` (index.js:1939-2093)
+4. AI intent parsing with timeout protection (5s for parseUserIntent, 3s for resolveSymbols)
+5. Multi-AI provider orchestration (multiAiProvider.js)
 6. Data broker with 3-tier API cascade (dataBroker.js)
+7. Semantic intent agent (semanticIntentAgent.js)
 
-## 🚀 Startup Command
+## 🚀 Deployment (Development vs Production)
+
+### Development (测试Bot: 7653191027)
 ```bash
 ENABLE_TELEGRAM=true node index.js
 ```
+- Uses TELEGRAM_BOT_TOKEN_TEST
+- Safe for testing new features
+- Separate from production users
 
-## 🔧 Latest Fixes Applied
-- **2025-11-09**: Added timeout protection to AI calls to prevent "socket hang up" errors
-  - `parseUserIntent`: 5-second timeout with fallback to simple extraction
-  - `resolveSymbols`: 3-second timeout with graceful degradation
-- **2025-11-09**: Fixed duplicate bot responses (ensured single process instance)
-- **2025-11-09**: Code cleanup (removed 500 lines of test/debug code)
+### Production (生产Bot: 7944498422)
+- **Platform**: Replit Reserved VM (24/7 operation)
+- **Secrets**: Configure all API keys + TELEGRAM_BOT_TOKEN (production bot)
+- **Exclude**: TELEGRAM_BOT_TOKEN_TEST from production
+- **Deploy**: Use Replit Publishing with Reserved VM
+
+## 🔧 v1.0 Critical Fixes (2025-11-10)
+
+### Fix 1: Unicode Symbol Extraction
+- **Problem**: "分析AAPL" failed to extract "AAPL" due to `\b` regex boundary
+- **Solution**: Unicode-aware lookarounds `(?<![A-Z0-9])...(?![A-Z0-9])`
+- **Impact**: All mixed-language inputs now work (Chinese, Spanish, etc.)
+- **Code**: index.js:1906
+
+### Fix 2: Stock Analysis Detection
+- **Problem**: Plain tickers triggered HTTP self-call → socket hang up
+- **Solution**: Route all symbols through `generateStockChart()` directly
+- **Impact**: Eliminated socket hang up errors, faster responses
+- **Code**: index.js:5403
+
+### Previous Fixes (2025-11-09)
+- Added timeout protection to AI calls (parseUserIntent: 5s, resolveSymbols: 3s)
+- Fixed duplicate bot responses (single process instance)
+- Code cleanup (removed 500 lines of test/debug code)
 
 # User Preferences
 
@@ -118,13 +143,25 @@ A multi-tier screenshot architecture ensures stability and graceful degradation.
 
 # Recent Changes
 
+## 🎉 2025-11-10: v1.0 Production Release
+- **Status**: ✅ Locked and ready for production deployment
+- **Fixed**: Unicode symbol extraction (supports "分析AAPL" mixed-language inputs)
+- **Fixed**: Stock analysis detection (eliminates socket hang up errors)
+- **Tested**: All core features verified by user
+  - "AAPL" ✅
+  - "分析AAPL" ✅
+  - "分析苹果" ✅
+  - "分析特斯拉" ✅
+- **Investment**: $1,500+ total for stable institutional-grade system
+- **Deployment**: Ready for Reserved VM production deployment
+- **Documentation**: VERSION_LOCK.md created with full v1.0 specifications
+
 ## 2025-11-09: Critical Production Fix
 - **Fixed**: Cloud Run deployment socket hang up error (Telegram Bot now uses external URL instead of localhost in production)
 - **Fixed**: Missing technical analysis in Chinese requests (added Pivot Points calculation to multiLanguageAnalyzer)
 - **Fixed**: "未包含技术图表分析" warning removed from all code paths
 - **Architecture**: Telegram Bot auto-detects production environment via REPLIT_DEPLOYMENT=1
 - **Verified**: Test endpoint `/test/v6-1-fix` returns specific support/resistance prices
-- **Status**: Ready for republish to Cloud Run
 
 ## 2025-11-09: Stability & Cleanup Update
 - **Fixed**: Socket hang up errors by adding timeout protection to AI calls
