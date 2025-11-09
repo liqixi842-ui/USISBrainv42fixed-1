@@ -5399,8 +5399,10 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
   // 🆕 v3.2: 临时缓存用户的持仓信息（用于callback恢复）
   const userPositionContextCache = new Map(); // key: userId, value: {positionContext, timestamp}
   
-  // Telegram API 调用
+  // Telegram API 调用（修复版 - 正确的超时处理）
   function telegramAPI(method, params = {}, timeout = 35000) {
+    console.log(`🌐 [TG API] Calling ${method}, timeout=${timeout}ms, params=`, JSON.stringify(params).slice(0, 100));
+    
     return new Promise((resolve, reject) => {
       const data = JSON.stringify(params);
       const options = {
@@ -5411,14 +5413,21 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(data, 'utf8')
-        },
-        timeout
+        }
+        // ❌ 不要在这里设置timeout，它不工作！
       };
 
+      console.log(`📤 [TG API] Sending request to ${options.hostname}${options.path}`);
+      
       const req = https.request(options, (res) => {
+        console.log(`📥 [TG API] Got response, status=${res.statusCode}`);
         let body = '';
-        res.on('data', chunk => body += chunk);
+        res.on('data', chunk => {
+          body += chunk;
+          console.log(`📦 [TG API] Received ${chunk.length} bytes`);
+        });
         res.on('end', () => {
+          console.log(`✅ [TG API] Response complete, body length=${body.length}`);
           try {
             const result = JSON.parse(body);
             if (!result.ok) {
@@ -5432,14 +5441,24 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         });
       });
 
-      req.on('error', reject);
-      req.on('timeout', () => {
+      // ✅ 正确的超时处理：使用req.setTimeout()并手动destroy()
+      req.setTimeout(timeout, () => {
+        console.log(`⏱️  [TG] ${method} timeout after ${timeout}ms, destroying request`);
         req.destroy();
-        reject(new Error(`Timeout for ${method}`));
+        reject(new Error(`Timeout for ${method} after ${timeout}ms`));
+      });
+
+      req.on('error', (err) => {
+        console.log(`❌ [TG API] Request error:`, err.message);
+        if (!req.destroyed) {
+          reject(err);
+        }
+        // 如果是destroy导致的error，已经在setTimeout中reject了
       });
 
       req.write(data);
       req.end();
+      console.log(`📨 [TG API] Request sent`);
     });
   }
   
@@ -5855,11 +5874,16 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
   let polling = false;
   
   async function pollTelegram() {
-    if (polling) return;
+    if (polling) {
+      console.log('⚠️  [TG] Polling already in progress, skipping');
+      return;
+    }
     polling = true;
+    console.log('🔄 [TG] Starting poll... (offset:', offset, ')');
     
     try {
       const result = await telegramAPI('getUpdates', { offset, timeout: 25 }, 35000);
+      console.log('✅ [TG] getUpdates success, got', result.result?.length || 0, 'updates');
       
       if (result.result && result.result.length > 0) {
         console.log(`📬 [TG] Got ${result.result.length} updates`);
@@ -5879,7 +5903,7 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         }
       }
     } catch (e) {
-      console.error('[TG] Poll error:', e.message);
+      console.error('❌ [TG] Poll error:', e.message, e.stack);
     } finally {
       polling = false;
       setTimeout(pollTelegram, 1000);

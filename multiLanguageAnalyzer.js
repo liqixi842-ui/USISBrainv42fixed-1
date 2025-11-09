@@ -99,25 +99,61 @@ class MultiLanguageAnalyzer {
   async analyzeInChinese(text, marketData, options = {}) {
     console.log('🇨🇳 [MultiLang] 启动DeepSeek中文财经分析');
 
+    // 🎯 v6.1修复：生成技术分析数据（支撑压力位）
+    let technicalLevels = null;
+    if (marketData && marketData.currentPrice) {
+      try {
+        const { calculateTechnicalLevels } = require('./technicalLevels');
+        technicalLevels = calculateTechnicalLevels({
+          currentPrice: marketData.currentPrice,
+          high: marketData.high || marketData.currentPrice * 1.02,
+          low: marketData.low || marketData.currentPrice * 0.98,
+          open: marketData.open || marketData.currentPrice
+        });
+        console.log('✅ [MultiLang] 技术分析数据已生成:', technicalLevels);
+      } catch (err) {
+        console.warn('⚠️  [MultiLang] 技术分析生成失败:', err.message);
+      }
+    }
+
     // 构建中文分析提示词
     const systemPrompt = `你是一位专业的中文财经分析师，精通A股、港股、美股市场。
 
 【核心能力】
 1. 深度理解中文财经术语和本土投资逻辑
 2. 熟悉中国监管政策和市场特点
-3. 结合技术面和基本面给出专业建议
+3. **必须**结合技术面（支撑压力位）和基本面给出专业建议
 
 【输出要求】
 - 使用专业但易懂的中文表达
+- **必须**包含具体的支撑压力位价格（例如：支撑位$266.50，压力位$270.25）
 - 数据引用准确，避免臆测
 - 给出具体的操作建议和风险提示`;
 
-    const userPrompt = `${text}
+    let userPrompt = `${text}
 
 【市场数据】
-${JSON.stringify(marketData, null, 2)}
+${JSON.stringify(marketData, null, 2)}`;
 
-请基于以上数据进行专业的中文财经分析。`;
+    // 🎯 添加技术分析数据到prompt
+    if (technicalLevels) {
+      userPrompt += `
+
+【技术分析 - 支撑压力位】
+Pivot Point: $${technicalLevels.pivot.toFixed(2)}
+压力位 (Resistance):
+  - R1: $${technicalLevels.r1.toFixed(2)}
+  - R2: $${technicalLevels.r2.toFixed(2)}
+支撑位 (Support):
+  - S1: $${technicalLevels.s1.toFixed(2)}
+  - S2: $${technicalLevels.s2.toFixed(2)}
+
+**重要**：请在分析中引用这些具体价格，不要说"未包含技术图表分析"。`;
+    }
+
+    userPrompt += `
+
+请基于以上数据（包括技术支撑压力位）进行专业的中文财经分析。`;
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -134,7 +170,8 @@ ${JSON.stringify(marketData, null, 2)}
     return {
       ...result,
       language: 'zh',
-      modelReason: 'Chinese financial analysis - DeepSeek优化'
+      modelReason: 'Chinese financial analysis - DeepSeek优化',
+      technicalLevels  // 🎯 返回技术数据供调用方使用
     };
   }
 
