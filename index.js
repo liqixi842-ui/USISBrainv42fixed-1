@@ -1899,7 +1899,8 @@ function extractSymbols(text = "") {
   
   // 匹配: 字母+数字组合 + 可选的.交易所后缀
   // 支持: AAPL, IBE.MC, 0700.HK, BABA, SAN.MC
-  const symbolPattern = /\b([A-Z0-9]{1,5}(?:\.[A-Z]{1,3})?)\b/g;
+  // 🆕 v1.0: 使用Unicode-aware lookarounds支持中文（"分析AAPL"）
+  const symbolPattern = /(?<![A-Z0-9])([A-Z0-9]{1,5}(?:\.[A-Z]{1,3})?)(?![A-Z0-9])/gu;
   const matches = upperText.match(symbolPattern) || [];
   
   // 去重并过滤常见非股票词（扩展黑名单）
