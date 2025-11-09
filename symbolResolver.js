@@ -107,7 +107,15 @@ async function lookupSymbol(query, exchangeHint = null) {
   console.log(`   🌐 Finnhub查询: "${query}" (交易所提示: ${exchangeHint || '无'})`);
   
   try {
-    const response = await fetch(url, { timeout: 10000 });
+    // 🛡️ 创建AbortController进行10秒超时保护
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
+    const response = await fetch(url, { 
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
     
     if (!response.ok) {
       throw new Error(`Finnhub API error: ${response.status}`);
