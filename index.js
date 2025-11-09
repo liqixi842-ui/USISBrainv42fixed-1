@@ -4559,47 +4559,60 @@ app.post("/brain/orchestrate", async (req, res) => {
     let gpt5Result;
     
     try {
-      // 检测是否为中文输入或需要多语言处理
-      const isChinese = /[\u4e00-\u9fa5]/.test(text);
-      
-      if (isChinese && symbols.length > 0) {
-        console.log(`🇨🇳 [v6.0] 检测到中文输入，启动DeepSeek多语言分析`);
-        
-        const multiLangAnalyzer = new MultiLanguageAnalyzer();
-        const analysisResult = await multiLangAnalyzer.smartAnalyze(
-          text,
-          marketData,
-          { mode: intent.mode, scene: scene }
-        );
-        
-        // 转换为v5.0兼容格式
+      // 🎯 v6.1优先级：如果已经有包含技术分析的完整分析（stockChartData.comprehensiveAnalysis），直接使用它
+      if (stockChartData && stockChartData.comprehensiveAnalysis) {
+        console.log(`✅ [v6.1] 使用数据驱动分析结果（已包含技术分析）`);
         gpt5Result = {
-          success: analysisResult.success,
-          text: analysisResult.text,
-          model: analysisResult.model,
-          usage: analysisResult.usage,
-          cost_usd: analysisResult.cost_usd,
-          debug: {
-            language: analysisResult.language,
-            modelReason: analysisResult.modelReason,
-            provider: analysisResult.provider
-          }
+          success: true,
+          text: stockChartData.comprehensiveAnalysis,
+          model: 'data-driven-analysis',
+          cost_usd: 0.002, // 估算值
+          debug: { source: 'stock-chart-comprehensive-analysis' }
         };
+      }
+      // 检测是否为中文输入或需要多语言处理
+      else {
+        const isChinese = /[\u4e00-\u9fa5]/.test(text);
         
-        console.log(`✅ [v6.0] 多语言分析完成 (${analysisResult.model}, 语言: ${analysisResult.language})`);
-        
-      } else {
-        // 非中文或无股票代码 → 使用原有GPT-5引擎
-        console.log(`🧠 [v4.0] 使用GPT-5单核引擎生成分析...`);
-        gpt5Result = await generateWithGPT5({
-          text,
-          marketData,
-          semanticIntent: semanticIntent,
-          mode: intent.mode,
-          scene,
-          symbols,
-          rankedNews: rankedNews  // 传递ImpactRank排序后的新闻
-        });
+        if (isChinese && symbols.length > 0) {
+          console.log(`🇨🇳 [v6.0] 检测到中文输入，启动DeepSeek多语言分析`);
+          
+          const multiLangAnalyzer = new MultiLanguageAnalyzer();
+          const analysisResult = await multiLangAnalyzer.smartAnalyze(
+            text,
+            marketData,
+            { mode: intent.mode, scene: scene }
+          );
+          
+          // 转换为v5.0兼容格式
+          gpt5Result = {
+            success: analysisResult.success,
+            text: analysisResult.text,
+            model: analysisResult.model,
+            usage: analysisResult.usage,
+            cost_usd: analysisResult.cost_usd,
+            debug: {
+              language: analysisResult.language,
+              modelReason: analysisResult.modelReason,
+              provider: analysisResult.provider
+            }
+          };
+          
+          console.log(`✅ [v6.0] 多语言分析完成 (${analysisResult.model}, 语言: ${analysisResult.language})`);
+          
+        } else {
+          // 非中文或无股票代码 → 使用原有GPT-5引擎
+          console.log(`🧠 [v4.0] 使用GPT-5单核引擎生成分析...`);
+          gpt5Result = await generateWithGPT5({
+            text,
+            marketData,
+            semanticIntent: semanticIntent,
+            mode: intent.mode,
+            scene,
+            symbols,
+            rankedNews: rankedNews  // 传递ImpactRank排序后的新闻
+          });
+        }
       }
     } catch (multiLangError) {
       console.warn(`⚠️  [v6.0] 多语言分析失败，降级到GPT-5:`, multiLangError.message);
