@@ -5693,20 +5693,9 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         console.log('🧠 常规分析');
         await telegramAPI('sendMessage', { chat_id: chatId, text: '🧠 正在分析...' });
         
-        // 🆕 v6.2: 添加超时控制（90秒，长于orchestrate的60秒）
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 90000);
-        
-        // 🎯 v6.1修复：生产环境使用外部URL，开发环境使用localhost
-        const isProduction = process.env.REPLIT_DEPLOYMENT === '1';
-        const baseURL = isProduction 
-          ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-          : `http://localhost:${PORT}`;
-        
-        console.log(`🔗 [Telegram] 调用orchestrate: ${baseURL}/brain/orchestrate (生产=${isProduction})`);
-        
+        // 🎯 v6.2修复：直接调用本地API（同进程，避免网络问题）
         try {
-          const response = await fetch(`${baseURL}/brain/orchestrate`, {
+          const response = await fetch(`http://127.0.0.1:${PORT}/brain/orchestrate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -5716,10 +5705,8 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
               mode: 'auto',
               budget: 'low'
             }),
-            signal: controller.signal
+            timeout: 90000
           });
-          
-          clearTimeout(timeoutId);
         
           const data = await response.json();
           
@@ -5759,7 +5746,6 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
           });
           console.log('✅ 分析结果已发送');
         } catch (fetchError) {
-          clearTimeout(timeoutId);
           console.error('❌ Orchestrate请求失败:', fetchError.message);
           throw new Error(`分析请求失败: ${fetchError.message}`);
         }
