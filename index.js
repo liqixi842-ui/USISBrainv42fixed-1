@@ -5392,11 +5392,12 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
       
       const isHeatmap = text.includes('热力图') || text.toLowerCase().includes('heatmap');
       
-      // 🆕 检测个股分析请求（类似热力图判断）
+      // 🆕 v1.0: 检测个股分析请求（扩展逻辑：单独股票代码也算）
       const stockKeywords = ['解析', '分析', '走势', 'K线', 'chart', '图表'];
       const hasStockKeyword = stockKeywords.some(kw => text.includes(kw));
       const symbols = extractSymbols(text);
-      const isStockAnalysis = hasStockKeyword && symbols.length > 0;
+      // 修复：单独的股票代码（如"AAPL"）也应该走股票分析路径，避免HTTP调用
+      const isStockAnalysis = symbols.length > 0 && !isHeatmap;
       
       if (isHeatmap) {
         console.log('🎨 热力图请求');
