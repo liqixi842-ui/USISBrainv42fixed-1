@@ -111,6 +111,14 @@ function buildDataPrompt(marketData) {
   
   dataPrompt += `\n`;
   
+  // 🆕 技术分析模块（支撑压力位计算）
+  let technicalLevelsModule = null;
+  try {
+    technicalLevelsModule = require('./technicalLevels');
+  } catch (err) {
+    console.warn('[Technical Levels] 模块加载失败，跳过技术分析');
+  }
+  
   // 2. 股票报价数据
   if (Object.keys(quotes).length > 0) {
     dataPrompt += `**股票报价数据** (以下是完整的可用数据):\n\n`;
@@ -131,6 +139,42 @@ function buildDataPrompt(marketData) {
         dataPrompt += `  - 数据年龄: ${quote.dataAgeMinutes}分钟\n`;
         dataPrompt += `  - 数据来源: ${quote.source}\n`;
         dataPrompt += `  - 新鲜度评分: ${(quote.freshnessScore * 100).toFixed(0)}%\n`;
+        
+        // 🎯 技术分析：自动计算支撑压力位
+        if (technicalLevelsModule) {
+          try {
+            const technicalLevels = technicalLevelsModule.calculateSupportResistance(quote);
+            if (technicalLevels) {
+              dataPrompt += `\n  ⚡ **技术分析 - 支撑/压力位（基于Pivot Points算法）**:\n`;
+              dataPrompt += `  当前价格: $${technicalLevels.current.toFixed(2)}\n\n`;
+              
+              // 压力位（从低到高）
+              if (technicalLevels.resistances && technicalLevels.resistances.length > 0) {
+                dataPrompt += `  📈 压力位（Resistance Levels）:\n`;
+                technicalLevels.resistances.forEach((r, i) => {
+                  dataPrompt += `     ${i + 1}. $${r.price.toFixed(2)} (+${r.distance}%) - ${r.type}\n`;
+                });
+              }
+              
+              // 支撑位（从高到低）
+              if (technicalLevels.supports && technicalLevels.supports.length > 0) {
+                dataPrompt += `  📉 支撑位（Support Levels）:\n`;
+                technicalLevels.supports.forEach((s, i) => {
+                  dataPrompt += `     ${i + 1}. $${s.price.toFixed(2)} (-${s.distance}%) - ${s.type}\n`;
+                });
+              }
+              
+              dataPrompt += `\n  🎯 关键价位:\n`;
+              dataPrompt += `     Pivot Point: $${technicalLevels.pivot.main.toFixed(2)}\n`;
+              dataPrompt += `     R1: $${technicalLevels.pivot.r1.toFixed(2)} | S1: $${technicalLevels.pivot.s1.toFixed(2)}\n`;
+              dataPrompt += `     R2: $${technicalLevels.pivot.r2.toFixed(2)} | S2: $${technicalLevels.pivot.s2.toFixed(2)}\n`;
+              dataPrompt += `     今日高: $${technicalLevels.keyLevels.todayHigh.toFixed(2)} | 今日低: $${technicalLevels.keyLevels.todayLow.toFixed(2)}\n`;
+              dataPrompt += `\n`;
+            }
+          } catch (techErr) {
+            console.warn(`[Technical Levels] 计算失败: ${techErr.message}`);
+          }
+        }
       } else {
         dataPrompt += `  ⚠️ 数据不可用（API调用失败或数据源暂时不可访问）\n`;
       }
