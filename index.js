@@ -4438,6 +4438,15 @@ app.post("/brain/orchestrate", async (req, res) => {
     const analysisKeywords = /分析|解析|诊断|评估|研究|技术分析|支撑|压力|阻力|建议|买卖点|进出场|chart|analyze|diagnose|evaluate|analysis|support|resistance|recommendation/i;
     const hasAnalysisKeyword = analysisKeywords.test(text || '');
     
+    // 🎯 强制启用实时数据：如果检测到技术分析关键词，必须获取市场数据
+    if (hasAnalysisKeyword && symbols.length > 0) {
+      console.log(`🎯 检测到技术分析关键词，强制启用实时数据模式`);
+      intent.requiresRealtimeData = true;
+      if (semanticIntent) {
+        semanticIntent.requiresRealtimeData = true;
+      }
+    }
+    
     // 🎯 触发条件优化：
     // 1. 有符号 + 非casual → 生成图表
     // 2. 无符号但有分析关键词 → 尝试从公司名解析符号
