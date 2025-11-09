@@ -86,17 +86,20 @@ async function initDatabase() {
 
   const maxRetries = 5;
   const baseDelay = 2000; // 2 seconds
+  
+  // 🛡️ v6.1: 使用懒加载连接池
+  const dbPool = getPool();
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`🔌 [尝试 ${attempt}/${maxRetries}] 连接数据库...`);
       
       // Step 1: Wake up the database with a simple query
-      const wakeResult = await pool.query('SELECT NOW() as wake_time');
+      const wakeResult = await dbPool.query('SELECT NOW() as wake_time');
       console.log(`✅ 数据库已唤醒！时间: ${wakeResult.rows[0].wake_time}`);
       
       // Step 2: Create tables
-      await pool.query(`
+      await dbPool.query(`
         CREATE TABLE IF NOT EXISTS user_memory (
           id SERIAL PRIMARY KEY,
           user_id TEXT NOT NULL,
@@ -2768,9 +2771,10 @@ function selectOptimalModels(complexity, mode, symbols = [], budget = 'medium') 
 
 // L3: 成本追踪器 - 记录每次分析的成本
 async function trackCost(request_id, user_id, mode, models, actualCost, responseTime) {
+  if (!ENABLE_DB) return; // 🛡️ v6.1: Skip when DB disabled
   try {
     // 插入成本记录 (表已在initDatabase中创建)
-    await pool.query(
+    await getPool().query(
       'INSERT INTO cost_tracking (request_id, user_id, mode, models, estimated_cost, actual_cost, response_time_ms) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [request_id, user_id || 'anonymous', mode, JSON.stringify(models), actualCost, actualCost, responseTime]
     );
@@ -2783,8 +2787,9 @@ async function trackCost(request_id, user_id, mode, models, actualCost, response
 
 // L3: 获取总成本 - 从数据库汇总特定请求的总成本
 async function getTotalCostFromDB(requestId) {
+  if (!ENABLE_DB) return 0; // 🛡️ v6.1: Return 0 when DB disabled
   try {
-    const { rows } = await pool.query(
+    const { rows } = await getPool().query(
       'SELECT COALESCE(SUM(actual_cost), 0) AS total FROM cost_tracking WHERE request_id = $1',
       [requestId]
     );
@@ -4104,9 +4109,9 @@ app.post("/brain/orchestrate", async (req, res) => {
     
     try {
       // 读取用户历史（用于上下文理解）
-      if (user_id) {
+      if (user_id && ENABLE_DB) {
         try {
-          const historyResult = await pool.query(
+          const historyResult = await getPool().query(
             'SELECT request_text, mode, symbols, response_text, timestamp FROM user_memory WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 3',
             [user_id]
           );
@@ -4722,9 +4727,9 @@ app.post("/brain/orchestrate", async (req, res) => {
     const imageUrl = null; // TODO: 后续添加图表生成
     
     // 7. Save to PostgreSQL Memory
-    if (user_id) {
+    if (user_id && ENABLE_DB) {
       try {
-        await pool.query(
+        await getPool().query(
           'INSERT INTO user_memory (user_id, request_text, mode, symbols, response_text, chat_type) VALUES ($1, $2, $3, $4, $5, $6)',
           [user_id, text, intent.mode, symbols, responseText, chat_type]
         );
@@ -5159,7 +5164,10 @@ app.post("/brain/memory/clear", async (req, res) => {
     }
     
     // 从PostgreSQL删除用户历史
-    const result = await pool.query(
+    if (!ENABLE_DB) {
+      return res.status(503).json({ error: "Database disabled" });
+    }
+    const result = await getPool().query(
       'DELETE FROM user_memory WHERE user_id = $1',
       [user_id]
     );
