@@ -5904,55 +5904,68 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         console.log('🧠 常规分析');
         await telegramAPI('sendMessage', { chat_id: chatId, text: '🧠 正在分析...' });
         
-        const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text,
-            user_id: `tg_${userId}`,
-            chat_type: message.chat.type,
-            mode: 'auto',
-            budget: 'low'
-          })
-        });
+        // 🆕 v6.2: 添加超时控制（90秒，长于orchestrate的60秒）
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 90000);
         
-        const data = await response.json();
+        try {
+          const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text,
+              user_id: `tg_${userId}`,
+              chat_type: message.chat.type,
+              mode: 'auto',
+              budget: 'low'
+            }),
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
         
-        // 🆕 v5.0: 检查是否有个股图表需要发送
-        if (data.stock_chart && data.stock_chart.buffer) {
-          console.log('📈 检测到个股图表，准备发送buffer...');
-          try {
-            // 重建Buffer（处理JSON序列化: {type:'Buffer', data:[...]}）
-            let chartBuffer;
-            if (data.stock_chart.buffer.type === 'Buffer' && Array.isArray(data.stock_chart.buffer.data)) {
-              chartBuffer = Buffer.from(data.stock_chart.buffer.data);
-            } else if (Buffer.isBuffer(data.stock_chart.buffer)) {
-              chartBuffer = data.stock_chart.buffer;
-            } else {
-              throw new Error('Invalid buffer format');
+          const data = await response.json();
+          
+          // 🆕 v5.0: 检查是否有个股图表需要发送
+          if (data.stock_chart && data.stock_chart.buffer) {
+            console.log('📈 检测到个股图表，准备发送buffer...');
+            try {
+              // 重建Buffer（处理JSON序列化: {type:'Buffer', data:[...]}）
+              let chartBuffer;
+              if (data.stock_chart.buffer.type === 'Buffer' && Array.isArray(data.stock_chart.buffer.data)) {
+                chartBuffer = Buffer.from(data.stock_chart.buffer.data);
+              } else if (Buffer.isBuffer(data.stock_chart.buffer)) {
+                chartBuffer = data.stock_chart.buffer;
+              } else {
+                throw new Error('Invalid buffer format');
+              }
+              
+              // 发送图表截图
+              await sendDocumentBuffer(
+                TELEGRAM_TOKEN, 
+                chatId, 
+                chartBuffer,
+                `${data.symbols?.[0] || 'stock'}_chart.png`,
+                data.stock_chart.comprehensiveAnalysis || data.stock_chart.chartAnalysis || '个股K线分析'
+              );
+              console.log('✅ 个股图表已发送');
+            } catch (chartError) {
+              console.error('❌ 发送个股图表失败:', chartError.message);
+              // 降级：仅发送文本分析
             }
-            
-            // 发送图表截图
-            await sendDocumentBuffer(
-              TELEGRAM_TOKEN, 
-              chatId, 
-              chartBuffer,
-              `${data.symbols?.[0] || 'stock'}_chart.png`,
-              data.stock_chart.comprehensiveAnalysis || data.stock_chart.chartAnalysis || '个股K线分析'
-            );
-            console.log('✅ 个股图表已发送');
-          } catch (chartError) {
-            console.error('❌ 发送个股图表失败:', chartError.message);
-            // 降级：仅发送文本分析
           }
+          
+          // 发送文本分析
+          await telegramAPI('sendMessage', { 
+            chat_id: chatId, 
+            text: data.final_text || data.final_analysis || '分析完成' 
+          });
+          console.log('✅ 分析结果已发送');
+        } catch (fetchError) {
+          clearTimeout(timeoutId);
+          console.error('❌ Orchestrate请求失败:', fetchError.message);
+          throw new Error(`分析请求失败: ${fetchError.message}`);
         }
-        
-        // 发送文本分析
-        await telegramAPI('sendMessage', { 
-          chat_id: chatId, 
-          text: data.final_text || data.final_analysis || '分析完成' 
-        });
-        console.log('✅ 分析结果已发送');
       }
     } catch (error) {
       console.error('[TG] Error:', error.message);
