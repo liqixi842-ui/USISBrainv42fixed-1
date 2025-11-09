@@ -477,7 +477,7 @@ function basicAnalysis(symbol, stockData, positionContext = null) {
     }
   }
 
-  analysis += `\n⚠️ 注意：这是基础分析（未包含技术图表分析），建议结合更多信息做出决策。`;
+  // 移除旧的"未包含技术图表分析"警告 - 现在总是包含技术分析
 
   return analysis;
 }
