@@ -391,19 +391,21 @@ function buildFallbackResponse(symbol, stockData, positionContext, diagnostics, 
   
   console.log(`NFLX_SUMMARY|${symbol}|data=${diagnostics.phases.dataFetch?.status || 'failed'}|chart=skipped|vision=skipped|duration=${diagnostics.totalDuration}|fallback=basic`);
   
+  // 🎯 v6.1修复：即使截图失败，也返回ok: true让数据驱动分析能继续执行
   return {
-    ok: true,
-    success: false,
+    ok: true,  // ✅ 关键修改：保持true让index.js继续调用generateDataDrivenStockAnalysis
+    success: false,  // ⚠️ 标记为降级模式（无截图/Vision AI）
     symbol,
     buffer: null,
     chartURL: null,
-    stockData,
-    chartAnalysis,
+    stockData,  // ✅ 包含实时数据，供技术分析使用
+    chartAnalysis,  // 基础分析（fallback）
     provider: 'fallback',
     meta: {
       analysis: {
-        analysis_type: 'basic_only',
-        reason: diagnostics.fallbackReason
+        analysis_type: 'basic_fallback',  // 标记为fallback模式
+        reason: diagnostics.fallbackReason,
+        note: 'stockData available for data-driven analysis'  // 提示数据可用
       },
       diagnostics
     },
