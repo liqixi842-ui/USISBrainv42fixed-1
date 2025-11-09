@@ -5211,12 +5211,44 @@ app.post("/brain/analyze_no_screenshot", async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
+// 🧪 测试端点：验证技术分析修复
+app.get('/test/technical-analysis', async (req, res) => {
+  try {
+    const { calculateSupportResistance } = require('./technicalLevels');
+    
+    // 模拟AAPL报价数据
+    const mockQuote = {
+      currentPrice: 226.89,
+      previousClose: 226.96,
+      open: 227.20,
+      high: 228.50,
+      low: 225.80
+    };
+    
+    const result = calculateSupportResistance(mockQuote);
+    
+    res.json({
+      success: true,
+      quote: mockQuote,
+      technicalLevels: result,
+      message: '✅ 技术分析计算正常工作！支撑压力位已成功生成。'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 USIS Brain v6.0 online on port ${PORT} 🆕 [Multi-AI + n8n Integration]`);
   console.log(`📍 Listening on 0.0.0.0:${PORT}`);
   console.log(`🔗 Health check available at http://0.0.0.0:${PORT}/health`);
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
   console.log(`🔵 n8n API available at http://0.0.0.0:${PORT}/brain/analyze_no_screenshot`);
+  console.log(`🧪 Technical analysis test: http://0.0.0.0:${PORT}/test/technical-analysis`);
   
   // 🛡️ v6.1: N8N监控已禁用（节省内存 ~200MB）
   console.log('⚠️  N8N监控已禁用以节省内存');
