@@ -1,8 +1,17 @@
 # Overview
 
-USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with real-time data integration from sources like Finnhub, SEC, and FRED. Key features include semantic intent parsing, **global stock discovery with 150+ stocks across 10+ markets**, anti-hallucination data validation, intelligent model routing for specialized analysis (e.g., Chinese financial analysis via DeepSeek), **fully automated N8N workflow management**, Vision AI chart analysis, and authoritative, data-backed investment recommendations. The system is built for deployment on Replit's Autoscale platform and aims to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
+USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates 6+ AI models (OpenAI GPT-4o, Claude 3.5, Gemini 2.5, DeepSeek V3, Mistral, Perplexity) with real-time data integration from sources like Finnhub, SEC, and FRED. Key features include semantic intent parsing, **global stock discovery with 150+ stocks across 10+ markets**, anti-hallucination data validation, intelligent model routing for specialized analysis (e.g., Chinese financial analysis via DeepSeek), **fully automated N8N workflow management**, Vision AI chart analysis, and authoritative, data-backed investment recommendations. The system is built for deployment on Replit's **Reserved VM platform** (not Cloud Run due to background processes) and aims to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
 
 ## Recent Updates (Nov 2025)
+- ✅ **API Timeout Protection** (Nov 9, 2025):
+    - **OpenAI API**: 15秒AbortController超时保护，防止socket hang up
+    - **Finnhub API**: 10秒AbortController超时保护
+    - **Telegram Bot**: 额外错误捕获机制，防止轮询崩溃
+- ✅ **Deployment Architecture Clarification** (Nov 9, 2025):
+    - **Cloud Run不适用**: 应用有Telegram Bot长轮询、数据库连接池等后台活动
+    - **推荐Reserved VM**: 需要always-on虚拟机支持持续运行
+    - **开发环境**: 需要前台运行或使用screen/tmux session
+    - **生产环境**: 使用Replit Reserved VM Deployment配置
 - ✅ **Intelligent Symbol Disambiguation v2.0** (Nov 7, 2025):
     - **Smart Precision Matching**: NVDA, AAPL等知名股票直接识别，不再误触发选择界面
     - **3-Tier Confidence Algorithm**: 精确匹配(score≥100) → 知名股票(score≥130+Common Stock) → 显著领先(2倍分数差距)
@@ -142,4 +151,11 @@ A pure rule-based parser supports 21 global indices with multi-language region d
 - **PostgreSQL**: Used for user conversation history and cost tracking.
 
 ## Deployment Environment
-- **Replit**: Platform for deployment.
+- **Replit Reserved VM**: Required for deployment (Cloud Run不支持后台进程)
+  - 应用特点: Telegram Bot长轮询、数据库连接池、N8N定时任务
+  - Cloud Run限制: 无HTTP流量时自动缩放到零，不适合本应用
+  - 推荐配置: `.replit`中设置`deploymentTarget = "gce"`（Reserved VM）
+- **开发环境运行方式**:
+  - 方案1: Shell前台运行`node index.js`（保持连接）
+  - 方案2: Screen/Tmux session运行（可detach）
+  - 方案3: Keep-alive脚本（定期ping health端点，但在当前环境中后台进程仍会被终止）

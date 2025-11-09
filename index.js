@@ -6039,7 +6039,19 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
   setTimeout(() => {
     console.log('✅ Telegram Bot 已启动（手动轮询）');
     console.log('💬 现在可以在 Telegram 里直接发消息了');
-    pollTelegram();
+    
+    // 🛡️ 添加额外的错误保护，防止轮询失败导致进程退出
+    try {
+      pollTelegram().catch(err => {
+        console.error('[TG] Poll startup error:', err.message);
+        // 重试
+        setTimeout(pollTelegram, 5000);
+      });
+    } catch (syncError) {
+      console.error('[TG] Poll sync error:', syncError.message);
+      // 重试
+      setTimeout(pollTelegram, 5000);
+    }
   }, 2000);
   
 } else {
