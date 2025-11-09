@@ -2,7 +2,8 @@
 set -euo pipefail
 
 echo "[USIS Brain] 安全重启 @$(date)"
-echo -n "[USIS Brain] git版本: " && git rev-parse --short HEAD
+# Git命令在生产环境不可用，已移除
+# echo -n "[USIS Brain] git版本: " && git rev-parse --short HEAD
 
 # 彻底清理旧进程
 echo "🔄 清理旧进程..."
