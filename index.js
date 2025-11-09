@@ -3920,50 +3920,19 @@ function formatMultipleOutputs(outputs, chatType, scene) {
 // 🆕 请求状态跟踪器
 const requestTracker = new Map();
 
-// Main Orchestrator Endpoint
-app.post("/brain/orchestrate", async (req, res) => {
+// 🎯 v6.2核心逻辑提取：runOrchestrator（可被Express和Telegram直接调用）
+async function runOrchestrator(payload) {
   const started = Date.now();
   const reqId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   
   // 🆕 注册请求状态（防御性text检查）
-  const textInput = req.body?.text || "default";
+  const textInput = payload?.text || "default";
   requestTracker.set(reqId, {
     startTime: started,
     status: 'processing',
     stage: 'init',
-    user_id: req.body?.user_id || 'unknown',
+    user_id: payload?.user_id || 'unknown',
     text: String(textInput).slice(0, 50)
-  });
-  
-  // 🆕 确保请求完成时清理tracker（防止内存泄漏）
-  const cleanupTracker = () => {
-    requestTracker.delete(reqId);
-  };
-  
-  res.on('finish', cleanupTracker);
-  res.on('close', cleanupTracker);
-  
-  // 🆕 设置60秒超时（从15秒增加到60秒）
-  req.setTimeout(60000, () => {
-    console.error(`⏱️  [${reqId}] 请求超时（60秒）- 可能AI响应过慢`);
-    
-    // 更新tracker状态
-    if (requestTracker.has(reqId)) {
-      requestTracker.set(reqId, {
-        ...requestTracker.get(reqId),
-        status: 'timeout',
-        stage: 'timeout'
-      });
-    }
-    
-    if (!res.headersSent) {
-      res.status(504).json({
-        status: "error",
-        ok: false,
-        final_analysis: "⚠️ 分析超时，请稍后重试或使用更简单的查询。",
-        error: "Request timeout after 60 seconds"
-      });
-    }
   });
   
   try {
@@ -3984,7 +3953,7 @@ app.post("/brain/orchestrate", async (req, res) => {
       lang = "zh",
       budget = "low",          // 🆕 预算控制：low | medium | high | unlimited（N8N传入或环境变量）
       userHistory: inputUserHistory = null  // 🔧 从n8n传入的用户历史（可选）
-    } = req.body || {};
+    } = payload || {};
     
     // 🆕 更新请求状态
     if (requestTracker.has(reqId)) {
@@ -5047,8 +5016,9 @@ app.post("/brain/orchestrate", async (req, res) => {
     }
     
     // 8. Response
-    // 注：cleanup由res.on('finish')自动处理，无需手动清理
-    return res.json(responseV2);
+    // 清理跟踪器
+    requestTracker.delete(reqId);
+    return responseV2;
     
   } catch (err) {
     console.error('[orchestrate] error', err);
@@ -5063,10 +5033,12 @@ app.post("/brain/orchestrate", async (req, res) => {
         error: err.message
       });
     }
-    // 注：cleanup由res.on('finish')自动处理
+    
+    // 清理跟踪器
+    requestTracker.delete(reqId);
     
     // 永不抛出，让 n8n 的 Normalize_Brain_Response / IF_ErrorCheck 有稳定语义
-    return res.status(200).json({
+    return {
       status: 'error',
       ok: false,
       error: String(err && err.message || err),
@@ -5075,6 +5047,36 @@ app.post("/brain/orchestrate", async (req, res) => {
       actions: [],
       symbols: [],
       elapsed_ms: Date.now() - started
+    };
+  }
+}
+
+// Main Orchestrator Endpoint (HTTP wrapper)
+app.post("/brain/orchestrate", async (req, res) => {
+  // 🆕 设置60秒超时
+  req.setTimeout(60000, () => {
+    console.error(`⏱️  请求超时（60秒）`);
+    if (!res.headersSent) {
+      res.status(504).json({
+        status: "error",
+        ok: false,
+        final_analysis: "⚠️ 分析超时，请稍后重试或使用更简单的查询。",
+        error: "Request timeout after 60 seconds"
+      });
+    }
+  });
+  
+  try {
+    const result = await runOrchestrator(req.body);
+    return res.json(result);
+  } catch (err) {
+    console.error('[orchestrate] wrapper error', err);
+    return res.status(200).json({
+      status: 'error',
+      ok: false,
+      error: String(err && err.message || err),
+      final_text: '⚠️ 系统临时故障，稍后再试',
+      final_analysis: '⚠️ 系统临时故障，稍后再试'
     });
   }
 });
@@ -5693,22 +5695,15 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         console.log('🧠 常规分析');
         await telegramAPI('sendMessage', { chat_id: chatId, text: '🧠 正在分析...' });
         
-        // 🎯 v6.2修复：直接调用本地API（同进程，避免网络问题）
+        // 🎯 v6.2修复：直接调用runOrchestrator（同进程，无网络依赖）
         try {
-          const response = await fetch(`http://127.0.0.1:${PORT}/brain/orchestrate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              text,
-              user_id: `tg_${userId}`,
-              chat_type: message.chat.type,
-              mode: 'auto',
-              budget: 'low'
-            }),
-            timeout: 90000
+          const data = await runOrchestrator({
+            text,
+            user_id: `tg_${userId}`,
+            chat_type: message.chat.type,
+            mode: 'auto',
+            budget: 'low'
           });
-        
-          const data = await response.json();
           
           // 🆕 v5.0: 检查是否有个股图表需要发送
           if (data.stock_chart && data.stock_chart.buffer) {
@@ -5745,9 +5740,9 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
             text: data.final_text || data.final_analysis || '分析完成' 
           });
           console.log('✅ 分析结果已发送');
-        } catch (fetchError) {
-          console.error('❌ Orchestrate请求失败:', fetchError.message);
-          throw new Error(`分析请求失败: ${fetchError.message}`);
+        } catch (orchestrateError) {
+          console.error('❌ Orchestrate执行失败:', orchestrateError.message);
+          throw new Error(`分析请求失败: ${orchestrateError.message}`);
         }
       }
     } catch (error) {
