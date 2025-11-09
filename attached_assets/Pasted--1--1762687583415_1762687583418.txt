@@ -1,0 +1,178 @@
+【系统升级指令】立即实施交互对话系统智能升级
+
+🚀 升级目标
+将当前"指令响应"模式升级为"智能对话伙伴"，解决响应格式混乱、缺乏上下文、无个性化等问题。
+
+📋 升级内容
+1. 响应格式标准化
+【去除元素】
+
+所有Markdown符号：###, **, *, 等
+
+复杂的分割线和表格符号
+
+【统一格式】
+
+使用【】作为标题标识
+
+使用•作为列表标识
+
+保持简洁专业的中文排版
+
+适当的emoji增强可读性
+
+2. 上下文记忆系统
+【短期记忆】
+
+记住当前会话的股票代码
+
+记住用户最近的分析请求
+
+记住持仓成本信息（如提供）
+
+【对话状态】
+
+跟踪多轮对话的连续性
+
+识别补充分析请求
+
+避免重复分析相同内容
+
+3. 个性化响应引擎
+【用户层级识别】
+
+新手用户：简化术语，增加解释
+
+专业用户：深度分析，技术细节
+
+根据问题复杂度自动调整
+
+【持仓感知】
+
+结合用户持仓给出个性化建议
+
+考虑成本价和当前盈亏
+
+提供针对性的风险管理
+
+🔧 具体实施步骤
+步骤1：修改响应格式化函数
+在现有代码中添加响应格式化层，统一处理所有AI输出：
+
+替换Markdown符号为中文符号
+
+标准化标题和列表格式
+
+保持技术分析的完整性但改善可读性
+
+步骤2：创建对话状态管理器
+javascript
+// 对话状态管理
+class DialogueState {
+  constructor(userId) {
+    this.userId = userId;
+    this.currentStock = null;
+    this.analysisHistory = [];
+    this.userPreferences = {};
+    this.conversationContext = {};
+  }
+  
+  // 更新对话状态
+  updateContext(stock, analysisType, userData) {
+    this.currentStock = stock;
+    this.analysisHistory.push({
+      timestamp: Date.now(),
+      type: analysisType,
+      stock: stock,
+      userData: userData
+    });
+    // 保持最近10次分析记录
+    if (this.analysisHistory.length > 10) {
+      this.analysisHistory.shift();
+    }
+  }
+  
+  // 获取上下文
+  getContext() {
+    return {
+      currentStock: this.currentStock,
+      lastAnalysis: this.analysisHistory[this.analysisHistory.length - 1],
+      preferences: this.userPreferences
+    };
+  }
+}
+步骤3：增强AI提示词工程
+修改所有AI调用的提示词，添加：
+
+上下文信息集成
+
+响应格式要求
+
+个性化调整指令
+
+步骤4：用户偏好学习
+在PostgreSQL中扩展用户表：
+
+sql
+-- 添加用户偏好字段
+ALTER TABLE users ADD COLUMN preferences JSONB;
+ALTER TABLE users ADD COLUMN interaction_patterns JSONB;
+ALTER TABLE users ADD COLUMN expertise_level VARCHAR(20);
+🎯 预期效果示例
+升级前：
+text
+## I. 趋势识别
+- **主要趋势方向**: 盘整
+- **趋势强度评估**: 5/10
+升级后：
+【趋势识别】
+• 主要趋势方向：盘整
+• 趋势强度评估：5/10
+
+连续对话示例：
+text
+用户：NFLX帮我解析
+系统：NFLX分析完成。当前1103，技术面显示盘整格局
+
+用户：短线支撑压力
+系统：基于刚才的NFLX分析补充：
+      • 短线支撑：1087
+      • 短线压力：1108
+      • 建议观察突破方向
+
+用户：中长线怎么看
+系统：中长线关键位：
+      • 强支撑：1000-1020
+      • 强压力：1200-1250
+      • 考虑到流媒体竞争格局，建议...
+⚡ 立即执行要求
+保持兼容性：不影响现有股票分析、热力图等核心功能
+
+渐进式升级：先实现基础功能，后续迭代增强
+
+错误处理：确保新功能失败时自动降级到原有模式
+
+性能保障：对话状态管理不能显著影响响应速度
+
+📊 验收标准
+所有响应不再包含Markdown符号
+
+连续对话能够记住上下文
+
+个性化响应明显（新手vs专家差异）
+
+系统稳定性不受影响
+
+响应时间保持在合理范围内
+
+🔄 回滚方案
+如升级出现问题，立即：
+
+恢复修改的响应格式化函数
+
+禁用对话状态管理器
+
+回退数据库变更
+
+请立即开始实施此升级，重点优先解决响应格式和基础上下文记忆问题。
+

@@ -45,6 +45,8 @@ const { generateSmartHeatmap } = require("./heatmapService");
 const { generateStockChart, formatStockData } = require("./stockChartService");
 // 🆕 v6.0: N8N API自动化管理
 const { getN8NClient } = require("./n8nClient");
+// 🆕 v2.0: 智能对话状态管理
+const { dialogueManager } = require("./dialogueManager");
 
 const app = express();
 app.use(express.json());

@@ -139,6 +139,7 @@ async function generateStockChart(symbol, options = {}) {
       try {
         console.log('🔬 [Vision] 启动K线图技术分析');
         const visionAnalyzer = new VisionAnalyzer();
+        const { formatMarkdownToChinese } = require('./responseFormatter');
         
         const marketContext = {
           symbol: symbol,
@@ -154,10 +155,21 @@ async function generateStockChart(symbol, options = {}) {
           marketContext
         );
         
-        chartAnalysis = visualAnalysis.rawAnalysis;
+        // 🆕 v2.0: 条件格式化（如果Vision AI仍返回Markdown）
+        let rawAnalysis = visualAnalysis.rawAnalysis;
+        const hasMarkdown = /^#{1,3}\s|^\*{1,2}|^-\s|\*\*/.test(rawAnalysis);
+        
+        if (hasMarkdown) {
+          console.log('🔄 [Format] 检测到Markdown，转换为中文符号格式');
+          chartAnalysis = formatMarkdownToChinese(rawAnalysis, { addEmoji: true });
+        } else {
+          chartAnalysis = rawAnalysis;
+        }
+        
         analysisMetadata = {
           analysis_type: 'vision_technical',
-          confidence: visualAnalysis.confidence || 0.85
+          confidence: visualAnalysis.confidence || 0.85,
+          formatted: hasMarkdown  // 标记是否经过格式化
         };
         
         console.log('📋 [Vision] 技术分析完成');
