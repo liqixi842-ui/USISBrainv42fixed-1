@@ -5214,7 +5214,8 @@ app.listen(PORT, "0.0.0.0", () => {
 });
 
 // ====== Telegram Bot v5.0 (手动轮询 - Replit兼容) ======
-const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+// 🆕 v1.0: 开发/生产环境自动Bot切换（优先使用测试Bot）
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN_TEST || process.env.TELEGRAM_BOT_TOKEN;
 
 if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
   // 🛡️ v6.1: 懒加载Telegraf（节省~200MB内存）
