@@ -5849,8 +5849,9 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
             console.log('⚠️  无法删除进度消息（可能已过期）');
           }
           
-          if (result.buffer) {
-            // 发送K线截图
+          // 🆕 v6.2: 检查success字段，支持降级分析
+          if (result.success && result.buffer) {
+            // 成功：发送K线截图 + AI分析
             await sendDocumentBuffer(
               TELEGRAM_TOKEN, 
               chatId, 
@@ -5869,8 +5870,17 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
               });
               console.log('✅ AI分析已发送');
             }
+          } else if (!result.success && result.chartAnalysis) {
+            // 降级：只有基础分析（screenshot失败）
+            console.log('⚠️  图表生成失败，使用降级分析');
+            await telegramAPI('sendMessage', { 
+              chat_id: chatId, 
+              text: `⚠️ TradingView图表暂时无法生成，为您提供基础分析：\n\n${result.chartAnalysis.slice(0, 4000)}` 
+            });
+            console.log('✅ 降级分析已发送');
           } else {
-            throw new Error('未生成图表buffer');
+            // 完全失败：无图表也无分析
+            throw new Error('图表和分析均失败');
           }
         } catch (stockError) {
           // 🆕 失败时也删除进度消息
