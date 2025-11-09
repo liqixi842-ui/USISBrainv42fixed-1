@@ -5319,10 +5319,18 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
   // 消息处理函数
   async function handleTelegramMessage(message) {
     const chatId = message.chat.id;
-    const text = message.text || '';
+    let text = message.text || '';
     const userId = message.from.id;
     
-    console.log(`\n📨 [TG] Message from ${userId}: "${text}"`);
+    // 🔧 修复群组消息：移除@mention前缀
+    const isGroupChat = message.chat.type === 'group' || message.chat.type === 'supergroup';
+    if (isGroupChat && text.startsWith('@')) {
+      // 移除 "@botname " 前缀，保留用户实际输入
+      text = text.replace(/^@\w+\s*/i, '').trim();
+      console.log(`\n📨 [TG] 群组消息 from ${userId}: "${message.text}" → 清理后: "${text}"`);
+    } else {
+      console.log(`\n📨 [TG] Message from ${userId}: "${text}"`);
+    }
     
     try {
       // 🆕 v6.2: 优先检测对话类意图（greeting/help/casual）
