@@ -5,6 +5,7 @@
  */
 
 const fetch = require('node-fetch');
+const { apiRequest } = require('./apiClient'); // 🆕 v1.1: 统一API客户端
 
 class MultiAIProvider {
   constructor() {
@@ -237,13 +238,18 @@ class MultiAIProvider {
       requestBody.return_images = false;
     }
 
-    const response = await fetch(endpoint, {
+    // 🆕 v1.1: 使用apiRequest（带超时+重试+熔断器）
+    const response = await apiRequest(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify(requestBody)
+    }, {
+      providerId: provider,
+      timeout: 25000, // 25秒超时
+      maxRetries: 2 // 最多重试2次
     });
 
     if (!response.ok) {
@@ -287,7 +293,8 @@ class MultiAIProvider {
       requestBody.system = systemMessage.content;
     }
 
-    const response = await fetch(endpoint, {
+    // 🆕 v1.1: 使用apiRequest（带超时+重试+熔断器）
+    const response = await apiRequest(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -295,6 +302,10 @@ class MultiAIProvider {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify(requestBody)
+    }, {
+      providerId: 'anthropic',
+      timeout: 30000, // Claude需要更长时间（30秒）
+      maxRetries: 2
     });
 
     if (!response.ok) {
@@ -341,12 +352,17 @@ class MultiAIProvider {
       };
     }
 
-    const response = await fetch(`${endpoint}?key=${apiKey}`, {
+    // 🆕 v1.1: 使用apiRequest（带超时+重试+熔断器）
+    const response = await apiRequest(`${endpoint}?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(requestBody)
+    }, {
+      providerId: 'google',
+      timeout: 25000, // 25秒超时
+      maxRetries: 2
     });
 
     if (!response.ok) {
