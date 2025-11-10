@@ -26,10 +26,10 @@ async function testDigestPush() {
       JOIN news_scores ns ON ni.id = ns.news_item_id
       JOIN news_routing_state nrs ON ni.id = nrs.news_item_id
       LEFT JOIN news_sources nsrc ON ni.source_id = nsrc.id
-      WHERE nrs.channel = 'fastlane'
+      WHERE nrs.channel = 'digest_4h'
         AND nrs.status = 'pending'
       ORDER BY ns.composite_score DESC
-      LIMIT 5
+      LIMIT 8
     `);
 
     const newsItems = result.rows;
@@ -55,7 +55,7 @@ async function testDigestPush() {
     // Format and display digest message
     console.log('📝 Formatted digest message:\n');
     console.log('='.repeat(60));
-    const message = pushService.formatDigestMessage(newsItems, 'digest_2h');
+    const message = pushService.formatDigestMessage(newsItems, 'digest_4h');
     console.log(message);
     console.log('='.repeat(60));
     console.log('\n');

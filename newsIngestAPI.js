@@ -105,6 +105,9 @@ class NewsIngestAPI {
           
           const pushResult = await this.pushService.pushFastlane(newsItemWithScore);
           
+          // Mark as sent in routing state (prevent duplicate in digests)
+          await this.router.markAsSent([newsItemId]);
+          
           console.log(`🚀 [Ingest] Pushed to Fastlane: message_id ${pushResult.message_id}`);
           
           return {
@@ -118,6 +121,7 @@ class NewsIngestAPI {
         } catch (pushError) {
           console.error(`❌ [Ingest] Push failed:`, pushError.message);
           // Don't fail the whole ingestion if push fails
+          // Status stays 'pending' for potential retry
         }
       }
 
