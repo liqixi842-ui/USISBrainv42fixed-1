@@ -17,6 +17,6 @@ localPort = 5001
 externalPort = 3001
 
 [deployment]
-deploymentTarget = "cloudrun"
-run = ["bash", "start.sh"]
+deploymentTarget = "gce"
+run = ["sh", "-c", "ENABLE_TELEGRAM=true node index.js"]
 
