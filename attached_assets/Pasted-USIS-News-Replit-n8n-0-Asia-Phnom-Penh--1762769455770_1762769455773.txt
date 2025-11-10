@@ -1,0 +1,346 @@
+USIS_News · 全量实施说明（交付给 Replit 与 n8n）
+0) 全局设定
+
+时区：Asia/Phnom_Penh（一切盘前/盘中/盘后判定都用此时区换算）
+
+输出语言：默认中文；可切 ZH｜ZH+EN｜ZH+ES（短句并排）
+
+Telegram 通道：
+
+TG_Fastlane（≥7 分即时快讯）
+
+TG_2hDigest（5–6 分每 2 小时汇总）
+
+TG_4hDigest（<5 分每 4 小时汇总 + “淡化”）
+
+系统分工：Replit Brain（判定/合成/点评/文案）；n8n（抓取/调度/去重/路由/发送/缓存）
+
+1) 新闻源（越多越好 · 分层权重 · 失败不阻断）
+
+统一抽取字段：title, url, source, published_at, body, tickers[], entities[], region, lang。
+每条源带上 source_tier 与 source_reliability(1–5)，供打分使用。
+
+1.1 官方/监管/交易所（Tier 5｜reliability=5）
+
+公司官网：Newsroom / IR / Press Release / 8-K 附链接
+
+监管/公告：SEC EDGAR（8-K/10-Q/10-K/SD/N-CSR 等）、EU Commission / DG COMP、ESMA、EBA、EIOPA、UK FCA / CMA、US FTC / DoJ、CFIUS、SAMR / CAC（中国）、CSRC、HK SFC、MAS（新加坡）、ASIC（澳）、J-FSA（日本）
+
+央行/财政/统计：Fed / FOMC / NY Fed、ECB、BoE、BoJ、PBoC、RBA、BIS；US Treasury；BLS（就业/CPI）、BEA（GDP/PCE）、Census；Eurostat；ONS（英国）；内地统计局
+
+交易所/披露：NYSE、NASDAQ、CBOE、ICE；HKEX、SSE/SHFE、SZSE、SGX、JPX、TSE、ASX、TSX/SEDAR+（加拿大）
+
+1.2 一线媒体（Tier 4｜reliability=4）
+
+Bloomberg、Reuters、WSJ、Financial Times、The Economist、CNBC、Barron’s、The Information、Nikkei、Caixin（财新）
+
+1.3 行业权威/二线媒体（Tier 3｜reliability=3）
+
+半导体/硬件：EE Times、SemiAnalysis、Digitimes、AnandTech
+
+云/AI/软件：The Verge、TechCrunch、The Register
+
+医药：Fierce Pharma、STAT、Endpoints
+
+能源/大宗：Platts、Argus、OilPrice
+
+汽车/新能源：InsideEVs、Electrek
+
+金融：IFR、Risk.net
+
+航运/物流：Lloyd’s List、FreightWaves
+
+1.4 快讯/通用聚合（Tier 3｜reliability=2.5–3）
+
+AP、AFP、路透快讯流
+
+通用 API/聚合：GDELT、NewsAPI、Twelve Data/Finnhub（News 端点）、MarketStack/EOD Historical（若有新闻字段）、Yahoo Finance RSS、Investing.com RSS（仅作补充）
+
+1.5 社交/论坛热度（Tier 1–2｜reliability=1–2）
+
+X/Twitter（关键词、官方账号列表、公司/高管 handle、监管官方 handle）
+
+Reddit（r/stocks、r/wallstreetbets、r/investing、各 ticker 子版）
+
+Stocktwits、SeekingAlpha 标题流
+
+其它地区性渠道（可选）：Weibo/财联社/同花顺快讯（仅作热度信号，不作事实依据）
+
+抓取策略：多路并发；任意来源失败都软错误记录到日志与 debug.data_errors，不阻断总流程。官方/监管/公司源如出现同题，优先保留。
+
+2) 标签体系（多维标签 · 可多选）
+2.1 顶层主类
+
+Macro（宏观）｜Sector（行业）｜Company（公司）｜Market（金融市场）｜Regulation（监管）｜Innovation（创新）｜RiskEvent（风险）｜Sentiment/Culture（社会/情绪）
+
+2.2 深层子类与事件本体（用于 why_score 与路由）
+
+财务：earnings, guidance, dividend, buyback, restatement
+
+资本运作：merger, spin_off, secondary_offering, convertible, pledge
+
+经营：layoff, capacity_expand, price_hike, ASP_cut, channel_change, big_order_win/loss
+
+产品/技术：launch, delay, recall, security_vuln, benchmark_lead/lag
+
+法律/监管：antitrust_case, fine, ban, license, export_control
+
+宏观/央行/数据：rate_decision, minutes, CPI/PPI/PCE, NFP, PMI, GDP
+
+供应链/安全：supplier_issue, logistics_block, cyber_attack, IP_dispute
+
+社交/舆情：celebrity_tweet, viral_rumor, boycott, user_revolt
+
+2.3 二级维度（枚举）
+
+ImpactDirection: positive|negative|neutral
+
+ImpactLevel: micro|meso|macro
+
+Timeline: intraday|weekly|quarterly|annual
+
+SentimentTone: bullish|cautious|panic|mixed|bearish
+
+RiskType: policy|liquidity|valuation|operational|supply_chain|geopolitical|cyber
+
+SourceReliability: 1–5（见第1节分层）
+
+Attention: 0–100（24h 分位归一化）
+
+ToneOfVoice: report|commentary|rumor|press_release
+
+Region: US|EU|UK|JP|CN|HK|SG|AU|LATAM|Global
+
+MarketSegment: Tech|Energy|Finance|Healthcare|Consumer|Industrials|Utilities|Materials|RealEstate|Telecom
+
+Entity: 标准公司名/基金/指数 + 归一化 Ticker
+
+Keyword: AI|ESG|利率|通胀|出口管制|裁员|供需|隐私|反垄断…（可维护）
+
+判定要点：
+
+rumor 无双源以上佐证 → 分数上限 6；
+
+press_release & official → 可靠度上调；
+
+macro/rate_decision → 盘前/盘中权重不同（见路由）。
+
+3) 打分机制（1–10 分 · 可解释）
+
+基础因子（合计 1.0）
+
+Freshness 0.18｜SourceQuality 0.18｜Relevance 0.18｜Impact 0.22｜Novelty 0.10｜Corroboration 0.07｜Attention 0.07
+
+情境系数（×0.7–1.3）
+
+RiskEvent & negative ×1.2
+
+Innovation & positive & (micro|meso) ×1.1
+
+rumor & single_source ×0.8
+
+press_release & official ×1.05
+
+与当日已推送主题相似度>0.92 且无新要点 ×0.85
+
+矛盾消解
+
+官方但影响项低→允许 Impact 中等（基于措辞/指引）
+
+高 Attention 且 rumor 无佐证→上限 6
+
+Freshness 低但出现二次权威佐证→允许 5–6 升至 ≥7
+
+输出：score(1–10) + why_score[]（列出触发因子与系数，如 official(+) / guidance(++) / 0–1h / attention:p80）
+
+4) 路由与时段策略
+
+S0 紧急：score ≥ 8 且命中 Regulation | RiskEvent | rate_decision → 即刻快讯（允许盘中二次跟进）
+
+S1 高优先：score ≥ 7 → 快讯（标题标注“盘前/盘中/盘后”）
+
+S2 中优先：5–6 → 2 小时汇总
+
+S3 低优先：<5 → 4 小时清单（触发“淡化”）
+
+分时段（美股示例，可配置换算本地时区）
+
+盘前 06:00–09:30｜盘中 09:30–16:00｜盘后 16:00–20:00
+
+盘前偏“宏观/指引/公告”，盘中偏“变动/事故/监管”，盘后做“高分复盘”。
+
+5) 去重、冷却与升级
+
+uid = hash(normalize(title + url + primary_tickers))
+
+topic_hash = 向量相似聚类（标题+首段，阈值>0.92）
+
+24h 内同题仅推一次；两种情况可“升级再推”：
+
+权威升级（出现官方/监管或一线媒体二次确认）；
+
+信息升级（出现金额/指引/关键量化指标等新要点）。
+
+升级文案要显式标注【跟进】与新增要点。
+
+6) “淡化（Fade）”机制（低分自动降权）
+
+适用于 score < 7 并进入 S2/S3 的条目：
+
+首次推送后记 faded_score = score - 1；
+
+12 小时内再次入列 faded_score - 1，最低 1；
+
+当 faded_score ≤ 3 且无升级证据→不再展示，仅在主题页保留；
+
+文案相应更克制，避免重复段落。
+
+7) 分时用途（高分做“盘前/盘中/盘后”重点）
+
+盘前重点：≥7 且命中 earnings/guidance/macro-rate/geo
+
+盘中变动：≥7 且命中 penalty/ban/product-incident/supply_chain
+
+盘后复盘：当日 ≥7 的高分清单，按 标签/影响层级/方向 汇总点评
+
+8) 分析师点评（Brain 生成）
+
+对 ≥7 快讯 与 2h/4h 汇总 都生成：
+
+analyst_comment_ZH：2–3 句（宏观/行业/风控/交易合成）
+
+action_hint_ZH：1 行（[观察]/[跟踪]/[减仓] 等），不给具体买卖点
+
+confidence: 0–1
+
+角色出场：Macro/Regulation→宏观优先；Sector/Innovation→行业优先；负向或 RiskEvent→风控优先；盘中即时→交易补充节奏。
+
+9) 文案模板池（去机械化 · 可轮换 · 语气旋钮）
+
+快讯（S1/S0）
+
+标题样式池：
+
+【快讯｜{score}/10｜{trading_window}｜{entity}】{headline_core}
+
+【{trading_window}重点｜{entity}】{headline_verb}：{headline_core}
+
+{entity}：{event_punchline}（{score}/10｜{source_short}）
+
+正文骨架：背景一句 + 三要点（尽量量化） + 分析师一句 + 建议一行 + 链接 + 轻标签（≤3）
+
+监管/黑天鹅专用样式更克制（避免煽动词）
+
+两小时精选（S2）
+
+标题池：📰 两小时脉搏（{time_block}） / 2h 精选
+
+3–6 条短项：{score}/10｜{entity}：{one_line_core}（{source_short}）× {tag1}/{tag2}
+
+结尾小结与组内行动提示
+
+四小时清单 + 淡化（S3）
+
+标题：🗂️ 低优先清单（{time_block}）
+
+条数更多但更短；尾注“若 12h 无权威跟进将自动降权并停止展示”
+
+盘后复盘
+
+标题：📌 盘后复盘｜今日高分看点
+
+3–6 条，每条含 标签/层级/方向 + 1 行点评 + 建议标签
+
+收尾：明日关注：{event_watchlist}
+
+语气旋钮
+
+正式度：严谨｜中性｜轻口语
+
+密度：极简｜标准｜扩展
+
+表情：禁用｜极少｜适量
+
+多语：ZH｜ZH+EN｜ZH+ES
+
+10) n8n 工作流（由 Replit 自动创建/更新）
+
+Cron_News：每 15 分钟触发抓取（多源并发）→ 标准化 → 调用 Brain 做实体识别与标签判定 → 评分（含 why_score & 情境系数）→ 去重/冷却 → 分桶路由
+
+Immediate_Fastlane：命中 ≥7 → 立刻调用 Brain 生成点评与文案 → Telegram 发送
+
+Bucket_2h：每 2 小时整点聚合（08:00/10:00/…）→ Brain 生成聚合点评 → 发送
+
+Bucket_4h：每 4 小时（08:30/12:30/16:30/20:30）→ 聚合 → Brain 点评 → 发送
+
+Fade_Manager：在每次聚合后更新 faded_score/push_count 并决定是否停止后续展示
+
+Daily_Close_Review：收市后（20:30）产出“盘后复盘”（当日 ≥7 汇总）
+
+Alert_Anomaly：1 小时内 S0/S1 数量超阈值（如 12 条）→ Telegram 报警
+
+Admin_Commands：解析管理命令（见下）
+
+11) 管理命令（Telegram 管理员）
+
+/news on|off、/news sources、/news addsource <name> <url/preset>、/news removesource <name>
+
+/news weights / /news setweight <factor> <0..1>（因子或系数）
+
+/news threshold fastlane <score>（默认 7）
+
+/news mute <entity|keyword> <hours>（静音）
+
+/news region <US|EU|CN|...>、/news lang <ZH|ZH+EN|ZH+ES>
+
+/news style <formal|neutral|light>、/news density <minimal|standard|extended>、/news emoji <off|few|some>
+
+/news digest2h now、/news digest4h now、/news status
+
+12) 数据对象（供内部流转，非代码）
+
+入站：title, url, source, published_at, body, tickers[], entities[], region, lang, source_tier, source_reliability
+
+标签维度：见第 2 节
+
+评分：score(1–10), why_score[], freshness, source_quality, relevance, impact, novelty, corroboration, attention
+
+路由：bucket = immediate|2h|4h、trading_window = pre|intra|post
+
+缓存：uid, topic_hash, first_seen, last_seen, last_pushed, last_bucket, push_count, faded_score
+
+Brain 输出：analyst_comment_ZH(/EN/ES), action_hint_ZH(/EN/ES), confidence
+
+文案元数据：template_used, style_knobs{tone,density,emoji,lang}
+
+13) 节流与观测
+
+每轮抓取仅处理 Top-N（建议 N=50）
+
+统计输出：抓取成功率、有效项、≥7 数量、2h/4h 条数、被淡化/终止展示数
+
+每日 21:00 发送“新闻系统健康度简报”（含错误与超时 Top 源）
+
+14) 合规与提示
+
+始终保留来源与链接；不全文复刻付费媒体内容
+
+rumor 必须显著标注；不要把社交热度当作事实
+
+点评/建议为一般性分析提示，避免具体买卖点位
+
+交付要求：请 Replit 依据以上说明自动：
+
+建立/更新 n8n 工作流与定时节点；
+
+配置多源抓取与分层可靠度；
+
+实装标签判定、评分与情境系数；
+
+完成去重/升级/淡化；
+
+生成快讯/精选/清单/复盘四类文案池（可轮换 + 语气旋钮）；
+
+打通 Telegram 三通道与管理命令；
+
+输出健康度监控与异常报警。
