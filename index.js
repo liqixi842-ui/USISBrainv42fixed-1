@@ -263,9 +263,112 @@ async function initDatabase() {
         CREATE INDEX IF NOT EXISTS idx_cost_tracking_user ON cost_tracking(user_id);
         CREATE INDEX IF NOT EXISTS idx_cost_tracking_request ON cost_tracking(request_id);
         CREATE INDEX IF NOT EXISTS idx_cost_tracking_time ON cost_tracking(timestamp DESC);
+        
+        -- 🆕 News System Tables (USIS News v2.0)
+        
+        -- 新闻源配置表（5层分级：官方/一线媒体/行业权威/聚合/社交）
+        CREATE TABLE IF NOT EXISTS news_sources (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE,
+          tier INTEGER NOT NULL CHECK (tier BETWEEN 1 AND 5),
+          reliability_score DECIMAL(2,1) CHECK (reliability_score BETWEEN 1.0 AND 5.0),
+          fetch_config JSONB,
+          rate_limit_per_hour INTEGER DEFAULT 60,
+          enabled BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        
+        -- 新闻条目表（存储采集的新闻）
+        CREATE TABLE IF NOT EXISTS news_items (
+          id TEXT PRIMARY KEY,
+          source_id INTEGER REFERENCES news_sources(id),
+          external_id TEXT,
+          title TEXT NOT NULL,
+          summary TEXT,
+          body TEXT,
+          url TEXT NOT NULL UNIQUE,
+          published_at TIMESTAMPTZ NOT NULL,
+          fetched_at TIMESTAMPTZ DEFAULT NOW(),
+          primary_symbol TEXT,
+          symbols TEXT[],
+          entities JSONB,
+          region TEXT,
+          lang TEXT DEFAULT 'en',
+          tags JSONB DEFAULT '[]'
+        );
+        CREATE INDEX IF NOT EXISTS idx_news_items_published ON news_items(published_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_news_items_symbol ON news_items USING GIN(symbols);
+        CREATE INDEX IF NOT EXISTS idx_news_items_url_hash ON news_items(MD5(url));
+        
+        -- 新闻评分表（ImpactRank 2.0 - 7因子评分）
+        CREATE TABLE IF NOT EXISTS news_scores (
+          news_item_id TEXT PRIMARY KEY REFERENCES news_items(id),
+          freshness DECIMAL(3,2) CHECK (freshness BETWEEN 0 AND 1),
+          source_quality DECIMAL(3,2) CHECK (source_quality BETWEEN 0 AND 1),
+          relevance DECIMAL(3,2) CHECK (relevance BETWEEN 0 AND 1),
+          impact DECIMAL(3,2) CHECK (impact BETWEEN 0 AND 1),
+          novelty DECIMAL(3,2) CHECK (novelty BETWEEN 0 AND 1),
+          corroboration DECIMAL(3,2) CHECK (corroboration BETWEEN 0 AND 1),
+          attention DECIMAL(3,2) CHECK (attention BETWEEN 0 AND 1),
+          composite_score DECIMAL(4,2) CHECK (composite_score BETWEEN 0 AND 10),
+          scoring_details JSONB,
+          scored_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_news_scores_composite ON news_scores(composite_score DESC);
+        
+        -- 新闻路由状态表（Fastlane/2h/4h分桶）
+        CREATE TABLE IF NOT EXISTS news_routing_state (
+          news_item_id TEXT PRIMARY KEY REFERENCES news_items(id),
+          channel TEXT CHECK (channel IN ('fastlane', 'digest_2h', 'digest_4h')),
+          status TEXT CHECK (status IN ('pending', 'sent', 'suppressed')) DEFAULT 'pending',
+          routed_at TIMESTAMPTZ DEFAULT NOW(),
+          fade_level INTEGER DEFAULT 0,
+          upgrade_flag BOOLEAN DEFAULT false,
+          last_updated TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_news_routing_channel ON news_routing_state(channel, status);
+        
+        -- 推送历史表（记录每条新闻的推送情况）
+        CREATE TABLE IF NOT EXISTS news_push_history (
+          id SERIAL PRIMARY KEY,
+          news_item_id TEXT REFERENCES news_items(id),
+          channel TEXT NOT NULL,
+          sent_at TIMESTAMPTZ DEFAULT NOW(),
+          message_id TEXT,
+          outcome TEXT CHECK (outcome IN ('success', 'failed', 'throttled')),
+          error_message TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_news_push_news_id ON news_push_history(news_item_id);
+        CREATE INDEX IF NOT EXISTS idx_news_push_sent ON news_push_history(sent_at DESC);
+        
+        -- 去重缓存表（24小时去重窗口）
+        CREATE TABLE IF NOT EXISTS news_dedupe_cache (
+          external_id TEXT PRIMARY KEY,
+          url_hash TEXT NOT NULL,
+          topic_hash TEXT,
+          first_seen_at TIMESTAMPTZ DEFAULT NOW(),
+          last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+          authority_level INTEGER DEFAULT 1,
+          seen_count INTEGER DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS idx_news_dedupe_topic ON news_dedupe_cache(topic_hash);
+        CREATE INDEX IF NOT EXISTS idx_news_dedupe_first_seen ON news_dedupe_cache(first_seen_at DESC);
+        
+        -- AI分析师点评表（Claude/GPT-4o生成的专业点评）
+        CREATE TABLE IF NOT EXISTS news_analyst_notes (
+          id SERIAL PRIMARY KEY,
+          news_item_id TEXT REFERENCES news_items(id),
+          model TEXT NOT NULL,
+          content_zh TEXT,
+          content_en TEXT,
+          action_hint TEXT,
+          confidence DECIMAL(3,2),
+          generated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_news_analyst_news_id ON news_analyst_notes(news_item_id);
       `);
       
-      console.log("✅ 数据库初始化完成: user_memory 和 cost_tracking 表已就绪");
+      console.log("✅ 数据库初始化完成: user_memory, cost_tracking 和 USIS News 表已就绪");
       return; // Success, exit the retry loop
       
     } catch (error) {
