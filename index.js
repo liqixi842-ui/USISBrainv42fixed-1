@@ -715,6 +715,50 @@ app.post("/brain/feed", (req, res) => {
   }
 });
 
+// ---- 🆕 v6.3: News Ingest API - 接收N8N采集的新闻数据
+const { NewsIngestAPI } = require('./newsIngestAPI');
+let newsIngestAPI = null;
+
+app.post("/api/news/ingest", async (req, res) => {
+  try {
+    // 1. Authentication check
+    const expectedSecret = process.env.NEWS_INGESTION_SECRET;
+    const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
+    
+    if (!NewsIngestAPI.validateAuth(authHeader, expectedSecret)) {
+      console.warn('⚠️  [NewsIngestAPI] Unauthorized request rejected');
+      return res.status(401).json({
+        ok: false,
+        error: 'Unauthorized: Missing or invalid API key',
+        stage: 'authentication'
+      });
+    }
+
+    // 2. Lazy initialization
+    if (!newsIngestAPI) {
+      const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+      const newsChannelId = process.env.NEWS_CHANNEL_ID;
+      newsIngestAPI = new NewsIngestAPI(telegramToken, newsChannelId);
+    }
+
+    // 3. Process news
+    const newsData = req.body;
+    const result = await newsIngestAPI.processNews(newsData);
+
+    // 4. Return with appropriate HTTP status
+    const httpStatus = result.httpStatus || (result.ok ? 200 : 500);
+    return res.status(httpStatus).json(result);
+
+  } catch (err) {
+    console.error("❌ [NewsIngestAPI] Error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message,
+      stage: 'api_error'
+    });
+  }
+});
+
 // ---- Midjourney Imagine: 转发 prompt 到 Midjourney API
 app.post("/mj/imagine", async (req, res) => {
   try {
