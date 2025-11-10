@@ -135,7 +135,7 @@ class NewsPushService {
     
     // Hashtags
     message += `${hashtags}\n\n`;
-    message += `_USIS Brain 新闻系统 v3\\.2_`;
+    message += `_USIS Brain 新闻系统 v2\\.0_`;
     
     return message;
   }
@@ -260,7 +260,7 @@ class NewsPushService {
       message += `_\\.\\.\\.还有 ${newsItems.length - 10} 条新闻_\n\n`;
     }
 
-    message += `\\-\\-\\-\n_USIS Brain 新闻系统 v3\\.0_`;
+    message += `\\-\\-\\-\n_USIS Brain 新闻系统 v2\\.0_`;
 
     return message;
   }
