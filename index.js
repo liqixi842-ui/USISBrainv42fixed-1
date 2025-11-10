@@ -3921,6 +3921,108 @@ function formatMultipleOutputs(outputs, chatType, scene) {
 // 🆕 请求状态跟踪器
 const requestTracker = new Map();
 
+// ========================================
+// 🧠 核心Orchestrator函数（v1.1重构）
+// ========================================
+/**
+ * 核心分析引擎 - 可被HTTP端点和Telegram Bot直接调用
+ * @param {Object} params - 分析参数
+ * @returns {Promise<Object>} 分析结果
+ */
+async function runOrchestratorCore(params) {
+  const startTime = Date.now();
+  const {
+    reqId,
+    text = "default",
+    chat_type = "private",
+    mode = null,
+    symbols: providedSymbols = [],
+    user_id = "system",
+    lang = "zh",
+    budget = "low",
+    userHistory: inputUserHistory = null
+  } = params;
+  
+  // 🆕 v4.2: 初始化debug容器（确保data_errors永远可用）
+  const debugInfo = {
+    data_errors: []
+  };
+  
+  // 记录原始入参
+  console.log('[orchestratorCore] inbound', { reqId, text, chat_type, user_id, mode, budget });
+  
+  // 🔧 安全初始化 userHistory（防止 ReferenceError）
+  let userHistory = inputUserHistory || [];
+  if (!Array.isArray(userHistory)) {
+    userHistory = [];
+    console.log(`⚠️  userHistory 格式无效，已重置为空数组`);
+  }
+  
+  console.log(`\n🧠 [${reqId}] Orchestrator 收到请求:`);
+  console.log(`   文本: "${text}"`);
+  console.log(`   场景: ${chat_type}`);
+  console.log(`   模式: ${mode || '自动检测'}`);
+  console.log(`   预算: ${budget || '未指定（使用默认）'}`);
+  
+  // 🆕 v3.1: 智能意图理解（AI驱动，非关键词匹配）
+  let semanticIntent = null;
+  let symbols = [];
+  
+  try {
+    // 读取用户历史（用于上下文理解）
+    if (user_id && ENABLE_DB) {
+      try {
+        const historyResult = await getPool().query(
+          'SELECT request_text, mode, symbols, response_text, timestamp FROM user_memory WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 3',
+          [user_id]
+        );
+        userHistory = historyResult.rows;
+      } catch (error) {
+        console.error(`❌ 读取用户历史失败:`, error.message);
+      }
+    }
+    
+    // Step 1: AI理解用户意图（带5秒超时保护）
+    semanticIntent = await Promise.race([
+      parseUserIntent(text, userHistory),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Intent parsing timeout after 5s')), 5000))
+    ]);
+    
+    // Step 2: 智能解析股票代码（带3秒超时保护）
+    const resolvedSymbols = await Promise.race([
+      resolveSymbols(semanticIntent),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Symbol resolution timeout after 3s')), 3000))
+    ]);
+    symbols = providedSymbols.length > 0 ? providedSymbols : resolvedSymbols;
+    
+    console.log(`🎯 意图识别: ${semanticIntent.intentType} → ${semanticIntent.mode} (置信度: ${semanticIntent.confidence.toFixed(2)})`);
+    console.log(`   股票: ${symbols.join(', ') || '无'}`);
+    
+  } catch (error) {
+    console.error(`⚠️  智能意图理解失败（${error.message}），使用降级逻辑`);
+    
+    // 降级：使用旧的extractSymbols和understandIntent
+    const extractedSymbols = extractSymbols(text);
+    // 🧠 智能验证和修正符号
+    const validatedSymbols = await validateAndFixSymbols(extractedSymbols);
+    symbols = providedSymbols.length > 0 ? providedSymbols : validatedSymbols;
+    semanticIntent = null;
+  }
+  
+  // 继续orchestrator核心逻辑...
+  // （这里插入完整的orchestrator逻辑，从intent理解到最终返回）
+  
+  // 临时返回（完整迁移进行中）
+  return {
+    status: "ok",
+    ok: true,
+    final_analysis: "🚧 Core函数迁移中...",
+    final_text: "🚧 Core函数迁移中...",
+    symbols,
+    response_time_ms: Date.now() - startTime
+  };
+}
+
 // Main Orchestrator Endpoint
 app.post("/brain/orchestrate", async (req, res) => {
   const started = Date.now();
