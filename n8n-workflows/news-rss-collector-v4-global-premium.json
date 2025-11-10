@@ -1,0 +1,1062 @@
+{
+  "name": "USIS News RSS Collector v4.0 - Global Premium Edition",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "name": "Schedule Every 5min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        500
+      ],
+      "id": "schedule-trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"
+      },
+      "name": "WSJ RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        100
+      ],
+      "id": "rss-wsj-markets"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'WSJ', tier: 4 } }));"
+      },
+      "name": "Add WSJ Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        100
+      ],
+      "id": "code-wsj-markets"
+    },
+    {
+      "parameters": {
+        "url": "https://www.ft.com/companies?format=rss"
+      },
+      "name": "Financial Times RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        150
+      ],
+      "id": "rss-ft-companies"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Financial Times', tier: 4 } }));"
+      },
+      "name": "Add Financial Times Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        150
+      ],
+      "id": "code-ft-companies"
+    },
+    {
+      "parameters": {
+        "url": "https://www.marketwatch.com/rss/topstories"
+      },
+      "name": "MarketWatch RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        200
+      ],
+      "id": "rss-marketwatch"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'MarketWatch', tier: 4 } }));"
+      },
+      "name": "Add MarketWatch Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        200
+      ],
+      "id": "code-marketwatch"
+    },
+    {
+      "parameters": {
+        "url": "https://techcrunch.com/feed/"
+      },
+      "name": "TechCrunch RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        250
+      ],
+      "id": "rss-techcrunch"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'TechCrunch', tier: 3 } }));"
+      },
+      "name": "Add TechCrunch Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        250
+      ],
+      "id": "code-techcrunch"
+    },
+    {
+      "parameters": {
+        "url": "https://www.eleconomista.es/rss/rss-mercados.xml"
+      },
+      "name": "El Economista RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        300
+      ],
+      "id": "rss-el-economista"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'El Economista', tier: 4 } }));"
+      },
+      "name": "Add El Economista Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ],
+      "id": "code-el-economista"
+    },
+    {
+      "parameters": {
+        "url": "https://www.expansion.com/rss/portada.xml"
+      },
+      "name": "Expansión RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        350
+      ],
+      "id": "rss-expansion"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Expansión', tier: 4 } }));"
+      },
+      "name": "Add Expansión Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        350
+      ],
+      "id": "code-expansion"
+    },
+    {
+      "parameters": {
+        "url": "https://www.boerse-frankfurt.de/en/rss"
+      },
+      "name": "Börse Frankfurt RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        400
+      ],
+      "id": "rss-borse-frankfurt"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Börse Frankfurt', tier: 4 } }));"
+      },
+      "name": "Add Börse Frankfurt Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        400
+      ],
+      "id": "code-borse-frankfurt"
+    },
+    {
+      "parameters": {
+        "url": "https://europeanfinancialreview.com/feed/"
+      },
+      "name": "European Financial Review RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        450
+      ],
+      "id": "rss-european-financial-review"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'European Financial Review', tier: 3 } }));"
+      },
+      "name": "Add European Financial Review Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        450
+      ],
+      "id": "code-european-financial-review"
+    },
+    {
+      "parameters": {
+        "url": "https://www.investing.com/rss/news.rss"
+      },
+      "name": "Investing.com RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        500
+      ],
+      "id": "rss-investing-global"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Investing.com', tier: 3 } }));"
+      },
+      "name": "Add Investing.com Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        500
+      ],
+      "id": "code-investing-global"
+    },
+    {
+      "parameters": {
+        "url": "https://www.ecb.europa.eu/rss/press.html"
+      },
+      "name": "ECB RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        550
+      ],
+      "id": "rss-ecb-press"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'ECB', tier: 5 } }));"
+      },
+      "name": "Add ECB Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        550
+      ],
+      "id": "code-ecb-press"
+    },
+    {
+      "parameters": {
+        "url": "https://www.theglobeandmail.com/arc/outboundfeeds/rss/category/business/"
+      },
+      "name": "Globe and Mail RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        600
+      ],
+      "id": "rss-globe-and-mail"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Globe and Mail', tier: 4 } }));"
+      },
+      "name": "Add Globe and Mail Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        600
+      ],
+      "id": "code-globe-and-mail"
+    },
+    {
+      "parameters": {
+        "url": "https://financialpost.com/category/news/feed"
+      },
+      "name": "Financial Post RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        650
+      ],
+      "id": "rss-financial-post"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Financial Post', tier: 4 } }));"
+      },
+      "name": "Add Financial Post Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        650
+      ],
+      "id": "code-financial-post"
+    },
+    {
+      "parameters": {
+        "url": "http://feeds.reuters.com/reuters/businessNews"
+      },
+      "name": "Reuters RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        700
+      ],
+      "id": "rss-reuters-business"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Reuters', tier: 4 } }));"
+      },
+      "name": "Add Reuters Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        700
+      ],
+      "id": "code-reuters-business"
+    },
+    {
+      "parameters": {
+        "url": "http://feeds.reuters.com/reuters/markets"
+      },
+      "name": "Reuters RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        750
+      ],
+      "id": "rss-reuters-markets"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Reuters', tier: 4 } }));"
+      },
+      "name": "Add Reuters Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        750
+      ],
+      "id": "code-reuters-markets"
+    },
+    {
+      "parameters": {
+        "url": "https://feeds.bloomberg.com/business/news.rss"
+      },
+      "name": "Bloomberg RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        800
+      ],
+      "id": "rss-bloomberg-business"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Bloomberg', tier: 4 } }));"
+      },
+      "name": "Add Bloomberg Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        800
+      ],
+      "id": "code-bloomberg-business"
+    },
+    {
+      "parameters": {
+        "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+      },
+      "name": "CNBC RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        850
+      ],
+      "id": "rss-cnbc-top-news"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'CNBC', tier: 4 } }));"
+      },
+      "name": "Add CNBC Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        850
+      ],
+      "id": "code-cnbc-top-news"
+    },
+    {
+      "parameters": {
+        "url": "https://seekingalpha.com/feed.xml"
+      },
+      "name": "Seeking Alpha RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        900
+      ],
+      "id": "rss-seeking-alpha"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Seeking Alpha', tier: 3 } }));"
+      },
+      "name": "Add Seeking Alpha Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        900
+      ],
+      "id": "code-seeking-alpha"
+    },
+    {
+      "parameters": {
+        "url": "https://finance.yahoo.com/news/rssindex"
+      },
+      "name": "Yahoo Finance RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [
+        460,
+        950
+      ],
+      "id": "rss-yahoo-finance"
+    },
+    {
+      "parameters": {
+        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Yahoo Finance', tier: 3 } }));"
+      },
+      "name": "Add Yahoo Finance Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        950
+      ],
+      "id": "code-yahoo-finance"
+    },
+    {
+      "parameters": {
+        "mode": "append"
+      },
+      "name": "Merge All Feeds",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [
+        860,
+        500
+      ],
+      "id": "merge-all"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{.REPL_URL}}/api/news/ingest",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-News-Secret",
+              "value": "={{.NEWS_INGESTION_SECRET}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 50
+            }
+          }
+        }
+      },
+      "name": "POST to USIS Brain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1080,
+        500
+      ],
+      "id": "http-post"
+    }
+  ],
+  "connections": {
+    "Schedule Every 5min": {
+      "main": [
+        [
+          {
+            "node": "WSJ RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Financial Times RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MarketWatch RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TechCrunch RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "El Economista RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Expansión RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Börse Frankfurt RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "European Financial Review RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Investing.com RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ECB RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Globe and Mail RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Financial Post RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reuters RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reuters RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bloomberg RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CNBC RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Seeking Alpha RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Yahoo Finance RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WSJ RSS": {
+      "main": [
+        [
+          {
+            "node": "Add WSJ Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add WSJ Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Financial Times RSS": {
+      "main": [
+        [
+          {
+            "node": "Add Financial Times Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Financial Times Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MarketWatch RSS": {
+      "main": [
+        [
+          {
+            "node": "Add MarketWatch Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add MarketWatch Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TechCrunch RSS": {
+      "main": [
+        [
+          {
+            "node": "Add TechCrunch Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add TechCrunch Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "El Economista RSS": {
+      "main": [
+        [
+          {
+            "node": "Add El Economista Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add El Economista Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expansión RSS": {
+      "main": [
+        [
+          {
+            "node": "Add Expansión Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Expansión Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Börse Frankfurt RSS": {
+      "main": [
+        [
+          {
+            "node": "Add Börse Frankfurt Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Börse Frankfurt Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "European Financial Review RSS": {
+      "main": [
+        [
+          {
+            "node": "Add European Financial Review Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add European Financial Review Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Investing.com RSS": {
+      "main": [
+        [
+          {
+            "node": "Add Investing.com Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Investing.com Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ECB RSS": {
+      "main": [
+        [
+          {
+            "node": "Add ECB Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add ECB Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Globe and Mail RSS": {
+      "main": [
+        [
+          {
+            "node": "Add Globe and Mail Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Globe and Mail Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Financial Post RSS": {
+      "main": [
+        [
+          {
+            "node": "Add Financial Post Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Financial Post Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reuters RSS": {
+      "main": [
+        [
+          {
+            "node": "Add Reuters Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Reuters Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bloomberg RSS": {
+      "main": [
+        [
+          {
+            "node": "Add Bloomberg Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Bloomberg Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CNBC RSS": {
+      "main": [
+        [
+          {
+            "node": "Add CNBC Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add CNBC Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Seeking Alpha RSS": {
+      "main": [
+        [
+          {
+            "node": "Add Seeking Alpha Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Seeking Alpha Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Yahoo Finance RSS": {
+      "main": [
+        [
+          {
+            "node": "Add Yahoo Finance Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Yahoo Finance Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Feeds": {
+      "main": [
+        [
+          {
+            "node": "POST to USIS Brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
