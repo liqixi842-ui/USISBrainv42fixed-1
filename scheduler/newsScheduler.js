@@ -117,13 +117,18 @@ class NewsScheduler {
   scheduleDelivery() {
     if (!this.pushService) return;
 
+    // Execute immediately on startup, then every 2 hours
+    this.sendDigest('digest_2h').catch(err => {
+      console.error('❌ [NewsScheduler] Initial digest failed:', err.message);
+    });
+
     // 2-hour Top-10 digest (repeatable)
     const digest2hInterval = setInterval(() => {
       this.sendDigest('digest_2h');
     }, 2 * 60 * 60 * 1000);
 
     this.intervals.push(digest2hInterval);
-    console.log('⏰ [NewsScheduler] 2-hour Top-10 digest scheduled');
+    console.log('⏰ [NewsScheduler] 2-hour Top-10 digest scheduled (immediate + every 2h)');
   }
 
   /**
