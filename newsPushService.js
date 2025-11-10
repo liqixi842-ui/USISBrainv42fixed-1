@@ -142,7 +142,7 @@ class NewsPushService {
     const sorted = newsItems.sort((a, b) => (b.composite_score || 0) - (a.composite_score || 0));
 
     sorted.slice(0, 10).forEach((item, index) => {
-      const score = item.composite_score || 0;
+      const score = parseFloat(item.composite_score) || 0;
       
       // Generate full 3-tier hashtags (v4.0 standard)
       const hashtags = this.generateHashtags(item, score);
