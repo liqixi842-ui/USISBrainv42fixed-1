@@ -29,9 +29,9 @@ const { runWithTimeout, RetryHelper } = require('./utils/asyncTools');
 // 🆕 v6.0: 阶段超时配置（环境变量可配置）
 const TIMEOUTS = {
   DATA_FETCH: parseInt(process.env.DATA_FETCH_TIMEOUT) || 10000,      // 10s
-  SCREENSHOT: parseInt(process.env.SCREENSHOT_TIMEOUT) || 15000,      // 15s
+  SCREENSHOT: parseInt(process.env.SCREENSHOT_TIMEOUT) || 30000,      // 30s (N8N平均14.6s + 余量)
   VISION_AI: parseInt(process.env.VISION_AI_TIMEOUT) || 20000,        // 20s
-  TOTAL: parseInt(process.env.TOTAL_TIMEOUT) || 55000                 // 55s（预留5s给Telegram）
+  TOTAL: parseInt(process.env.TOTAL_TIMEOUT) || 75000                 // 75s（预留5s给Telegram）
 };
 
 // 🆕 v6.0: 重试助手实例

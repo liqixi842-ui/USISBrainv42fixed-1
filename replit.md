@@ -1,6 +1,9 @@
 # Overview
 USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates over six AI models with real-time data integration from various financial sources. Its purpose is to provide authoritative, data-backed investment recommendations through features like semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system is built for deployment on Replit's Reserved VM platform, aiming to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
 
+# Recent Changes
+- **2025-11-10**: Fixed screenshot timeout issue causing chart analysis failures. Increased SCREENSHOT_TIMEOUT from 15s to 30s and TOTAL_TIMEOUT from 55s to 75s to accommodate N8N's average 14.6s response time with safety margin.
+
 # User Preferences
 Preferred communication style: Simple, everyday language.
 
