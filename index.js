@@ -60,8 +60,10 @@ const ENABLE_TELEGRAM = process.env.ENABLE_TELEGRAM !== 'false'; // 默认启用
 
 console.log(`🏴 Feature Flags: DB=${ENABLE_DB}, Telegram=${ENABLE_TELEGRAM}`);
 
-// PostgreSQL Database Connection (Lazy Loading)
+// 🆕 v1.1: 增强数据库连接池管理（查询超时+生命周期钩子+健康检查）
 let pool = null;
+const DB_QUERY_TIMEOUT_MS = 8000; // 8秒查询超时
+
 function getPool() {
   if (!ENABLE_DB) {
     throw new Error('Database disabled (ENABLE_DB=false)');
@@ -72,12 +74,132 @@ function getPool() {
     }
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      max: 10, // 最大连接数
+      idleTimeoutMillis: 30000, // 30秒空闲超时
+      connectionTimeoutMillis: 5000 // 5秒连接超时
+      // 🔧 移除statement_timeout（Neon不支持启动参数）
+      // 改为在每个连接建立后设置
     });
-    console.log('🔄 [LazyLoad] PostgreSQL连接池已创建');
+    
+    // 🆕 v1.1: 连接建立后设置statement_timeout（Neon兼容）
+    pool.on('connect', (client) => {
+      client.query(`SET statement_timeout = ${DB_QUERY_TIMEOUT_MS}`, (err) => {
+        if (err) {
+          console.error('❌ [DB Pool] 设置statement_timeout失败:', err.message);
+        }
+      });
+    });
+    
+    // 错误日志
+    pool.on('error', (err, client) => {
+      console.error('❌ [DB Pool] 连接池错误:', err.message);
+    });
+    
+    // 连接日志（仅开发环境）
+    if (process.env.NODE_ENV !== 'production') {
+      pool.on('connect', () => {
+        console.log('🔌 [DB Pool] 新连接已建立');
+      });
+      pool.on('remove', () => {
+        console.log('🔌 [DB Pool] 连接已移除');
+      });
+    }
+    
+    console.log('🔄 [LazyLoad] PostgreSQL连接池已创建（max=10, timeout=8s）');
   }
   return pool;
 }
+
+// 🆕 v1.1: 安全查询包装器（自动超时保护）
+async function safeQuery(queryText, params = []) {
+  if (!ENABLE_DB) {
+    throw new Error('Database disabled (ENABLE_DB=false)');
+  }
+  
+  const dbPool = getPool();
+  const startTime = Date.now();
+  
+  try {
+    const result = await dbPool.query(queryText, params);
+    const duration = Date.now() - startTime;
+    
+    if (duration > 3000) { // 慢查询警告（3秒）
+      console.warn(`⚠️  [DB] 慢查询 (${duration}ms): ${queryText.substring(0, 50)}...`);
+    }
+    
+    return result;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    
+    if (error.message.includes('timeout') || error.message.includes('canceled')) {
+      console.error(`⏱️  [DB] 查询超时 (${duration}ms): ${queryText.substring(0, 50)}...`);
+    } else {
+      console.error(`❌ [DB] 查询失败 (${duration}ms):`, error.message);
+    }
+    
+    throw error;
+  }
+}
+
+// 🆕 v1.1: 数据库健康检查（带重试）
+async function checkDatabaseHealth() {
+  if (!ENABLE_DB) {
+    return { healthy: false, reason: 'Database disabled (ENABLE_DB=false)' };
+  }
+  
+  const maxRetries = 3;
+  const retryDelay = 1000; // 1秒
+  
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const startTime = Date.now();
+      // 🔧 使用safeQuery并确保pool已初始化
+      const result = await safeQuery('SELECT NOW() as health_check_time');
+      const duration = Date.now() - startTime;
+      
+      return {
+        healthy: true,
+        responseTime: duration,
+        timestamp: result.rows[0].health_check_time
+      };
+    } catch (error) {
+      console.warn(`⚠️  [DB Health] 检查失败 (尝试${i + 1}/${maxRetries}):`, error.message);
+      
+      if (i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+  }
+  
+  return { healthy: false, reason: 'Health check failed after retries' };
+}
+
+// 🆕 v1.1: 优雅关闭数据库连接池
+async function shutdownDatabase() {
+  if (pool) {
+    console.log('🔌 [DB] 正在关闭连接池...');
+    try {
+      await pool.end();
+      console.log('✅ [DB] 连接池已安全关闭');
+    } catch (error) {
+      console.error('❌ [DB] 关闭连接池失败:', error.message);
+    }
+  }
+}
+
+// 🆕 v1.1: SIGTERM/SIGINT生命周期钩子
+process.on('SIGTERM', async () => {
+  console.log('📡 收到SIGTERM信号，准备优雅关闭...');
+  await shutdownDatabase();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('📡 收到SIGINT信号，准备优雅关闭...');
+  await shutdownDatabase();
+  process.exit(0);
+});
 
 // Initialize database table with retry logic for Neon auto-wake
 async function initDatabase() {
@@ -97,11 +219,11 @@ async function initDatabase() {
       console.log(`🔌 [尝试 ${attempt}/${maxRetries}] 连接数据库...`);
       
       // Step 1: Wake up the database with a simple query
-      const wakeResult = await dbPool.query('SELECT NOW() as wake_time');
+      const wakeResult = await safeQuery('SELECT NOW() as wake_time');
       console.log(`✅ 数据库已唤醒！时间: ${wakeResult.rows[0].wake_time}`);
       
       // Step 2: Create tables
-      await dbPool.query(`
+      await safeQuery(`
         CREATE TABLE IF NOT EXISTS user_memory (
           id SERIAL PRIMARY KEY,
           user_id TEXT NOT NULL,
@@ -430,14 +552,22 @@ app.get("/brain/stats", (_req, res) => {
 });
 
 app.get("/health", async (_req, res) => {
+  // 🆕 v1.1: 包含数据库健康状态
+  const dbHealth = await checkDatabaseHealth();
+  
   // 🆕 v6.0: 包含N8N API健康状态
   const n8nClient = getN8NClient();
   const n8nHealth = await n8nClient.healthCheck();
   
-  res.json({ 
-    ok: true, 
-    status: 'ok', 
+  // 如果数据库不健康且已启用，返回503
+  const isHealthy = !ENABLE_DB || dbHealth.healthy;
+  const statusCode = isHealthy ? 200 : 503;
+  
+  res.status(statusCode).json({ 
+    ok: isHealthy,
+    status: isHealthy ? 'ok' : 'degraded',
     ts: Date.now(),
+    database: ENABLE_DB ? dbHealth : { healthy: true, reason: 'Database disabled' },
     n8n: n8nHealth
   });
 });
@@ -5474,8 +5604,7 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         let userHistory = [];
         if (ENABLE_DB) {
           try {
-            const dbPool = getPool();
-            const result = await dbPool.query(
+            const result = await safeQuery(
               'SELECT * FROM user_memory WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 5',
               [`tg_${userId}`]
             );
@@ -5497,8 +5626,7 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         if (conversationResponse.type === 'system' && conversationResponse.action === 'clear_memory') {
           if (ENABLE_DB) {
             try {
-              const dbPool = getPool();
-              await dbPool.query('DELETE FROM user_memory WHERE user_id = $1', [`tg_${userId}`]);
+              await safeQuery('DELETE FROM user_memory WHERE user_id = $1', [`tg_${userId}`]);
               console.log(`✅ 已清除用户 ${userId} 的记忆`);
             } catch (dbError) {
               console.log('⚠️  清除记忆失败:', dbError.message);
