@@ -25,7 +25,7 @@ class NewsPushService {
   async pushFastlane(newsItem) {
     try {
       const message = this.formatFastlaneMessage(newsItem);
-      const result = await this.sendMessage(message);
+      const result = await this.sendMessage(message, true); // Use Markdown for urgent news
 
       // Record push history (v3.0: channel = 'urgent_10')
       await this.recordPush(newsItem.id, 'urgent_10', result);
@@ -41,7 +41,7 @@ class NewsPushService {
   }
 
   /**
-   * Push digest of multiple news items
+   * Push digest of multiple news items (v3.1: sends each news as separate message)
    */
   async pushDigest(newsItems, channel) {
     try {
@@ -50,27 +50,95 @@ class NewsPushService {
         return null;
       }
 
-      const message = this.formatDigestMessage(newsItems, channel);
-      const result = await this.sendMessage(message);
+      console.log(`📤 [Push/${channel}] Sending ${newsItems.length} items individually...`);
 
-      // Record push history for all items
-      for (const item of newsItems) {
-        await this.recordPush(item.id, channel, result);
+      // Sort by score (highest first)
+      const sorted = newsItems.sort((a, b) => (b.composite_score || 0) - (a.composite_score || 0));
+      
+      let successCount = 0;
+      let failCount = 0;
+      
+      // Send each news item as separate message
+      for (let i = 0; i < sorted.length; i++) {
+        const item = sorted[i];
+        
+        try {
+          const message = this.formatSingleDigestItem(item, i + 1, sorted.length, channel);
+          const result = await this.sendMessage(message);
+          
+          // Record push history
+          await this.recordPush(item.id, channel, result);
+          
+          successCount++;
+          console.log(`  ✅ [${i + 1}/${sorted.length}] ${item.title?.substring(0, 50)}...`);
+          
+          // Delay between messages to avoid Telegram rate limits (0.5s)
+          if (i < sorted.length - 1) {
+            await this.delay(500);
+          }
+          
+        } catch (error) {
+          failCount++;
+          console.error(`  ❌ [${i + 1}/${sorted.length}] Failed:`, error.message);
+          await this.recordPush(item.id, channel, null, error.message);
+        }
       }
 
-      console.log(`📤 [Push/${channel}] Sent digest with ${newsItems.length} items`);
-      return result;
+      console.log(`📊 [Push/${channel}] Complete: ${successCount} sent, ${failCount} failed`);
+      
+      return {
+        success: failCount === 0, // true only if all succeeded
+        sent: successCount,
+        failed: failCount,
+        total: sorted.length
+      };
 
     } catch (error) {
       console.error(`❌ [Push/${channel}] Failed:`, error.message);
-      
-      // Record failures
-      for (const item of newsItems) {
-        await this.recordPush(item.id, channel, null, error.message);
-      }
-      
       throw error;
     }
+  }
+
+  /**
+   * Format single digest item (v3.1: each news as separate message)
+   */
+  formatSingleDigestItem(item, index, total, channel) {
+    const score = parseFloat(item.composite_score) || 0;
+    
+    // Use translated content if available
+    const displayTitle = item.translated_title || item.title;
+    const displaySummary = item.translated_summary || item.summary;
+    
+    // Generate hashtags
+    const hashtags = this.generateHashtags(item, score);
+    
+    // Build message (plain text, no markdown escaping needed)
+    let message = `📰 新闻 ${index}/${total}\n`;
+    message += `📊 评分: ${score.toFixed(1)}/10\n\n`;
+    message += `${displayTitle}\n\n`;
+    
+    // Summary (show more than digest, up to 200 chars)
+    if (displaySummary) {
+      const summary = displaySummary.length > 200 
+        ? displaySummary.substring(0, 200) + '...' 
+        : displaySummary;
+      message += `📄 ${summary}\n\n`;
+    }
+    
+    // AI Commentary
+    if (item.ai_commentary) {
+      message += `💡 AI点评: ${item.ai_commentary}\n\n`;
+    }
+    
+    // Source and link
+    message += `🔗 ${item.url}\n`;
+    message += `📌 来源: ${item.source_name || '未知'}\n\n`;
+    
+    // Hashtags
+    message += `${hashtags}\n\n`;
+    message += `---\nUSIS Brain 新闻系统 v3.1`;
+    
+    return message;
   }
 
   /**
@@ -201,17 +269,23 @@ class NewsPushService {
   /**
    * Send message to Telegram
    */
-  async sendMessage(text, retryCount = 0) {
+  async sendMessage(text, useMarkdown = false, retryCount = 0) {
     try {
+      const payload = {
+        chat_id: this.channelId,
+        text: text,
+        disable_web_page_preview: true
+      };
+      
+      // Only add parse_mode if markdown is needed (for fastlane messages)
+      if (useMarkdown) {
+        payload.parse_mode = 'Markdown';
+      }
+      
       const response = await fetch(`${this.apiBase}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: this.channelId,
-          text: text,
-          parse_mode: 'Markdown',
-          disable_web_page_preview: true
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
@@ -229,7 +303,7 @@ class NewsPushService {
       if (retryCount < this.maxRetries) {
         console.warn(`⚠️  [Push] Retry ${retryCount + 1}/${this.maxRetries}:`, error.message);
         await this.delay(1000 * (retryCount + 1)); // Exponential backoff
-        return this.sendMessage(text, retryCount + 1);
+        return this.sendMessage(text, useMarkdown, retryCount + 1);
       }
 
       throw error;
