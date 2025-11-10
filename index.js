@@ -723,7 +723,7 @@ app.post("/api/news/ingest", async (req, res) => {
   try {
     // 1. Authentication check
     const expectedSecret = process.env.NEWS_INGESTION_SECRET;
-    const authHeader = req.headers['authorization'] || req.headers['x-api-key'];
+    const authHeader = req.headers['authorization'] || req.headers['x-api-key'] || req.headers['x-news-secret'];
     
     if (!NewsIngestAPI.validateAuth(authHeader, expectedSecret)) {
       console.warn('⚠️  [NewsIngestAPI] Unauthorized request rejected');
