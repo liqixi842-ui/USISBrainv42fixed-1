@@ -15,7 +15,7 @@
 
 | 地区 | 数量 | 新闻源 |
 |------|------|--------|
-| 🌍 全球 | 6 | Reuters (x2), Bloomberg, Investing.com, TechCrunch, Seeking Alpha, Yahoo Finance |
+| 🌍 全球 | 5 | Reuters (x2), Bloomberg, Investing.com, TechCrunch, Seeking Alpha |
 | 🇺🇸 美国 | 4 | WSJ, MarketWatch, CNBC, Yahoo Finance |
 | 🇪🇺 欧洲 | 3 | Financial Times, European Financial Review, ECB |
 | 🇪🇸 西班牙 | 2 | El Economista, Expansión |
