@@ -12,7 +12,7 @@ class NewsEnhancementService {
   constructor() {
     this.deeplKey = process.env.DEEPL_API_KEY;
     this.openaiKey = process.env.OPENAI_API_KEY;
-    this.deeplEndpoint = 'https://api-free.deepl.com/v2/translate';
+    this.deeplEndpoint = 'https://api.deepl.com/v2/translate';
     this.openaiEndpoint = 'https://api.openai.com/v1/chat/completions';
   }
 
