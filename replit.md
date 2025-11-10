@@ -143,6 +143,48 @@ A multi-tier screenshot architecture ensures stability and graceful degradation.
 
 # Recent Changes
 
+## 🛡️ 2025-11-10: v1.1 Reliability Enhancement
+- **Status**: ✅ Production-ready reliability improvements
+- **Mission**: Prevent production outages through systematic risk mitigation
+- **Investment**: Additional hardening of $1,500+ v1.0 investment
+
+### Task 1: HTTP Retry Hardening (apiClient.js)
+- **Problem**: API timeouts could cause cascading failures
+- **Solution**: 25s timeout per attempt, exponential backoff (1s→2s→4s), fresh AbortController per retry
+- **Impact**: All external API calls protected with unified retry/circuit-breaker policy
+- **Code**: apiClient.js:117-157 (new ~200-line module)
+
+### Task 2: Memory Leak Prevention (requestTracker)
+- **Problem**: Unbounded growth in request tracking map
+- **Solution**: TTL cleanup (5min expiry), LRU limit (max 1000), periodic sweep (every minute)
+- **Impact**: Long-running processes no longer accumulate request metadata
+- **Code**: index.js:118-135
+
+### Task 3: Database Pool Management
+- **Problem**: Query hangs could block entire pool
+- **Solution**: 8s query timeout via safeQuery wrapper, health checks, graceful shutdown hooks
+- **Impact**: /health endpoint returns HTTP 503 on DB failure, preventing cascade
+- **Code**: index.js:64-115
+
+### Task 4: AI Provider Timeout Unification
+- **Problem**: Each AI provider had different timeout handling
+- **Solution**: Refactored all 6 providers (OpenAI, Claude, Gemini, DeepSeek, Mistral, Perplexity) to use apiClient
+- **Impact**: Consistent 25s timeout across all AI calls, circuit breaker protection
+- **Code**: multiAiProvider.js refactored to use apiRequest
+
+### Task 5: Telegram Single-Instance Protection
+- **Problem**: Multiple Bot instances could conflict (duplicate responses)
+- **Solution**: PID file lock prevents duplicate startups, automatic stale lock cleanup
+- **Impact**: Safe dev/prod isolation, SKIP_BOT_LOCK=true bypass for development
+- **Code**: index.js:5485-5558
+- **Note**: Coordinate TELEGRAM_BOT_TOKEN usage between dev/prod environments
+
+### Architect Validation
+- All 5 tasks reviewed and approved by Architect agent
+- Regression smoke tests passed
+- No critical regressions detected
+- Known issue: Telegram getUpdates conflict (requires operational coordination of token usage)
+
 ## 🎉 2025-11-10: v1.0 Production Release
 - **Status**: ✅ Locked and ready for production deployment
 - **Fixed**: Unicode symbol extraction (supports "分析AAPL" mixed-language inputs)
