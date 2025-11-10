@@ -26,6 +26,15 @@ class NewsRouter {
   }
 
   /**
+   * Initialize router (required by scheduler)
+   * NewsRouter is stateless, so this is a no-op
+   */
+  async initialize() {
+    console.log('✅ [NewsRouter] Router initialized');
+    return true;
+  }
+
+  /**
    * Route news item to appropriate channel
    * @param {string} newsItemId - News item ID
    * @param {number} compositeScore - Composite score (0-10)
