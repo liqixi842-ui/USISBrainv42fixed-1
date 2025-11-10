@@ -7,7 +7,7 @@
 const { NewsDeduplicator } = require('./newsDeduplication');
 const { NewsScorer } = require('./newsScoring');
 const { NewsRouter } = require('./newsRouter');
-const { NewsPushService } = require('./newsPushService');
+const NewsPushService = require('./newsPushService');
 const { safeQuery } = require('./dbUtils');
 
 class NewsIngestAPI {
