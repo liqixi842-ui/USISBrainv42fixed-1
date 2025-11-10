@@ -97,10 +97,15 @@ class NewsIngestAPI {
       // 6. Push if Fastlane (immediate push)
       if (channel === 'fastlane' && this.pushService) {
         try {
-          const pushResult = await this.pushService.sendNews(article, scoreResult.composite_score, 'fastlane');
-          await this.savePushHistory(newsItemId, channel, pushResult);
+          // Prepare news item with score for push
+          const newsItemWithScore = {
+            ...article,
+            composite_score: scoreResult.composite_score
+          };
           
-          console.log(`🚀 [Ingest] Pushed to Fastlane: ${pushResult.success ? 'success' : 'failed'}`);
+          const pushResult = await this.pushService.pushFastlane(newsItemWithScore);
+          
+          console.log(`🚀 [Ingest] Pushed to Fastlane: message_id ${pushResult.message_id}`);
           
           return {
             ok: true,
