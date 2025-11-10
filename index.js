@@ -6329,3 +6329,44 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
 } else {
   console.log('⚠️  未配置 TELEGRAM_BOT_TOKEN');
 }
+
+// 🆕 USIS News v2.0 - 新闻系统启动
+const ENABLE_NEWS_SYSTEM = process.env.ENABLE_NEWS_SYSTEM === 'true';
+const NEWS_CHANNEL_ID = process.env.NEWS_CHANNEL_ID; // Telegram频道ID用于推送新闻
+
+if (ENABLE_NEWS_SYSTEM && ENABLE_DB) {
+  console.log('\n📰 [USIS News v2.0] 正在启动新闻系统...');
+  
+  const { getScheduler } = require('./scheduler/newsScheduler');
+  
+  const newsScheduler = getScheduler({
+    enabled: true,
+    telegramToken: TELEGRAM_TOKEN,
+    newsChannelId: NEWS_CHANNEL_ID
+  });
+  
+  // 延迟5秒启动（确保数据库和Telegram都已就绪）
+  setTimeout(async () => {
+    try {
+      await newsScheduler.start();
+      console.log('✅ [USIS News v2.0] 新闻系统已启动');
+      
+      // 输出状态
+      const status = await newsScheduler.getStatus();
+      console.log('📊 [USIS News v2.0] 状态:', JSON.stringify(status, null, 2));
+    } catch (error) {
+      console.error('❌ [USIS News v2.0] 启动失败:', error.message);
+    }
+  }, 5000);
+  
+  // 优雅关闭
+  process.on('SIGTERM', async () => {
+    console.log('📰 [USIS News v2.0] 正在关闭...');
+    newsScheduler.stop();
+  });
+  
+} else if (ENABLE_NEWS_SYSTEM && !ENABLE_DB) {
+  console.warn('⚠️  [USIS News v2.0] 需要数据库支持，但数据库已禁用');
+} else {
+  console.log('ℹ️  [USIS News v2.0] 已禁用 (设置 ENABLE_NEWS_SYSTEM=true 启用)');
+}
