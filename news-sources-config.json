@@ -1,0 +1,222 @@
+{
+  "version": "4.0",
+  "description": "USIS News Global Premium Edition - 18 curated financial news sources",
+  "sources": [
+    {
+      "id": "wsj-markets",
+      "name": "WSJ",
+      "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+      "region": "美国",
+      "tier": 4,
+      "reliability": 4.2,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "ft-companies",
+      "name": "Financial Times",
+      "url": "https://www.ft.com/companies?format=rss",
+      "region": "欧洲",
+      "tier": 4,
+      "reliability": 4.1,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "marketwatch",
+      "name": "MarketWatch",
+      "url": "https://www.marketwatch.com/rss/topstories",
+      "region": "美国",
+      "tier": 4,
+      "reliability": 4.0,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "techcrunch",
+      "name": "TechCrunch",
+      "url": "https://techcrunch.com/feed/",
+      "region": "全球",
+      "tier": 3,
+      "reliability": 3.5,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "el-economista",
+      "name": "El Economista",
+      "url": "https://www.eleconomista.es/rss/rss-mercados.xml",
+      "region": "西班牙",
+      "tier": 4,
+      "reliability": 4.0,
+      "update_frequency": "5min",
+      "language": "es"
+    },
+    {
+      "id": "expansion",
+      "name": "Expansión",
+      "url": "https://www.expansion.com/rss/portada.xml",
+      "region": "西班牙",
+      "tier": 4,
+      "reliability": 4.0,
+      "update_frequency": "5min",
+      "language": "es"
+    },
+    {
+      "id": "borse-frankfurt",
+      "name": "Börse Frankfurt",
+      "url": "https://www.boerse-frankfurt.de/en/rss",
+      "region": "德国",
+      "tier": 4,
+      "reliability": 4.0,
+      "update_frequency": "5min",
+      "language": "en/de"
+    },
+    {
+      "id": "european-financial-review",
+      "name": "European Financial Review",
+      "url": "https://europeanfinancialreview.com/feed/",
+      "region": "欧洲",
+      "tier": 3,
+      "reliability": 3.5,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "investing-global",
+      "name": "Investing.com",
+      "url": "https://www.investing.com/rss/news.rss",
+      "region": "全球",
+      "tier": 3,
+      "reliability": 3.5,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "ecb-press",
+      "name": "ECB",
+      "url": "https://www.ecb.europa.eu/rss/press.html",
+      "region": "欧洲",
+      "tier": 5,
+      "reliability": 5.0,
+      "update_frequency": "1h",
+      "language": "en"
+    },
+    {
+      "id": "globe-and-mail",
+      "name": "Globe and Mail",
+      "url": "https://www.theglobeandmail.com/arc/outboundfeeds/rss/category/business/",
+      "region": "加拿大",
+      "tier": 4,
+      "reliability": 4.0,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "financial-post",
+      "name": "Financial Post",
+      "url": "https://financialpost.com/category/news/feed",
+      "region": "加拿大",
+      "tier": 4,
+      "reliability": 4.0,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "reuters-business",
+      "name": "Reuters",
+      "url": "http://feeds.reuters.com/reuters/businessNews",
+      "region": "全球",
+      "tier": 4,
+      "reliability": 4.3,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "reuters-markets",
+      "name": "Reuters",
+      "url": "http://feeds.reuters.com/reuters/markets",
+      "region": "全球",
+      "tier": 4,
+      "reliability": 4.3,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "bloomberg-business",
+      "name": "Bloomberg",
+      "url": "https://feeds.bloomberg.com/business/news.rss",
+      "region": "全球",
+      "tier": 4,
+      "reliability": 4.2,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "cnbc-top-news",
+      "name": "CNBC",
+      "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+      "region": "美国",
+      "tier": 4,
+      "reliability": 4.0,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "seeking-alpha",
+      "name": "Seeking Alpha",
+      "url": "https://seekingalpha.com/feed.xml",
+      "region": "全球",
+      "tier": 3,
+      "reliability": 3.5,
+      "update_frequency": "5min",
+      "language": "en"
+    },
+    {
+      "id": "yahoo-finance",
+      "name": "Yahoo Finance",
+      "url": "https://finance.yahoo.com/news/rssindex",
+      "region": "美国",
+      "tier": 3,
+      "reliability": 3.5,
+      "update_frequency": "5min",
+      "language": "en"
+    }
+  ],
+  "coverage_summary": {
+    "total_sources": 18,
+    "by_region": {
+      "全球": 6,
+      "美国": 4,
+      "欧洲": 3,
+      "西班牙": 2,
+      "加拿大": 2,
+      "德国": 1
+    },
+    "by_tier": {
+      "tier_5": 1,
+      "tier_4": 12,
+      "tier_3": 5
+    },
+    "languages": ["en", "es", "de"],
+    "update_frequency": "Every 5 minutes"
+  },
+  "extensibility": {
+    "add_source_template": {
+      "id": "unique-source-id",
+      "name": "Source Name",
+      "url": "https://example.com/rss",
+      "region": "地区（中文）",
+      "tier": "1-5",
+      "reliability": "1.0-5.0",
+      "update_frequency": "5min|1h|daily",
+      "language": "en|es|zh|de|fr"
+    },
+    "notes": [
+      "新增新闻源时，复制上面的模板并填写相应信息",
+      "tier越高，来源权威性越强（5=官方/监管，4=顶级媒体，3=行业媒体）",
+      "region使用中文标注（美国、欧洲、全球等）",
+      "修改后需要同步更新N8N workflow文件"
+    ]
+  }
+}

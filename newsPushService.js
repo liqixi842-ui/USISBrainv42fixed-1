@@ -246,11 +246,12 @@ class NewsPushService {
 
   /**
    * Generate hashtags for news categorization
+   * Returns: #评分X分 #地区 #事件类型 #来源
    */
   generateHashtags(newsItem, score) {
     const tags = [];
 
-    // Exact score tag (for precise search like "7分以上")
+    // 1. 评分标签 (Score tag)
     const scoreInt = Math.floor(score);
     tags.push(`#评分${scoreInt}分`);
 
@@ -259,23 +260,162 @@ class NewsPushService {
     else if (score >= 7) tags.push('#突发');
     else if (score >= 5) tags.push('#重要');
 
-    // Category tags based on title/summary
-    const text = `${newsItem.title} ${newsItem.summary || ''}`.toLowerCase();
+    // 2. 地区标签 (Region tag - Chinese)
+    const region = this.detectRegion(newsItem);
+    if (region) tags.push(region);
+
+    // 3. 事件分类标签 (Event category tags)
+    const eventTags = this.detectEventCategories(newsItem);
+    tags.push(...eventTags);
     
-    if (text.includes('earning') || text.includes('财报') || text.includes('revenue')) tags.push('#财报');
-    if (text.includes('merger') || text.includes('acquisition') || text.includes('并购') || text.includes('收购')) tags.push('#并购');
-    if (text.includes('fed') || text.includes('美联储') || text.includes('rate') || text.includes('利率')) tags.push('#货币政策');
-    if (text.includes('ipo') || text.includes('上市')) tags.push('#IPO');
-    if (text.includes('lawsuit') || text.includes('诉讼') || text.includes('fraud')) tags.push('#法律');
-    if (text.includes('ceo') || text.includes('cfo') || text.includes('高管')) tags.push('#高管');
-    if (text.includes('bankruptcy') || text.includes('破产') || text.includes('default')) tags.push('#危机');
-    
-    // Source tag
+    // 4. 来源标签 (Source tag)
     if (newsItem.source) {
       tags.push(`#${newsItem.source.replace(/\s+/g, '')}`);
     }
 
     return tags.join(' ');
+  }
+
+  /**
+   * Detect news region based on source and content
+   * Returns Chinese region hashtag
+   */
+  detectRegion(newsItem) {
+    const source = (newsItem.source || '').toLowerCase();
+    const text = `${newsItem.title} ${newsItem.summary || ''}`.toLowerCase();
+
+    // Priority 1: Source-based detection
+    const regionMap = {
+      // 美国 (US)
+      'wsj': '#美国',
+      'marketwatch': '#美国',
+      'bloomberg': '#全球',  // Bloomberg is global
+      'cnbc': '#美国',
+      'yahoo finance': '#美国',
+      
+      // 加拿大 (Canada)
+      'globe and mail': '#加拿大',
+      'financial post': '#加拿大',
+      'bnn bloomberg': '#加拿大',
+      'globeandmail': '#加拿大',
+      
+      // 西班牙 (Spain)
+      'el economista': '#西班牙',
+      'expansión': '#西班牙',
+      'expansion': '#西班牙',
+      
+      // 欧洲 (Europe)
+      'financial times': '#欧洲',
+      'ft': '#欧洲',
+      'ecb': '#欧洲',
+      'börse frankfurt': '#德国',
+      'european financial review': '#欧洲',
+      
+      // 全球 (Global)
+      'reuters': '#全球',
+      'investing.com': '#全球',
+      'techcrunch': '#全球'
+    };
+
+    for (const [key, region] of Object.entries(regionMap)) {
+      if (source.includes(key)) {
+        return region;
+      }
+    }
+
+    // Priority 2: Content-based detection
+    if (text.includes('canada') || text.includes('toronto') || text.includes('ottawa')) return '#加拿大';
+    if (text.includes('spain') || text.includes('madrid') || text.includes('ibex')) return '#西班牙';
+    if (text.includes('germany') || text.includes('frankfurt') || text.includes('dax')) return '#德国';
+    if (text.includes('uk') || text.includes('britain') || text.includes('london') || text.includes('ftse')) return '#英国';
+    if (text.includes('europe') || text.includes('eu') || text.includes('euro')) return '#欧洲';
+    if (text.includes('usa') || text.includes('america') || text.includes('fed') || text.includes('nasdaq')) return '#美国';
+    if (text.includes('china') || text.includes('beijing') || text.includes('shanghai')) return '#中国';
+    if (text.includes('japan') || text.includes('tokyo') || text.includes('nikkei')) return '#日本';
+
+    // Default: Global
+    return '#全球';
+  }
+
+  /**
+   * Detect event categories from title and summary
+   * Returns array of event hashtags
+   */
+  detectEventCategories(newsItem) {
+    const tags = [];
+    const text = `${newsItem.title} ${newsItem.summary || ''}`.toLowerCase();
+
+    // 财报季节 (Earnings)
+    if (text.match(/earning|财报|revenue|profit|eps|guidance|beat|miss|quarterly/)) {
+      tags.push('#财报');
+    }
+
+    // 并购重组 (M&A)
+    if (text.match(/merger|acquisition|buyout|takeover|deal|并购|收购|重组/)) {
+      tags.push('#并购');
+    }
+
+    // 货币政策 (Monetary Policy)
+    if (text.match(/fed|central bank|interest rate|monetary|美联储|央行|利率|降息|加息|ecb/)) {
+      tags.push('#货币政策');
+    }
+
+    // IPO/上市 (IPO)
+    if (text.match(/\bipo\b|initial public offering|listing|上市|首次公开/)) {
+      tags.push('#IPO');
+    }
+
+    // 法律诉讼 (Legal)
+    if (text.match(/lawsuit|litigation|settlement|fraud|investigation|诉讼|起诉|调查/)) {
+      tags.push('#法律');
+    }
+
+    // 高管变动 (Executive Changes)
+    if (text.match(/ceo|cfo|cto|chief|executive|resign|appoint|hire|fire|高管|辞职|任命/)) {
+      tags.push('#高管');
+    }
+
+    // 危机破产 (Crisis/Bankruptcy)
+    if (text.match(/bankruptcy|chapter 11|insolvency|default|crisis|collapse|破产|倒闭|危机/)) {
+      tags.push('#危机');
+    }
+
+    // 股票回购 (Buyback)
+    if (text.match(/buyback|share repurchase|stock repurchase|回购/)) {
+      tags.push('#回购');
+    }
+
+    // 分红派息 (Dividends)
+    if (text.match(/dividend|payout|distribution|分红|派息/)) {
+      tags.push('#分红');
+    }
+
+    // 分析师评级 (Analyst Ratings)
+    if (text.match(/upgrade|downgrade|rating|target price|analyst|分析师|评级|目标价/)) {
+      tags.push('#分析师');
+    }
+
+    // 监管政策 (Regulation)
+    if (text.match(/regulation|regulatory|policy|law|sec|监管|政策|法规/)) {
+      tags.push('#监管');
+    }
+
+    // 产品发布 (Product Launch)
+    if (text.match(/launch|release|unveil|introduce|发布|推出|新品/)) {
+      tags.push('#产品');
+    }
+
+    // 技术创新 (Innovation)
+    if (text.match(/ai|artificial intelligence|innovation|technology|patent|技术|创新|专利/)) {
+      tags.push('#科技');
+    }
+
+    // 市场波动 (Market Movement)
+    if (text.match(/surge|plunge|rally|crash|soar|tumble|spike|暴涨|暴跌|飙升/)) {
+      tags.push('#市场波动');
+    }
+
+    return tags;
   }
 
   /**
