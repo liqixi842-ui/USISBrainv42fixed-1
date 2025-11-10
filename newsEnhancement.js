@@ -60,9 +60,9 @@ class NewsEnhancementService {
   }
 
   /**
-   * Generate AI commentary for news item
+   * Generate professional investment analysis commentary
    * @param {Object} newsItem - News item with title and summary
-   * @returns {Promise<string>} AI-generated commentary (30-50 chars)
+   * @returns {Promise<string>} Professional investment analysis (100-200 chars)
    */
   async generateCommentary(newsItem) {
     try {
@@ -74,22 +74,27 @@ class NewsEnhancementService {
       const { title, summary, symbols = [] } = newsItem;
       const symbolList = symbols.slice(0, 3).join(', ');
 
-      const prompt = `作为金融分析师，为以下新闻生成30-50字的"未来影响"评论，聚焦于对市场/行业的实质影响：
+      const prompt = `作为专业投资分析师，为以下财经新闻撰写深度投资影响分析，适合分享到专业投资群组：
 
-标题：${title}
-摘要：${summary || ''}
-相关股票：${symbolList || '无'}
+【新闻标题】${title}
+
+【新闻摘要】${summary || '无'}
+
+【相关股票】${symbolList || '无'}
+
+请撰写100-150字的专业投资分析，必须包含：
+
+1. **短期影响**（1-3个月）：对相关板块/个股的预期影响
+2. **长期趋势**（6-12个月）：行业发展方向或政策影响
+3. **投资建议**：具体的操作建议（关注/观望/规避等）
 
 要求：
-1. 30-50字，简洁专业
-2. 聚焦未来影响（不重复新闻内容）
-3. 使用中文
-4. 可以预测价格趋势、行业变化、政策影响等
-5. 避免废话，直接给出分析
+- 语言专业，逻辑严谨，避免AI生成痕迹
+- 基于新闻内容给出实质性分析，不重复新闻内容
+- 如有相关股票，必须提及具体影响
+- 适合直接转发到投资群组
 
-示例格式："预计将推动XX板块上涨，长期利好XX行业发展"
-
-未来影响：`;
+投资影响分析：`;
 
       const response = await fetch(this.openaiEndpoint, {
         method: 'POST',
@@ -98,21 +103,21 @@ class NewsEnhancementService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'gpt-4o',
           messages: [
             {
               role: 'system',
-              content: '你是专业的金融分析师，擅长预测新闻对市场的影响。'
+              content: '你是资深投资分析师，擅长深度分析财经新闻对市场的影响，撰写适合专业投资者阅读的分析报告。'
             },
             {
               role: 'user',
               content: prompt
             }
           ],
-          max_tokens: 100,
-          temperature: 0.7
+          max_tokens: 400,
+          temperature: 0.6
         }),
-        signal: AbortSignal.timeout(15000) // 15s timeout
+        signal: AbortSignal.timeout(20000) // 20s timeout
       });
 
       if (!response.ok) {

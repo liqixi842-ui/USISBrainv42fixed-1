@@ -100,7 +100,7 @@ class NewsPushService {
   }
 
   /**
-   * Format single digest item (v3.1: each news as separate message)
+   * Format single digest item (v3.2: professional format for sharing)
    */
   formatSingleDigestItem(item, index, total, channel) {
     const score = parseFloat(item.composite_score) || 0;
@@ -112,31 +112,34 @@ class NewsPushService {
     // Generate hashtags
     const hashtags = this.generateHashtags(item, score);
     
-    // Build message (plain text, no markdown escaping needed)
-    let message = `📰 新闻 ${index}/${total}\n`;
-    message += `📊 评分: ${score.toFixed(1)}/10\n\n`;
-    message += `${displayTitle}\n\n`;
+    // Emoji indicator based on score
+    let scoreEmoji = '📊';
+    if (score >= 9.0) scoreEmoji = '🔥';
+    else if (score >= 8.0) scoreEmoji = '⚡';
+    else if (score >= 7.0) scoreEmoji = '💼';
     
-    // Summary (show more than digest, up to 200 chars)
+    // Build professional message format
+    let message = `${scoreEmoji} ${displayTitle}\n`;
+    message += `━━━━━━━━━━━━━━━━━━━━\n`;
+    message += `📊 重要性评分: ${score.toFixed(1)}/10.0\n\n`;
+    
+    // Full summary (no truncation for professional sharing)
     if (displaySummary) {
-      const summary = displaySummary.length > 200 
-        ? displaySummary.substring(0, 200) + '...' 
-        : displaySummary;
-      message += `📄 ${summary}\n\n`;
+      message += `📰 核心要点：\n${displaySummary}\n\n`;
     }
     
-    // AI Commentary
+    // Professional analysis (enhanced AI commentary)
     if (item.ai_commentary) {
-      message += `💡 AI点评: ${item.ai_commentary}\n\n`;
+      message += `💡 投资影响分析：\n${item.ai_commentary}\n\n`;
     }
     
-    // Source and link
-    message += `🔗 ${item.url}\n`;
-    message += `📌 来源: ${item.source_name || '未知'}\n\n`;
+    // Source credibility
+    const tierDesc = item.tier >= 4 ? '权威来源' : item.tier >= 3 ? '主流媒体' : '一般来源';
+    message += `📌 信息来源：${item.source_name || '未知'} (${tierDesc})\n`;
+    message += `🔗 原文链接：${item.url}\n\n`;
     
-    // Hashtags
-    message += `${hashtags}\n\n`;
-    message += `---\nUSIS Brain 新闻系统 v3.1`;
+    // Hashtags for categorization
+    message += `${hashtags}`;
     
     return message;
   }
