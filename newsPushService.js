@@ -144,12 +144,19 @@ class NewsPushService {
     sorted.slice(0, 10).forEach((item, index) => {
       const score = parseFloat(item.composite_score) || 0;
       
-      // Generate full 3-tier hashtags (v4.0 standard)
+      // Stock symbols (first line)
+      const symbols = item.symbols?.slice(0, 5) || [];
+      const symbolTags = symbols.map(s => `#${s}`).join(' ');
+      
+      // Category hashtags (second line)
       const hashtags = this.generateHashtags(item, score);
       
       message += `${index + 1}\\. *${this.escapeMarkdown(item.title)}*\n`;
-      message += `   📊 ${score.toFixed(1)}/10 | ${hashtags}\n`;
-      message += `   🔗 [查看原文](${item.url})\n\n`;
+      message += `   📊 ${score.toFixed(1)}/10`;
+      if (symbolTags) message += ` | ${symbolTags}`;
+      message += `\n`;
+      message += `   🔗 [查看原文](${item.url})\n`;
+      message += `   ${hashtags}\n\n`;
     });
 
     if (newsItems.length > 10) {
