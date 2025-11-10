@@ -1,0 +1,385 @@
+{
+  "name": "USIS News RSS Collector v2.0",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "name": "Schedule Every 5min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"
+      },
+      "name": "WSJ Markets RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Attach source metadata to WSJ items\nreturn $input.all().map(item => ({\n  json: {\n    ...item.json,\n    source: 'WSJ',\n    tier: 4\n  }\n}));"
+      },
+      "name": "Add WSJ Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 180]
+    },
+    {
+      "parameters": {
+        "url": "https://www.ft.com/companies?format=rss"
+      },
+      "name": "FT Companies RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Attach source metadata to FT items\nreturn $input.all().map(item => ({\n  json: {\n    ...item.json,\n    source: 'Financial Times',\n    tier: 4\n  }\n}));"
+      },
+      "name": "Add FT Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.marketwatch.com/rss/topstories"
+      },
+      "name": "MarketWatch RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Attach source metadata to MarketWatch items\nreturn $input.all().map(item => ({\n  json: {\n    ...item.json,\n    source: 'MarketWatch',\n    tier: 4\n  }\n}));"
+      },
+      "name": "Add MarketWatch Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 420]
+    },
+    {
+      "parameters": {
+        "url": "https://techcrunch.com/feed/"
+      },
+      "name": "TechCrunch RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 540]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Attach source metadata to TechCrunch items\nreturn $input.all().map(item => ({\n  json: {\n    ...item.json,\n    source: 'TechCrunch',\n    tier: 3\n  }\n}));"
+      },
+      "name": "Add TechCrunch Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 540]
+    },
+    {
+      "parameters": {
+        "mode": "append"
+      },
+      "name": "Merge All Feeds",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format RSS items for USIS Brain API\nreturn $input.all().map(item => {\n  const data = item.json;\n  \n  // Extract text content from HTML description\n  const stripHtml = (html) => {\n    if (!html) return '';\n    return html.replace(/<[^>]*>/g, '').trim().substring(0, 500);\n  };\n  \n  return {\n    json: {\n      title: data.title || '',\n      url: data.link || data.url || '',\n      summary: stripHtml(data.description || data.contentSnippet || data.content || ''),\n      published_at: data.pubDate || data.isoDate || new Date().toISOString(),\n      source: data.source || 'Unknown',\n      tier: data.tier || 4,\n      symbols: [] // Will be extracted by USIS Brain\n    }\n  };\n});"
+      },
+      "name": "Format for USIS Brain",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.USIS_BRAIN_URL }}/api/news/ingest",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.NEWS_INGESTION_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "={{ $json.title }}"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.url }}"
+            },
+            {
+              "name": "summary",
+              "value": "={{ $json.summary }}"
+            },
+            {
+              "name": "published_at",
+              "value": "={{ $json.published_at }}"
+            },
+            {
+              "name": "source",
+              "value": "={{ $json.source }}"
+            },
+            {
+              "name": "tier",
+              "value": "={{ $json.tier }}"
+            },
+            {
+              "name": "symbols",
+              "value": "={{ $json.symbols }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          }
+        }
+      },
+      "name": "Send to USIS Brain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "name": "Check Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "message": "=✅ News ingested successfully\\nAction: {{ $json.action }}\\nScore: {{ $json.score }}\\nChannel: {{ $json.channel }}"
+      },
+      "name": "Log Success",
+      "type": "n8n-nodes-base.sticky",
+      "typeVersion": 1,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "message": "=❌ News ingestion failed\\nError: {{ $json.error }}\\nStage: {{ $json.stage }}"
+      },
+      "name": "Log Error",
+      "type": "n8n-nodes-base.sticky",
+      "typeVersion": 1,
+      "position": [1560, 400]
+    }
+  ],
+  "connections": {
+    "Schedule Every 5min": {
+      "main": [
+        [
+          {
+            "node": "WSJ Markets RSS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "FT Companies RSS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "MarketWatch RSS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "TechCrunch RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WSJ Markets RSS": {
+      "main": [
+        [
+          {
+            "node": "Add WSJ Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add WSJ Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FT Companies RSS": {
+      "main": [
+        [
+          {
+            "node": "Add FT Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add FT Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "MarketWatch RSS": {
+      "main": [
+        [
+          {
+            "node": "Add MarketWatch Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add MarketWatch Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "TechCrunch RSS": {
+      "main": [
+        [
+          {
+            "node": "Add TechCrunch Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add TechCrunch Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge All Feeds",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge All Feeds": {
+      "main": [
+        [
+          {
+            "node": "Format for USIS Brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for USIS Brain": {
+      "main": [
+        [
+          {
+            "node": "Send to USIS Brain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to USIS Brain": {
+      "main": [
+        [
+          {
+            "node": "Check Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Success": {
+      "main": [
+        [
+          {
+            "node": "Log Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
