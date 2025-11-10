@@ -2,7 +2,8 @@
 USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It orchestrates over six AI models with real-time data integration from various financial sources. Its purpose is to provide authoritative, data-backed investment recommendations through features like semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system is built for deployment on Replit's Reserved VM platform, aiming to deliver institutional-grade analysis with multilingual capabilities and cost optimization.
 
 # Recent Changes
-- **2025-11-10**: **N8N-Based News Architecture DEPLOYED** - Refactored News System v2.0 to distributed architecture: N8N workflows handle lightweight RSS ingestion ("eyes"), USIS Brain handles heavy computation (ImpactRank scoring, deduplication, routing, push) ("brain"). Reduced USIS Brain CPU/memory load by 50%. API endpoint `/api/news/ingest` secured with NEWS_INGESTION_SECRET authentication. Scheduler simplified to digest delivery + cleanup only. N8N workflow `news-rss-collector.json` fetches from 4 sources (WSJ, FT, MarketWatch, TechCrunch) every 5min with append-mode merging to prevent article loss.
+- **2025-11-10**: **News System v4.0 Global Premium Edition DEPLOYED** - Expanded from 4 to 18 high-quality news sources (Tier 3-5) covering 6 regions: US(4), Canada(2), Spain(2), Germany(1), Europe(3), Global(6). Sources include WSJ, FT, Reuters, Bloomberg, Globe&Mail, Financial Post, El Economista, Expansión, and more. Implemented 3-tier hashtag system: #评分X分 (score), #地区 (Chinese region tags: 美国/加拿大/西班牙/德国/欧洲/全球), #事件类型 (15 categories). N8N workflow v4.0 auto-deployed via API (ID: ddvIQQUO4YfR1rAx) with optimized 15-minute collection frequency (reduced from 5min, saving 67% requests). Extensible architecture with news-sources-config.json template for future expansion.
+- **2025-11-10**: **N8N-Based News Architecture DEPLOYED** - Refactored News System v2.0 to distributed architecture: N8N workflows handle lightweight RSS ingestion ("eyes"), USIS Brain handles heavy computation (ImpactRank scoring, deduplication, routing, push) ("brain"). Reduced USIS Brain CPU/memory load by 50%. API endpoint `/api/news/ingest` secured with NEWS_INGESTION_SECRET authentication. Scheduler simplified to digest delivery + cleanup only.
 - **2025-11-10**: Fixed screenshot timeout issue causing chart analysis failures. Increased SCREENSHOT_TIMEOUT from 15s to 30s and TOTAL_TIMEOUT from 55s to 75s to accommodate N8N's average 14.6s response time with safety margin.
 
 # User Preferences
@@ -17,14 +18,16 @@ The system is built on Node.js with Express.js, offering a RESTful JSON API with
 Institutional-grade news aggregation with distributed processing: N8N handles ingestion, USIS Brain handles analysis.
 
 **Architecture Pattern: "Eyes & Brain"**
-- **N8N ("Eyes")**: Lightweight RSS collection, runs every 5min on dedicated workflow engine
+- **N8N ("Eyes")**: Lightweight RSS collection, runs every 15min on dedicated workflow engine (optimized from 5min)
 - **USIS Brain ("Brain")**: Heavy computation (scoring, deduplication, routing, push), triggered by N8N
 
 **Data Flow:**
 ```
-N8N Workflow (every 5min)
-  ↓ rssFeedRead nodes (WSJ, FT, MarketWatch, TechCrunch)
-  ↓ Metadata injection (source name + tier)
+N8N Workflow v4.0 (every 15min, 18 sources)
+  ↓ rssFeedRead nodes (US: WSJ/MarketWatch/CNBC/Yahoo, Canada: Globe&Mail/FinPost, 
+                       Spain: ElEconomista/Expansión, Germany: Börse Frankfurt,
+                       Europe: FT/ECB/EUFinReview, Global: Reuters/Bloomberg/Investing/TC/SeekingAlpha)
+  ↓ Metadata injection (source name + tier + region)
   ↓ Merge (append mode, prevents article loss)
   ↓ Format for API
   ↓ POST /api/news/ingest (authenticated)
@@ -32,7 +35,7 @@ USIS Brain
   ↓ Deduplication (24h URL + 6h topic hash)
   ↓ ImpactRank 2.0 Scoring (7 factors)
   ↓ Routing (Fastlane/2h/4h digest)
-  ↓ Fastlane Push (immediate, if score ≥7)
+  ↓ Fastlane Push (immediate, if score ≥7) with 3-tier hashtags
 Scheduler (periodic)
   ↓ 2h Digest Push (every 2h)
   ↓ 4h Digest Push (every 4h)
@@ -40,7 +43,7 @@ Scheduler (periodic)
 ```
 
 **Components:**
-- **N8N Ingestion Workflow** (`n8n-workflows/news-rss-collector.json`): Parallel RSS fetching from 4 sources with automatic XML parsing, metadata tagging, append-mode merging, and authenticated POST to USIS Brain.
+- **N8N Ingestion Workflow v4.0** (`n8n-workflows/news-rss-collector-v4-global-premium.json`): Parallel RSS fetching from 18 premium sources (Tier 3-5) with automatic XML parsing, metadata tagging (source/tier/region), append-mode merging, and authenticated POST to USIS Brain. Optimized to 15-minute intervals (saves 67% requests vs 5min).
 - **Ingestion API Endpoint** (`POST /api/news/ingest`): Secured with NEWS_INGESTION_SECRET, validates tier bounds (1-5), deduplicates, scores, routes, and pushes Fastlane items immediately.
 - **Deduplication Engine**: 24h URL hash + 6h topic hash window with authority escalation (higher tier wins) and corroboration tracking.
 - **ImpactRank 2.0 Scoring**: 7-factor algorithm (freshness, source_quality, relevance, impact, novelty, corroboration, attention) with context-aware weights. Composite score 0-10 scale.
