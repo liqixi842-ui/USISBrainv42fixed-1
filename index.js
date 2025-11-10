@@ -5479,13 +5479,79 @@ app.listen(PORT, "0.0.0.0", () => {
 // 🆕 v1.0: 开发/生产环境自动Bot切换（优先使用测试Bot）
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN_TEST || process.env.TELEGRAM_BOT_TOKEN;
 
-if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
-  // 🛡️ v6.1: 懒加载Telegraf（节省~200MB内存）
-  const { Telegraf } = require('telegraf');
-  const https = require('https');
-  const FormData = require('form-data');
+// 🆕 v1.1: PID文件锁机制（防止重复启动Bot）
+const fs = require('fs');
+const path = require('path');
+const BOT_PID_FILE = path.join(__dirname, '.telegram_bot.pid');
+const SKIP_BOT_LOCK = process.env.SKIP_BOT_LOCK === 'true'; // 开发环境bypass
+
+function acquireBotLock() {
+  if (SKIP_BOT_LOCK) {
+    console.log('🔓 [Bot Lock] 跳过锁检查（SKIP_BOT_LOCK=true）');
+    return true;
+  }
   
-  console.log('🤖 启动 Telegram Bot (Manual Polling)...');
+  // 检查锁文件是否存在
+  if (fs.existsSync(BOT_PID_FILE)) {
+    try {
+      const oldPid = parseInt(fs.readFileSync(BOT_PID_FILE, 'utf8').trim());
+      
+      // 检查该进程是否仍在运行
+      try {
+        process.kill(oldPid, 0); // 发送0信号检查进程存在性
+        console.error(`🔒 [Bot Lock] Telegram Bot已在运行（PID: ${oldPid}）`);
+        console.error(`⚠️  如果确定没有重复实例，请删除 ${BOT_PID_FILE}`);
+        return false;
+      } catch (e) {
+        // 进程不存在，删除过期锁文件
+        console.log(`🧹 [Bot Lock] 清理过期锁文件（PID ${oldPid} 已不存在）`);
+        fs.unlinkSync(BOT_PID_FILE);
+      }
+    } catch (e) {
+      console.warn(`⚠️  [Bot Lock] 读取锁文件失败:`, e.message);
+      fs.unlinkSync(BOT_PID_FILE);
+    }
+  }
+  
+  // 创建新锁文件
+  try {
+    fs.writeFileSync(BOT_PID_FILE, String(process.pid));
+    console.log(`🔒 [Bot Lock] 已获取Bot锁（PID: ${process.pid}）`);
+    return true;
+  } catch (e) {
+    console.error(`❌ [Bot Lock] 创建锁文件失败:`, e.message);
+    return false;
+  }
+}
+
+function releaseBotLock() {
+  if (fs.existsSync(BOT_PID_FILE)) {
+    try {
+      fs.unlinkSync(BOT_PID_FILE);
+      console.log(`🔓 [Bot Lock] 已释放Bot锁`);
+    } catch (e) {
+      console.error(`⚠️  [Bot Lock] 释放锁失败:`, e.message);
+    }
+  }
+}
+
+// 🆕 v1.1: 进程退出时释放Bot锁
+process.on('exit', () => {
+  releaseBotLock();
+});
+
+if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
+  // 🆕 v1.1: 获取Bot锁（防止重复启动）
+  if (!acquireBotLock()) {
+    console.error('❌ 无法启动Telegram Bot: 已有实例在运行');
+    console.error('💡 提示: 设置环境变量 SKIP_BOT_LOCK=true 可跳过锁检查');
+  } else {
+    // 🛡️ v6.1: 懒加载Telegraf（节省~200MB内存）
+    const { Telegraf } = require('telegraf');
+    const https = require('https');
+    const FormData = require('form-data');
+    
+    console.log('🤖 启动 Telegram Bot (Manual Polling)...');
   
   // ===== Telegram Document Sender (safe multipart) =====
   async function sendDocumentBuffer(token, chatId, buffer, filename, caption = '') {
