@@ -250,7 +250,11 @@ class NewsPushService {
   generateHashtags(newsItem, score) {
     const tags = [];
 
-    // Score-based tags
+    // Exact score tag (for precise search like "7分以上")
+    const scoreInt = Math.floor(score);
+    tags.push(`#评分${scoreInt}分`);
+
+    // Score range tags
     if (score >= 9) tags.push('#极端重要');
     else if (score >= 7) tags.push('#突发');
     else if (score >= 5) tags.push('#重要');
