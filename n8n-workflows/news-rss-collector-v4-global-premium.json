@@ -36,7 +36,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'WSJ', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'WSJ', tier: 4 } }));"
       },
       "name": "Add WSJ Metadata",
       "type": "n8n-nodes-base.code",
@@ -62,7 +62,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Financial Times', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Financial Times', tier: 4 } }));"
       },
       "name": "Add Financial Times Metadata",
       "type": "n8n-nodes-base.code",
@@ -88,7 +88,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'MarketWatch', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'MarketWatch', tier: 4 } }));"
       },
       "name": "Add MarketWatch Metadata",
       "type": "n8n-nodes-base.code",
@@ -114,7 +114,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'TechCrunch', tier: 3 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'TechCrunch', tier: 3 } }));"
       },
       "name": "Add TechCrunch Metadata",
       "type": "n8n-nodes-base.code",
@@ -140,7 +140,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'El Economista', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'El Economista', tier: 4 } }));"
       },
       "name": "Add El Economista Metadata",
       "type": "n8n-nodes-base.code",
@@ -166,7 +166,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Expansión', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Expansión', tier: 4 } }));"
       },
       "name": "Add Expansión Metadata",
       "type": "n8n-nodes-base.code",
@@ -192,7 +192,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Börse Frankfurt', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Börse Frankfurt', tier: 4 } }));"
       },
       "name": "Add Börse Frankfurt Metadata",
       "type": "n8n-nodes-base.code",
@@ -218,7 +218,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'European Financial Review', tier: 3 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'European Financial Review', tier: 3 } }));"
       },
       "name": "Add European Financial Review Metadata",
       "type": "n8n-nodes-base.code",
@@ -244,7 +244,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Investing.com', tier: 3 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Investing.com', tier: 3 } }));"
       },
       "name": "Add Investing.com Metadata",
       "type": "n8n-nodes-base.code",
@@ -270,7 +270,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'ECB', tier: 5 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'ECB', tier: 5 } }));"
       },
       "name": "Add ECB Metadata",
       "type": "n8n-nodes-base.code",
@@ -296,7 +296,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Globe and Mail', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Globe and Mail', tier: 4 } }));"
       },
       "name": "Add Globe and Mail Metadata",
       "type": "n8n-nodes-base.code",
@@ -322,7 +322,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Financial Post', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Financial Post', tier: 4 } }));"
       },
       "name": "Add Financial Post Metadata",
       "type": "n8n-nodes-base.code",
@@ -348,7 +348,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Reuters', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Reuters', tier: 4 } }));"
       },
       "name": "Add Reuters Metadata",
       "type": "n8n-nodes-base.code",
@@ -374,7 +374,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Reuters', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Reuters', tier: 4 } }));"
       },
       "name": "Add Reuters Metadata",
       "type": "n8n-nodes-base.code",
@@ -400,7 +400,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Bloomberg', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Bloomberg', tier: 4 } }));"
       },
       "name": "Add Bloomberg Metadata",
       "type": "n8n-nodes-base.code",
@@ -426,7 +426,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'CNBC', tier: 4 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'CNBC', tier: 4 } }));"
       },
       "name": "Add CNBC Metadata",
       "type": "n8n-nodes-base.code",
@@ -452,7 +452,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Seeking Alpha', tier: 3 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Seeking Alpha', tier: 3 } }));"
       },
       "name": "Add Seeking Alpha Metadata",
       "type": "n8n-nodes-base.code",
@@ -478,7 +478,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return .all().map(item => ({ json: { ...item.json, source: 'Yahoo Finance', tier: 3 } }));"
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Yahoo Finance', tier: 3 } }));"
       },
       "name": "Add Yahoo Finance Metadata",
       "type": "n8n-nodes-base.code",
@@ -506,14 +506,17 @@
       "parameters": {
         "method": "POST",
         "url": "={{.REPL_URL}}/api/news/ingest",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "X-News-Secret",
               "value": "={{.NEWS_INGESTION_SECRET}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
             }
           ]
         },
