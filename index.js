@@ -3918,8 +3918,37 @@ function formatMultipleOutputs(outputs, chatType, scene) {
   }
 }
 
-// 🆕 请求状态跟踪器
+// 🆕 请求状态跟踪器（带TTL和LRU清理）
 const requestTracker = new Map();
+const REQUEST_TTL_MS = 300000; // 5分钟TTL
+const MAX_TRACKER_SIZE = 1000; // 最多保留1000个请求
+
+// 定期清理过期请求（每分钟）
+setInterval(() => {
+  const now = Date.now();
+  let cleanedCount = 0;
+  
+  for (const [reqId, req] of requestTracker.entries()) {
+    // 清理超过TTL的请求
+    if (now - req.startTime > REQUEST_TTL_MS) {
+      requestTracker.delete(reqId);
+      cleanedCount++;
+    }
+  }
+  
+  // LRU清理：如果超过最大数量，删除最老的
+  if (requestTracker.size > MAX_TRACKER_SIZE) {
+    const entries = Array.from(requestTracker.entries());
+    entries.sort((a, b) => a[1].startTime - b[1].startTime);
+    const toDelete = entries.slice(0, requestTracker.size - MAX_TRACKER_SIZE);
+    toDelete.forEach(([reqId]) => requestTracker.delete(reqId));
+    cleanedCount += toDelete.length;
+  }
+  
+  if (cleanedCount > 0) {
+    console.log(`🧹 requestTracker清理: 删除${cleanedCount}个过期请求, 剩余${requestTracker.size}个`);
+  }
+}, 60000); // 每分钟执行一次
 
 // ========================================
 // 🧠 核心Orchestrator函数（v1.1重构）
@@ -5660,28 +5689,65 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         console.log('🧠 常规分析');
         await telegramAPI('sendMessage', { chat_id: chatId, text: '🧠 正在分析...' });
         
-        // 🆕 v6.2: 添加超时控制（90秒，长于orchestrate的60秒）
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 90000);
+        // 🆕 v1.1: 强化HTTP调用保护（25秒超时+重试）
+        let data = null;
+        let retryCount = 0;
+        const maxRetries = 1; // 最多重试1次
+        
+        while (retryCount <= maxRetries) {
+          // 🔧 每次重试都创建新的AbortController和timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 25000); // 25秒超时
+          
+          try {
+            console.log(`🔄 [尝试${retryCount + 1}/${maxRetries + 1}] 调用orchestrate (超时25s)...`);
+            
+            const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                text,
+                user_id: `tg_${userId}`,
+                chat_type: message.chat.type,
+                mode: 'auto',
+                budget: 'low'
+              }),
+              signal: controller.signal
+            });
+            
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+          
+            data = await response.json();
+            console.log('✅ orchestrate调用成功');
+            break; // 成功，跳出循环
+            
+          } catch (fetchError) {
+            retryCount++;
+            
+            if (retryCount > maxRetries) {
+              // 超过重试次数，立即抛出错误（不执行backoff）
+              console.error(`❌ orchestrate调用失败（${maxRetries + 1}次尝试）:`, fetchError.message);
+              throw new Error(`分析请求失败: ${fetchError.message}`);
+            }
+            
+            // 指数退避后重试
+            const backoffMs = 100 * Math.pow(2, retryCount - 1);
+            console.warn(`⚠️  orchestrate调用失败，${backoffMs}ms后重试...`);
+            await new Promise(resolve => setTimeout(resolve, backoffMs));
+          } finally {
+            // 🔧 确保总是清理timeout（防止timer泄漏）
+            clearTimeout(timeoutId);
+          }
+        }
+        
+        // 处理返回的数据
+        if (!data) {
+          throw new Error('orchestrate未返回数据');
+        }
         
         try {
-          const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              text,
-              user_id: `tg_${userId}`,
-              chat_type: message.chat.type,
-              mode: 'auto',
-              budget: 'low'
-            }),
-            signal: controller.signal
-          });
-          
-          clearTimeout(timeoutId);
-        
-          const data = await response.json();
-          
           // 🆕 v5.0: 检查是否有个股图表需要发送
           if (data.stock_chart && data.stock_chart.buffer) {
             console.log('📈 检测到个股图表，准备发送buffer...');
@@ -5717,10 +5783,9 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
             text: data.final_text || data.final_analysis || '分析完成' 
           });
           console.log('✅ 分析结果已发送');
-        } catch (fetchError) {
-          clearTimeout(timeoutId);
-          console.error('❌ Orchestrate请求失败:', fetchError.message);
-          throw new Error(`分析请求失败: ${fetchError.message}`);
+        } catch (sendError) {
+          console.error('❌ 发送结果失败:', sendError.message);
+          throw sendError;
         }
       }
     } catch (error) {
