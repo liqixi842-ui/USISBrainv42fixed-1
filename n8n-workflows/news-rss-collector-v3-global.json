@@ -1,0 +1,333 @@
+{
+  "name": "USIS News RSS Collector v3.0 - Global Edition",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "name": "Schedule Every 5min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 500]
+    },
+    
+    {
+      "parameters": {
+        "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"
+      },
+      "name": "WSJ Markets RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'WSJ', tier: 4 } }));"
+      },
+      "name": "Add WSJ Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 100]
+    },
+    
+    {
+      "parameters": {
+        "url": "https://www.ft.com/companies?format=rss"
+      },
+      "name": "FT Companies RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Financial Times', tier: 4 } }));"
+      },
+      "name": "Add FT Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 200]
+    },
+    
+    {
+      "parameters": {
+        "url": "https://www.marketwatch.com/rss/topstories"
+      },
+      "name": "MarketWatch RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'MarketWatch', tier: 4 } }));"
+      },
+      "name": "Add MarketWatch Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    
+    {
+      "parameters": {
+        "url": "https://techcrunch.com/feed/"
+      },
+      "name": "TechCrunch RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'TechCrunch', tier: 3 } }));"
+      },
+      "name": "Add TechCrunch Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 400]
+    },
+    
+    {
+      "parameters": {
+        "url": "https://www.eleconomista.es/rss/rss-mercados.xml"
+      },
+      "name": "El Economista (ES)",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'El Economista', tier: 4 } }));"
+      },
+      "name": "Add El Economista Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 500]
+    },
+    
+    {
+      "parameters": {
+        "url": "https://www.expansion.com/rss/portada.xml"
+      },
+      "name": "Expansión (ES)",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Expansión', tier: 4 } }));"
+      },
+      "name": "Add Expansión Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 600]
+    },
+    
+    {
+      "parameters": {
+        "url": "https://www.boerse-frankfurt.de/en/rss"
+      },
+      "name": "Börse Frankfurt (DE)",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 700]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Börse Frankfurt', tier: 4 } }));"
+      },
+      "name": "Add Frankfurt Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 700]
+    },
+    
+    {
+      "parameters": {
+        "url": "https://europeanfinancialreview.com/feed/"
+      },
+      "name": "European Financial Review",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 800]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'European Financial Review', tier: 3 } }));"
+      },
+      "name": "Add EFR Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 800]
+    },
+    
+    {
+      "parameters": {
+        "url": "https://www.investing.com/rss/news.rss"
+      },
+      "name": "Investing.com Global",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 900]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'Investing.com', tier: 3 } }));"
+      },
+      "name": "Add Investing Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 900]
+    },
+    
+    {
+      "parameters": {
+        "url": "https://www.ecb.europa.eu/rss/press.html"
+      },
+      "name": "ECB Press Releases",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [460, 1000]
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: { ...item.json, source: 'ECB', tier: 5 } }));"
+      },
+      "name": "Add ECB Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 1000]
+    },
+    
+    {
+      "parameters": {
+        "mode": "append"
+      },
+      "name": "Merge All Feeds",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [840, 500]
+    },
+    
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n  const data = item.json;\n  const stripHtml = (html) => {\n    if (!html) return '';\n    return html.replace(/<[^>]*>/g, '').trim().substring(0, 500);\n  };\n  return {\n    json: {\n      title: data.title || '',\n      url: data.link || data.url || '',\n      summary: stripHtml(data.description || data.contentSnippet || data.content || ''),\n      published_at: data.pubDate || data.isoDate || new Date().toISOString(),\n      source: data.source || 'Unknown',\n      tier: data.tier || 4,\n      symbols: []\n    }\n  };\n});"
+      },
+      "name": "Format for USIS Brain",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 500]
+    },
+    
+    {
+      "parameters": {
+        "url": "={{ $env.USIS_BRAIN_URL }}/api/news/ingest",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $env.NEWS_INGESTION_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "title",
+              "value": "={{ $json.title }}"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.url }}"
+            },
+            {
+              "name": "summary",
+              "value": "={{ $json.summary }}"
+            },
+            {
+              "name": "published_at",
+              "value": "={{ $json.published_at }}"
+            },
+            {
+              "name": "source",
+              "value": "={{ $json.source }}"
+            },
+            {
+              "name": "tier",
+              "value": "={{ $json.tier }}"
+            },
+            {
+              "name": "symbols",
+              "value": "={{ $json.symbols }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          }
+        }
+      },
+      "name": "Send to USIS Brain",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1240, 500]
+    }
+  ],
+  "connections": {
+    "Schedule Every 5min": {
+      "main": [[
+        {"node": "WSJ Markets RSS", "type": "main", "index": 0},
+        {"node": "FT Companies RSS", "type": "main", "index": 0},
+        {"node": "MarketWatch RSS", "type": "main", "index": 0},
+        {"node": "TechCrunch RSS", "type": "main", "index": 0},
+        {"node": "El Economista (ES)", "type": "main", "index": 0},
+        {"node": "Expansión (ES)", "type": "main", "index": 0},
+        {"node": "Börse Frankfurt (DE)", "type": "main", "index": 0},
+        {"node": "European Financial Review", "type": "main", "index": 0},
+        {"node": "Investing.com Global", "type": "main", "index": 0},
+        {"node": "ECB Press Releases", "type": "main", "index": 0}
+      ]]
+    },
+    "WSJ Markets RSS": {"main": [[{"node": "Add WSJ Metadata", "type": "main", "index": 0}]]},
+    "Add WSJ Metadata": {"main": [[{"node": "Merge All Feeds", "type": "main", "index": 0}]]},
+    "FT Companies RSS": {"main": [[{"node": "Add FT Metadata", "type": "main", "index": 0}]]},
+    "Add FT Metadata": {"main": [[{"node": "Merge All Feeds", "type": "main", "index": 1}]]},
+    "MarketWatch RSS": {"main": [[{"node": "Add MarketWatch Metadata", "type": "main", "index": 0}]]},
+    "Add MarketWatch Metadata": {"main": [[{"node": "Merge All Feeds", "type": "main", "index": 2}]]},
+    "TechCrunch RSS": {"main": [[{"node": "Add TechCrunch Metadata", "type": "main", "index": 0}]]},
+    "Add TechCrunch Metadata": {"main": [[{"node": "Merge All Feeds", "type": "main", "index": 3}]]},
+    "El Economista (ES)": {"main": [[{"node": "Add El Economista Metadata", "type": "main", "index": 0}]]},
+    "Add El Economista Metadata": {"main": [[{"node": "Merge All Feeds", "type": "main", "index": 4}]]},
+    "Expansión (ES)": {"main": [[{"node": "Add Expansión Metadata", "type": "main", "index": 0}]]},
+    "Add Expansión Metadata": {"main": [[{"node": "Merge All Feeds", "type": "main", "index": 5}]]},
+    "Börse Frankfurt (DE)": {"main": [[{"node": "Add Frankfurt Metadata", "type": "main", "index": 0}]]},
+    "Add Frankfurt Metadata": {"main": [[{"node": "Merge All Feeds", "type": "main", "index": 6}]]},
+    "European Financial Review": {"main": [[{"node": "Add EFR Metadata", "type": "main", "index": 0}]]},
+    "Add EFR Metadata": {"main": [[{"node": "Merge All Feeds", "type": "main", "index": 7}]]},
+    "Investing.com Global": {"main": [[{"node": "Add Investing Metadata", "type": "main", "index": 0}]]},
+    "Add Investing Metadata": {"main": [[{"node": "Merge All Feeds", "type": "main", "index": 8}]]},
+    "ECB Press Releases": {"main": [[{"node": "Add ECB Metadata", "type": "main", "index": 0}]]},
+    "Add ECB Metadata": {"main": [[{"node": "Merge All Feeds", "type": "main", "index": 9}]]},
+    "Merge All Feeds": {"main": [[{"node": "Format for USIS Brain", "type": "main", "index": 0}]]},
+    "Format for USIS Brain": {"main": [[{"node": "Send to USIS Brain", "type": "main", "index": 0}]]}
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

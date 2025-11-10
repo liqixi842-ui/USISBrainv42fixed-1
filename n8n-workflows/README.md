@@ -1,291 +1,234 @@
-# USIS News System v2.0 - N8N 工作流配置指南
+# USIS News v2.0 - N8N Workflow Configuration
 
-## 📋 概览
-
-N8N作为"眼睛"负责采集新闻，USIS Brain作为"大脑"负责分析评分。
-
-**分工：**
-- **N8N**: 定时触发 → RSS采集 → 解析 → POST到USIS Brain
-- **USIS Brain**: 接收 → 去重 → 评分 → 路由 → Telegram推送
+## Overview
+N8N handles lightweight RSS ingestion ("eyes"), USIS Brain handles heavy computation ("brain").
 
 ---
 
-## 🚀 快速开始
+## 📁 Workflow Files
 
-### 1. 在N8N中导入工作流
+### v2.0 (Current - 4 Sources)
+**File:** `news-rss-collector.json`
 
-1. 登录您的N8N实例
-2. 点击右上角 **Import from File**
-3. 选择 `news-rss-collector.json`
-4. 工作流导入成功！
+**Sources:**
+1. **WSJ Markets** - Tier 4 (Premium US financial news)
+2. **Financial Times** - Tier 4 (Premium UK/global financial news)
+3. **MarketWatch** - Tier 4 (US markets)
+4. **TechCrunch** - Tier 3 (Tech industry news)
 
-### 2. 配置环境变量
+**Coverage:** US markets, global tech
 
-在N8N设置中添加以下环境变量：
+---
 
+### v3.0 (Global Edition - 10 Sources) ⭐ RECOMMENDED
+**File:** `news-rss-collector-v3-global.json`
+
+**Sources:**
+
+| Region | Source | Tier | Focus |
+|--------|--------|------|-------|
+| 🇺🇸 US | WSJ Markets | 4 | US stocks, Fed policy |
+| 🇬🇧 UK | Financial Times | 4 | Global finance, LSE |
+| 🇺🇸 US | MarketWatch | 4 | US markets |
+| 🇺🇸 US | TechCrunch | 3 | Tech industry |
+| 🇪🇸 **Spain** | **El Economista** | 4 | **IBEX 35, Spanish economy** |
+| 🇪🇸 **Spain** | **Expansión** | 4 | **Spanish business, markets** |
+| 🇩🇪 Germany | Börse Frankfurt | 4 | DAX, German stocks |
+| 🇪🇺 Europe | European Financial Review | 3 | EU banking, finance |
+| 🌍 Global | Investing.com | 3 | Multi-market coverage |
+| 🇪🇺 **Regulatory** | **ECB Press Releases** | **5** | **Monetary policy (Tier 5!)** |
+
+**Coverage:** US + Europe + Spain + Regulatory
+
+**Spanish Market Coverage:** ✅ IBEX 35, Spanish banks (BBVA, Santander), Spanish economy
+
+---
+
+## 🚀 Setup Instructions
+
+### 1. Import Workflow to N8N
+
+**For v3.0 Global Edition:**
 ```bash
-USIS_BRAIN_URL=https://your-repl-slug.replit.app
-NEWS_INGESTION_SECRET=<生成一个强密码>
+# In your N8N instance:
+# 1. Go to Workflows → Import from File
+# 2. Select: news-rss-collector-v3-global.json
+# 3. Click "Import"
 ```
 
-**生成SECRET：**
+### 2. Configure Environment Variables
+
+**In N8N Settings → Environment Variables:**
 ```bash
-# 在Replit Shell中运行
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+USIS_BRAIN_URL=https://your-replit-url.repl.co
+NEWS_INGESTION_SECRET=<same-as-USIS-Brain>
 ```
 
-### 3. 在USIS Brain中设置相同的SECRET
-
-在Replit Secrets中添加：
+**In USIS Brain (.env or Secrets):**
+```bash
+NEWS_INGESTION_SECRET=<generate-random-secret>
+NEWS_CHANNEL_ID=-4997808098
+ENABLE_NEWS_SYSTEM=true
 ```
-NEWS_INGESTION_SECRET=<与N8N相同的密码>
-```
 
-### 4. 激活工作流
+### 3. Activate Workflow
 
-在N8N中点击工作流右上角的 **Activate** 开关。
-
-✅ 完成！N8N现在每5分钟自动采集新闻并发送到USIS Brain。
+1. Open imported workflow in N8N
+2. Click **"Active"** toggle (top-right)
+3. Workflow will run every 5 minutes automatically
 
 ---
 
-## 📊 工作流说明
+## 🔍 How It Works
 
-### 节点流程
+### Architecture: "Eyes & Brain"
 
 ```
-Schedule (每5分钟)
+N8N Workflow (every 5min)
   ↓
-并行采集4个RSS源:
-  - WSJ Markets
-  - FT Companies  
-  - MarketWatch
-  - TechCrunch
+Parallel RSS Fetch (10 sources)
   ↓
-Merge All Feeds (合并)
+Attach Metadata (source name + tier)
   ↓
-Parse RSS Items (解析XML)
+Merge (append mode - prevents article loss)
   ↓
-Send to USIS Brain (POST /api/news/ingest)
+Format for API (strip HTML, extract summary)
   ↓
-Check Success (验证响应)
+POST /api/news/ingest (authenticated)
   ↓
-Log Success / Log Error
+USIS Brain
+  ↓ Deduplication (24h URL + 6h topic)
+  ↓ ImpactRank 2.0 Scoring (7 factors)
+  ↓ Routing (fastlane/2h/4h digest)
+  ↓ Fastlane Push (if score ≥7)
+  ↓
+Telegram Delivery
 ```
 
-### 采集源配置（Tier 4 + Tier 3）
+### RSS Collection Details
 
-| 源 | URL | Tier | 可靠性 |
-|---|---|---|---|
-| WSJ Markets | `https://feeds.a.dj.com/rss/RSSMarketsMain.xml` | 4 | 4.2 |
-| FT Companies | `https://www.ft.com/companies?format=rss` | 4 | 4.2 |
-| MarketWatch | `https://www.marketwatch.com/rss/topstories` | 4 | 4.2 |
-| TechCrunch | `https://techcrunch.com/feed/` | 3 | 3.5 |
+**Parallel Processing:**
+- All 10 sources fetched simultaneously
+- Each source gets metadata tag (source name + tier)
+- Append-mode merge prevents article loss
 
----
-
-## 🔧 自定义配置
-
-### 添加更多新闻源
-
-1. 在N8N中复制现有的RSS节点（如"WSJ Markets RSS"）
-2. 修改URL为新的RSS源
-3. 添加到"Merge All Feeds"节点
-4. 在解析节点中添加source名称和tier级别
-
-**示例：添加Yahoo Finance**
-```json
-{
-  "url": "https://finance.yahoo.com/news/rssindex",
-  "source": "Yahoo Finance",
-  "tier": 3
-}
-```
-
-### 调整采集频率
-
-修改"Schedule Every 5min"节点：
-- 每1分钟：`minutesInterval: 1`
-- 每15分钟：`minutesInterval: 15`
-- 每小时：`hoursInterval: 1`
-
----
-
-## 🛡️ 安全说明
-
-### API认证
-
-所有请求必须携带认证header：
-```
-Authorization: Bearer <NEWS_INGESTION_SECRET>
-```
-
-或
-```
-x-api-key: <NEWS_INGESTION_SECRET>
-```
-
-### 错误处理
-
-USIS Brain返回的HTTP状态码：
-- **200**: 成功
-- **400**: 验证错误（缺少字段、格式错误）
-- **401**: 认证失败（检查SECRET是否匹配）
-- **500**: 服务器错误
-
----
-
-## 📈 监控与调试
-
-### 查看N8N执行日志
-
-1. 在N8N工作流页面点击"Executions"
-2. 查看每次执行的详细日志
-3. 检查哪些新闻被成功发送，哪些失败
-
-### 查看USIS Brain日志
-
-在Replit Console中查看：
-```
-📰 [Ingest] Processing: Apple Reports Strong Q4...
-📊 [Ingest] Score: 7.5/10 (fresh + high-impact)
-🚀 [Ingest] Pushed to Fastlane: success
-```
-
-### 常见问题
-
-**Q: 所有请求返回401**
-A: 检查N8N和USIS Brain的`NEWS_INGESTION_SECRET`是否一致
-
-**Q: 新闻被标记为duplicate**
-A: 正常！去重系统在工作，24小时内相同URL会被跳过
-
-**Q: Score太低被suppressed**
-A: 新闻质量不够高（<3分），不会推送到Telegram
-
----
-
-## 🎯 数据格式
-
-### N8N发送的数据结构
-
-```json
-{
-  "title": "Apple Reports Record Q4 Earnings",
-  "url": "https://www.wsj.com/...",
-  "summary": "Apple Inc announced quarterly earnings...",
-  "published_at": "2025-11-10T15:30:00Z",
-  "source": "WSJ",
-  "tier": 4,
-  "symbols": []
-}
-```
-
-### USIS Brain返回的响应
-
-**成功（Fastlane）：**
-```json
-{
-  "ok": true,
-  "action": "pushed",
-  "channel": "fastlane",
-  "score": 7.5,
-  "message_id": "12345",
-  "elapsed_ms": 234
-}
-```
-
-**成功（Digest）：**
-```json
-{
-  "ok": true,
-  "action": "routed",
-  "channel": "digest_2h",
-  "score": 6.2,
-  "elapsed_ms": 187
-}
-```
-
-**跳过（重复）：**
-```json
-{
-  "ok": true,
-  "action": "skipped",
-  "reason": "url_duplicate_within_24h",
-  "elapsed_ms": 45
-}
-```
-
-**错误：**
-```json
-{
-  "ok": false,
-  "error": "Missing required field: title",
-  "stage": "validation",
-  "httpStatus": 400
-}
-```
-
----
-
-## 📚 进阶配置
-
-### Tier 5源（官方/监管）
-
-添加SEC和美联储RSS（需要额外配置）：
-
+**Data Transformation:**
 ```javascript
-// SEC EDGAR RSS
 {
-  "url": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=&company=&dateb=&owner=include&start=0&count=40&output=atom",
-  "source": "SEC EDGAR",
-  "tier": 5
-}
-
-// Federal Reserve
-{
-  "url": "https://www.federalreserve.gov/feeds/press_all.xml",
-  "source": "Federal Reserve",
-  "tier": 5
+  title: "Breaking News...",
+  url: "https://...",
+  summary: "Stripped HTML content (max 500 chars)",
+  published_at: "2025-11-10T12:00:00Z",
+  source: "El Economista",
+  tier: 4,
+  symbols: [] // Extracted by USIS Brain
 }
 ```
 
-### 批量处理
+**Error Handling:**
+- Individual source failures don't break workflow
+- N8N retries failed requests automatically
+- USIS Brain validates tier bounds (1-5)
 
-修改"Send to USIS Brain"节点的batching设置：
-```json
-{
-  "batching": {
-    "batch": {
-      "batchSize": 10  // 每次发送10条新闻
-    }
-  }
-}
+---
+
+## 📊 Source Tier System
+
+| Tier | Authority | Examples | Impact on Score |
+|------|-----------|----------|-----------------|
+| 5 | Official/Regulatory | ECB, Fed, SEC | Source Quality: 1.0 |
+| 4 | Premium Media | WSJ, FT, El Economista | Source Quality: 0.85 |
+| 3 | Industry/Aggregators | TechCrunch, Investing.com | Source Quality: 0.65 |
+| 2 | Verified Social | Twitter Blue | Source Quality: 0.40 |
+| 1 | Unverified | Social media | Source Quality: 0.20 |
+
+**Note:** ECB press releases are Tier 5 (highest authority for EU monetary policy)
+
+---
+
+## 🇪🇸 Spanish Market Coverage
+
+### Sources Added in v3.0
+
+1. **El Economista** (`eleconomista.es/rss/rss-mercados.xml`)
+   - IBEX 35 stocks
+   - Spanish banking (BBVA, Santander)
+   - Spanish economy news
+
+2. **Expansión** (`expansion.com/rss/portada.xml`)
+   - Business news
+   - Corporate earnings
+   - Spanish company analysis
+
+### Symbols Covered
+- **IBEX 35 Components:** TEF, SAN, BBVA, IBE, REP, ITX, etc.
+- **Banks:** Santander (SAN), BBVA (BBVA), CaixaBank (CABK)
+- **Energy:** Repsol (REP), Iberdrola (IBE)
+- **Telecom:** Telefónica (TEF)
+- **Retail:** Inditex (ITX)
+
+---
+
+## 🛠️ Troubleshooting
+
+### Workflow Not Running
+
+**Check:**
+1. Workflow is "Active" (toggle in top-right)
+2. Schedule trigger shows green checkmark
+3. N8N has internet access to fetch RSS feeds
+
+**Test Manually:**
+```
+1. Open workflow in N8N
+2. Click "Execute Workflow" button
+3. Check execution log for errors
 ```
 
+### USIS Brain Not Receiving News
+
+**Check:**
+1. Environment variables set correctly in N8N
+2. `USIS_BRAIN_URL` is accessible from N8N
+3. `NEWS_INGESTION_SECRET` matches on both sides
+
+**Test Authentication:**
+```bash
+curl -X POST https://your-repl.co/api/news/ingest \
+  -H "Authorization: Bearer YOUR_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"test","url":"https://test.com","summary":"test","published_at":"2025-11-10T12:00:00Z","source":"Test","tier":4,"symbols":[]}'
+```
+
+Expected response: `{"ok":true,"action":"..."}`
+
+### RSS Feed Not Working
+
+**Common Issues:**
+- **El Economista/Expansión:** May require specific RSS path (check website)
+- **Paywalls:** FT may block some articles
+- **Rate Limits:** N8N's 5min interval is safe for all sources
+
+**Alternative Spanish Sources:**
+- BME (Spanish Exchange): `bolsasymercados.es/bme-exchange/en/RSS`
+- Investing.com Spanish: `es.investing.com/webmaster-tools/rss`
+- Estrategias de Inversión: `estrategiasdeinversion.com/corporativo/rss`
+
 ---
 
-## ✅ 验证清单
+## 📝 Maintenance
 
-部署前检查：
-- [ ] N8N工作流已导入并激活
-- [ ] `USIS_BRAIN_URL`环境变量已设置
-- [ ] `NEWS_INGESTION_SECRET`在N8N和USIS Brain中一致
-- [ ] USIS Brain的数据库schema已初始化（`node init-news-schema.js`）
-- [ ] `NEWS_CHANNEL_ID`已在Replit Secrets中配置
-- [ ] 手动测试：在N8N中点击"Execute Workflow"查看是否成功
+### Weekly Tasks
+- Check N8N execution log for failed RSS fetches
+- Monitor USIS Brain logs for authentication errors
+- Review fastlane push rate (should be ~5-15% of total articles)
+
+### Monthly Tasks
+- Update RSS feed URLs if sources change
+- Review source tier assignments based on quality
+- Prune old workflow executions in N8N
 
 ---
 
-## 🆘 技术支持
-
-遇到问题？检查：
-1. N8N执行日志（Executions标签）
-2. USIS Brain Console日志（Replit）
-3. Telegram频道是否收到推送
-
-**关键指标：**
-- 采集成功率：>90%
-- 去重率：20-40%（正常）
-- Fastlane推送：高分新闻（≥7分）
-- Digest积压：定期2h/4h发送
+Last Updated: 2025-11-10
+Version: 3.0 Global Edition
