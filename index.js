@@ -4083,6 +4083,77 @@ setInterval(() => {
 // ========================================
 // 🧠 核心Orchestrator函数（v1.1重构）
 // ========================================
+
+/**
+ * 🆕 v1.1.1: Orchestrator包装函数（供Telegram Bot等直接调用）
+ * 移除HTTP自调用，直接调用核心逻辑
+ * @param {Object} params - 分析参数
+ * @returns {Promise<Object>} 分析结果
+ */
+async function invokeOrchestrator(params) {
+  const started = Date.now();
+  const reqId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  
+  // 提取参数
+  const {
+    text = "default",
+    user_id = "system",
+    chat_type = "private",
+    mode = "auto",
+    budget = "low",
+    symbols = [],
+    lang = "zh"
+  } = params;
+  
+  // 注册请求状态（与HTTP端点保持一致）
+  requestTracker.set(reqId, {
+    startTime: started,
+    status: 'processing',
+    stage: 'init',
+    user_id,
+    text: String(text).slice(0, 50)
+  });
+  
+  try {
+    // 调用核心逻辑
+    const result = await runOrchestratorCore({
+      reqId,
+      text,
+      user_id,
+      chat_type,
+      mode,
+      budget,
+      symbols,
+      lang,
+      userHistory: null
+    });
+    
+    // 更新tracker状态
+    if (requestTracker.has(reqId)) {
+      requestTracker.set(reqId, {
+        ...requestTracker.get(reqId),
+        status: 'completed',
+        duration: Date.now() - started
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    // 更新tracker状态
+    if (requestTracker.has(reqId)) {
+      requestTracker.set(reqId, {
+        ...requestTracker.get(reqId),
+        status: 'error',
+        error: error.message
+      });
+    }
+    throw error;
+  } finally {
+    // 请求完成后清理tracker（延迟5分钟，与TTL保持一致）
+    setTimeout(() => requestTracker.delete(reqId), REQUEST_TTL_MS);
+  }
+}
+
 /**
  * 核心分析引擎 - 可被HTTP端点和Telegram Bot直接调用
  * @param {Object} params - 分析参数
@@ -5883,38 +5954,35 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
         console.log('🧠 常规分析');
         await telegramAPI('sendMessage', { chat_id: chatId, text: '🧠 正在分析...' });
         
-        // 🆕 v1.1: 强化HTTP调用保护（25秒超时+重试）
+        // 🆕 v1.1.1: 移除HTTP自调用，直接调用核心逻辑（带超时保护）
         let data = null;
         let retryCount = 0;
         const maxRetries = 1; // 最多重试1次
         
         while (retryCount <= maxRetries) {
-          // 🔧 每次重试都创建新的AbortController和timeout
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 25000); // 25秒超时
+          // 🔧 创建timeout timer（确保总是被清理）
+          let timeoutId = null;
           
           try {
-            console.log(`🔄 [尝试${retryCount + 1}/${maxRetries + 1}] 调用orchestrate (超时25s)...`);
+            console.log(`🔄 [尝试${retryCount + 1}/${maxRetries + 1}] 调用invokeOrchestrator (超时25s)...`);
             
-            const response = await fetch(`http://localhost:${PORT}/brain/orchestrate`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
+            // 🔧 使用Promise.race实现25秒超时（确保清理timer）
+            data = await Promise.race([
+              invokeOrchestrator({
                 text,
                 user_id: `tg_${userId}`,
                 chat_type: message.chat.type,
                 mode: 'auto',
-                budget: 'low'
+                budget: 'low',
+                symbols: [],
+                lang: 'zh'
               }),
-              signal: controller.signal
-            });
+              new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error('Orchestrator timeout after 25s')), 25000);
+              })
+            ]);
             
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-          
-            data = await response.json();
-            console.log('✅ orchestrate调用成功');
+            console.log('✅ invokeOrchestrator调用成功');
             break; // 成功，跳出循环
             
           } catch (fetchError) {
@@ -5922,23 +5990,25 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
             
             if (retryCount > maxRetries) {
               // 超过重试次数，立即抛出错误（不执行backoff）
-              console.error(`❌ orchestrate调用失败（${maxRetries + 1}次尝试）:`, fetchError.message);
+              console.error(`❌ invokeOrchestrator调用失败（${maxRetries + 1}次尝试）:`, fetchError.message);
               throw new Error(`分析请求失败: ${fetchError.message}`);
             }
             
             // 指数退避后重试
             const backoffMs = 100 * Math.pow(2, retryCount - 1);
-            console.warn(`⚠️  orchestrate调用失败，${backoffMs}ms后重试...`);
+            console.warn(`⚠️  invokeOrchestrator调用失败，${backoffMs}ms后重试...`);
             await new Promise(resolve => setTimeout(resolve, backoffMs));
           } finally {
-            // 🔧 确保总是清理timeout（防止timer泄漏）
-            clearTimeout(timeoutId);
+            // 🔧 确保总是清理timeout（防止unhandledRejection）
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
           }
         }
         
         // 处理返回的数据
         if (!data) {
-          throw new Error('orchestrate未返回数据');
+          throw new Error('invokeOrchestrator未返回数据');
         }
         
         try {
