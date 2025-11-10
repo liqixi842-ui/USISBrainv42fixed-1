@@ -121,14 +121,12 @@ class NewsPushService {
     let message = `${scoreEmoji} *${this.escapeMarkdown(displayTitle)}*\n`;
     message += `📊 评分: ${score.toFixed(1)}/10\n\n`;
     
-    // Full summary (no truncation)
-    if (displaySummary) {
-      message += `${this.escapeMarkdown(displaySummary)}\n\n`;
-    }
-    
-    // AI Commentary (new addition)
+    // AI Enhanced Content (includes detailed summary + investment analysis)
     if (item.ai_commentary) {
-      message += `💡 *投资分析*：${this.escapeMarkdown(item.ai_commentary)}\n\n`;
+      message += `${this.escapeMarkdown(item.ai_commentary)}\n\n`;
+    } else if (displaySummary) {
+      // Fallback to original summary if no AI content
+      message += `${this.escapeMarkdown(displaySummary)}\n\n`;
     }
     
     // Link

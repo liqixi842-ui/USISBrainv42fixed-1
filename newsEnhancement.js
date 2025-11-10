@@ -74,50 +74,52 @@ class NewsEnhancementService {
       const { title, summary, symbols = [] } = newsItem;
       const symbolList = symbols.slice(0, 3).join(', ');
 
-      const prompt = `作为专业投资分析师，为以下财经新闻撰写深度投资影响分析，适合分享到专业投资群组：
+      // Simplified prompt: focus on investment analysis only
+      const prompt = `你是资深投资分析师，基于新闻标题和摘要，为投资群组撰写150-200字的深度投资影响分析。
 
 【新闻标题】${title}
-
-【新闻摘要】${summary || '无'}
-
+【新闻摘要】${summary || title}
 【相关股票】${symbolList || '无'}
 
-请撰写100-150字的专业投资分析，必须包含：
+要求撰写150-200字的投资分析，必须包含：
+1. 短期影响（1-3个月）：对相关板块/个股的预期影响，具体到涨跌幅度
+2. 长期趋势（6-12个月）：行业发展方向或政策影响
+3. 投资建议：给出明确的操作建议（买入/持有/观望/规避）
+4. 相关机会：如果有相关的投资机会，请具体说明
 
-1. **短期影响**（1-3个月）：对相关板块/个股的预期影响
-2. **长期趋势**（6-12个月）：行业发展方向或政策影响
-3. **投资建议**：具体的操作建议（关注/观望/规避等）
+语言要求：
+- 专业但易懂，适合分享到投资群组
+- 避免空话套话，给出实质性分析
+- 最少150字，确保内容充实
 
-要求：
-- 语言专业，逻辑严谨，避免AI生成痕迹
-- 基于新闻内容给出实质性分析，不重复新闻内容
-- 如有相关股票，必须提及具体影响
-- 适合直接转发到投资群组
+投资分析：`;
 
-投资影响分析：`;
-
+      console.log(`🤖 [AI] Calling GPT-4o for detailed analysis (max_tokens: 800)...`);
+      
+      const requestBody = {
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: '你是资深投资分析师，必须撰写详细的财经新闻分析。严格遵守字数要求（第一段最少200字，第二段最少100字）。'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: 800,
+        temperature: 0.7
+      };
+      
       const response = await fetch(this.openaiEndpoint, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${this.openaiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'system',
-              content: '你是资深投资分析师，擅长深度分析财经新闻对市场的影响，撰写适合专业投资者阅读的分析报告。'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          max_tokens: 400,
-          temperature: 0.6
-        }),
-        signal: AbortSignal.timeout(20000) // 20s timeout
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(25000) // 25s timeout
       });
 
       if (!response.ok) {
@@ -125,11 +127,30 @@ class NewsEnhancementService {
       }
 
       const data = await response.json();
-      const commentary = data.choices?.[0]?.message?.content?.trim();
+      const fullContent = data.choices?.[0]?.message?.content?.trim();
+      const tokensUsed = data.usage?.total_tokens || 0;
+      
+      console.log(`🤖 [AI] Response: ${fullContent?.length || 0} chars, ${tokensUsed} tokens used`);
 
-      if (commentary) {
-        console.log(`💡 [Enhancement] Generated commentary: ${commentary.substring(0, 50)}...`);
-        return commentary;
+      if (fullContent && fullContent.length > 100) {
+        // Split by double newline to separate two parts
+        const parts = fullContent.split(/\n\n+/);
+        
+        if (parts.length >= 2) {
+          // Two distinct parts found
+          const contentSummary = parts[0].trim();
+          const investmentImpact = parts.slice(1).join('\n\n').trim();
+          
+          const commentary = `📋 详细解读\n${contentSummary}\n\n💡 投资影响\n${investmentImpact}`;
+          
+          console.log(`💡 [Enhancement] Generated ${commentary.length}-char analysis`);
+          return commentary;
+        } else {
+          // Single block - use as-is with prefix
+          const commentary = `📋 ${fullContent}`;
+          console.log(`💡 [Enhancement] Generated ${commentary.length}-char content`);
+          return commentary;
+        }
       }
 
       return '';
