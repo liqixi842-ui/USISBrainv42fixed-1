@@ -299,6 +299,7 @@ async function initDatabase() {
         CREATE INDEX IF NOT EXISTS idx_news_items_published ON news_items(published_at DESC);
         CREATE INDEX IF NOT EXISTS idx_news_items_symbol ON news_items USING GIN(symbols);
         CREATE INDEX IF NOT EXISTS idx_news_items_url_hash ON news_items(MD5(url));
+        CREATE INDEX IF NOT EXISTS idx_news_items_source_id ON news_items(source_id);
         
         -- 新闻评分表（ImpactRank 2.0 - 7因子评分）
         CREATE TABLE IF NOT EXISTS news_scores (
@@ -319,8 +320,8 @@ async function initDatabase() {
         -- 新闻路由状态表（Fastlane/2h/4h分桶）
         CREATE TABLE IF NOT EXISTS news_routing_state (
           news_item_id TEXT PRIMARY KEY REFERENCES news_items(id),
-          channel TEXT CHECK (channel IN ('fastlane', 'digest_2h', 'digest_4h')),
-          status TEXT CHECK (status IN ('pending', 'sent', 'suppressed')) DEFAULT 'pending',
+          channel TEXT NOT NULL CHECK (channel IN ('fastlane', 'digest_2h', 'digest_4h')),
+          status TEXT NOT NULL CHECK (status IN ('pending', 'sent', 'suppressed')) DEFAULT 'pending',
           routed_at TIMESTAMPTZ DEFAULT NOW(),
           fade_level INTEGER DEFAULT 0,
           upgrade_flag BOOLEAN DEFAULT false,
@@ -332,7 +333,7 @@ async function initDatabase() {
         CREATE TABLE IF NOT EXISTS news_push_history (
           id SERIAL PRIMARY KEY,
           news_item_id TEXT REFERENCES news_items(id),
-          channel TEXT NOT NULL,
+          channel TEXT NOT NULL CHECK (channel IN ('fastlane', 'digest_2h', 'digest_4h')),
           sent_at TIMESTAMPTZ DEFAULT NOW(),
           message_id TEXT,
           outcome TEXT CHECK (outcome IN ('success', 'failed', 'throttled')),
@@ -353,6 +354,7 @@ async function initDatabase() {
         );
         CREATE INDEX IF NOT EXISTS idx_news_dedupe_topic ON news_dedupe_cache(topic_hash);
         CREATE INDEX IF NOT EXISTS idx_news_dedupe_first_seen ON news_dedupe_cache(first_seen_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_news_dedupe_url_hash ON news_dedupe_cache(url_hash);
         
         -- AI分析师点评表（Claude/GPT-4o生成的专业点评）
         CREATE TABLE IF NOT EXISTS news_analyst_notes (
