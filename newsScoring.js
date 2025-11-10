@@ -19,26 +19,43 @@ class NewsScorer {
   constructor() {
     // Context-aware weights (can be adjusted based on market hours, user holdings, etc.)
     this.defaultWeights = {
-      freshness: 0.20,
-      source_quality: 0.20,
+      freshness: 0.15,
+      source_quality: 0.15,
       relevance: 0.15,
-      impact: 0.20,
+      impact: 0.35,      // BOOSTED: Impact is most important
       novelty: 0.10,
-      corroboration: 0.10,
+      corroboration: 0.05,
       attention: 0.05
     };
 
-    // Impact keyword patterns
+    // Impact keyword patterns (ordered by priority)
     this.impactPatterns = {
-      earnings: { keywords: ['earnings', 'revenue', 'profit', 'eps', 'guidance', 'beat', 'miss'], weight: 1.0 },
-      merger: { keywords: ['merger', 'acquisition', 'buyout', 'takeover', 'deal'], weight: 0.95 },
-      bankruptcy: { keywords: ['bankruptcy', 'chapter 11', 'insolvency', 'default'], weight: 1.0 },
-      lawsuit: { keywords: ['lawsuit', 'litigation', 'settlement', 'fraud', 'investigation'], weight: 0.75 },
-      product: { keywords: ['launch', 'release', 'recall', 'approval', 'fda'], weight: 0.7 },
-      executive: { keywords: ['ceo', 'cfo', 'resign', 'appoint', 'hire', 'fire'], weight: 0.65 },
-      dividend: { keywords: ['dividend', 'buyback', 'split', 'distribution'], weight: 0.6 },
-      upgrade: { keywords: ['upgrade', 'downgrade', 'rating', 'analyst', 'target'], weight: 0.55 },
-      contract: { keywords: ['contract', 'partnership', 'agreement', 'collaboration'], weight: 0.5 }
+      // TIER 1: Extreme urgency (1.0)
+      breaking: { keywords: ['breaking', 'urgent', 'emergency', 'alert', 'crisis', 'unprecedented'], weight: 1.0 },
+      bankruptcy: { keywords: ['bankruptcy', 'chapter 11', 'insolvency', 'default', 'collapse'], weight: 1.0 },
+      
+      // TIER 2: Major events (0.9-0.95)
+      merger: { keywords: ['merger', 'acquisition', 'buyout', 'takeover', 'deal worth'], weight: 0.95 },
+      market_move: { keywords: ['surge', 'plunge', 'rally', 'crash', 'soar', 'tumble', 'spike'], weight: 0.90 },
+      
+      // TIER 3: Financial results (0.85)
+      earnings: { keywords: ['earnings beat', 'revenue beat', 'profit surge', 'eps beat', 'guidance raised'], weight: 0.85 },
+      
+      // TIER 4: Regulatory/Legal (0.75-0.80)
+      regulatory: { keywords: ['sec', 'investigation', 'probe', 'enforcement', 'violation'], weight: 0.80 },
+      lawsuit: { keywords: ['lawsuit', 'litigation', 'settlement', 'fraud'], weight: 0.75 },
+      
+      // TIER 5: Product/Executive (0.65-0.70)
+      product: { keywords: ['launch', 'breakthrough', 'revolutionary', 'recall', 'fda approval'], weight: 0.70 },
+      executive: { keywords: ['ceo resign', 'cfo resign', 'ceo appoint', 'leadership change'], weight: 0.65 },
+      
+      // TIER 6: Analyst/Dividends (0.55-0.60)
+      analyst: { keywords: ['upgrade to buy', 'downgrade to sell', 'price target raised', 'price target cut'], weight: 0.60 },
+      dividend: { keywords: ['dividend increase', 'special dividend', 'buyback', 'stock split'], weight: 0.55 },
+      
+      // TIER 7: Routine (0.40-0.50)
+      contract: { keywords: ['contract win', 'partnership', 'agreement', 'collaboration'], weight: 0.50 },
+      routine: { keywords: ['update', 'announcement', 'statement', 'comment'], weight: 0.40 }
     };
   }
 
@@ -124,26 +141,36 @@ class NewsScorer {
   calculateRelevance(article, userSymbols = []) {
     let score = 0;
 
-    // Symbol match bonus
-    if (article.primary_symbol && userSymbols.includes(article.primary_symbol)) {
-      score += 0.5; // Strong match
-    } else if (article.symbols && article.symbols.some(s => userSymbols.includes(s))) {
-      score += 0.3; // Partial match
+    // Symbol match bonus (if user tracks symbols)
+    if (userSymbols.length > 0) {
+      if (article.primary_symbol && userSymbols.includes(article.primary_symbol)) {
+        score += 0.6; // Strong match
+      } else if (article.symbols && article.symbols.some(s => userSymbols.includes(s))) {
+        score += 0.4; // Partial match
+      }
+    } else {
+      // Default relevance: Check if article has financial symbols (shows it's market-relevant)
+      if (article.symbols && article.symbols.length > 0) {
+        score = 0.7; // Has market symbols = relevant financial news
+      } else {
+        score = 0.4; // Generic news
+      }
     }
 
-    // Default relevance if user has no tracked symbols
-    if (userSymbols.length === 0) {
-      score = 0.5; // Neutral
+    // Major index symbols boost (market-wide impact)
+    const majorIndices = ['SPY', 'QQQ', 'DIA', 'IWM'];
+    if (article.symbols && article.symbols.some(s => majorIndices.includes(s))) {
+      score += 0.2; // Market-wide news
     }
 
     // Title length bonus (longer titles often more specific)
-    if (article.title.length > 100) {
-      score += 0.1;
+    if (article.title.length > 80) {
+      score += 0.05;
     }
 
-    // Has summary bonus
-    if (article.summary && article.summary.length > 100) {
-      score += 0.1;
+    // Has detailed summary bonus
+    if (article.summary && article.summary.length > 150) {
+      score += 0.05;
     }
 
     return Math.min(score, 1.0);
