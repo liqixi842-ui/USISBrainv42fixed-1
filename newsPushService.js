@@ -64,7 +64,7 @@ class NewsPushService {
         
         try {
           const message = this.formatSingleDigestItem(item, i + 1, sorted.length, channel);
-          const result = await this.sendMessage(message);
+          const result = await this.sendMessage(message, true); // Use Markdown like urgent format
           
           // Record push history
           await this.recordPush(item.id, channel, result);
@@ -100,7 +100,7 @@ class NewsPushService {
   }
 
   /**
-   * Format single digest item (v3.2: professional format for sharing)
+   * Format single digest item (v3.2: similar to urgent format with AI commentary)
    */
   formatSingleDigestItem(item, index, total, channel) {
     const score = parseFloat(item.composite_score) || 0;
@@ -112,34 +112,32 @@ class NewsPushService {
     // Generate hashtags
     const hashtags = this.generateHashtags(item, score);
     
-    // Emoji indicator based on score
+    // Score emoji
     let scoreEmoji = '📊';
-    if (score >= 9.0) scoreEmoji = '🔥';
-    else if (score >= 8.0) scoreEmoji = '⚡';
-    else if (score >= 7.0) scoreEmoji = '💼';
+    if (score >= 8.0) scoreEmoji = '⚡';
+    else if (score >= 7.0) scoreEmoji = '🔥';
     
-    // Build professional message format
-    let message = `${scoreEmoji} ${displayTitle}\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `📊 重要性评分: ${score.toFixed(1)}/10.0\n\n`;
+    // Build message (similar to urgent format, with Markdown)
+    let message = `${scoreEmoji} *${this.escapeMarkdown(displayTitle)}*\n`;
+    message += `📊 评分: ${score.toFixed(1)}/10\n\n`;
     
-    // Full summary (no truncation for professional sharing)
+    // Full summary (no truncation)
     if (displaySummary) {
-      message += `📰 核心要点：\n${displaySummary}\n\n`;
+      message += `${this.escapeMarkdown(displaySummary)}\n\n`;
     }
     
-    // Professional analysis (enhanced AI commentary)
+    // AI Commentary (new addition)
     if (item.ai_commentary) {
-      message += `💡 投资影响分析：\n${item.ai_commentary}\n\n`;
+      message += `💡 *投资分析*：${this.escapeMarkdown(item.ai_commentary)}\n\n`;
     }
     
-    // Source credibility
-    const tierDesc = item.tier >= 4 ? '权威来源' : item.tier >= 3 ? '主流媒体' : '一般来源';
-    message += `📌 信息来源：${item.source_name || '未知'} (${tierDesc})\n`;
-    message += `🔗 原文链接：${item.url}\n\n`;
+    // Link
+    message += `🔗 [查看原文](${item.url})\n`;
+    message += `📌 来源: ${item.source_name || '未知'}\n\n`;
     
-    // Hashtags for categorization
-    message += `${hashtags}`;
+    // Hashtags
+    message += `${hashtags}\n\n`;
+    message += `_USIS Brain 新闻系统 v3\\.2_`;
     
     return message;
   }
