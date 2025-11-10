@@ -12,8 +12,18 @@ class NewsEnhancementService {
   constructor() {
     this.deeplKey = process.env.DEEPL_API_KEY;
     this.openaiKey = process.env.OPENAI_API_KEY;
-    this.deeplEndpoint = 'https://api.deepl.com/v2/translate';
+    
+    // Auto-detect DeepL API type (Free vs Pro)
+    const isFreeKey = this.deeplKey && this.deeplKey.endsWith(':fx');
+    this.deeplEndpoint = isFreeKey 
+      ? 'https://api-free.deepl.com/v2/translate'
+      : 'https://api.deepl.com/v2/translate';
+    
     this.openaiEndpoint = 'https://api.openai.com/v1/chat/completions';
+    
+    if (this.deeplKey) {
+      console.log(`✅ [Enhancement] DeepL API configured (${isFreeKey ? 'Free' : 'Pro'} key)`);
+    }
   }
 
   /**
