@@ -6150,6 +6150,7 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
     }
   }, 2000);
   
+  } // 🆕 v1.1: 闭合acquireBotLock的else块
 } else {
   console.log('⚠️  未配置 TELEGRAM_BOT_TOKEN');
 }
