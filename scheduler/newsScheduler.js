@@ -111,43 +111,72 @@ class NewsScheduler {
   // This scheduler only handles digest delivery and cleanup
 
   /**
-   * Schedule digest delivery
+   * Schedule digest delivery (v3.0 Simplified)
+   * Only 2-hour Top-10 digest now
    */
   scheduleDelivery() {
     if (!this.pushService) return;
 
-    // 2-hour digest
+    // 2-hour Top-10 digest (repeatable)
     const digest2hInterval = setInterval(() => {
       this.sendDigest('digest_2h');
     }, 2 * 60 * 60 * 1000);
 
-    // 4-hour digest
-    const digest4hInterval = setInterval(() => {
-      this.sendDigest('digest_4h');
-    }, 4 * 60 * 60 * 1000);
-
-    this.intervals.push(digest2hInterval, digest4hInterval);
-    console.log('⏰ [NewsScheduler] Digests scheduled (2h, 4h)');
+    this.intervals.push(digest2hInterval);
+    console.log('⏰ [NewsScheduler] 2-hour Top-10 digest scheduled');
   }
 
   /**
-   * Send digest for a channel
+   * Send digest for a channel (v3.0 Top-10 Logic)
+   * 
+   * NEW: Queries Top 10 news by score (allows repeats)
+   * - Lookback: last 12 hours (configurable)
+   * - Includes translations and AI commentary
+   * - No markAsSent (allows repeat digests)
    */
   async sendDigest(channel) {
     try {
-      console.log(`\n📬 [NewsScheduler] Preparing ${channel} digest...`);
+      console.log(`\n📬 [NewsScheduler] Preparing ${channel} Top-10 digest...`);
 
-      const items = await this.router.getPendingItems(channel, 50);
+      // Configurable lookback window (default 12 hours)
+      const lookbackHours = parseInt(process.env.DIGEST_LOOKBACK_HOURS) || 12;
+
+      // Query Top 10 news by composite score
+      const result = await safeQuery(`
+        SELECT 
+          ni.id,
+          ni.title,
+          ni.summary,
+          ni.url,
+          ni.published_at,
+          ni.symbols,
+          ni.translated_title,
+          ni.translated_summary,
+          ni.ai_commentary,
+          ns.composite_score,
+          nsrc.name as source,
+          nsrc.tier
+        FROM news_items ni
+        JOIN news_scores ns ON ns.news_item_id = ni.id
+        LEFT JOIN news_sources nsrc ON nsrc.id = ni.source_id
+        JOIN news_routing_state nrs ON nrs.news_item_id = ni.id
+        WHERE ni.published_at > NOW() - INTERVAL '${lookbackHours} hours'
+          AND nrs.channel IN ('urgent_10', 'digest_2h')
+        ORDER BY ns.composite_score DESC, ni.published_at DESC
+        LIMIT 10
+      `);
+
+      const items = result.rows;
       
       if (items.length === 0) {
-        console.log(`ℹ️  [NewsScheduler] No items for ${channel}`);
+        console.log(`ℹ️  [NewsScheduler] No items in last ${lookbackHours}h for ${channel}`);
         return;
       }
 
+      // Push digest (no markAsSent - allows repeats)
       await this.pushService.pushDigest(items, channel);
-      await this.router.markAsSent(items.map(item => item.id));
 
-      console.log(`✅ [NewsScheduler] ${channel} digest sent (${items.length} items)\n`);
+      console.log(`✅ [NewsScheduler] ${channel} digest sent: Top ${items.length} from last ${lookbackHours}h\n`);
 
     } catch (error) {
       console.error(`❌ [NewsScheduler] Failed to send ${channel} digest:`, error.message);

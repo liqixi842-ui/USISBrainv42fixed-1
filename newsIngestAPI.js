@@ -4,22 +4,24 @@
  * Receives raw news data from N8N, processes through scoring/routing/push pipeline
  */
 
-const { NewsDeduplicator } = require('./newsDeduplication');
-const { NewsScorer } = require('./newsScoring');
-const { NewsRouter } = require('./newsRouter');
+const { getDeduplicator } = require('./newsDeduplication');
+const { getScorer } = require('./newsScoring');
+const { getRouter } = require('./newsRouter');
 const NewsPushService = require('./newsPushService');
+const { NewsEnhancementService } = require('./newsEnhancement');
 const { safeQuery } = require('./dbUtils');
 
 class NewsIngestAPI {
   constructor(telegramToken = null, newsChannelId = null) {
-    this.deduplicator = new NewsDeduplicator();
-    this.scorer = new NewsScorer();
-    this.router = new NewsRouter();
+    this.deduplicator = getDeduplicator();
+    this.scorer = getScorer();
+    this.router = getRouter();
+    this.enhancer = new NewsEnhancementService();
     this.pushService = (telegramToken && newsChannelId) 
       ? new NewsPushService(telegramToken, newsChannelId)
       : null;
     
-    console.log('🧠 [NewsIngestAPI] Initialized (push service:', this.pushService ? 'enabled' : 'disabled', ')');
+    console.log('🧠 [NewsIngestAPI] Initialized (push:', this.pushService ? 'enabled' : 'disabled', ', enhancement: enabled)');
   }
 
   /**
@@ -79,7 +81,16 @@ class NewsIngestAPI {
 
       console.log(`📊 [Ingest] Score: ${scoreResult.composite_score}/10 (${scoreResult.breakdown})`);
 
-      // 5. Route to appropriate channel
+      // 5. Enhance with translation and AI commentary
+      const enhanced = await this.enhancer.enhanceNewsItem(article);
+      if (enhanced.translated_title || enhanced.translated_summary || enhanced.ai_commentary) {
+        await this.saveEnhancement(newsItemId, enhanced);
+      }
+      
+      // Merge enhanced data back into article
+      Object.assign(article, enhanced);
+
+      // 6. Route to appropriate channel
       const channel = this.router.determineChannel(scoreResult.composite_score);
       
       if (channel === 'suppressed') {
@@ -94,8 +105,8 @@ class NewsIngestAPI {
 
       await this.saveRoutingState(newsItemId, channel);
 
-      // 6. Push if Fastlane (immediate push)
-      if (channel === 'fastlane' && this.pushService) {
+      // 7. Push if urgent_10 (immediate push within 10 minutes)
+      if (channel === 'urgent_10' && this.pushService) {
         try {
           // Prepare news item with score for push
           const newsItemWithScore = {
@@ -108,7 +119,7 @@ class NewsIngestAPI {
           // Mark as sent in routing state (prevent duplicate in digests)
           await this.router.markAsSent([newsItemId]);
           
-          console.log(`🚀 [Ingest] Pushed to Fastlane: message_id ${pushResult.message_id}`);
+          console.log(`🚀 [Ingest] Pushed to urgent_10: message_id ${pushResult.message_id}`);
           
           return {
             ok: true,
@@ -294,6 +305,25 @@ class NewsIngestAPI {
         scoreResult.scores.attention,
         scoreResult.composite_score,
         JSON.stringify(scoreResult)
+      ]
+    );
+  }
+
+  /**
+   * Save enhancement data (translation + AI commentary) to database
+   */
+  async saveEnhancement(newsItemId, enhanced) {
+    await safeQuery(
+      `UPDATE news_items 
+       SET translated_title = $2,
+           translated_summary = $3,
+           ai_commentary = $4
+       WHERE id = $1`,
+      [
+        newsItemId,
+        enhanced.translated_title || null,
+        enhanced.translated_summary || null,
+        enhanced.ai_commentary || null
       ]
     );
   }

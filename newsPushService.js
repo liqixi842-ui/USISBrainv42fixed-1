@@ -19,22 +19,23 @@ class NewsPushService {
   }
 
   /**
-   * Push single news item immediately (Fastlane)
+   * Push single news item immediately (Urgent 10-score news)
+   * Renamed from Fastlane in v3.0
    */
   async pushFastlane(newsItem) {
     try {
       const message = this.formatFastlaneMessage(newsItem);
       const result = await this.sendMessage(message);
 
-      // Record push history
-      await this.recordPush(newsItem.id, 'fastlane', result);
+      // Record push history (v3.0: channel = 'urgent_10')
+      await this.recordPush(newsItem.id, 'urgent_10', result);
 
-      console.log(`📤 [Push/Fastlane] Sent: ${newsItem.title.substring(0, 50)}...`);
+      console.log(`📤 [Push/urgent_10] Sent: ${newsItem.title.substring(0, 50)}...`);
       return result;
 
     } catch (error) {
-      console.error(`❌ [Push/Fastlane] Failed:`, error.message);
-      await this.recordPush(newsItem.id, 'fastlane', null, error.message);
+      console.error(`❌ [Push/urgent_10] Failed:`, error.message);
+      await this.recordPush(newsItem.id, 'urgent_10', null, error.message);
       throw error;
     }
   }
@@ -74,6 +75,7 @@ class NewsPushService {
 
   /**
    * Format Fastlane message (single breaking news)
+   * NEW: Uses Chinese translation + AI commentary
    */
   formatFastlaneMessage(newsItem) {
     const score = newsItem.composite_score || 0;
@@ -87,12 +89,18 @@ class NewsPushService {
       minute: '2-digit'
     });
 
+    // Use translated title if available, otherwise original
+    const displayTitle = newsItem.translated_title || newsItem.title;
+    
+    // Use translated summary if available, otherwise original
+    const displaySummary = newsItem.translated_summary || newsItem.summary || displayTitle;
+
     // Generate hashtags for search
     const hashtags = this.generateHashtags(newsItem, score);
 
-    // Build message
-    let message = `🚨 *突发新闻* \\(评分: ${score}/10\\)\n\n`;
-    message += `📰 *${this.escapeMarkdown(newsItem.title)}*\n\n`;
+    // Build message (NEW FORMAT)
+    let message = `🚨 *突发新闻* \\(评分: ${score.toFixed(1)}/10\\)\n\n`;
+    message += `📰 *${this.escapeMarkdown(displayTitle)}*\n\n`;
     
     // Symbols with hashtags
     if (symbols.length > 0) {
@@ -103,9 +111,13 @@ class NewsPushService {
     message += `⏰ ${time}\n`;
     message += `📊 来源: ${newsItem.source || '未知'}\n\n`;
     
-    // Summary
-    const summary = newsItem.summary || newsItem.title;
-    message += `${this.escapeMarkdown(summary)}\n\n`;
+    // Summary (Chinese)
+    message += `${this.escapeMarkdown(displaySummary)}\n\n`;
+    
+    // AI Commentary (NEW)
+    if (newsItem.ai_commentary) {
+      message += `💡 *未来影响*：${this.escapeMarkdown(newsItem.ai_commentary)}\n\n`;
+    }
     
     // Link
     message += `🔗 [查看原文](${newsItem.url})\n\n`;
@@ -119,10 +131,11 @@ class NewsPushService {
 
   /**
    * Format digest message (multiple items)
+   * NEW v3.0: Uses Chinese translations
    */
   formatDigestMessage(newsItems, channel) {
     const channelNames = {
-      'digest_2h': '📊 2小时重要新闻摘要',
+      'digest_2h': '📊 2小时Top 10新闻',
       'digest_4h': '📋 4小时常规新闻摘要'
     };
 
@@ -144,17 +157,34 @@ class NewsPushService {
     sorted.slice(0, 10).forEach((item, index) => {
       const score = parseFloat(item.composite_score) || 0;
       
-      // Stock symbols (first line)
+      // Use translated content if available (v3.0)
+      const displayTitle = item.translated_title || item.title;
+      const displaySummary = item.translated_summary || item.summary;
+      
+      // Stock symbols
       const symbols = item.symbols?.slice(0, 5) || [];
       const symbolTags = symbols.map(s => `#${s}`).join(' ');
       
-      // Category hashtags (second line)
+      // Category hashtags
       const hashtags = this.generateHashtags(item, score);
       
-      message += `${index + 1}\\. *${this.escapeMarkdown(item.title)}*\n`;
+      // Title
+      message += `${index + 1}\\. *${this.escapeMarkdown(displayTitle)}*\n`;
       message += `   📊 ${score.toFixed(1)}/10`;
       if (symbolTags) message += ` | ${symbolTags}`;
       message += `\n`;
+      
+      // Summary (v3.0: show brief excerpt, 60 chars max)
+      if (displaySummary) {
+        const excerpt = displaySummary.substring(0, 60) + (displaySummary.length > 60 ? '...' : '');
+        message += `   📄 ${this.escapeMarkdown(excerpt)}\n`;
+      }
+      
+      // AI Commentary (v3.0)
+      if (item.ai_commentary) {
+        message += `   💡 ${this.escapeMarkdown(item.ai_commentary)}\n`;
+      }
+      
       message += `   🔗 [查看原文](${item.url})\n`;
       message += `   ${hashtags}\n\n`;
     });
@@ -163,7 +193,7 @@ class NewsPushService {
       message += `_\\.\\.\\.还有 ${newsItems.length - 10} 条新闻_\n\n`;
     }
 
-    message += `\\-\\-\\-\n_USIS Brain 新闻系统 v2\\.0_`;
+    message += `\\-\\-\\-\n_USIS Brain 新闻系统 v3\\.0_`;
 
     return message;
   }

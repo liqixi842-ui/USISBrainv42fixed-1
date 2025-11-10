@@ -1,13 +1,11 @@
 /**
- * USIS News v2.0 - Routing Engine
+ * USIS News v2.0 - Routing Engine (Simplified)
  * 
- * Smart routing based on composite score:
- * - ≥7.0: Fastlane (instant push)
- * - 5.0-6.9: 2-hour digest
- * - 3.0-4.9: 4-hour digest
- * - <3.0: Suppress (low quality)
+ * NEW Routing Strategy:
+ * - Score = 10.0: urgent_10 (push within 10 minutes)
+ * - All others: digest_2h (Top 10 every 2 hours)
  * 
- * Includes fade mechanism and upgrade detection
+ * No more fastlane/4h digest. Simple and clean.
  */
 
 const { safeQuery } = require('./dbUtils');
@@ -15,10 +13,8 @@ const { safeQuery } = require('./dbUtils');
 class NewsRouter {
   constructor() {
     this.routingRules = [
-      { minScore: 7.0, channel: 'fastlane', description: 'Breaking news - instant push' },
-      { minScore: 5.0, channel: 'digest_2h', description: 'Important news - 2h digest' },
-      { minScore: 3.0, channel: 'digest_4h', description: 'Regular news - 4h digest' },
-      { minScore: 0, channel: 'suppressed', description: 'Low quality - suppressed' }
+      { minScore: 10.0, channel: 'urgent_10', description: 'Perfect score - instant push within 10min' },
+      { minScore: 0, channel: 'digest_2h', description: 'All news - 2h Top 10 digest' }
     ];
 
     this.fadeThreshold = 3; // Number of times before starting fade
@@ -71,7 +67,7 @@ class NewsRouter {
     } catch (error) {
       console.error('❌ [Router] Routing failed:', error.message);
       return {
-        channel: 'digest_4h', // Default fallback
+        channel: 'digest_2h', // Default fallback
         error: error.message
       };
     }
@@ -123,26 +119,26 @@ class NewsRouter {
   }
 
   /**
-   * Apply fade mechanism to channel
+   * Apply fade mechanism to channel (SIMPLIFIED for v3.0)
+   * Note: With v3.0 Top-10 digest allowing repeats, fade is less critical
    */
   applyFade(channel, fadeLevel) {
     if (fadeLevel === 0) return channel;
 
-    // Fade rules
+    // NEW Simplified fade rules (only 2 channels: urgent_10, digest_2h)
     if (fadeLevel >= 5) {
       return 'suppressed'; // Too many repeats
     }
 
     if (fadeLevel >= 3) {
-      // Downgrade to lower priority channel
-      if (channel === 'fastlane') return 'digest_2h';
-      if (channel === 'digest_2h') return 'digest_4h';
-      if (channel === 'digest_4h') return 'suppressed';
+      // Downgrade urgent to digest
+      if (channel === 'urgent_10') return 'digest_2h';
+      if (channel === 'digest_2h') return 'suppressed';
     }
 
     if (fadeLevel >= 1) {
-      // Mild downgrade
-      if (channel === 'fastlane') return 'digest_2h';
+      // Mild downgrade: urgent → digest
+      if (channel === 'urgent_10') return 'digest_2h';
     }
 
     return channel;
