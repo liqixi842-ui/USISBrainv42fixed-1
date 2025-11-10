@@ -77,22 +77,44 @@ class NewsPushService {
    */
   formatFastlaneMessage(newsItem) {
     const score = newsItem.composite_score || 0;
-    const symbols = newsItem.symbols?.join(', ') || 'General';
-    const time = new Date(newsItem.published_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+    const symbols = newsItem.symbols || [];
+    const time = new Date(newsItem.published_at).toLocaleString('zh-CN', { 
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
 
-    return `🚨 *BREAKING NEWS* (ImpactRank: ${score}/10)
+    // Generate hashtags for search
+    const hashtags = this.generateHashtags(newsItem, score);
 
-📰 *${this.escapeMarkdown(newsItem.title)}*
+    // Build message
+    let message = `🚨 *突发新闻* \\(评分: ${score}/10\\)\n\n`;
+    message += `📰 *${this.escapeMarkdown(newsItem.title)}*\n\n`;
+    
+    // Symbols with hashtags
+    if (symbols.length > 0) {
+      const symbolTags = symbols.slice(0, 5).map(s => `#${s}`).join(' ');
+      message += `🏷️ ${symbolTags}\n`;
+    }
+    
+    message += `⏰ ${time}\n`;
+    message += `📊 来源: ${newsItem.source || '未知'}\n\n`;
+    
+    // Summary
+    const summary = newsItem.summary || newsItem.title;
+    message += `${this.escapeMarkdown(summary)}\n\n`;
+    
+    // Link
+    message += `🔗 [查看原文](${newsItem.url})\n\n`;
+    
+    // Hashtags for categorization
+    message += `${hashtags}\n\n`;
+    message += `_USIS Brain 新闻系统 v2\\.0 | 快讯通道_`;
 
-🏷️ ${symbols}
-⏰ ${time}
-
-${this.escapeMarkdown(newsItem.summary || '')}
-
-🔗 [阅读原文](${newsItem.url})
-
----
-_USIS Brain News v2.0 | Fastlane_`;
+    return message;
   }
 
   /**
@@ -105,7 +127,14 @@ _USIS Brain News v2.0 | Fastlane_`;
     };
 
     const header = channelNames[channel] || '📰 新闻摘要';
-    const timestamp = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+    const timestamp = new Date().toLocaleString('zh-CN', { 
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
 
     let message = `${header}\n⏰ ${timestamp}\n\n`;
 
@@ -114,19 +143,20 @@ _USIS Brain News v2.0 | Fastlane_`;
 
     sorted.slice(0, 10).forEach((item, index) => {
       const score = item.composite_score || 0;
-      const symbols = item.symbols?.slice(0, 3).join(', ') || '';
+      const symbols = item.symbols?.slice(0, 3) || [];
+      const symbolTags = symbols.map(s => `#${s}`).join(' ');
       
-      message += `${index + 1}. *${this.escapeMarkdown(item.title)}*\n`;
+      message += `${index + 1}\\. *${this.escapeMarkdown(item.title)}*\n`;
       message += `   📊 ${score}/10`;
-      if (symbols) message += ` | 🏷️ ${symbols}`;
-      message += `\n   🔗 ${item.url}\n\n`;
+      if (symbolTags) message += ` | ${symbolTags}`;
+      message += `\n   🔗 [查看原文](${item.url})\n\n`;
     });
 
     if (newsItems.length > 10) {
-      message += `_...还有 ${newsItems.length - 10} 条新闻_\n\n`;
+      message += `_\\.\\.\\.还有 ${newsItems.length - 10} 条新闻_\n\n`;
     }
 
-    message += `---\n_USIS Brain News v2.0_`;
+    message += `\\-\\-\\-\n_USIS Brain 新闻系统 v2\\.0_`;
 
     return message;
   }
@@ -212,6 +242,36 @@ _USIS Brain News v2.0 | Fastlane_`;
       console.error('❌ [Push] Failed to get stats:', error.message);
       return [];
     }
+  }
+
+  /**
+   * Generate hashtags for news categorization
+   */
+  generateHashtags(newsItem, score) {
+    const tags = [];
+
+    // Score-based tags
+    if (score >= 9) tags.push('#极端重要');
+    else if (score >= 7) tags.push('#突发');
+    else if (score >= 5) tags.push('#重要');
+
+    // Category tags based on title/summary
+    const text = `${newsItem.title} ${newsItem.summary || ''}`.toLowerCase();
+    
+    if (text.includes('earning') || text.includes('财报') || text.includes('revenue')) tags.push('#财报');
+    if (text.includes('merger') || text.includes('acquisition') || text.includes('并购') || text.includes('收购')) tags.push('#并购');
+    if (text.includes('fed') || text.includes('美联储') || text.includes('rate') || text.includes('利率')) tags.push('#货币政策');
+    if (text.includes('ipo') || text.includes('上市')) tags.push('#IPO');
+    if (text.includes('lawsuit') || text.includes('诉讼') || text.includes('fraud')) tags.push('#法律');
+    if (text.includes('ceo') || text.includes('cfo') || text.includes('高管')) tags.push('#高管');
+    if (text.includes('bankruptcy') || text.includes('破产') || text.includes('default')) tags.push('#危机');
+    
+    // Source tag
+    if (newsItem.source) {
+      tags.push(`#${newsItem.source.replace(/\s+/g, '')}`);
+    }
+
+    return tags.join(' ');
   }
 
   /**
