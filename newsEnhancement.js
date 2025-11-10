@@ -1,29 +1,20 @@
 /**
- * USIS News v2.0 - Content Enhancement Service
+ * USIS News v3.0 - Content Enhancement Service
  * 
  * Handles:
- * 1. Translation (DeepL): English/Spanish/German → Chinese
+ * 1. Translation (Google Translate): English/Spanish/German → Chinese (FREE, no API key)
  * 2. AI Commentary (GPT-4o): Generate future impact analysis
  */
 
 const fetch = require('node-fetch');
+const translate = require('@vitalets/google-translate-api').translate;
 
 class NewsEnhancementService {
   constructor() {
-    this.deeplKey = process.env.DEEPL_API_KEY;
     this.openaiKey = process.env.OPENAI_API_KEY;
-    
-    // Auto-detect DeepL API type (Free vs Pro)
-    const isFreeKey = this.deeplKey && this.deeplKey.endsWith(':fx');
-    this.deeplEndpoint = isFreeKey 
-      ? 'https://api-free.deepl.com/v2/translate'
-      : 'https://api.deepl.com/v2/translate';
-    
     this.openaiEndpoint = 'https://api.openai.com/v1/chat/completions';
     
-    if (this.deeplKey) {
-      console.log(`✅ [Enhancement] DeepL API configured (${isFreeKey ? 'Free' : 'Pro'} key)`);
-    }
+    console.log('✅ [Enhancement] Google Translate configured (FREE, no API key required)');
   }
 
   /**
@@ -36,9 +27,9 @@ class NewsEnhancementService {
   }
 
   /**
-   * Translate text to Chinese using DeepL
+   * Translate text to Chinese using Google Translate (FREE)
    * @param {string} text - Text to translate
-   * @param {string} sourceLang - Source language (EN, ES, DE, etc.)
+   * @param {string} sourceLang - Source language (auto-detected)
    * @returns {Promise<string>} Translated text
    */
   async translateToChinese(text, sourceLang = 'auto') {
@@ -47,32 +38,15 @@ class NewsEnhancementService {
         return text; // Already Chinese or empty
       }
 
-      if (!this.deeplKey) {
-        console.warn('⚠️  [Enhancement] DEEPL_API_KEY not configured, skipping translation');
-        return text;
-      }
-
-      const response = await fetch(this.deeplEndpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `DeepL-Auth-Key ${this.deeplKey}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          text: text,
-          target_lang: 'ZH',
-          source_lang: sourceLang === 'auto' ? '' : sourceLang
-        })
+      // Use Google Translate (free, no API key required)
+      const result = await translate(text, { 
+        to: 'zh-CN',
+        autoCorrect: true
       });
 
-      if (!response.ok) {
-        throw new Error(`DeepL API error: ${response.status}`);
-      }
+      const translated = result.text;
 
-      const data = await response.json();
-      const translated = data.translations?.[0]?.text;
-
-      if (translated) {
+      if (translated && translated !== text) {
         console.log(`✅ [Enhancement] Translated: ${text.substring(0, 50)}... → ${translated.substring(0, 50)}...`);
         return translated;
       }
