@@ -111,19 +111,34 @@ class NewsScheduler {
   // This scheduler only handles digest delivery and cleanup
 
   /**
-   * Schedule digest delivery (v3.0 Simplified)
-   * Only 2-hour Top-10 digest now
+   * Schedule digest delivery (v2.0 Fixed Schedule)
+   * Push at even hours: 00:00, 02:00, 04:00, 06:00, 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00
    */
   scheduleDelivery() {
     if (!this.pushService) return;
 
-    // 2-hour Top-10 digest (repeatable)
-    const digest2hInterval = setInterval(() => {
-      this.sendDigest('digest_2h');
-    }, 2 * 60 * 60 * 1000);
+    // Check every minute if we should send digest
+    const checkInterval = setInterval(() => {
+      const now = new Date();
+      const hour = now.getHours();
+      const minute = now.getMinutes();
+      
+      // Send at even hours (0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22) at 00 minutes
+      if (hour % 2 === 0 && minute === 0) {
+        console.log(`⏰ [NewsScheduler] Triggered at ${hour.toString().padStart(2, '0')}:00`);
+        this.sendDigest('digest_2h');
+      }
+    }, 60 * 1000); // Check every minute
 
-    this.intervals.push(digest2hInterval);
-    console.log('⏰ [NewsScheduler] 2-hour Top-10 digest scheduled');
+    this.intervals.push(checkInterval);
+    
+    const now = new Date();
+    const currentHour = now.getHours();
+    const nextEvenHour = currentHour % 2 === 0 ? currentHour + 2 : currentHour + 1;
+    const nextHourDisplay = (nextEvenHour % 24).toString().padStart(2, '0');
+    
+    console.log('⏰ [NewsScheduler] Top-10 digest scheduled for even hours (00:00, 02:00, 04:00, 06:00, 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00)');
+    console.log(`⏰ [NewsScheduler] Next push: ${nextHourDisplay}:00`);
   }
 
   /**
