@@ -29,8 +29,4 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "gce"
-run = [
-  "sh",
-  "-c",
-  "PORT=3000 ENABLE_TELEGRAM=true ENABLE_NEWS_SYSTEM=true node index.js",
-]
+run = ["sh", "-c", "ENABLE_TELEGRAM=true ENABLE_NEWS_SYSTEM=true node index.js"]
