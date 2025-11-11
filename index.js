@@ -54,11 +54,18 @@ const { handleConversation, isGreeting, isHelpRequest, isSystemCommand } = requi
 const app = express();
 app.set('trust proxy', 1);
 
+// 🆕 App startup timestamp for uptime calculation
+const APP_START_TIME = Date.now();
+
 // 🆕 Simple health check endpoint (before middleware)
 app.get('/health', (_req, res) => {
+  const uptimeSeconds = Math.floor((Date.now() - APP_START_TIME) / 1000);
   res.status(200).json({
     ok: true,
     status: 'ok',
+    pid: process.pid,
+    port: Number(process.env.PORT) || 8080,
+    uptime: uptimeSeconds,
     ts: Date.now(),
     message: 'HTTPS verified and healthy ✅'
   });
