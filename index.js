@@ -761,7 +761,9 @@ app.post("/api/news/ingest", async (req, res) => {
     // 2. Lazy initialization
     if (!newsIngestAPI) {
       // 🆕 v6.3: 环境感知Token选择（与主bot保持一致）
-      const IS_PROD = process.env.REPL_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
+      const IS_PROD = process.env.ENVIRONMENT === 'production' || 
+                      process.env.REPL_DEPLOYMENT === '1' || 
+                      process.env.NODE_ENV === 'production';
       const telegramToken = IS_PROD 
         ? process.env.TELEGRAM_BOT_TOKEN 
         : (process.env.TELEGRAM_BOT_TOKEN_TEST || process.env.TELEGRAM_BOT_TOKEN);
@@ -5726,7 +5728,9 @@ app.listen(PORT, "0.0.0.0", () => {
 
 // ====== Telegram Bot v5.0 (手动轮询 - Replit兼容) ======
 // 🆕 v6.3: 环境感知Token选择（Publishing用正式bot，Workspace用测试bot）
-const IS_PRODUCTION = process.env.REPL_DEPLOYMENT === '1' || process.env.NODE_ENV === 'production';
+const IS_PRODUCTION = process.env.ENVIRONMENT === 'production' || 
+                      process.env.REPL_DEPLOYMENT === '1' || 
+                      process.env.NODE_ENV === 'production';
 const TELEGRAM_TOKEN = IS_PRODUCTION 
   ? process.env.TELEGRAM_BOT_TOKEN  // 生产环境：强制使用正式bot
   : (process.env.TELEGRAM_BOT_TOKEN_TEST || process.env.TELEGRAM_BOT_TOKEN); // 开发环境：优先测试bot
