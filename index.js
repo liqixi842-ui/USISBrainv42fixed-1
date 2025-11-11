@@ -63,7 +63,7 @@ console.log(`🏴 Feature Flags: DB=${ENABLE_DB}, Telegram=${ENABLE_TELEGRAM}`);
 
 // 🆕 v1.1: 增强数据库连接池管理（查询超时+生命周期钩子+健康检查）
 let pool = null;
-const DB_QUERY_TIMEOUT_MS = 8000; // 8秒查询超时
+const DB_QUERY_TIMEOUT_MS = 20000; // 20秒查询超时（新闻查询优化）
 
 function getPool() {
   if (!ENABLE_DB) {
