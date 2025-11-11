@@ -52,6 +52,7 @@ const { dialogueManager } = require("./dialogueManager");
 const { handleConversation, isGreeting, isHelpRequest, isSystemCommand } = require("./conversationAgent");
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json());
 
 // 🛡️ v6.1: Feature Flags (Dev环境内存优化)
