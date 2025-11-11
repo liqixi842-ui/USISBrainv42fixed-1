@@ -53,6 +53,17 @@ const { handleConversation, isGreeting, isHelpRequest, isSystemCommand } = requi
 
 const app = express();
 app.set('trust proxy', 1);
+
+// 🆕 Simple health check endpoint (before middleware)
+app.get('/health', (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    status: 'ok',
+    ts: Date.now(),
+    message: 'HTTPS verified and healthy ✅'
+  });
+});
+
 app.use(express.json());
 
 // 🛡️ v6.1: Feature Flags (Dev环境内存优化)
