@@ -15,7 +15,7 @@ else
 fi
 
 # 检查端口
-PORT=3000
+PORT=${PORT:-8080}
 if netstat -tuln 2>/dev/null | grep ":$PORT " > /dev/null; then
     echo "✅ 端口$PORT: 监听中"
 else
@@ -43,7 +43,8 @@ echo ""
 echo "🧪 API测试（轻量级请求）..."
 
 # 发送测试请求
-response=$(curl -s -X POST http://localhost:3000/api/analyze \
+PORT=${PORT:-8080}
+response=$(curl -s -X POST http://localhost:${PORT}/api/analyze \
   -H "Content-Type: application/json" \
   -d '{"text":"test","chat_type":"private","user_id":"health_check"}' \
   --max-time 30)
