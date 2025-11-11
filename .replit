@@ -23,9 +23,11 @@ packages = [
   "try",
 ]
 
-[[ports]]
-localPort = 3000
-externalPort = 80
+# [[ports]] 对 Reserved VM 无效，可删除或保留都不会生效
+# 建议删除避免混淆
+# [[ports]]
+# localPort = 3000
+# externalPort = 80
 
 [deployment]
 deploymentTarget = "gce"
