@@ -5788,7 +5788,23 @@ process.on('exit', () => {
   releaseBotLock();
 });
 
-if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
+// 🔒 安全阀：检查Token状态，防止冲突
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TOKEN_IS_SAFE = BOT_TOKEN && 
+                      BOT_TOKEN !== 'ROTATING' && 
+                      BOT_TOKEN.length > 10 &&
+                      BOT_TOKEN !== 'undefined' &&
+                      BOT_TOKEN !== 'null';
+
+if (!TOKEN_IS_SAFE) {
+  console.log('🛡️  [SAFE MODE] Telegram bot disabled (no token or rotating)');
+  console.log('📋 [SAFE MODE] Token状态:', {
+    exists: !!BOT_TOKEN,
+    value: BOT_TOKEN?.substring(0, 10) + '...' || 'undefined',
+    isRotating: BOT_TOKEN === 'ROTATING'
+  });
+  console.log('💡 [SAFE MODE] 设置有效的TELEGRAM_BOT_TOKEN后重启应用');
+} else if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
   // 🆕 v1.1: 获取Bot锁（防止重复启动）
   if (!acquireBotLock()) {
     console.error('❌ 无法启动Telegram Bot: 已有实例在运行');
@@ -6345,8 +6361,13 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
   // 轮询循环
   let offset = 0;
   let polling = false;
+  let shouldStop = false; // 优雅关闭标志
   
   async function pollTelegram() {
+    if (shouldStop) {
+      console.log('🛑 [TG] Polling stopped gracefully');
+      return;
+    }
     if (polling) return;
     polling = true;
     
@@ -6379,7 +6400,21 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
   }
   
   // 延迟2秒启动轮询（让Express服务器先启动）
-  setTimeout(() => {
+  setTimeout(async () => {
+    try {
+      // 🔧 修复冲突：启动前强制删除Webhook（确保使用长轮询）
+      console.log('🔄 [TG] Deleting webhook before starting polling...');
+      const deleteResult = await telegramAPI('deleteWebhook', { drop_pending_updates: true }, 10000);
+      if (deleteResult.ok) {
+        console.log('✅ [TG] Webhook deleted successfully');
+      } else {
+        console.warn('⚠️  [TG] Webhook delete warning:', deleteResult);
+      }
+    } catch (deleteError) {
+      console.error('⚠️  [TG] Failed to delete webhook:', deleteError.message);
+      // 继续启动，因为webhook可能本来就不存在
+    }
+    
     console.log('✅ Telegram Bot 已启动（手动轮询）');
     console.log('💬 现在可以在 Telegram 里直接发消息了');
     
@@ -6396,6 +6431,27 @@ if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
       setTimeout(pollTelegram, 5000);
     }
   }, 2000);
+  
+  // 🛡️ 优雅关闭：停止轮询
+  const originalSIGTERM = process.listeners('SIGTERM')[0];
+  const originalSIGINT = process.listeners('SIGINT')[0];
+  
+  process.removeAllListeners('SIGTERM');
+  process.removeAllListeners('SIGINT');
+  
+  process.on('SIGTERM', async () => {
+    console.log('📡 [TG] Stopping bot polling...');
+    shouldStop = true;
+    releaseBotLock();
+    if (originalSIGTERM) await originalSIGTERM();
+  });
+  
+  process.on('SIGINT', async () => {
+    console.log('📡 [TG] Stopping bot polling...');
+    shouldStop = true;
+    releaseBotLock();
+    if (originalSIGINT) await originalSIGINT();
+  });
   
   } // 🆕 v1.1: 闭合acquireBotLock的else块
 } else {
