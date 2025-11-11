@@ -1,0 +1,113 @@
+好的，咱们把它像工程事故一样复盘+修好。你给的线索非常关键：「via: 1.1 google」纯文本 404，且应用日志已在 0.0.0.0:3000 监听 —— 这几乎把锅指向 GCE 负载均衡（LB）的后端检查与端口/路径不一致，而不是 Express 本身。
+
+根因结论（按概率从高到低）
+
+端口错位（最可能）
+Reserved VM 的 GCE 后端常用 固定探测端口（通常 8080 或 80），而你在 .replit [deployment].run 里强行 PORT=3000。
+在 Reserved VM 模式下，[[ports]] 基本对部署无效；LB 不会“把 80/8080 映射到 3000”。结果是：LB 在健康检查端口上探测不到服务 → 后端被判不健康 → GFE 返回一个“Not Found”的LB 自己的 404（不是你的 Express 404 页面）。
+
+健康检查路径不匹配
+你把 /health 改到永远 200 很好，但 LB 未必检查 /health；GCE 缺省经常打 /。如果你没有给 / 返回 200，LB 依旧判不健康。
+
+.replit 的 [[ports]] 与 Reserved VM 不相干
+这段在 Repl 里预览有用，但 在 deploymentTarget="gce" 的部署上不会自动生效。实际以 LB 后端服务的端口/路径 为准（由 Replit 的部署器预设），你应当只监听 $PORT，不要自己硬编码端口或试图映射。
+
+一次到位的修复方案（最小改动，立即生效型）
+1) 让应用只听 $PORT，不要覆盖
+
+把 .replit 里的 run 命令 移除 PORT=3000，保留其它环境变量：
+
+[deployment]
+deploymentTarget = "gce"
+run = ["sh", "-c", "ENABLE_TELEGRAM=true ENABLE_NEWS_SYSTEM=true node index.js"]
+
+
+在 index.js 顶部的监听配置已经是对的：
+
+const PORT = process.env.PORT || 5000;  // ✅ 允许平台注入 PORT（Reserved VM 会给）
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 USIS Brain v6.0 online on port ${PORT}`);
+  console.log(`📍 Listening on 0.0.0.0:${PORT}`);
+});
+
+
+这样 Reserved VM 注入的真实端口（很可能是 8080）会被正确采用，LB 能连上。
+
+2) 补一个根路径 / 返回 200
+
+多数 GCE 健康检查打 /。你即便有 /health，也要保证 / 是 200。
+
+app.get("/", (_req, res) => {
+  res.status(200).type("text/plain").send("OK");
+});
+
+3) 健康检查 /health 继续保持“永远 200”
+
+你已经做好降级不失败的设计了，保留即可。务必保证无论内部依赖是否出错，状态码都为 200（内容里区分 ok / degraded）。
+
+可选但推荐的小加固
+
+在启动时打印实际端口，帮助核对平台注入值：
+
+console.log("ENV PORT =", process.env.PORT);
+
+
+关闭任何会把 / 重定向或 404 的中间件（例如只挂了一个路由前缀 /api，但没给 / 兜底时）。
+
+验证步骤（本地日志 + 远端探测）
+
+重新部署（应用会按 $PORT 监听）。查看日志应看到：
+
+ENV PORT = 8080         // 示例
+📍 Listening on 0.0.0.0:8080
+
+
+从外部访问：GET / 应返回 OK 文本，HTTP 200；GET /health 返回你的 JSON，HTTP 200。
+注：LB 的健康状态一般会在几秒到数十秒内切换到 healthy（无需你等待说明；只要日志正确、/ 200，它就会好）。
+
+你提的具体问题逐条答复
+
+为什么 GCLB 仍返回 404？
+因为后端不健康或端口不通，GCLB 自己回的 404（GFE），请求压根没到你的 Express。
+
+是否需要配置额外的健康检查路径？
+在你无法直接改 LB 配置的前提下，保证 / 返回 200 是最保险的通用解。/health 也保留为 200 没坏处。
+
+.replit 的 run 命令是否真的被 Reserved VM 使用？
+是的，[deployment].run 会作为启动命令。但 [[ports]] 在 Reserved VM 上不负责“转发/映射”，不要依赖它。
+
+是否有隐藏配置导致端口不匹配？
+有可能——Reserved VM/GCE 期望你监听平台注入的 $PORT（常见 8080）。你手工 PORT=3000 会导致错位。
+
+部署后需要多久生效？
+重新部署后应用即刻运行；LB 健康状态切换通常只需 几十秒级（取决于探测周期和成功阈值）。不需要做任何异步等待描述，按上面的改动完成后就能立刻自测。
+
+一段「一键式」补丁（你可直接粘贴修改）
+
+.replit：
+
+[[ports]]
+localPort = 3000
+externalPort = 80
+
+[deployment]
+deploymentTarget = "gce"
+# 去掉 PORT=3000；让平台注入 PORT（常见 8080）
+run = ["sh", "-c", "ENABLE_TELEGRAM=true ENABLE_NEWS_SYSTEM=true node index.js"]
+
+
+index.js（新增两个小块）
+在 app.listen(...) 之前添加：
+
+// 兜底根路径，保证 GCLB 健康检查打 "/" 时拿到 200
+app.get("/", (_req, res) => {
+  res.status(200).type("text/plain").send("OK");
+});
+
+// 可选：打印平台注入端口，便于核查
+console.log("ENV PORT =", process.env.PORT);
+
+
+完成这两处后重新部署；如果日志显示在 8080（或平台注入的端口）监听，且 GET / 能 200，你的 404 就会消失。
+
+如果按上面做了仍旧 404，那下一步该锁定的是「LB 的 Host/Path URL Map 是否把你的域名/路径路由到了这组后端」，但在 Replit Reserved VM 的托管部署里，这通常由 Replit 统一配置，很少出错；绝大多数现场问题都卡在 PORT 被手工固定 或 没有给 / 返回 200 这两点上。继续的话，我们可以再加一招：打印请求日志（含 x-forwarded-*）确认流量是否实际进入你的进程，然后再看 URL Map。

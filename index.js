@@ -5696,6 +5696,7 @@ app.post("/brain/analyze_no_screenshot", async (req, res) => {
   }
 });
 
+console.log("🔍 ENV PORT =", process.env.PORT);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 USIS Brain v6.0 online on port ${PORT} 🆕 [Multi-AI + n8n Integration]`);
