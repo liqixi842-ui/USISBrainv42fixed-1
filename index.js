@@ -657,22 +657,36 @@ app.get("/brain/stats", (_req, res) => {
 });
 
 app.get("/health", async (_req, res) => {
-  // 🆕 v1.1: 包含数据库健康状态
-  const dbHealth = await checkDatabaseHealth();
-  
-  // 🆕 v6.0: 包含N8N API健康状态
-  const n8nClient = getN8NClient();
-  const n8nHealth = await n8nClient.healthCheck();
-  
-  const isHealthy = !ENABLE_DB || dbHealth.healthy;
-  
-  res.status(200).json({ 
-    ok: true,
-    status: isHealthy ? 'ok' : 'degraded',
-    ts: Date.now(),
-    database: ENABLE_DB ? dbHealth : { healthy: true, reason: 'Database disabled' },
-    n8n: n8nHealth
-  });
+  try {
+    const dbHealth = await checkDatabaseHealth();
+    
+    let n8nHealth;
+    try {
+      const n8nClient = getN8NClient();
+      n8nHealth = await n8nClient.healthCheck();
+    } catch (n8nError) {
+      console.warn('[Health] N8N health check failed:', n8nError.message);
+      n8nHealth = { healthy: false, reason: n8nError.message };
+    }
+    
+    const isHealthy = !ENABLE_DB || dbHealth.healthy;
+    
+    res.status(200).json({ 
+      ok: true,
+      status: isHealthy ? 'ok' : 'degraded',
+      ts: Date.now(),
+      database: ENABLE_DB ? dbHealth : { healthy: true, reason: 'Database disabled' },
+      n8n: n8nHealth
+    });
+  } catch (error) {
+    console.error('[Health] Health check failed:', error.message);
+    res.status(200).json({
+      ok: true,
+      status: 'degraded',
+      ts: Date.now(),
+      error: error.message
+    });
+  }
 });
 
 // 🆕 请求状态监控端点
