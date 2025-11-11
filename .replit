@@ -2,7 +2,26 @@ modules = ["nodejs-20", "postgresql-16"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["glib", "nss", "nspr", "dbus", "atk", "at-spi2-atk", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libxcb", "libxkbcommon", "alsa-lib", "mesa", "cups", "try"]
+packages = [
+  "glib",
+  "nss",
+  "nspr",
+  "dbus",
+  "atk",
+  "at-spi2-atk",
+  "xorg.libX11",
+  "xorg.libXcomposite",
+  "xorg.libXdamage",
+  "xorg.libXext",
+  "xorg.libXfixes",
+  "xorg.libXrandr",
+  "xorg.libxcb",
+  "libxkbcommon",
+  "alsa-lib",
+  "mesa",
+  "cups",
+  "try",
+]
 
 [[ports]]
 localPort = 3000
@@ -18,5 +37,8 @@ externalPort = 3001
 
 [deployment]
 deploymentTarget = "gce"
-run = ["sh", "-c", "PORT=3000 ENABLE_TELEGRAM=true ENABLE_NEWS_SYSTEM=true node index.js"]
-
+run = [
+  "sh",
+  "-c",
+  "PORT=3000 ENABLE_TELEGRAM=true ENABLE_NEWS_SYSTEM=true node index.js",
+]
