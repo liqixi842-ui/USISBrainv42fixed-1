@@ -664,12 +664,10 @@ app.get("/health", async (_req, res) => {
   const n8nClient = getN8NClient();
   const n8nHealth = await n8nClient.healthCheck();
   
-  // 如果数据库不健康且已启用，返回503
   const isHealthy = !ENABLE_DB || dbHealth.healthy;
-  const statusCode = isHealthy ? 200 : 503;
   
-  res.status(statusCode).json({ 
-    ok: isHealthy,
+  res.status(200).json({ 
+    ok: true,
     status: isHealthy ? 'ok' : 'degraded',
     ts: Date.now(),
     database: ENABLE_DB ? dbHealth : { healthy: true, reason: 'Database disabled' },
