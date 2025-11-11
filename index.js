@@ -736,7 +736,8 @@ app.post("/api/news/ingest", async (req, res) => {
 
     // 2. Lazy initialization
     if (!newsIngestAPI) {
-      const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+      // Use TEST token in development, PRODUCTION token in deployment
+      const telegramToken = process.env.TELEGRAM_BOT_TOKEN_TEST || process.env.TELEGRAM_BOT_TOKEN;
       const newsChannelId = process.env.NEWS_CHANNEL_ID;
       newsIngestAPI = new NewsIngestAPI(telegramToken, newsChannelId);
     }
