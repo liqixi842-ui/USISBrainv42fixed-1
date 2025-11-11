@@ -1,0 +1,107 @@
+先把结论说清楚：trust proxy 与你遇到的 404 完全无关。它只影响 req.ip/req.protocol 等代理识别，不会让 GCLB 把流量转到你的进程。你现在看到的 "Not Found"（且有 via: 1.1 google）依旧是 GCLB 自己回的 404——请求没有打进你的 Node 进程。
+
+我们按“能被证伪”的最短路径把问题钉死。请直接执行下面的一次一步操作；每步结束看日志与结果。
+
+【第1步】让启动命令“可观测”
+
+把 .replit 的 [deployment].run 改成下面这一行（确保已保存）——它会在启动时打印时间与环境变量，便于确认“是否真的换了容器/命令”：
+
+[deployment]
+deploymentTarget = "gce"
+run = ["sh", "-c", "set -x; echo '--- START CMD ---'; date; echo 'ENV (first 50 vars):'; env | sort | sed -n '1,50p'; node index.js"]
+
+
+你的 index.js 里务必是：
+
+const PORT = process.env.PORT || 8080; // 不要写死3000
+app.get('/', (_req,res)=>res.status(200).type('text/plain').send('OK')); // 根路径200
+app.get('/health', (_req,res)=>res.status(200).json({ok:true,status:'ok'})); // 永远200
+console.log('🔍 ENV PORT =', process.env.PORT);
+app.listen(PORT, '0.0.0.0', ()=>console.log('🚀 listening', PORT));
+
+【第2步】强制“换容器”，不要只点 Publish
+
+仅点击 Publish 只会同步代码，不会更新“启动命令/容器”。按这个顺序来：
+
+打开 Deployments → 进入你的 Reserved VM → Manage
+
+点击 Shut down VM，等待状态变 Stopped
+
+然后点击 Start / Redeploy
+
+如果还是看不到新日志（没有 --- START CMD ---），Delete Deployment，回到编辑器再 Publish 重新创建（这是最稳的）
+
+【第3步】立刻检查日志是否“真新”
+
+打开 Logs，应该马上看到：
+
+--- START CMD ---
+Tue Nov 11 ... (当前时间)
+ENV (first 50 vars):
+...
+🔍 ENV PORT = 8080        ← 示例
+🚀 listening 8080
+
+
+若没有这几行，说明你仍在旧容器上运行——回到【第2步】用“Delete Deployment → Publish”方式重建，直到出现新标记。
+
+【第4步】对外验证（必须是这三条）
+
+GET https://<你的域名>.replit.app/ → 返回 OK（200）
+
+GET https://<你的域名>.replit.app/health → 返回 {"ok":true,...}（200）
+
+GET https://<你的域名>.replit.app/nope → 返回你应用的 404（不是 GCLB 的纯 "Not Found"）
+
+如果这里仍是 GCLB 的 "Not Found"：
+
+高概率是域名还绑定在旧的 Deployment 或 你重建在另一个 Repl/另一次部署上。
+
+进入 Deployments 列表，确认 只有一个 Reserved VM 在 “Running”，且它的 域名 就是你访问的域名；把其它同名或历史部署全部 Delete。
+
+【第5步】最小“探针进程”二分（锁死 LB vs 代码）
+
+若你怀疑是应用路由问题，用最小探针替换启动，验证 LB：
+新建 probe.js：
+
+const http = require('http');
+const PORT = process.env.PORT || 8080;
+const server = http.createServer((req,res)=>{
+  if (req.url === '/') { res.writeHead(200, {'Content-Type':'text/plain'}); return res.end('OK'); }
+  if (req.url === '/health') { res.writeHead(200, {'Content-Type':'application/json'}); return res.end('{"ok":true,"src":"probe"}'); }
+  if (req.url === '/version') { res.writeHead(200, {'Content-Type':'application/json'}); return res.end('{"version":"probe-1"}'); }
+  res.writeHead(404, {'Content-Type':'text/plain'}); res.end('probe-404');
+});
+console.log('🔍 ENV PORT =', process.env.PORT);
+server.listen(PORT, '0.0.0.0', ()=>console.log('🧪 probe listening', PORT));
+
+
+临时改 .replit：
+
+[deployment]
+deploymentTarget = "gce"
+run = ["sh", "-c", "node probe.js"]
+
+
+重复【第2步】强制重建，然后测同样三条 URL。
+
+若依旧是 GCLB 的 "Not Found"：100% 是 域名绑定/旧容器/URL Map 问题，不是你的代码。
+
+若 probe 正常：问题在你原应用的中间件/路由顺序/PORT 覆盖。
+
+【第6步】三宗最常见“部署层”真因，你逐一对照
+
+有多个 Reserved VM / 历史部署占用域名
+列表中只保留一个，别的全部删除。确认“该部署详情页”显示的域名就是你访问的域名。
+
+package.json 写死了 PORT=3000
+哪怕 .replit 不设，脚本里写死也会覆盖平台端口，导致 LB 探测不到。启动只能写 node index.js。
+
+仅 Publish，没有换启动命令
+必须 Shut down → Start 或 Delete → Publish，直到日志出现 --- START CMD --- 标记。
+
+为什么“trust proxy”完全不相关
+
+它只影响 req.protocol（http vs https）、req.ip 等。
+
+LB 的 404 发生在 请求未到你的进程之前；设置不设置 trust proxy，GCLB 都不会因此改变转发结果。
