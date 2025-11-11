@@ -1,0 +1,160 @@
+2025-11-11 19:27:02.57
+3cca9a47
+User
+🧠 [SmartBrain] 主脑: gpt-5-mini
+2025-11-11 19:27:02.57
+3cca9a47
+User
+🛡️ [SmartBrain] 保底链: gpt-4o → gpt-4o-mini
+2025-11-11 19:27:02.59
+3cca9a47
+User
+🏴 Feature Flags: DB=true, Telegram=true
+2025-11-11 19:27:02.59
+3cca9a47
+User
+🔄 [LazyLoad] PostgreSQL连接池已创建（max=10, timeout=8s）
+2025-11-11 19:27:02.59
+3cca9a47
+User
+🔌 [尝试 1/5] 连接数据库...
+2025-11-11 19:27:02.61
+3cca9a47
+User
+✅ Using Replicate token: r8_ePsDg3M...
+2025-11-11 19:27:02.61
+3cca9a47
+User
+⚠️ TWITTER_BEARER not found in environment
+2025-11-11 19:27:02.63
+3cca9a47
+User
+🔍 ENV PORT = 8080
+2025-11-11 19:27:02.63
+3cca9a47
+User
+🤖 [Bot Token] Token: 7944498422...
+2025-11-11 19:27:02.63
+3cca9a47
+User
+🔒 [Bot Lock] 已获取Bot锁（PID: 18）
+2025-11-11 19:27:02.77
+3cca9a47
+User
+🤖 启动 Telegram Bot (Manual Polling)...
+2025-11-11 19:27:02.77
+3cca9a47
+User
+📰 [USIS News v2.0] 正在启动新闻系统...
+2025-11-11 19:27:02.78
+3cca9a47
+User
+🚀 USIS Brain v6.0 online on port 8080 🆕 [Multi-AI + n8n Integration]
+2025-11-11 19:27:02.78
+3cca9a47
+User
+📍 Listening on 0.0.0.0:8080
+2025-11-11 19:27:02.78
+3cca9a47
+User
+🔗 Health check available at http://0.0.0.0:8080/health
+2025-11-11 19:27:02.78
+3cca9a47
+User
+🧪 Heatmap test available at http://0.0.0.0:8080/api/test-heatmap
+2025-11-11 19:27:02.78
+3cca9a47
+User
+🔵 n8n API available at http://0.0.0.0:8080/brain/analyze_no_screenshot
+2025-11-11 19:27:02.78
+3cca9a47
+User
+⚠️ N8N监控已禁用以节省内存
+2025-11-11 19:27:03.08
+3cca9a47
+User
+❌ [DB] 查询失败 (491ms): The endpoint has been disabled. Enable it using Neon API and retry.
+2025-11-11 19:27:03.08
+3cca9a47
+User
+⏳ [尝试 1/5] 数据库休眠中，正在唤醒...
+2025-11-11 19:27:03.08
+3cca9a47
+User
+⏱️ 2秒后重试...
+2025-11-11 19:27:04.77
+3cca9a47
+User
+✅ Telegram Bot 已启动（手动轮询）
+2025-11-11 19:27:04.77
+3cca9a47
+User
+💬 现在可以在 Telegram 里直接发消息了
+2025-11-11 19:27:05.09
+3cca9a47
+User
+🔌 [尝试 2/5] 连接数据库...
+2025-11-11 19:27:05.35
+3cca9a47
+User
+❌ [DB] 查询失败 (259ms): The endpoint has been disabled. Enable it using Neon API and retry.
+2025-11-11 19:27:05.35
+3cca9a47
+User
+⏳ [尝试 2/5] 数据库休眠中，正在唤醒...
+2025-11-11 19:27:05.35
+3cca9a47
+User
+⏱️ 4秒后重试...
+2025-11-11 19:27:07.78
+3cca9a47
+User
+🚀 [NewsScheduler] Starting (N8N-optimized mode)...
+2025-11-11 19:27:07.78
+3cca9a47
+User
+🔌 [DB] Connection pool created
+2025-11-11 19:27:08.02
+3cca9a47
+User
+❌ [DB] Query failed (239ms): The endpoint has been disabled. Enable it using Neon API and retry.
+2025-11-11 19:27:08.02
+3cca9a47
+User
+❌ [NewsScheduler] Schema check failed: The endpoint has been disabled. Enable it using Neon API and retry.
+2025-11-11 19:27:08.02
+3cca9a47
+User
+❌ [USIS News v2.0] 启动失败: The endpoint has been disabled. Enable it using Neon API and retry.
+2025-11-11 19:27:09.35
+3cca9a47
+User
+🔌 [尝试 3/5] 连接数据库...
+2025-11-11 19:27:09.59
+3cca9a47
+User
+❌ [DB] 查询失败 (246ms): The endpoint has been disabled. Enable it using Neon API and retry.
+2025-11-11 19:27:09.59
+3cca9a47
+User
+⏳ [尝试 3/5] 数据库休眠中，正在唤醒...
+2025-11-11 19:27:09.59
+3cca9a47
+User
+⏱️ 8秒后重试...
+2025-11-11 19:27:17.60
+3cca9a47
+User
+🔌 [尝试 4/5] 连接数据库...
+2025-11-11 19:27:17.86
+3cca9a47
+User
+❌ [DB] 查询失败 (258ms): The endpoint has been disabled. Enable it using Neon API and retry.
+2025-11-11 19:27:17.86
+3cca9a47
+User
+⏳ [尝试 4/5] 数据库休眠中，正在唤醒...
+2025-11-11 19:27:17.86
+3cca9a47
+User
+⏱️ 16秒后重试...
