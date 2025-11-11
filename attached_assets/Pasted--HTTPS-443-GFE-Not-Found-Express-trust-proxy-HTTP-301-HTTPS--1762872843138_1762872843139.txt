@@ -1,0 +1,122 @@
+你现在遇到的是HTTPS 443 路由没有打进你的容器（GFE 自己回 "Not Found"），而不是 Express 或 trust proxy 问题。HTTP 会 301 到 HTTPS，说明域名接入正常，但 HTTPS→后端绑定/健康检查/旧部署占用 有问题。
+
+把它一次解决掉——按下面做就能把 404 干掉；每步都是可验证的，不靠猜。
+
+结论先答
+
+端口：只监听 process.env.PORT（Reserved VM 常给 8080）。不要手写 3000/80。
+
+[[ports]]：对 Reserved VM 无效，删了也行（不会影响 GCE LB）。
+
+trust proxy：与 404 无关。
+
+要不要重建：要。必须用「Delete deployment → Publish」重建，仅 Republish/Resume 不会刷新 443 的 URL Map/健康检查。
+
+修复步骤（一次一步做）
+【第1步】最小“探针”启动，排除应用层
+
+先让部署跑一个 10 行的探针，确保 LB 能探到 200。
+
+probe.js
+
+const http = require('http');
+const PORT = process.env.PORT || 8080;
+const server = http.createServer((req,res)=>{
+  if (req.url === '/')       { res.writeHead(200, {'Content-Type':'text/plain'}); return res.end('OK'); }
+  if (req.url === '/health') { res.writeHead(200, {'Content-Type':'application/json'}); return res.end('{"ok":true,"src":"probe"}'); }
+  if (req.url === '/version'){ res.writeHead(200, {'Content-Type':'application/json'}); return res.end('{"version":"probe-1"}'); }
+  res.writeHead(404, {'Content-Type':'text/plain'}); res.end('probe-404');
+});
+console.log('🔍 ENV PORT =', process.env.PORT);
+server.listen(PORT, '0.0.0.0', ()=>console.log('🧪 probe listening', PORT));
+
+
+.replit（只保留 deployment 段；不要写 PORT=...）
+
+[deployment]
+deploymentTarget = "gce"
+run = ["sh", "-c", "echo '--- START CMD ---'; date; env | sort | sed -n '1,40p'; node probe.js"]
+
+
+package.json 里不要有 "start": "PORT=3000 node index.js" 之类硬编码端口；应是 "start": "node index.js"（甚至不需要用它，Reserved VM 走 .replit [deployment].run）。
+
+【第2步】强制换容器（不是 Republish）
+
+Deployments → 你的 Reserved VM → Manage → Delete deployment
+
+回到编辑器 → Publish → 选择 Reserved VM（新建）
+
+部署完成后打开 Logs，必须看到：
+
+--- START CMD ---
+<当前时间>
+ENV (first 40 vars): ...
+🔍 ENV PORT = 8080    // 示例
+🧪 probe listening 8080
+
+
+看不到这些，说明你没跑到新容器，回到第2步重来一次。
+
+【第3步】只访问“这次部署的 Public URL”
+
+在部署详情页 Overview 复制 Public URL（它才是绑定到这次容器的域名）。用它测试 HTTPS：
+
+curl -sv https://<Public-URL>/health 2>&1 | sed -n '1,25p'
+
+
+预期：HTTP/2 200，返回 {"ok":true,"src":"probe"}。
+若 仍是 "Not Found" 且响应头含 server: Google Frontend / via: 1.1 google，继续下一步。
+
+【第4步】清空历史部署（避免旧 VM 占着 443）
+
+打开 Deployments 列表：
+
+只保留一个 Reserved VM 在 Running；其余全部 Delete deployment（不是 Pause/Shutdown，是 Delete）。
+
+回到保留的那个 → Manage → Shut down → Start（重拉健康检查/URL Map）。
+
+再测 https://<Public-URL>/health。
+
+经验：历史部署常把 443 的 URL Map/证书绑定卡住；80→443 的跳转正常，但 443 还指向旧后端，于是你看到 GFE 404。
+
+【第5步】恢复你的应用
+
+探针通过后，把 .replit run 改回你的应用启动，但保留这几件事：
+
+const PORT = process.env.PORT || 8080;
+
+app.get('/', (_req,res)=>res.status(200).type('text/plain').send('OK'));
+
+/health 永远 200（用内容表达 degraded/ok）
+
+不在任何地方写死 PORT=...
+
+再做一次 Delete deployment → Publish，确认日志出现新的 --- START CMD --- 与 listening 行，然后测：
+
+https://<Public-URL>/
+
+https://<Public-URL>/health
+
+快速判读你当前现象
+
+HTTP 会 301 到 HTTPS：域名接了，但 443 的后端未就绪或仍绑着旧部署。
+
+“qixl is resuming”卡住：常见于老部署残留/映射未刷新。Delete 重建最干净。
+
+切端口（5000/3000/80/8080）无效：因为问题不在端口，而在 443→后端 的绑定。
+
+[[ports]]：与 Reserved VM 无关，可忽略。
+
+你现在最省力的动作
+
+用上面的 probe.js + 可观测 run，Delete deployment → Publish 一次；
+
+只用 本次部署 Overview 的 Public URL 测 HTTPS；
+
+如果还 404，把其他 Reserved VM 全部 Delete，只留一个，再 Shut down → Start；
+
+确认日志里出现 --- START CMD --- 与 🧪 probe listening；
+
+成功后再切回你的 index.js。
+
+这样走完，HTTPS 404 就会消失。
