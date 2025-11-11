@@ -67,14 +67,20 @@ async function resolveSymbols(intent) {
       }
       
       // 如果静态映射失败，尝试Finnhub API
-      const resolvedSymbols = await lookupSymbol(companyName, intent.exchange);
-      
-      if (resolvedSymbols.length > 0) {
-        const bestMatch = selectBestMatch(resolvedSymbols, intent.exchange, companyName);
-        symbols.push(bestMatch.symbol);
-        console.log(`   ✓ Finnhub找到: ${bestMatch.symbol} (${bestMatch.description})`);
-      } else {
-        console.log(`   ⚠️  未找到符号: ${companyName}`);
+      try {
+        const resolvedSymbols = await lookupSymbol(companyName, intent.exchange);
+        
+        if (resolvedSymbols.length > 0) {
+          const bestMatch = selectBestMatch(resolvedSymbols, intent.exchange, companyName);
+          symbols.push(bestMatch.symbol);
+          console.log(`   ✓ Finnhub找到: ${bestMatch.symbol} (${bestMatch.description})`);
+        } else {
+          console.log(`   ⚠️  未找到符号: ${companyName}`);
+        }
+      } catch (apiError) {
+        // 🛡️ Fallback: API失败时，将公司名作为符号尝试（适用于已知代码如AAPL, TSLA等）
+        console.log(`   ⚠️  Finnhub API失败，尝试使用公司名作为代码: ${companyName}`);
+        symbols.push(companyName.toUpperCase());
       }
     } catch (error) {
       console.error(`   ❌ 查找失败: ${companyName} - ${error.message}`);

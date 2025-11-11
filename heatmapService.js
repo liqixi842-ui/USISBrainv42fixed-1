@@ -79,14 +79,16 @@ async function generateSmartHeatmap(userText) {
     const query = extractHeatmapQueryRulesOnly(userText);
     console.log(`🎯 [规则引擎] 解析结果: region=${query.region}, index=${query.index}, sector=${query.sector}`);
     
+    // 🛡️ Fallback: 当无法确定指数时，默认使用SPX500
+    if (!query.index || query.index === 'AUTO') {
+      console.log('⚠️  [Fallback] 未指定具体指数，默认使用SPX500');
+      query.index = 'SPX500';
+      query.region = 'US';
+    }
+    
     const caption = generateCaption(query);
     const summary = generateHeatmapSummary(query);
     const tradingViewUrl = buildTradingViewURL(query);
-    
-    // 确保index有值
-    if (!query.index || query.index === 'AUTO') {
-      throw new Error('无法确定目标指数，请提供更具体的地区或指数信息');
-    }
     
     // 🚨 关键校验：西班牙IBEX35（三层防护第1层）
     if (query.region === 'ES' && query.index !== 'IBEX35') {
