@@ -39,6 +39,14 @@ class RSSCollector {
       { name: 'Bloomberg Markets', url: 'https://feeds.bloomberg.com/markets/news.rss', tier: 2, enabled: true },
       { name: 'WSJ Markets', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml', tier: 2, enabled: true },
       
+      // 西班牙财经媒体（免费RSS）
+      { name: 'Expansión', url: 'https://www.expansion.com/rss/portada.xml', tier: 2, enabled: true },
+      { name: 'El Español - Invertia', url: 'https://www.elespanol.com/rss/invertia', tier: 2, enabled: true },
+      
+      // 加拿大财经媒体（免费RSS）
+      { name: 'Financial Post', url: 'https://feeds.feedburner.com/FP_TopStories', tier: 2, enabled: true },
+      { name: 'Bank of Canada', url: 'https://www.bankofcanada.ca/feed/', tier: 1, enabled: true },
+      
       // 三类：行业垂直+聚合源（免费）
       { name: 'Investing.com', url: 'https://www.investing.com/rss/news.rss', tier: 3, enabled: true },
       { name: 'Seeking Alpha', url: 'https://seekingalpha.com/feed.xml', tier: 3, enabled: true },
