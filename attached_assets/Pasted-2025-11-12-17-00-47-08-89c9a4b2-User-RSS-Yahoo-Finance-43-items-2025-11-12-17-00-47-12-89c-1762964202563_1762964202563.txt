@@ -1,0 +1,148 @@
+2025-11-12 17:00:47.08
+89c9a4b2
+User
+✅ [RSS] Yahoo Finance: 43 items
+2025-11-12 17:00:47.12
+89c9a4b2
+User
+✅ [RSS] WSJ Markets: 20 items
+2025-11-12 17:00:47.16
+89c9a4b2
+User
+✅ [RSS] Expansión: 59 items
+2025-11-12 17:00:47.19
+89c9a4b2
+User
+✅ [RSS] Financial Post: 10 items
+2025-11-12 17:00:47.22
+89c9a4b2
+User
+✅ [RSS] Bloomberg Markets: 30 items
+2025-11-12 17:00:47.27
+89c9a4b2
+User
+✅ [RSS] Investing.com: 10 items
+2025-11-12 17:00:47.28
+89c9a4b2
+User
+❌ [RSS] TechCrunch failed: Status code 403
+2025-11-12 17:00:47.32
+89c9a4b2
+User
+✅ [RSS] Seeking Alpha: 30 items
+2025-11-12 17:00:47.35
+89c9a4b2
+User
+✅ [RSS] Fortune: 10 items
+2025-11-12 17:00:47.36
+89c9a4b2
+User
+✅ [RSS] ECB: 15 items
+2025-11-12 17:00:47.41
+89c9a4b2
+User
+✅ [RSS] Bank of Canada: 10 items
+2025-11-12 17:00:47.47
+89c9a4b2
+User
+❌ [RSS] Reuters Business failed: Status code 404
+2025-11-12 17:00:47.55
+89c9a4b2
+User
+✅ [RSS] MarketWatch: 10 items
+2025-11-12 17:00:47.71
+89c9a4b2
+User
+✅ [RSS] El Español - Invertia: 30 items
+2025-11-12 17:00:47.71
+89c9a4b2
+User
+📊 [RSS] Total collected: 352 items
+2025-11-12 17:00:47.76
+89c9a4b2
+User
+📥 POST /api/news/ingest from 127.0.0.1
+2025-11-12 17:00:47.76
+89c9a4b2
+User
+✅ [Enhancement] Google Translate configured (FREE, no API key required)
+2025-11-12 17:00:47.76
+89c9a4b2
+User
+🧠 [NewsIngestAPI] Initialized (push: enabled , enhancement: enabled)
+2025-11-12 17:00:47.76
+89c9a4b2
+User
+📰 [Ingest] Processing: Federal Reserve Board issues enforcement actions w...
+2025-11-12 17:00:47.91
+89c9a4b2
+User
+❌ [DB] Query failed (36ms): duplicate key value violates unique constraint "news_items_url_key"
+2025-11-12 17:00:47.92
+89c9a4b2
+User
+❌ [NewsIngestAPI] Processing failed: error: duplicate key value violates unique constraint "news_items_url_key"
+2025-11-12 17:00:47.92
+89c9a4b2
+User
+at /home/runner/workspace/node_modules/pg-pool/index.js:45:11
+2025-11-12 17:00:47.92
+89c9a4b2
+User
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-11-12 17:00:47.92
+89c9a4b2
+User
+at async safeQuery (/home/runner/workspace/dbUtils.js:54:20)
+2025-11-12 17:00:47.92
+89c9a4b2
+User
+at async NewsIngestAPI.processNews (/home/runner/workspace/newsIngestAPI.js:75:26)
+2025-11-12 17:00:47.92
+89c9a4b2
+User
+detail: 'Key (url)=(https://www.federalreserve.gov/newsevents/pressreleases/enforcement20251106a.htm) already exists.',
+2025-11-12 17:00:47.92
+89c9a4b2
+User
+position: undefined,
+2025-11-12 17:00:47.92
+89c9a4b2
+User
+internalPosition: undefined,
+2025-11-12 17:00:47.92
+89c9a4b2
+User
+internalQuery: undefined,
+2025-11-12 17:00:47.92
+89c9a4b2
+User
+dataType: undefined,
+2025-11-12 17:00:47.92
+89c9a4b2
+User
+file: 'nbtinsert.c',
+2025-11-12 17:00:48.37
+89c9a4b2
+User
+❌ [DB] Query failed (32ms): duplicate key value violates unique constraint "news_items_url_key"
+2025-11-12 17:00:48.86
+89c9a4b2
+User
+❌ [DB] Query failed (35ms): duplicate key value violates unique constraint "news_items_url_key"
+2025-11-12 17:00:48.86
+89c9a4b2
+User
+❌ [NewsIngestAPI] Processing failed: error: duplicate key value violates unique constraint "news_items_url_key"
+2025-11-12 17:00:48.86
+89c9a4b2
+User
+at /home/runner/workspace/node_modules/pg-pool/index.js:45:11
+2025-11-12 17:00:48.86
+89c9a4b2
+User
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-11-12 17:00:48.86
+89c9a4b2
+User
+at async safeQuery (/home/runner/
