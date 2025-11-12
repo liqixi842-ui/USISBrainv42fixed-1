@@ -117,12 +117,9 @@ class NewsPushService {
     if (score >= 8.0) scoreEmoji = '⚡';
     else if (score >= 7.0) scoreEmoji = '🔥';
     
-    // Build message - Make title VERY prominent with bold
-    let message = `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `${scoreEmoji} *${displayTitle}*\n`;
-    message += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    message += `📊 评分: ${score.toFixed(1)}/10\n`;
-    message += `\n`; // Extra line break for separation
+    // Build message - Make title prominent with bold and spacing
+    let message = `\n${scoreEmoji} *${displayTitle}*\n\n`;
+    message += `📊 评分: ${score.toFixed(1)}/10\n\n`;
     
     // 📋 详细解读 section
     if (displaySummary) {
@@ -142,7 +139,7 @@ class NewsPushService {
     
     // Hashtags
     message += `${hashtags}\n\n`;
-    message += `USIS Brain 新闻系统 v2.0`;
+    message += `*USIS Brain 新闻系统 v2\\.0*`;
     
     return message;
   }
