@@ -117,25 +117,29 @@ class NewsPushService {
     if (score >= 8.0) scoreEmoji = '⚡';
     else if (score >= 7.0) scoreEmoji = '🔥';
     
-    // Build message (similar to urgent format, with Markdown)
-    let message = `${scoreEmoji} *${this.escapeMarkdown(displayTitle)}*\n`;
+    // Build message - NEW FORMAT matching user's preference
+    let message = `${scoreEmoji} ${this.escapeMarkdown(displayTitle)}\n`;
     message += `📊 评分: ${score.toFixed(1)}/10\n\n`;
     
-    // AI Enhanced Content (includes detailed summary + investment analysis)
-    if (item.ai_commentary) {
-      message += `${this.escapeMarkdown(item.ai_commentary)}\n\n`;
-    } else if (displaySummary) {
-      // Fallback to original summary if no AI content
+    // 📋 详细解读 section
+    if (displaySummary) {
+      message += `📋 详细解读\n`;
       message += `${this.escapeMarkdown(displaySummary)}\n\n`;
     }
     
-    // Link
-    message += `🔗 [查看原文](${item.url})\n`;
+    // 💡 投资影响 section (AI Commentary)
+    if (item.ai_commentary) {
+      message += `💡 投资影响\n`;
+      message += `${this.escapeMarkdown(item.ai_commentary)}\n\n`;
+    }
+    
+    // Link - NEW FORMAT: 🔗 查看原文 (url)
+    message += `🔗 查看原文 (${item.url})\n`;
     message += `📌 来源: ${item.source_name || '未知'}\n\n`;
     
     // Hashtags
     message += `${hashtags}\n\n`;
-    message += `_USIS Brain 新闻系统 v2\\.0_`;
+    message += `USIS Brain 新闻系统 v2\\.0`;
     
     return message;
   }
@@ -165,33 +169,29 @@ class NewsPushService {
     // Generate hashtags for search
     const hashtags = this.generateHashtags(newsItem, score);
 
-    // Build message (NEW FORMAT)
-    let message = `🚨 *突发新闻* \\(评分: ${score.toFixed(1)}/10\\)\n\n`;
-    message += `📰 *${this.escapeMarkdown(displayTitle)}*\n\n`;
+    // Build message - NEW FORMAT matching user's preference
+    let message = `🚨 ${this.escapeMarkdown(displayTitle)}\n`;
+    message += `📊 评分: ${score.toFixed(1)}/10\n\n`;
     
-    // Symbols with hashtags
-    if (symbols.length > 0) {
-      const symbolTags = symbols.slice(0, 5).map(s => `#${s}`).join(' ');
-      message += `🏷️ ${symbolTags}\n`;
+    // 📋 详细解读 section
+    if (displaySummary) {
+      message += `📋 详细解读\n`;
+      message += `${this.escapeMarkdown(displaySummary)}\n\n`;
     }
     
-    message += `⏰ ${time}\n`;
-    message += `📊 来源: ${newsItem.source || '未知'}\n\n`;
-    
-    // Summary (Chinese)
-    message += `${this.escapeMarkdown(displaySummary)}\n\n`;
-    
-    // AI Commentary (NEW)
+    // 💡 投资影响 section (AI Commentary)
     if (newsItem.ai_commentary) {
-      message += `💡 *未来影响*：${this.escapeMarkdown(newsItem.ai_commentary)}\n\n`;
+      message += `💡 投资影响\n`;
+      message += `${this.escapeMarkdown(newsItem.ai_commentary)}\n\n`;
     }
     
-    // Link
-    message += `🔗 [查看原文](${newsItem.url})\n\n`;
+    // Link - NEW FORMAT
+    message += `🔗 查看原文 (${newsItem.url})\n`;
+    message += `📌 来源: ${newsItem.source_name || newsItem.source || '未知'}\n\n`;
     
-    // Hashtags for categorization
+    // Hashtags
     message += `${hashtags}\n\n`;
-    message += `_USIS Brain 新闻系统 v2\\.0 | 快讯通道_`;
+    message += `USIS Brain 新闻系统 v2\\.0`;
 
     return message;
   }
