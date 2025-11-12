@@ -64,7 +64,7 @@ class NewsPushService {
         
         try {
           const message = this.formatSingleDigestItem(item, i + 1, sorted.length, channel);
-          const result = await this.sendMessage(message, false); // Use plain text to avoid link preview
+          const result = await this.sendMessage(message, true); // Use Markdown for clickable links
           
           // Record push history
           await this.recordPush(item.id, channel, result);
@@ -135,8 +135,8 @@ class NewsPushService {
       message += `${item.ai_commentary}\n\n`;
     }
     
-    // Link - NEW FORMAT: 🔗 查看原文 (url) - plain text to avoid preview
-    message += `🔗 查看原文 (${item.url})\n`;
+    // Link - Clickable text using Markdown format
+    message += `🔗 [查看原文](${item.url})\n`;
     message += `📌 来源: ${item.source_name || '未知'}\n\n`;
     
     // Hashtags
