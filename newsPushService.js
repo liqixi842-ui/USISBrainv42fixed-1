@@ -117,8 +117,10 @@ class NewsPushService {
     if (score >= 8.0) scoreEmoji = '⚡';
     else if (score >= 7.0) scoreEmoji = '🔥';
     
-    // Build message - PLAIN TEXT (no Markdown escaping to avoid link preview issues)
-    let message = `${scoreEmoji} ${displayTitle}\n`;
+    // Build message - Make title more prominent
+    let message = `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    message += `${scoreEmoji} ${displayTitle}\n`;
+    message += `━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     message += `📊 评分: ${score.toFixed(1)}/10\n\n`;
     
     // 📋 详细解读 section
