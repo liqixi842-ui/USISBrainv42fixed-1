@@ -4545,38 +4545,38 @@ async function runOrchestratorCore(params) {
   
   // 7. AI Analysis
   try {
-    // 构建分析prompt
-    const analysisPrompt = buildAnalysisPrompt(intent, scene, marketData, symbols, text);
-    
-    // 调用GPT-5单核引擎
-    const gpt5Result = await generateWithGPT5(analysisPrompt, {
+    // 调用GPT-5单核引擎（使用HTTP端点相同的参数格式）
+    console.log(`🧠 [v4.0] 使用GPT-5单核引擎生成分析...`);
+    const gpt5Result = await generateWithGPT5({
+      text,
+      marketData,
+      semanticIntent: semanticIntent,
       mode: intent.mode,
+      scene,
       symbols,
-      budget,
-      userHistory,
-      requestId: reqId
+      rankedNews: marketData.news || []
     });
     
     // 包装为v3.1格式
-    const responseV2 = wrapAsV31Synthesis(gpt5Result, {
-      mode: intent.mode,
-      symbols,
-      actions: intent.actions || []
-    });
+    const responseV2 = wrapAsV31Synthesis(gpt5Result);
     
     const responseTime = Date.now() - startTime;
     
-    // 记录统计
-    recordRequest(
-      gpt5Result.success,
-      responseTime,
-      gpt5Result.debug?.model_used || gpt5Result.model,
-      gpt5Result.debug?.fallback_used || false,
-      { 
-        hits: marketData?.metadata?.cache_hits || 0,
-        total: marketData?.metadata?.cache_total || 0
-      }
-    );
+    console.log(`✅ [v4.0] GPT-5生成完成 (成本: $${gpt5Result.cost_usd?.toFixed(4) || '0.00'})`);
+    
+    // 记录统计（如果recordRequest函数存在）
+    if (typeof recordRequest === 'function') {
+      recordRequest(
+        gpt5Result.success,
+        responseTime,
+        gpt5Result.debug?.model_used || gpt5Result.model,
+        gpt5Result.debug?.fallback_used || false,
+        { 
+          hits: marketData?.metadata?.cache_hits || 0,
+          total: marketData?.metadata?.cache_total || 0
+        }
+      );
+    }
     
     return responseV2;
     
