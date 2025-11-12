@@ -16,6 +16,23 @@ const OPENAI_KEY = process.env.OPENAI_API_KEY;
 async function parseUserIntent(userText, userHistory = []) {
   console.log(`\n🧠 [Semantic Intent Agent] 开始解析用户意图: "${userText}"`);
   
+  // 🆕 快速检测：纯新闻命令（不调用AI，直接返回）
+  const trimmedText = userText.trim();
+  if (/^(新闻|资讯|news|市场动态|头条)[\s!！?？。.]*$/i.test(trimmedText)) {
+    console.log(`📰 [Quick Detection] 检测到纯新闻命令，直接返回news intent`);
+    return createIntent({
+      intentType: INTENT_TYPES.NEWS,
+      entities: [],
+      mode: 'news',
+      actions: [{ type: 'fetch_news', reason: '用户请求新闻资讯' }],
+      confidence: 1.0,
+      reasoning: '用户直接请求新闻资讯',
+      language: /[\u4e00-\u9fa5]/.test(userText) ? 'zh' : 'en',
+      responseMode: 'news',
+      timeHorizon: '2h'
+    });
+  }
+  
   // 构建AI Prompt - 让AI理解意图而非关键词匹配
   const systemPrompt = buildIntentPrompt();
   const userPrompt = buildUserPrompt(userText, userHistory);
