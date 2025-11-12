@@ -6320,15 +6320,16 @@ if (!TOKEN_IS_SAFE) {
         let data = null;
         let retryCount = 0;
         const maxRetries = 1; // 最多重试1次
+        const ANALYSIS_TIMEOUT_MS = 60000; // 🔧 增加到60秒（支持复杂分析）
         
         while (retryCount <= maxRetries) {
           // 🔧 创建timeout timer（确保总是被清理）
           let timeoutId = null;
           
           try {
-            console.log(`🔄 [尝试${retryCount + 1}/${maxRetries + 1}] 调用invokeOrchestrator (超时25s)...`);
+            console.log(`🔄 [尝试${retryCount + 1}/${maxRetries + 1}] 调用invokeOrchestrator (超时${ANALYSIS_TIMEOUT_MS/1000}s)...`);
             
-            // 🔧 使用Promise.race实现25秒超时（确保清理timer）
+            // 🔧 使用Promise.race实现超时保护（确保清理timer）
             data = await Promise.race([
               invokeOrchestrator({
                 text,
@@ -6340,7 +6341,7 @@ if (!TOKEN_IS_SAFE) {
                 lang: 'zh'
               }),
               new Promise((_, reject) => {
-                timeoutId = setTimeout(() => reject(new Error('Orchestrator timeout after 25s')), 25000);
+                timeoutId = setTimeout(() => reject(new Error(`Orchestrator timeout after ${ANALYSIS_TIMEOUT_MS/1000}s`)), ANALYSIS_TIMEOUT_MS);
               })
             ]);
             
