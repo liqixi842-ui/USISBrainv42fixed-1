@@ -1,0 +1,72 @@
+请用 N8N_BASE_URL + N8N_API_KEY 通过 n8n REST API 修复 “USIS News RSS Collector v4.0” 工作流中 “Ingest” HTTP 节点（这是 V3 节点），并完成一次 dryRun。具体要求：
+
+【0】准备
+- 从 Replit Secrets 读取 NEWS_INGESTION_SECRET（仅用于本次写入，不要在日志中打印明文）。记为 secretValue。
+- 读取当前 Published Primary URL（形如 https://xxxxx.replit.app）。如果未发布请先发布。PrimaryURL = 该地址。
+
+【1】拉取工作流
+- GET {N8N_BASE_URL}/api/v1/workflows，找到 name 含 “USIS News RSS Collector v4.0” 的工作流，记下 workflowId。
+- GET {N8N_BASE_URL}/api/v1/workflows/{workflowId} 保存 JSON。
+
+【2】定位并修正 HTTP Request (V3) 节点参数（注意：V3 的字段名和表达式语法）
+- 在 nodes[] 里找到 type === "n8n-nodes-base.httpRequest" 且 name 含 “Ingest” 的节点（V3）。
+- 将该节点的 parameters 更新为（V3 正确字段）：
+  {
+    "method": "POST",
+    "url": "{{PrimaryURL}}/api/news/ingest",
+    "sendHeaders": true,
+    "headerParametersUi": {
+      "parameter": [
+        { "name": "X-News-Secret", "value": "<secretValue-明文，勿用表达式>" },
+        { "name": "Content-Type", "value": "application/json" }
+      ]
+    },
+    "sendBody": true,
+    "contentType": "json",
+    "specifyBody": "json",
+    "jsonParameters": true,
+    "jsonBody": {
+      "title": "{{ $json.title }}",
+      "url": "{{ $json.link }}",
+      "source": "{{ $json.source || 'WSJ' }}",
+      "isoDate": "{{ $json.isoDate }}",
+      "content": "{{ $json.content || $json['content:encoded'] || $json.contentSnippet }}",
+      "tier": "{{ $json.tier }}",
+      "domain": "{{ $json.domain }}",
+      "paid": "{{ Array.isArray($json.categories) && $json.categories.includes('_PAID') }}",
+      "dryRun": true
+    }
+  }
+- 重点：V3 表达式统一使用 `{{ ... }}`，不要 `={{ ... }}`；Headers 用 **纯文本**，不要表达式和不要 $env。
+
+【3】保存工作流
+- PUT {N8N_BASE_URL}/api/v1/workflows/{workflowId}，仅替换上述 HTTP 节点的 parameters。
+- 回显确认（只打印该节点的 url、headerParametersUi、jsonBody 三段；X-News-Secret 以 *** 遮挡）。
+
+【4】dryRun 验证
+- 调用 {N8N_BASE_URL}/api/v1/workflows/{workflowId}/execute 触发一次单条测试，输入样例：
+  {
+    "title": "Stocks Sink in Broad AI Rout Sparked by China's DeepSeek",
+    "link": "https://www.wsj.com/articles/nikkei-may-rise-as-weak-yen-raises-earnings-hopes-776a8056?mod=rss_markets_main",
+    "isoDate": "2025-01-27T19:26:00.000Z",
+    "source": "WSJ",
+    "content": "U.S. stocks were mostly lower, ... Nvidia was down 16%.",
+    "contentSnippet": "U.S. stocks were mostly lower, ... Nvidia was down 16%.",
+    "categories": ["_PAID"],
+    "tier": 4,
+    "domain": "wsj.com"
+  }
+- 回显：
+  - 目标 URL（应为 PrimaryURL/api/news/ingest）
+  - 展开的 Headers（X-News-Secret 用 *** 遮挡）
+  - 展开的 JSON Body（前 200 字）
+  - 服务器返回的状态码 + 响应前 200 字（若包含 { ok, dryRun } 一并显示）
+
+【5】若非 200
+- 打印服务端 ingest 路由日志关键行（match=true/false，status），不打印明文 secret。
+- 若 401：说明 secret 不匹配；若 404：说明 URL 或路由未注册。
+- 处理后再重试 dryRun。
+
+【6】切换正式写入
+- 在该 HTTP 节点里把 jsonBody.dryRun 从 true 改为 false（或 "{{ false }}"）。
+- 保存并再执行一次，回显状态码与 n8n 执行状态，期望 { ok:true } / success。
