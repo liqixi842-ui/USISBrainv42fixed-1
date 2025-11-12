@@ -7,7 +7,7 @@
  */
 
 const fetch = require('node-fetch');
-const translate = require('@vitalets/google-translate-api').translate;
+const { translate } = require('@vitalets/google-translate-api');
 
 class NewsEnhancementService {
   constructor() {
@@ -27,7 +27,7 @@ class NewsEnhancementService {
   }
 
   /**
-   * Translate text to Chinese using Google Translate (FREE)
+   * Translate text to Chinese using OpenAI (more reliable than Google Translate)
    * @param {string} text - Text to translate
    * @param {string} sourceLang - Source language (auto-detected)
    * @returns {Promise<string>} Translated text
@@ -38,16 +38,40 @@ class NewsEnhancementService {
         return text; // Already Chinese or empty
       }
 
-      // Use Google Translate (free, no API key required)
-      const result = await translate(text, { 
-        to: 'zh-CN',
-        autoCorrect: true
+      if (!this.openaiKey) {
+        console.warn('⚠️  [Enhancement] OPENAI_API_KEY not configured, skipping translation');
+        return text;
+      }
+
+      // Use OpenAI for translation (fast and reliable)
+      const response = await fetch(this.openaiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.openaiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { 
+              role: 'system', 
+              content: '你是专业的财经新闻翻译工具。将英文标题/摘要翻译成简洁准确的中文。只返回翻译结果，不要任何解释或标点。' 
+            },
+            { 
+              role: 'user', 
+              content: text 
+            }
+          ],
+          max_tokens: 200,
+          temperature: 0.3
+        })
       });
 
-      const translated = result.text;
+      const data = await response.json();
+      const translated = data.choices?.[0]?.message?.content?.trim();
 
       if (translated && translated !== text) {
-        console.log(`✅ [Enhancement] Translated: ${text.substring(0, 50)}... → ${translated.substring(0, 50)}...`);
+        console.log(`✅ [Enhancement] Translated: ${text.substring(0, 40)}... → ${translated.substring(0, 40)}...`);
         return translated;
       }
 
