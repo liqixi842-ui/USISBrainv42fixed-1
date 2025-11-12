@@ -4457,18 +4457,143 @@ async function runOrchestratorCore(params) {
     semanticIntent = null;
   }
   
-  // 继续orchestrator核心逻辑...
-  // （这里插入完整的orchestrator逻辑，从intent理解到最终返回）
+  // 2. Intent Understanding (兼容旧系统)
+  const intent = semanticIntent || understandIntent(text, mode, symbols);
+  console.log(`🎯 意图模式: ${intent.mode} (置信度: ${intent.confidence})`);
   
-  // 临时返回（完整迁移进行中）
-  return {
-    status: "ok",
-    ok: true,
-    final_analysis: "🚧 Core函数迁移中...",
-    final_text: "🚧 Core函数迁移中...",
-    symbols,
-    response_time_ms: Date.now() - startTime
-  };
+  // 2.5. 检测到的Action指令
+  if (intent.actions && intent.actions.length > 0) {
+    console.log(`🎬 检测到动作指令: ${intent.actions.map(a => a.type).join(', ')}`);
+  }
+  
+  // 2.6. 读取用户偏好
+  let userPrefs = {};
+  if (user_id) {
+    userPrefs = Memory.userPrefs[user_id] || {};
+  }
+  
+  // 3. Scene Awareness
+  const scene = analyzeScene(intent.mode, symbols);
+  
+  // 应用用户偏好调整场景
+  if (userPrefs.preferred_depth) {
+    const depthMultipliers = { brief: 0.7, medium: 1.0, deep: 1.3 };
+    scene.targetLength = Math.round(scene.targetLength * (depthMultipliers[userPrefs.preferred_depth] || 1.0));
+  }
+  
+  if (userPrefs.preferred_tone) {
+    scene.userTone = userPrefs.preferred_tone;
+  }
+  
+  console.log(`📋 场景分析: ${scene.name} | 目标长度: ${scene.targetLength}字 | 深度: ${scene.depth}`);
+  
+  // 4. Planning
+  const tasks = planTasks(intent, scene, symbols);
+  console.log(`📝 任务规划: ${tasks.join(' → ')}`);
+  
+  // 5. 特殊处理：Meta问题（关于AI本身）
+  if (intent.mode === 'meta') {
+    console.log(`🤖 检测到Meta问题（关于AI能力），直接回复`);
+    
+    const metaText = `你好！我是USIS Brain v6.0，一个机构级数据驱动投资分析系统。
+
+🧠 **我的核心能力：**
+1. **实时市场分析** - 盘前、盘中、盘后全天候分析
+2. **个股诊断** - 技术面 + 基本面 + 情绪面综合解读
+3. **6模型协同** - Claude、GPT-4、Gemini等6个AI专家团队分析
+4. **可视化热力图** - 支持40+全球指数（美股、欧洲、亚洲等）
+5. **新闻追踪** - 实时抓取市场动态和公司新闻
+6. **记忆学习** - 记住你的历史对话和偏好，提供个性化分析
+
+💡 **使用示例：**
+- "盘前NVDA" - 查看NVDA盘前分析
+- "特斯拉热力图" - 查看特斯拉所在板块热力图
+- "西班牙IBEX35热力图" - 查看西班牙市场
+- "新闻资讯" - 获取最新市场动态
+
+有什么市场问题可以随时问我！📈`;
+    
+    return {
+      status: "ok",
+      ok: true,
+      final_analysis: metaText,
+      final_text: metaText,
+      symbols: [],
+      response_time_ms: Date.now() - startTime
+    };
+  }
+  
+  // 6. Data Fetching
+  let marketData = { quotes: {}, news: [], metadata: { dataQuality: { overallScore: 0 } } };
+  if (symbols.length > 0 && tasks.includes('fetch_data')) {
+    try {
+      marketData = await fetchMarketData(symbols, ['quote', 'profile', 'metrics', 'news']);
+      
+      // 数据质量评估
+      const qualityScore = marketData.metadata.dataQuality.overallScore || 0;
+      console.log(`✅ 数据采集成功 (质量: ${(qualityScore * 100).toFixed(0)}%)`);
+      
+      if (qualityScore < 0.5) {
+        console.warn(`⚠️  数据质量较低 (${(qualityScore * 100).toFixed(0)}%)，可能影响分析准确性`);
+        debugInfo.data_errors.push(`数据质量: ${(qualityScore * 100).toFixed(0)}%`);
+      }
+    } catch (error) {
+      console.error(`❌ 数据采集失败:`, error.message);
+      debugInfo.data_errors.push(error.message);
+    }
+  }
+  
+  // 7. AI Analysis
+  try {
+    // 构建分析prompt
+    const analysisPrompt = buildAnalysisPrompt(intent, scene, marketData, symbols, text);
+    
+    // 调用GPT-5单核引擎
+    const gpt5Result = await generateWithGPT5(analysisPrompt, {
+      mode: intent.mode,
+      symbols,
+      budget,
+      userHistory,
+      requestId: reqId
+    });
+    
+    // 包装为v3.1格式
+    const responseV2 = wrapAsV31Synthesis(gpt5Result, {
+      mode: intent.mode,
+      symbols,
+      actions: intent.actions || []
+    });
+    
+    const responseTime = Date.now() - startTime;
+    
+    // 记录统计
+    recordRequest(
+      gpt5Result.success,
+      responseTime,
+      gpt5Result.debug?.model_used || gpt5Result.model,
+      gpt5Result.debug?.fallback_used || false,
+      { 
+        hits: marketData?.metadata?.cache_hits || 0,
+        total: marketData?.metadata?.cache_total || 0
+      }
+    );
+    
+    return responseV2;
+    
+  } catch (error) {
+    console.error('[orchestratorCore] error', error);
+    
+    return {
+      status: 'error',
+      ok: false,
+      error: String(error && error.message || error),
+      final_text: '⚠️ 系统临时故障，稍后再试',
+      final_analysis: '⚠️ 系统临时故障，稍后再试',
+      actions: [],
+      symbols: [],
+      response_time_ms: Date.now() - startTime
+    };
+  }
 }
 
 // Main Orchestrator Endpoint
