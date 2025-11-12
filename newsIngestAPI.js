@@ -147,6 +147,18 @@ class NewsIngestAPI {
 
     } catch (error) {
       console.error(`❌ [NewsIngestAPI] Processing failed:`, error);
+      
+      // Handle duplicate key constraint as success (already exists)
+      if (error.message && error.message.includes('duplicate key value violates unique constraint')) {
+        console.log(`⏭️  [Ingest] Skipped - already exists in database`);
+        return {
+          ok: true,
+          action: 'skipped',
+          reason: 'already_exists',
+          elapsed_ms: Date.now() - startTime
+        };
+      }
+      
       return {
         ok: false,
         error: error.message,
