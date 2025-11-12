@@ -2067,7 +2067,8 @@ function extractSymbols(text = "") {
     '联合健康': 'UNH', 'unitedhealth': 'UNH',
     '礼来': 'LLY', 'eli lilly': 'LLY',
     '艾伯维': 'ABBV', 'abbvie': 'ABBV',
-    '美国银行': 'BAC', 'bank of america': 'BAC'
+    '美国银行': 'BAC', 'bank of america': 'BAC',
+    '陶氏': 'DOW', 'dow': 'DOW', 'dow inc': 'DOW'
   };
   
   // 🇨🇳 中国概念股（美股上市 + 港股）
