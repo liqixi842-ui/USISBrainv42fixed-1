@@ -13,6 +13,7 @@ process.on('uncaughtException', (err) => {
 const express = require("express");
 const fetch = require("node-fetch");
 const { Pool } = require("pg");
+const cron = require("node-cron");
 // 🛡️ v6.1: Telegraf moved to conditional loading (see line ~5575)
 
 // 🆕 ScreenshotAPI配置（自动去除前后空格）
@@ -787,6 +788,42 @@ app.post("/api/news/ingest", async (req, res) => {
       ok: false,
       error: err.message,
       stage: 'api_error'
+    });
+  }
+});
+
+// ---- 🆕 v6.3: Manual RSS Collection Trigger
+app.post("/api/news/collect-rss", async (req, res) => {
+  try {
+    // Authentication check
+    const expectedSecret = process.env.NEWS_INGESTION_SECRET;
+    const authHeader = req.headers['authorization'] || req.headers['x-api-key'] || req.headers['x-news-secret'];
+    
+    if (!NewsIngestAPI.validateAuth(authHeader, expectedSecret)) {
+      return res.status(401).json({
+        ok: false,
+        error: 'Unauthorized: Missing or invalid API key'
+      });
+    }
+
+    // Trigger RSS collection
+    const RSSCollector = require('./rssCollector');
+    const rssCollector = new RSSCollector();
+    
+    console.log('📡 [API] Manual RSS collection triggered');
+    const result = await rssCollector.run();
+    
+    return res.status(200).json({
+      ok: true,
+      message: 'RSS collection completed',
+      ...result
+    });
+
+  } catch (err) {
+    console.error("❌ [RSS API] Error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: err.message
     });
   }
 });
@@ -6494,10 +6531,34 @@ if (ENABLE_NEWS_SYSTEM && ENABLE_DB) {
     }
   }, 5000);
   
+  // 🆕 v6.3: 内置RSS采集器（替代N8N）
+  const RSSCollector = require('./rssCollector');
+  const rssCollector = new RSSCollector();
+  
+  // 延迟10秒后首次执行
+  setTimeout(() => {
+    console.log('\n🚀 [RSS] Starting first collection...');
+    rssCollector.run().catch(err => {
+      console.error('❌ [RSS] First run failed:', err.message);
+    });
+  }, 10000);
+  
+  // 设置定时任务：每5分钟采集一次
+  const rssTask = cron.schedule('*/5 * * * *', () => {
+    console.log('\n⏰ [RSS] Scheduled collection triggered');
+    rssCollector.run().catch(err => {
+      console.error('❌ [RSS] Scheduled run failed:', err.message);
+    });
+  });
+  
+  console.log('📡 [RSS] Auto-collection scheduled every 5 minutes');
+  
   // 优雅关闭
   process.on('SIGTERM', async () => {
     console.log('📰 [USIS News v2.0] 正在关闭...');
     newsScheduler.stop();
+    rssTask.stop();
+    console.log('📡 [RSS] Auto-collection stopped');
   });
   
 } else if (ENABLE_NEWS_SYSTEM && !ENABLE_DB) {
