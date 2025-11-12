@@ -358,33 +358,45 @@ class NewsPushService {
 
   /**
    * Generate hashtags for news categorization
-   * Returns: #评分X分 #地区 #事件类型 #来源
+   * Returns: 至少5个标签 - #评分 #国家 #事件 #板块 #来源
    */
   generateHashtags(newsItem, score) {
     const tags = [];
 
-    // 1. 评分标签 (Score tag)
+    // 1. 评分标签 (Score tag) - MUST HAVE
     const scoreInt = Math.floor(score);
     tags.push(`#评分${scoreInt}分`);
 
-    // Score range tags
-    if (score >= 9) tags.push('#极端重要');
-    else if (score >= 7) tags.push('#突发');
-    else if (score >= 5) tags.push('#重要');
-
-    // 2. 地区标签 (Region tag - Chinese)
+    // 2. 国家/地区标签 (Region tag) - MUST HAVE
     const region = this.detectRegion(newsItem);
-    if (region) tags.push(region);
+    tags.push(region || '#全球');
 
-    // 3. 事件分类标签 (Event category tags)
+    // 3. 事件分类标签 (Event category tags) - MUST HAVE at least 1
     const eventTags = this.detectEventCategories(newsItem);
-    tags.push(...eventTags);
+    if (eventTags.length > 0) {
+      tags.push(eventTags[0]); // 至少取一个事件标签
+    } else {
+      tags.push('#市场动态'); // 默认事件标签
+    }
     
-    // 4. 来源标签 (Source tag)
-    if (newsItem.source) {
+    // 4. 板块标签 (Sector tags) - MUST HAVE at least 1
+    const sectorTags = this.detectSectorCategories(newsItem);
+    if (sectorTags.length > 0) {
+      tags.push(sectorTags[0]); // 至少取一个板块标签
+    } else {
+      tags.push('#综合'); // 默认板块标签
+    }
+    
+    // 5. 来源标签 (Source tag) - MUST HAVE
+    if (newsItem.source_name) {
+      tags.push(`#${newsItem.source_name.replace(/\s+/g, '')}`);
+    } else if (newsItem.source) {
       tags.push(`#${newsItem.source.replace(/\s+/g, '')}`);
+    } else {
+      tags.push('#财经新闻');
     }
 
+    // 确保至少有5个标签
     return tags.join(' ');
   }
 
@@ -525,6 +537,67 @@ class NewsPushService {
     // 市场波动 (Market Movement)
     if (text.match(/surge|plunge|rally|crash|soar|tumble|spike|暴涨|暴跌|飙升/)) {
       tags.push('#市场波动');
+    }
+
+    return tags;
+  }
+
+  /**
+   * Detect sector categories from title and summary
+   * Returns array of sector hashtags (板块标签)
+   */
+  detectSectorCategories(newsItem) {
+    const tags = [];
+    const text = `${newsItem.title} ${newsItem.summary || ''}`.toLowerCase();
+
+    // 科技板块 (Technology)
+    if (text.match(/apple|microsoft|google|amazon|meta|tesla|nvidia|tech|software|ai|cloud|semiconductor|芯片|科技|软件/)) {
+      tags.push('#科技');
+    }
+
+    // 金融板块 (Financial)
+    if (text.match(/bank|financial|insurance|fintech|payment|credit|loan|银行|金融|保险|支付/)) {
+      tags.push('#金融');
+    }
+
+    // 能源板块 (Energy)
+    if (text.match(/oil|gas|energy|renewable|solar|wind|electric|battery|能源|石油|天然气|电池/)) {
+      tags.push('#能源');
+    }
+
+    // 医疗健康 (Healthcare)
+    if (text.match(/health|pharma|biotech|medical|drug|hospital|healthcare|医疗|制药|生物/)) {
+      tags.push('#医疗');
+    }
+
+    // 消费板块 (Consumer)
+    if (text.match(/retail|consumer|e-commerce|shopping|brand|零售|消费|电商/)) {
+      tags.push('#消费');
+    }
+
+    // 房地产 (Real Estate)
+    if (text.match(/real estate|property|housing|reit|房地产|物业|住房/)) {
+      tags.push('#房地产');
+    }
+
+    // 工业制造 (Industrial)
+    if (text.match(/manufacturing|industrial|machinery|automotive|汽车|制造|工业/)) {
+      tags.push('#工业');
+    }
+
+    // 通信媒体 (Communication/Media)
+    if (text.match(/telecom|media|5g|broadcasting|通信|媒体|电信/)) {
+      tags.push('#通信');
+    }
+
+    // 航空航天 (Aerospace)
+    if (text.match(/airline|aircraft|aviation|aerospace|航空|飞机/)) {
+      tags.push('#航空');
+    }
+
+    // 加密货币 (Crypto)
+    if (text.match(/crypto|bitcoin|blockchain|digital currency|加密|比特币|区块链/)) {
+      tags.push('#加密货币');
     }
 
     return tags;
