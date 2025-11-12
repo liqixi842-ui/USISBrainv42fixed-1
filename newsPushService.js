@@ -119,17 +119,17 @@ class NewsPushService {
     
     // Build message - Make title prominent with bold and spacing
     let message = `\n${scoreEmoji} *${displayTitle}*\n\n`;
-    message += `📊 评分: ${score.toFixed(1)}/10\n\n`;
+    message += `评分: ${score.toFixed(1)}/10\n\n`;
     
-    // 📋 详细解读 section
+    // 【详细解读】 section
     if (displaySummary) {
-      message += `📋 详细解读\n`;
+      message += `【详细解读】\n`;
       message += `${displaySummary}\n\n`;
     }
     
-    // 💡 投资影响 section (AI Commentary)
+    // 【投资影响】 section (AI Commentary)
     if (item.ai_commentary) {
-      message += `💡 投资影响\n`;
+      message += `【投资影响】\n`;
       message += `${item.ai_commentary}\n\n`;
     }
     
