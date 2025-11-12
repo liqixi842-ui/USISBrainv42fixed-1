@@ -100,7 +100,7 @@ class NewsPushService {
   }
 
   /**
-   * Format single digest item (v3.2: similar to urgent format with AI commentary)
+   * Format single digest item (v3.3 Fixed: AI commentary already contains headers)
    */
   formatSingleDigestItem(item, index, total, channel) {
     const score = parseFloat(item.composite_score) || 0;
@@ -121,16 +121,14 @@ class NewsPushService {
     let message = `\n${scoreEmoji} *${displayTitle}*\n\n`;
     message += `评分: ${score.toFixed(1)}/10\n\n`;
     
-    // 【详细解读】 section
-    if (displaySummary) {
-      message += `【详细解读】\n`;
-      message += `${displaySummary}\n\n`;
-    }
-    
-    // 【投资影响】 section (AI Commentary)
+    // AI Commentary already contains formatted headers (📋 详细解读 + 💡 投资影响)
+    // Just display it directly without adding extra headers
     if (item.ai_commentary) {
-      message += `【投资影响】\n`;
       message += `${item.ai_commentary}\n\n`;
+    } else if (displaySummary) {
+      // Fallback: if no AI commentary, show summary with header
+      message += `📋 详细解读\n`;
+      message += `${displaySummary}\n\n`;
     }
     
     // Link - Clickable text using Markdown format
