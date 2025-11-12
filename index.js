@@ -4558,7 +4558,7 @@ async function runOrchestratorCore(params) {
     });
     
     // 包装为v3.1格式
-    const responseV2 = wrapAsV31Synthesis(gpt5Result);
+    const synthesis = wrapAsV31Synthesis(gpt5Result);
     
     const responseTime = Date.now() - startTime;
     
@@ -4578,7 +4578,39 @@ async function runOrchestratorCore(params) {
       );
     }
     
-    return responseV2;
+    // 🔧 返回Telegram Bot兼容的格式（包含final_text和final_analysis）
+    return {
+      status: "ok",
+      ok: true,
+      final_text: synthesis.text,
+      final_analysis: synthesis.text,
+      summary: synthesis.text,
+      caption: synthesis.text,
+      symbols: symbols,
+      model: gpt5Result.model,
+      response_time_ms: responseTime,
+      ai_results: {
+        model: gpt5Result.model,
+        success: gpt5Result.success,
+        cost_usd: gpt5Result.cost_usd,
+        elapsed_ms: responseTime
+      },
+      synthesis: {
+        success: synthesis.success,
+        synthesized: synthesis.synthesized
+      },
+      intent: {
+        mode: intent.mode,
+        lang: lang,
+        confidence: intent.confidence
+      },
+      scene: {
+        name: scene.name,
+        depth: scene.depth,
+        targetLength: scene.targetLength
+      },
+      debug: gpt5Result.debug
+    };
     
   } catch (error) {
     console.error('[orchestratorCore] error', error);
