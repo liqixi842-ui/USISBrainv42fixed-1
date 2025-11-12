@@ -64,7 +64,7 @@ class NewsPushService {
         
         try {
           const message = this.formatSingleDigestItem(item, i + 1, sorted.length, channel);
-          const result = await this.sendMessage(message, true); // Use Markdown like urgent format
+          const result = await this.sendMessage(message, false); // Use plain text to avoid link preview
           
           // Record push history
           await this.recordPush(item.id, channel, result);
@@ -105,7 +105,7 @@ class NewsPushService {
   formatSingleDigestItem(item, index, total, channel) {
     const score = parseFloat(item.composite_score) || 0;
     
-    // Use translated content if available
+    // Use translated content if available (MUST use Chinese title)
     const displayTitle = item.translated_title || item.title;
     const displaySummary = item.translated_summary || item.summary;
     
@@ -117,29 +117,29 @@ class NewsPushService {
     if (score >= 8.0) scoreEmoji = '⚡';
     else if (score >= 7.0) scoreEmoji = '🔥';
     
-    // Build message - NEW FORMAT matching user's preference
-    let message = `${scoreEmoji} ${this.escapeMarkdown(displayTitle)}\n`;
+    // Build message - PLAIN TEXT (no Markdown escaping to avoid link preview issues)
+    let message = `${scoreEmoji} ${displayTitle}\n`;
     message += `📊 评分: ${score.toFixed(1)}/10\n\n`;
     
     // 📋 详细解读 section
     if (displaySummary) {
       message += `📋 详细解读\n`;
-      message += `${this.escapeMarkdown(displaySummary)}\n\n`;
+      message += `${displaySummary}\n\n`;
     }
     
     // 💡 投资影响 section (AI Commentary)
     if (item.ai_commentary) {
       message += `💡 投资影响\n`;
-      message += `${this.escapeMarkdown(item.ai_commentary)}\n\n`;
+      message += `${item.ai_commentary}\n\n`;
     }
     
-    // Link - NEW FORMAT: 🔗 查看原文 (url)
+    // Link - NEW FORMAT: 🔗 查看原文 (url) - plain text to avoid preview
     message += `🔗 查看原文 (${item.url})\n`;
     message += `📌 来源: ${item.source_name || '未知'}\n\n`;
     
     // Hashtags
     message += `${hashtags}\n\n`;
-    message += `USIS Brain 新闻系统 v2\\.0`;
+    message += `USIS Brain 新闻系统 v2.0`;
     
     return message;
   }
