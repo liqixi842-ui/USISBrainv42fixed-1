@@ -142,22 +142,20 @@ class NewsScheduler {
   }
 
   /**
-   * Send digest for a channel (v3.0 Top-10 Logic)
+   * Send digest for a channel (v3.1 Fixed: Always Push Top 10)
    * 
-   * NEW: Queries Top 10 news by score (allows repeats)
-   * - Lookback: last 12 hours (configurable)
-   * - Includes translations and AI commentary
-   * - No markAsSent (allows repeat digests)
+   * NEW Logic:
+   * - Primary: Last 2 hours, all news regardless of routing channel
+   * - Fallback: Extend to 12 hours if <10 items found
+   * - Always send Top 10 by score (even low scores like 4, 3, 2, 1)
+   * - No channel filtering (was causing <10 results due to suppressed routing)
    */
   async sendDigest(channel) {
     try {
       console.log(`\n📬 [NewsScheduler] Preparing ${channel} Top-10 digest...`);
 
-      // Configurable lookback window (default 12 hours)
-      const lookbackHours = parseInt(process.env.DIGEST_LOOKBACK_HOURS) || 12;
-
-      // Query Top 10 news by composite score
-      const result = await safeQuery(`
+      // Step 1: Try last 2 hours first (strict SLA)
+      let result = await safeQuery(`
         SELECT 
           ni.id,
           ni.title,
@@ -169,29 +167,60 @@ class NewsScheduler {
           ni.translated_summary,
           ni.ai_commentary,
           ns.composite_score,
-          nsrc.name as source,
+          nsrc.name as source_name,
           nsrc.tier
         FROM news_items ni
         JOIN news_scores ns ON ns.news_item_id = ni.id
         LEFT JOIN news_sources nsrc ON nsrc.id = ni.source_id
-        JOIN news_routing_state nrs ON nrs.news_item_id = ni.id
-        WHERE ni.published_at > NOW() - INTERVAL '${lookbackHours} hours'
-          AND nrs.channel IN ('urgent_10', 'digest_2h')
+        WHERE ni.published_at > NOW() - INTERVAL '2 hours'
         ORDER BY ns.composite_score DESC, ni.published_at DESC
         LIMIT 10
       `);
 
-      const items = result.rows;
+      let items = result.rows;
+      let timeWindow = '2h';
+      
+      // Step 2: Fallback to 12 hours if insufficient items
+      if (items.length < 10) {
+        console.log(`⚠️  [NewsScheduler] Only ${items.length} items in last 2h, expanding to 12h...`);
+        
+        result = await safeQuery(`
+          SELECT 
+            ni.id,
+            ni.title,
+            ni.summary,
+            ni.url,
+            ni.published_at,
+            ni.symbols,
+            ni.translated_title,
+            ni.translated_summary,
+            ni.ai_commentary,
+            ns.composite_score,
+            nsrc.name as source_name,
+            nsrc.tier
+          FROM news_items ni
+          JOIN news_scores ns ON ns.news_item_id = ni.id
+          LEFT JOIN news_sources nsrc ON nsrc.id = ni.source_id
+          WHERE ni.published_at > NOW() - INTERVAL '12 hours'
+          ORDER BY ns.composite_score DESC, ni.published_at DESC
+          LIMIT 10
+        `);
+        
+        items = result.rows;
+        timeWindow = '12h (fallback)';
+      }
       
       if (items.length === 0) {
-        console.log(`ℹ️  [NewsScheduler] No items in last ${lookbackHours}h for ${channel}`);
+        console.log(`❌ [NewsScheduler] No items found even in last 12h!`);
         return;
       }
+
+      console.log(`📊 [NewsScheduler] Found ${items.length} items in ${timeWindow}`);
 
       // Push digest (no markAsSent - allows repeats)
       await this.pushService.pushDigest(items, channel);
 
-      console.log(`✅ [NewsScheduler] ${channel} digest sent: Top ${items.length} from last ${lookbackHours}h\n`);
+      console.log(`✅ [NewsScheduler] ${channel} digest sent: Top ${items.length} from ${timeWindow}\n`);
 
     } catch (error) {
       console.error(`❌ [NewsScheduler] Failed to send ${channel} digest:`, error.message);
