@@ -1,5 +1,15 @@
 // ====== USIS Brain · v6.0（多AI模型 + 多语言分析 + 数据驱动投研） ======
 
+// 🔍 BUILD VERSION TRACKING
+const BUILD_VERSION = 'v4.0.1-PEER-FIX';
+const BUILD_TIMESTAMP = new Date('2025-11-13T19:43:00Z');
+console.log('\n🚀 ═══════════════════════════════════════════════════════');
+console.log(`   USIS Brain ${BUILD_VERSION}`);
+console.log(`   Build: ${BUILD_TIMESTAMP.toISOString()}`);
+console.log(`   Started: ${new Date().toISOString()}`);
+console.log(`   PID: ${process.pid}`);
+console.log('═══════════════════════════════════════════════════════\n');
+
 // Global error handlers（不退出进程，保持应用运行）
 process.on('unhandledRejection', (err) => {
   console.error('[ERROR] UnhandledRejection:', err.message);

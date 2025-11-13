@@ -546,6 +546,7 @@ function generateVolumeChartURL(historicalPrices, symbol) {
  */
 async function generateDeepReport(symbol, options = {}) {
   console.log(`\n📊 [Deep Report v3.0] 生成机构级深度研报: ${symbol}`);
+  console.log(`   🔍 ACTIVE_BUILD: deepReportService.js v4.0.1-PEER-FIX | ${new Date().toISOString()}`);
   const startTime = Date.now();
   
   try {
@@ -667,6 +668,7 @@ async function collectEnrichedData(symbol) {
   console.log(`      - 历史价格点数: ${enrichedData.historicalPrices?.length || 0}`);
   console.log(`      - 技术指标: RSI=${enrichedData.technicalIndicators?.rsi ? '✓' : '✗'} MACD=${enrichedData.technicalIndicators?.macd ? '✓' : '✗'}`);
   console.log(`      - 同行公司数: ${enrichedData.peerBenchmarks?.peers?.length || 0}个`);
+  console.log(`   📦 MODULE VERSION: deepReportService.js v4.0.1-PEER-FIX (2025-11-13 19:43 UTC)`);
   
   return {
     symbol,
