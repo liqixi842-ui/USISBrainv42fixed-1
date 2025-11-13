@@ -1182,11 +1182,338 @@ async function fetchDataDrivenAnalysis(symbol) {
   };
 }
 
+/**
+ * 🆕 v6.2: Twelve Data技术指标获取 - 并行获取多个指标
+ * @param {string} symbol - 股票代码
+ * @param {string} interval - 时间间隔 (1day, 1h, 15min等)
+ * @returns {Promise<Object>} 技术指标数据
+ */
+async function fetchTechnicalIndicators(symbol, interval = '1day') {
+  console.log(`\n📈 [Twelve Data] 获取${symbol}技术指标 (${interval})...`);
+  
+  if (!TWELVE_DATA_KEY) {
+    console.warn('   ⚠️  TWELVE_DATA_API_KEY未配置，跳过技术指标');
+    return { indicators: null, source: null };
+  }
+  
+  const baseUrl = 'https://api.twelvedata.com';
+  const startTime = Date.now();
+  
+  // 🔧 辅助函数：检查HTTP响应和API错误
+  const fetchIndicator = async (url, parser) => {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    if (data.status === 'error') {
+      throw new Error(data.message || 'API returned error status');
+    }
+    return parser(data);
+  };
+  
+  // 并行获取5个核心技术指标
+  const indicators = await Promise.allSettled([
+    // RSI - 相对强弱指标
+    fetchIndicator(
+      `${baseUrl}/rsi?symbol=${symbol}&interval=${interval}&time_period=14&apikey=${TWELVE_DATA_KEY}`,
+      data => ({
+        name: 'RSI',
+        value: parseFloat(data.values?.[0]?.rsi),
+        timestamp: data.values?.[0]?.datetime,
+        period: 14,
+        status: 'ok'
+      })
+    ),
+    
+    // MACD - 移动平均收敛散度
+    fetchIndicator(
+      `${baseUrl}/macd?symbol=${symbol}&interval=${interval}&apikey=${TWELVE_DATA_KEY}`,
+      data => ({
+        name: 'MACD',
+        macd: parseFloat(data.values?.[0]?.macd),
+        signal: parseFloat(data.values?.[0]?.macd_signal),
+        histogram: parseFloat(data.values?.[0]?.macd_hist),
+        timestamp: data.values?.[0]?.datetime,
+        status: 'ok'
+      })
+    ),
+    
+    // EMA - 指数移动平均线
+    fetchIndicator(
+      `${baseUrl}/ema?symbol=${symbol}&interval=${interval}&time_period=20&apikey=${TWELVE_DATA_KEY}`,
+      data => ({
+        name: 'EMA_20',
+        value: parseFloat(data.values?.[0]?.ema),
+        timestamp: data.values?.[0]?.datetime,
+        period: 20,
+        status: 'ok'
+      })
+    ),
+    
+    // BBANDS - 布林带
+    fetchIndicator(
+      `${baseUrl}/bbands?symbol=${symbol}&interval=${interval}&time_period=20&apikey=${TWELVE_DATA_KEY}`,
+      data => ({
+        name: 'BBANDS',
+        upper: parseFloat(data.values?.[0]?.upper_band),
+        middle: parseFloat(data.values?.[0]?.middle_band),
+        lower: parseFloat(data.values?.[0]?.lower_band),
+        timestamp: data.values?.[0]?.datetime,
+        status: 'ok'
+      })
+    ),
+    
+    // ADX - 平均趋向指标
+    fetchIndicator(
+      `${baseUrl}/adx?symbol=${symbol}&interval=${interval}&time_period=14&apikey=${TWELVE_DATA_KEY}`,
+      data => ({
+        name: 'ADX',
+        value: parseFloat(data.values?.[0]?.adx),
+        timestamp: data.values?.[0]?.datetime,
+        period: 14,
+        status: 'ok'
+      })
+    )
+  ]);
+  
+  const elapsed = Date.now() - startTime;
+  
+  // 🔧 处理结果，保留错误信息以供下游判断
+  const results = {
+    rsi: indicators[0].status === 'fulfilled' ? indicators[0].value : { error: indicators[0].reason?.message },
+    macd: indicators[1].status === 'fulfilled' ? indicators[1].value : { error: indicators[1].reason?.message },
+    ema: indicators[2].status === 'fulfilled' ? indicators[2].value : { error: indicators[2].reason?.message },
+    bbands: indicators[3].status === 'fulfilled' ? indicators[3].value : { error: indicators[3].reason?.message },
+    adx: indicators[4].status === 'fulfilled' ? indicators[4].value : { error: indicators[4].reason?.message },
+    metadata: {
+      symbol,
+      interval,
+      timestamp: Date.now(),
+      elapsed_ms: elapsed,
+      source: 'Twelve Data',
+      success_count: indicators.filter(r => r.status === 'fulfilled').length,
+      total_count: indicators.length
+    }
+  };
+  
+  console.log(`✅ [Technical Indicators] 完成 (${elapsed}ms, 成功率: ${results.metadata.success_count}/${results.metadata.total_count})`);
+  return { technical: results, source: 'Twelve Data' };
+}
+
+/**
+ * 🆕 v6.2: Twelve Data基本面数据获取 - 财报三表
+ * @param {string} symbol - 股票代码
+ * @returns {Promise<Object>} 基本面数据
+ */
+async function fetchFundamentals(symbol) {
+  console.log(`\n📊 [Twelve Data] 获取${symbol}基本面数据...`);
+  
+  if (!TWELVE_DATA_KEY) {
+    console.warn('   ⚠️  TWELVE_DATA_API_KEY未配置，跳过基本面数据');
+    return { fundamentals: null, source: null };
+  }
+  
+  const baseUrl = 'https://api.twelvedata.com';
+  const startTime = Date.now();
+  
+  // 🔧 辅助函数：检查HTTP响应和API错误
+  const fetchFundamental = async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    if (data.status === 'error') {
+      throw new Error(data.message || 'API returned error status');
+    }
+    return data;
+  };
+  
+  // 并行获取4个基本面数据源
+  const fundamentals = await Promise.allSettled([
+    // 利润表 (Income Statement)
+    fetchFundamental(`${baseUrl}/income_statement?symbol=${symbol}&period=annual&apikey=${TWELVE_DATA_KEY}`)
+      .then(data => ({ name: 'income_statement', data: data.income_statement?.[0], timestamp: data.income_statement?.[0]?.fiscal_date })),
+    
+    // 资产负债表 (Balance Sheet)
+    fetchFundamental(`${baseUrl}/balance_sheet?symbol=${symbol}&period=annual&apikey=${TWELVE_DATA_KEY}`)
+      .then(data => ({ name: 'balance_sheet', data: data.balance_sheet?.[0], timestamp: data.balance_sheet?.[0]?.fiscal_date })),
+    
+    // 现金流量表 (Cash Flow)
+    fetchFundamental(`${baseUrl}/cash_flow?symbol=${symbol}&period=annual&apikey=${TWELVE_DATA_KEY}`)
+      .then(data => ({ name: 'cash_flow', data: data.cash_flow?.[0], timestamp: data.cash_flow?.[0]?.fiscal_date })),
+    
+    // 统计数据 (Statistics - PE, Market Cap等)
+    fetchFundamental(`${baseUrl}/statistics?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`)
+      .then(data => ({ name: 'statistics', data: data.statistics }))
+  ]);
+  
+  const elapsed = Date.now() - startTime;
+  
+  const results = {
+    income_statement: fundamentals[0].status === 'fulfilled' ? fundamentals[0].value : { error: fundamentals[0].reason?.message },
+    balance_sheet: fundamentals[1].status === 'fulfilled' ? fundamentals[1].value : { error: fundamentals[1].reason?.message },
+    cash_flow: fundamentals[2].status === 'fulfilled' ? fundamentals[2].value : { error: fundamentals[2].reason?.message },
+    statistics: fundamentals[3].status === 'fulfilled' ? fundamentals[3].value : { error: fundamentals[3].reason?.message },
+    metadata: {
+      symbol,
+      timestamp: Date.now(),
+      elapsed_ms: elapsed,
+      source: 'Twelve Data',
+      success_count: fundamentals.filter(r => r.status === 'fulfilled').length,
+      total_count: fundamentals.length
+    }
+  };
+  
+  console.log(`✅ [Fundamentals] 完成 (${elapsed}ms, 成功率: ${results.metadata.success_count}/${results.metadata.total_count})`);
+  return { fundamentals: results, source: 'Twelve Data' };
+}
+
+/**
+ * 🆕 v6.2: Twelve Data分析师评级和价格目标
+ * @param {string} symbol - 股票代码
+ * @returns {Promise<Object>} 分析师评级数据
+ */
+async function fetchAnalystRatings(symbol) {
+  console.log(`\n👔 [Twelve Data] 获取${symbol}分析师评级...`);
+  
+  if (!TWELVE_DATA_KEY) {
+    console.warn('   ⚠️  TWELVE_DATA_API_KEY未配置，跳过分析师评级');
+    return { ratings: null, source: null };
+  }
+  
+  const baseUrl = 'https://api.twelvedata.com';
+  const startTime = Date.now();
+  
+  // 🔧 辅助函数：检查HTTP响应和API错误
+  const fetchRating = async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    }
+    const data = await res.json();
+    if (data.status === 'error') {
+      throw new Error(data.message || 'API returned error status');
+    }
+    return data;
+  };
+  
+  // 并行获取分析师相关数据
+  const ratingsData = await Promise.allSettled([
+    // 推荐评级
+    fetchRating(`${baseUrl}/recommendations?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`),
+    
+    // 价格目标
+    fetchRating(`${baseUrl}/price_target?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`)
+  ]);
+  
+  const elapsed = Date.now() - startTime;
+  
+  const results = {
+    recommendations: ratingsData[0].status === 'fulfilled' ? ratingsData[0].value : { error: ratingsData[0].reason?.message },
+    price_target: ratingsData[1].status === 'fulfilled' ? ratingsData[1].value : { error: ratingsData[1].reason?.message },
+    metadata: {
+      symbol,
+      timestamp: Date.now(),
+      elapsed_ms: elapsed,
+      source: 'Twelve Data',
+      success_count: ratingsData.filter(r => r.status === 'fulfilled').length,
+      total_count: ratingsData.length
+    }
+  };
+  
+  console.log(`✅ [Analyst Ratings] 完成 (${elapsed}ms, 成功率: ${results.metadata.success_count}/${results.metadata.total_count})`);
+  return { ratings: results, source: 'Twelve Data' };
+}
+
+/**
+ * 🆕 v6.2: 全面数据驱动分析 - 整合所有Twelve Data功能
+ * @param {string} symbol - 股票代码
+ * @returns {Promise<Object>} 完整的分析数据包
+ */
+async function fetchComprehensiveAnalysis(symbol) {
+  console.log(`\n🚀 [Comprehensive Analysis] 获取${symbol}全面分析数据...`);
+  
+  const startTime = Date.now();
+  
+  // 超级并行：同时获取6个维度的数据
+  const [quoteData, profileData, technicalData, fundamentalData, analystData, newsData] = await Promise.all([
+    // 1. 实时报价
+    fetchMarketData([symbol], ['quote']).then(d => d.quotes[symbol]).catch(() => null),
+    
+    // 2. 公司概况
+    fetchCompanyProfile(symbol).catch(() => ({ profile: null, source: null })),
+    
+    // 3. 技术指标
+    fetchTechnicalIndicators(symbol).catch(() => ({ technical: null, source: null })),
+    
+    // 4. 基本面数据
+    fetchFundamentals(symbol).catch(() => ({ fundamentals: null, source: null })),
+    
+    // 5. 分析师评级
+    fetchAnalystRatings(symbol).catch(() => ({ ratings: null, source: null })),
+    
+    // 6. 新闻
+    fetchNews(symbol).catch(() => ({ news: [], sources: [] }))
+  ]);
+  
+  const elapsed = Date.now() - startTime;
+  
+  // 计算数据完整性评分
+  const dataCompleteness = {
+    hasQuote: !!quoteData,
+    hasProfile: !!profileData.profile,
+    hasTechnical: !!technicalData.technical,
+    hasFundamentals: !!fundamentalData.fundamentals,
+    hasAnalystRatings: !!analystData.ratings,
+    hasNews: newsData.news?.length > 0,
+    completenessScore: [
+      !!quoteData,
+      !!profileData.profile,
+      !!technicalData.technical,
+      !!fundamentalData.fundamentals,
+      !!analystData.ratings,
+      newsData.news?.length > 0
+    ].filter(Boolean).length / 6
+  };
+  
+  console.log(`✅ [Comprehensive Analysis] 完成 (${elapsed}ms, 完整度: ${(dataCompleteness.completenessScore * 100).toFixed(0)}%)`);
+  
+  return {
+    symbol,
+    quote: quoteData,
+    profile: profileData.profile,
+    technical_indicators: technicalData.technical,
+    fundamentals: fundamentalData.fundamentals,
+    analyst_ratings: analystData.ratings,
+    news: newsData.news || [],
+    metadata: {
+      timestamp: Date.now(),
+      elapsed_ms: elapsed,
+      completeness: dataCompleteness,
+      sources: {
+        quote: 'Multi-source',
+        profile: profileData.source,
+        technical: technicalData.source,
+        fundamentals: fundamentalData.source,
+        analyst: analystData.source,
+        news: newsData.sources
+      }
+    }
+  };
+}
+
 module.exports = {
   fetchMarketData,
   validateDataForAnalysis,
   calculateFreshnessScore,
   fetchCompanyProfile,
   fetchStockMetrics,
-  fetchDataDrivenAnalysis
+  fetchDataDrivenAnalysis,
+  // 🆕 v6.2: Twelve Data集成
+  fetchTechnicalIndicators,
+  fetchFundamentals,
+  fetchAnalystRatings,
+  fetchComprehensiveAnalysis
 };

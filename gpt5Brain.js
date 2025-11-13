@@ -387,10 +387,151 @@ async function generateDataDrivenStockAnalysis(dataPackage, chartAnalysis, conte
 }
 
 /**
+ * 🆕 v6.2: 格式化Twelve Data技术指标
+ */
+function buildTwelveDataTechnicalText(technical_indicators) {
+  if (!technical_indicators || technical_indicators.error) return '';
+  
+  const { rsi, macd, ema, bbands, adx } = technical_indicators;
+  
+  let text = '\n### 📊 Twelve Data技术指标 (实时)\n';
+  
+  // RSI指标
+  if (rsi && !rsi.error) {
+    const rsiValue = parseFloat(rsi.value);
+    const rsiSignal = rsiValue > 70 ? '超买' : rsiValue < 30 ? '超卖' : '中性';
+    text += `- **RSI(14)**: ${rsiValue.toFixed(2)} - ${rsiSignal}\n`;
+  }
+  
+  // MACD指标
+  if (macd && !macd.error) {
+    const macdValue = parseFloat(macd.macd);
+    const signal = parseFloat(macd.signal);
+    const histogram = parseFloat(macd.histogram);
+    const macdSignal = histogram > 0 ? '看多' : '看空';
+    text += `- **MACD**: ${macdValue.toFixed(4)} (信号线: ${signal.toFixed(4)}, 柱状图: ${histogram.toFixed(4)}) - ${macdSignal}\n`;
+  }
+  
+  // EMA指标
+  if (ema && !ema.error) {
+    text += `- **EMA(20)**: $${parseFloat(ema.value).toFixed(2)}\n`;
+  }
+  
+  // 布林带
+  if (bbands && !bbands.error) {
+    text += `- **布林带**: 上轨 $${parseFloat(bbands.upper).toFixed(2)} | 中轨 $${parseFloat(bbands.middle).toFixed(2)} | 下轨 $${parseFloat(bbands.lower).toFixed(2)}\n`;
+  }
+  
+  // ADX趋势强度
+  if (adx && !adx.error) {
+    const adxValue = parseFloat(adx.value);
+    const trendStrength = adxValue > 25 ? '强趋势' : adxValue > 20 ? '中等趋势' : '弱趋势';
+    text += `- **ADX(14)**: ${adxValue.toFixed(2)} - ${trendStrength}\n`;
+  }
+  
+  return text + '\n';
+}
+
+/**
+ * 🆕 v6.2: 格式化Twelve Data基本面数据
+ */
+function buildFundamentalsText(fundamentals) {
+  if (!fundamentals || fundamentals.error) return '';
+  
+  let text = '\n### 💰 基本面数据 (Twelve Data)\n';
+  
+  // 利润表
+  if (fundamentals.income_statement && !fundamentals.income_statement.error) {
+    const income = fundamentals.income_statement.data;
+    if (income) {
+      text += `\n**利润表 (${income.fiscal_date || '最新年报'})**:\n`;
+      if (income.total_revenue) text += `- 总收入: $${(income.total_revenue / 1e9).toFixed(2)}B\n`;
+      if (income.net_income) text += `- 净利润: $${(income.net_income / 1e9).toFixed(2)}B\n`;
+      if (income.operating_income) text += `- 营业利润: $${(income.operating_income / 1e9).toFixed(2)}B\n`;
+      if (income.gross_profit) text += `- 毛利润: $${(income.gross_profit / 1e9).toFixed(2)}B\n`;
+    }
+  }
+  
+  // 资产负债表
+  if (fundamentals.balance_sheet && !fundamentals.balance_sheet.error) {
+    const balance = fundamentals.balance_sheet.data;
+    if (balance) {
+      text += `\n**资产负债表 (${balance.fiscal_date || '最新'})**:\n`;
+      if (balance.total_assets) text += `- 总资产: $${(balance.total_assets / 1e9).toFixed(2)}B\n`;
+      if (balance.total_liabilities) text += `- 总负债: $${(balance.total_liabilities / 1e9).toFixed(2)}B\n`;
+      if (balance.total_equity) text += `- 股东权益: $${(balance.total_equity / 1e9).toFixed(2)}B\n`;
+      if (balance.cash) text += `- 现金: $${(balance.cash / 1e9).toFixed(2)}B\n`;
+    }
+  }
+  
+  // 现金流量表
+  if (fundamentals.cash_flow && !fundamentals.cash_flow.error) {
+    const cashFlow = fundamentals.cash_flow.data;
+    if (cashFlow) {
+      text += `\n**现金流量表 (${cashFlow.fiscal_date || '最新'})**:\n`;
+      if (cashFlow.operating_cash_flow) text += `- 经营性现金流: $${(cashFlow.operating_cash_flow / 1e9).toFixed(2)}B\n`;
+      if (cashFlow.investing_cash_flow) text += `- 投资性现金流: $${(cashFlow.investing_cash_flow / 1e9).toFixed(2)}B\n`;
+      if (cashFlow.financing_cash_flow) text += `- 筹资性现金流: $${(cashFlow.financing_cash_flow / 1e9).toFixed(2)}B\n`;
+    }
+  }
+  
+  // 统计数据
+  if (fundamentals.statistics && !fundamentals.statistics.error) {
+    const stats = fundamentals.statistics.data;
+    if (stats) {
+      text += `\n**估值指标**:\n`;
+      if (stats.pe_ratio) text += `- P/E比率: ${stats.pe_ratio.toFixed(2)}\n`;
+      if (stats.pb_ratio) text += `- P/B比率: ${stats.pb_ratio.toFixed(2)}\n`;
+      if (stats.dividend_yield) text += `- 股息率: ${(stats.dividend_yield * 100).toFixed(2)}%\n`;
+      if (stats.market_cap) text += `- 市值: $${(stats.market_cap / 1e9).toFixed(2)}B\n`;
+    }
+  }
+  
+  return text + '\n';
+}
+
+/**
+ * 🆕 v6.2: 格式化Twelve Data分析师评级
+ */
+function buildAnalystRatingsText(analyst_ratings) {
+  if (!analyst_ratings || analyst_ratings.error) return '';
+  
+  let text = '\n### 👔 分析师评级 (Twelve Data)\n';
+  
+  // 推荐评级
+  if (analyst_ratings.recommendations && !analyst_ratings.recommendations.error) {
+    const rec = analyst_ratings.recommendations;
+    if (rec.buy || rec.strong_buy || rec.hold || rec.sell) {
+      text += `\n**分析师推荐汇总**:\n`;
+      if (rec.strong_buy) text += `- 强力买入: ${rec.strong_buy} 位分析师\n`;
+      if (rec.buy) text += `- 买入: ${rec.buy} 位分析师\n`;
+      if (rec.hold) text += `- 持有: ${rec.hold} 位分析师\n`;
+      if (rec.sell) text += `- 卖出: ${rec.sell} 位分析师\n`;
+      if (rec.strong_sell) text += `- 强力卖出: ${rec.strong_sell} 位分析师\n`;
+      if (rec.recommendation_mean) text += `- 平均评级: ${rec.recommendation_mean}\n`;
+    }
+  }
+  
+  // 价格目标
+  if (analyst_ratings.price_target && !analyst_ratings.price_target.error) {
+    const target = analyst_ratings.price_target;
+    if (target.price_target_average || target.price_target_high || target.price_target_low) {
+      text += `\n**分析师目标价**:\n`;
+      if (target.price_target_average) text += `- 平均目标价: $${target.price_target_average.toFixed(2)}\n`;
+      if (target.price_target_high) text += `- 最高目标价: $${target.price_target_high.toFixed(2)}\n`;
+      if (target.price_target_low) text += `- 最低目标价: $${target.price_target_low.toFixed(2)}\n`;
+      if (target.number_of_analysts) text += `- 覆盖分析师数: ${target.number_of_analysts} 位\n`;
+    }
+  }
+  
+  return text + '\n';
+}
+
+/**
  * 🆕 v5.0: 构建数据驱动提示词（机构级投研模板）
  */
 function buildDataDrivenPrompt(dataPackage, chartAnalysis, context) {
-  const { symbol, quote, profile, metrics, news } = dataPackage;
+  const { symbol, quote, profile, metrics, news, technical_indicators, fundamentals, analyst_ratings } = dataPackage;
   
   // 🎯 计算技术分析：支撑压力位
   let technicalLevelsText = '';
@@ -502,6 +643,9 @@ function buildDataDrivenPrompt(dataPackage, chartAnalysis, context) {
 - **Beta系数**: ${metrics?.beta?.toFixed(2) || 'N/A'}
 
 ${technicalLevelsText}
+${buildTwelveDataTechnicalText(technical_indicators)}
+${buildFundamentalsText(fundamentals)}
+${buildAnalystRatingsText(analyst_ratings)}
 ${chartAnalysis ? `### Vision AI技术分析\n${chartAnalysis}\n` : ''}
 
 ### 近期新闻
