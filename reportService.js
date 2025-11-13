@@ -2,11 +2,13 @@
 // 自动生成公司研究报告PDF：8部分结构化报告 + AI分析
 
 const fetch = require("node-fetch");
-const htmlPdf = require('html-pdf-node');
 const { fetchMarketData, fetchCompanyProfile, fetchHistoricalPrices } = require("./dataBroker");
 const { fetchAndRankNews } = require("./newsBroker");
 const { getMultiAIProvider } = require("./multiAiProvider");
 const { buildStockChartURL } = require("./stockChartService");
+
+// PDFShift API配置（50个免费PDF/月，无需Chromium）
+const PDFSHIFT_API_KEY = process.env.PDFSHIFT_API_KEY || '';
 
 /**
  * 生成公司研究报告（8部分结构）
@@ -255,17 +257,99 @@ async function renderReportPDF(symbol, reportContent) {
     chartURL
   });
   
-  // 生成PDF
-  const options = {
-    format: 'A4',
-    margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
-    printBackground: true
-  };
-  
-  const file = { content: htmlContent };
-  const pdfBuffer = await htmlPdf.generatePdf(file, options);
+  // 使用PDFShift API生成PDF（无需本地Chromium）
+  const pdfBuffer = await convertHTMLtoPDF(htmlContent);
   
   return { pdfBuffer, htmlContent };
+}
+
+/**
+ * 使用PDFShift API将HTML转换为PDF
+ * @param {string} htmlContent - HTML内容
+ * @returns {Promise<Buffer>} PDF Buffer
+ */
+async function convertHTMLtoPDF(htmlContent) {
+  // 如果没有API Key，使用备用方案（纯文本PDF）
+  if (!PDFSHIFT_API_KEY) {
+    console.warn('⚠️  PDFShift API Key未配置，使用PDFKit备用方案');
+    return generateFallbackPDF(htmlContent);
+  }
+  
+  try {
+    console.log('📄 [PDFShift] 开始生成PDF...');
+    const response = await fetch('https://api.pdfshift.io/v3/convert/pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${Buffer.from('api:' + PDFSHIFT_API_KEY).toString('base64')}`
+      },
+      body: JSON.stringify({
+        source: htmlContent,
+        format: 'A4',
+        margin: '20mm 15mm',
+        print_background: true
+      }),
+      timeout: 30000
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`PDFShift API错误: ${response.status} - ${errorText}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    console.log('✅ [PDFShift] PDF生成成功');
+    return Buffer.from(arrayBuffer);
+    
+  } catch (error) {
+    console.error('❌ PDFShift API调用失败:', error.message);
+    console.warn('⚠️  降级到PDFKit备用方案');
+    return generateFallbackPDF(htmlContent);
+  }
+}
+
+/**
+ * 备用方案：使用PDFKit生成纯文本PDF
+ */
+function generateFallbackPDF(htmlContent) {
+  console.log('📝 [PDFKit] 使用备用方案生成PDF...');
+  
+  // 提取文本内容
+  const textContent = htmlContent
+    .replace(/<style>[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, '\n')
+    .replace(/\n+/g, '\n')
+    .trim();
+  
+  const PDFDocument = require('pdfkit');
+  const chunks = [];
+  
+  const doc = new PDFDocument({ 
+    size: 'A4',
+    margins: { top: 50, bottom: 50, left: 50, right: 50 }
+  });
+  
+  doc.on('data', chunk => chunks.push(chunk));
+  
+  // 标题
+  doc.fontSize(16).font('Helvetica-Bold').text('USIS Research Report', { align: 'center' });
+  doc.moveDown();
+  
+  // 内容
+  doc.fontSize(10).font('Helvetica').text(textContent, {
+    width: 500,
+    align: 'left'
+  });
+  
+  doc.end();
+  
+  return new Promise((resolve, reject) => {
+    doc.on('end', () => {
+      console.log('✅ [PDFKit] PDF生成成功');
+      resolve(Buffer.concat(chunks));
+    });
+    doc.on('error', reject);
+  });
 }
 
 /**

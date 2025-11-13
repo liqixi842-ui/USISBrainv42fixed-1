@@ -15,6 +15,7 @@
     "html-pdf-node": "^1.0.8",
     "node-cron": "^4.2.1",
     "node-fetch": "^2.7.0",
+    "pdfkit": "^0.17.2",
     "pg": "^8.16.3",
     "rss-parser": "^3.13.0",
     "telegraf": "^4.16.3"
