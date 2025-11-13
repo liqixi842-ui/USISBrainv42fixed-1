@@ -11,6 +11,51 @@ const QuickChart = require('quickchart-js');
 const PDFSHIFT_API_KEY = process.env.PDFSHIFT_API_KEY || '';
 
 /**
+ * 🔧 格式化市值（自动单位：B/M/K）
+ * @param {number} marketCap - 原始市值（以百万为单位）
+ * @returns {string} 格式化后的市值字符串
+ */
+function formatMarketCap(marketCap) {
+  if (!marketCap || isNaN(marketCap)) return 'N/A';
+  
+  const numCap = Number(marketCap);
+  
+  // 如果已经是以百万为单位（来自Finnhub profile.marketCapitalization）
+  if (numCap > 1000) {
+    // 转换为十亿（Billion）
+    return `$${(numCap / 1000).toFixed(2)}B`;
+  } else if (numCap >= 1) {
+    // 保持百万（Million）
+    return `$${numCap.toFixed(2)}M`;
+  } else {
+    // 转换为千（Thousand）
+    return `$${(numCap * 1000).toFixed(2)}K`;
+  }
+}
+
+/**
+ * 🔧 格式化财务数值（自动单位：B/M/K）
+ * @param {number} value - 原始值
+ * @returns {string} 格式化后的字符串
+ */
+function formatFinancialValue(value) {
+  if (!value || isNaN(value)) return 'N/A';
+  
+  const num = Number(value);
+  const abs = Math.abs(num);
+  
+  if (abs >= 1000000000) {
+    return `$${(num / 1000000000).toFixed(2)}B`;
+  } else if (abs >= 1000000) {
+    return `$${(num / 1000000).toFixed(2)}M`;
+  } else if (abs >= 1000) {
+    return `$${(num / 1000).toFixed(2)}K`;
+  } else {
+    return `$${num.toFixed(2)}`;
+  }
+}
+
+/**
  * 🆕 v4.0: 标准化财务数据为时间序列（用于图表和分析）
  * @param {Object} fundamentals - Twelve Data基本面数据
  * @param {Object} metrics - Finnhub估值指标
@@ -444,7 +489,7 @@ async function generateSection_Summary(symbol, data, multiAI) {
 
 数据：
 - 股价: $${quote.c || 'N/A'} (${quote.dp ? (quote.dp > 0 ? '+' : '') + quote.dp.toFixed(2) + '%' : 'N/A'})
-- 市值: $${profile.marketCapitalization || 'N/A'}M
+- 市值: ${formatMarketCap(profile.marketCapitalization)}
 - 行业: ${profile.finnhubIndustry || '未知'}
 - 最近新闻: ${news.slice(0, 3).map(n => n.headline).join('; ')}
 
@@ -594,7 +639,7 @@ async function generateSection_Financials(symbol, data, multiAI) {
   const prompt = `你是财务分析师，请分析${companyName} (${symbol})的财务与估值：
 
 数据：
-- 市值: $${profile.marketCapitalization || 'N/A'}M
+- 市值: ${formatMarketCap(profile.marketCapitalization)}
 - 股价: $${quote.c || 'N/A'}
 - 行业: ${profile.finnhubIndustry || '未知'}
 ${finContext}
@@ -605,10 +650,10 @@ ${finContext}
   "profitability": "${hasRealData ? '基于毛利率、净利率、ROE分析盈利能力' : '数据有限'}",
   "valuationView": "${hasRealData ? '基于PE对比行业平均判断估值水平' : '数据不足'}",
   "keyMetrics": {
-    "revenue": "${financialData.revenue[0] ? (financialData.revenue[0] / 1000000).toFixed(2) + 'M' : 'N/A'}",
-    "netIncome": "${financialData.netIncome[0] ? (financialData.netIncome[0] / 1000000).toFixed(2) + 'M' : 'N/A'}",
+    "revenue": "${financialData.revenue[0] ? formatFinancialValue(financialData.revenue[0]) : 'N/A'}",
+    "netIncome": "${financialData.netIncome[0] ? formatFinancialValue(financialData.netIncome[0]) : 'N/A'}",
     "pe": "${metrics?.peRatio?.toFixed(2) || 'N/A'}",
-    "marketCap": "${profile.marketCapitalization || 'N/A'}M"
+    "marketCap": "${formatMarketCap(profile.marketCapitalization)}"
   },
   "tableData": {
     "recentYears": "${hasRealData ? '基于真实数据' : '数据有限'}"
@@ -628,10 +673,10 @@ ${finContext}
       profitability: '数据有限',
       valuationView: '数据有限',
       keyMetrics: {
-        revenue: financialData.revenue[0] ? (financialData.revenue[0] / 1000000).toFixed(2) + 'M' : 'N/A',
-        netIncome: financialData.netIncome[0] ? (financialData.netIncome[0] / 1000000).toFixed(2) + 'M' : 'N/A',
+        revenue: financialData.revenue[0] ? formatFinancialValue(financialData.revenue[0]) : 'N/A',
+        netIncome: financialData.netIncome[0] ? formatFinancialValue(financialData.netIncome[0]) : 'N/A',
         pe: metrics?.peRatio?.toFixed(2) || 'N/A',
-        marketCap: profile.marketCapitalization || 'N/A'
+        marketCap: formatMarketCap(profile.marketCapitalization)
       },
       tableData: { recentYears: '数据缺失' },
       realFinancialData: financialData,
