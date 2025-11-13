@@ -229,18 +229,23 @@ class NewsScheduler {
   }
 
   /**
-   * Deduplicate news items by title (v3.2: Fix duplicate Form 13G, etc.)
-   * Keeps highest scored item for each unique title
+   * Deduplicate news items by title (v3.3: Fuzzy matching for similar titles)
+   * Keeps highest scored item for each unique/similar title
    */
   deduplicateByTitle(items) {
-    const seen = new Map();
     const result = [];
+    const seenTitles = [];
     
     for (const item of items) {
-      const title = item.translated_title || item.title;
+      const title = (item.translated_title || item.title || '').trim();
       
-      if (!seen.has(title)) {
-        seen.set(title, true);
+      // Check if this title is similar to any already seen
+      const isDuplicate = seenTitles.some(seenTitle => 
+        this.areTitlesSimilar(title, seenTitle)
+      );
+      
+      if (!isDuplicate) {
+        seenTitles.push(title);
         result.push(item);
       }
       // Skip duplicates (already sorted by score DESC, so we keep the highest)
@@ -248,6 +253,58 @@ class NewsScheduler {
     
     console.log(`🔄 [Dedup] ${items.length} items → ${result.length} unique (removed ${items.length - result.length} duplicates)`);
     return result;
+  }
+
+  /**
+   * Check if two titles are similar enough to be considered duplicates
+   * Returns true if:
+   * - Exactly the same
+   * - One is a prefix/substring of the other (length > 15 chars)
+   * - 90%+ similar (simple similarity check)
+   */
+  areTitlesSimilar(title1, title2) {
+    if (!title1 || !title2) return false;
+    
+    const t1 = title1.toLowerCase().trim();
+    const t2 = title2.toLowerCase().trim();
+    
+    // Exact match
+    if (t1 === t2) return true;
+    
+    // Prefix/substring match (for titles like "利率公告" vs "利率公告和货币政策报告")
+    // Check if one title starts with or contains the other (min 4 chars to avoid false positives)
+    const minLength = 4;
+    if (t1.length >= minLength && t2.length >= minLength) {
+      // If shorter title is a prefix of longer title
+      if (t1.startsWith(t2) || t2.startsWith(t1)) return true;
+      // If shorter title is contained in longer title (with length check)
+      const shorter = t1.length < t2.length ? t1 : t2;
+      const longer = t1.length < t2.length ? t2 : t1;
+      if (shorter.length >= 5 && longer.includes(shorter)) return true;
+    }
+    
+    // Very similar titles (90%+ similar characters)
+    const similarity = this.calculateSimilarity(t1, t2);
+    if (similarity >= 0.9) return true;
+    
+    return false;
+  }
+
+  /**
+   * Calculate simple character-based similarity between two strings
+   */
+  calculateSimilarity(str1, str2) {
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+    
+    if (longer.length === 0) return 1.0;
+    
+    let matches = 0;
+    for (let i = 0; i < shorter.length; i++) {
+      if (longer[i] === shorter[i]) matches++;
+    }
+    
+    return matches / longer.length;
   }
 
   /**
