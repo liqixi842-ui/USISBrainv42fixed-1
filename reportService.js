@@ -117,13 +117,15 @@ async function generateReportContent(symbol, dataCollection) {
   
   // 使用GPT-4o生成报告
   const multiAI = getMultiAIProvider();
-  const aiResponse = await multiAI.generateWithModel('openai-gpt4o', prompt, {
+  const aiResponse = await multiAI.generate('gpt-4o', [
+    { role: 'user', content: prompt }
+  ], {
     maxTokens: 2000,
     temperature: 0.7
   });
   
   // 解析AI响应为结构化内容
-  const sections = parseAIResponse(aiResponse);
+  const sections = parseAIResponse(aiResponse.text || aiResponse);
   
   // 生成3-5行摘要
   const summary = generateSummary(sections, quote);
