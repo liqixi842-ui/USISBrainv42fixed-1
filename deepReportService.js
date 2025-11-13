@@ -1190,11 +1190,35 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
 
   <!-- 行业与竞争 -->
   <h2>三、行业与竞争格局</h2>
-  <h3>行业现状</h3>
-  <p>${sections.industry.industryTrend}</p>
+  
+  ${sections.industry.industryCycle ? `
+  <h3>行业周期</h3>
+  <div class="highlight-box">
+    <p>${sections.industry.industryCycle}</p>
+  </div>
+  ` : ''}
+  
+  ${sections.industry.keyDrivers && sections.industry.keyDrivers.length > 0 ? `
+  <h3>关键驱动因素</h3>
+  <ul>
+    ${sections.industry.keyDrivers.map(d => `<li>${d}</li>`).join('')}
+  </ul>
+  ` : ''}
+  
+  ${sections.industry.industryRisks && sections.industry.industryRisks.length > 0 ? `
+  <h3>行业风险</h3>
+  <ul>
+    ${sections.industry.industryRisks.map(r => `<li>${r}</li>`).join('')}
+  </ul>
+  ` : ''}
+  
+  ${sections.industry.outlook6_12m ? `
+  <h3>未来6-12个月展望</h3>
+  <p>${sections.industry.outlook6_12m}</p>
+  ` : ''}
   
   <h3>主要竞争对手</h3>
-  ${sections.industry.competitors.length > 0 ? `
+  ${sections.industry.competitors && sections.industry.competitors.length > 0 ? `
     <table>
       <thead>
         <tr>
@@ -1359,13 +1383,42 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
 
   <!-- 综合结论与评级 -->
   <div class="page-break"></div>
-  <h2>八、综合结论与评级</h2>
+  <h2>八、综合结论与投资策略</h2>
   <div class="highlight-box">
-    <h3>评级：${rating.ratingCode}</h3>
+    <h3>评级：${rating.ratingCode} ${rating.riskTier ? `| 风险等级：${rating.riskTier}` : ''}</h3>
     <p><strong>估值判断：</strong>${rating.valuation}</p>
     <p><strong>评级理由：</strong>${rating.rationale}</p>
-    <p><strong>投资建议：</strong>${rating.suggestion}</p>
   </div>
+  
+  ${rating.shortTermView ? `
+  <h3>短期观点（1-4周）</h3>
+  <p>${rating.shortTermView}</p>
+  ` : ''}
+  
+  ${(rating.supportLevel || rating.resistanceLevel) ? `
+  <h3>关键价位</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>类型</th>
+        <th>价位</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rating.supportLevel ? `<tr><td>支撑位</td><td>$${rating.supportLevel}</td></tr>` : ''}
+      ${rating.resistanceLevel ? `<tr><td>压力位</td><td>$${rating.resistanceLevel}</td></tr>` : ''}
+    </tbody>
+  </table>
+  ` : ''}
+  
+  ${(rating.breakoutTrigger || rating.breakdownRisk) ? `
+  <h3>触发点与风险</h3>
+  ${rating.breakoutTrigger ? `<p><strong>突破触发点：</strong>${rating.breakoutTrigger}</p>` : ''}
+  ${rating.breakdownRisk ? `<p><strong>下行风险：</strong>${rating.breakdownRisk}</p>` : ''}
+  ` : ''}
+  
+  <h3>投资建议</h3>
+  <p><strong>${rating.suggestion}</strong></p>
   
   <h3>投资摘要</h3>
   <p style="white-space: pre-line;">${rating.investmentSummary}</p>
