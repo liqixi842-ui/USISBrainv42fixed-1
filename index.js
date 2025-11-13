@@ -1,8 +1,8 @@
 // ====== USIS Brain · v6.0（多AI模型 + 多语言分析 + 数据驱动投研） ======
 
 // 🔍 BUILD VERSION TRACKING
-const BUILD_VERSION = 'v4.0.1-PEER-FIX';
-const BUILD_TIMESTAMP = new Date('2025-11-13T19:43:00Z');
+const BUILD_VERSION = 'v4.0.2-UNIFIED-DATA-SOURCES';
+const BUILD_TIMESTAMP = new Date('2025-11-13T20:06:00Z');
 console.log('\n🚀 ═══════════════════════════════════════════════════════');
 console.log(`   USIS Brain ${BUILD_VERSION}`);
 console.log(`   Build: ${BUILD_TIMESTAMP.toISOString()}`);

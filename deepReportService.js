@@ -625,17 +625,21 @@ async function collectEnrichedData(symbol) {
   const results = await Promise.all(tasks);
   const enrichedData = results.reduce((acc, curr) => ({ ...acc, ...curr }), {});
   
-  // 🔍 v4.0: 详细数据诊断日志
+  // 🔍 v4.0.2: 详细数据诊断日志（新Finnhub结构）
   console.log(`   ✅ 数据收集完成: 行情✓ 概况✓ 历史✓ 新闻✓ 技术指标✓ 财务✓ 估值✓ 同行✓`);
-  console.log(`   🔍 [诊断] 财务数据状态:`);
-  console.log(`      - Fundamentals: ${enrichedData.fundamentals?.income_statement ? '有数据' : '⚠️ 缺失'}`);
-  console.log(`      - Metrics(嵌套): ${enrichedData.metrics?.metric?.peBasicTTM || enrichedData.metrics?.peRatio ? '有数据' : '⚠️ 缺失'}`);
-  console.log(`      - 市值来源: ${enrichedData.metrics?.metric?.marketCapitalization ? 'Finnhub nested' : (enrichedData.metrics?.marketCap ? 'Finnhub flat' : enrichedData.profile?.marketCapitalization ? 'Profile' : '⚠️ 缺失')}`);
+  console.log(`   🔍 [诊断] 财务数据状态 (Finnhub Unified):`);
+  console.log(`      - Statements: ${enrichedData.fundamentals?.statements?.length || 0}期年报 (${enrichedData.fundamentals?.statements?.[0]?.revenue ? '有Revenue数据' : '⚠️ Revenue缺失'})`);
+  console.log(`      - Ratios: PE=${enrichedData.fundamentals?.ratios?.peRatio || 'N/A'}, MarketCap=${enrichedData.fundamentals?.ratios?.marketCap ? '$' + enrichedData.fundamentals.ratios.marketCap + 'M' : 'N/A'}`);
+  console.log(`      - Metrics(deprecated): ${enrichedData.metrics?.peRatio || enrichedData.metrics?.marketCap ? '⚠️ 旧结构仍存在' : '已清空'}`);
   console.log(`      - 新闻数量: ${enrichedData.news?.length || 0}条`);
   console.log(`      - 历史价格点数: ${enrichedData.historicalPrices?.length || 0}`);
   console.log(`      - 技术指标: RSI=${enrichedData.technicalIndicators?.rsi ? '✓' : '✗'} MACD=${enrichedData.technicalIndicators?.macd ? '✓' : '✗'}`);
   console.log(`      - 同行公司数: ${enrichedData.peerBenchmarks?.peers?.length || 0}个`);
-  console.log(`   📦 MODULE VERSION: deepReportService.js v4.0.1-PEER-FIX (2025-11-13 19:43 UTC)`);
+  console.log(`   📦 MODULE VERSION: deepReportService.js v4.0.2-UNIFIED-DATA-SOURCES (2025-11-13)`);
+  console.log(`   🔍 DATA SOURCE TRACE:`);
+  console.log(`      📈 Market/Technical = Twelve Data API (${enrichedData.technicalIndicators ? 'active' : 'inactive'})`);
+  console.log(`      💰 Financials = Finnhub Raw (financials-reported + metric) (${enrichedData.fundamentals ? 'active' : 'inactive'})`);
+  console.log(`      📰 News = ${ENABLE_NEWS_IN_REPORTS ? 'Finnhub' : 'DISABLED (Phase 2 pending)'} (${enrichedData.news?.length || 0} items)`);
   
   return {
     symbol,
