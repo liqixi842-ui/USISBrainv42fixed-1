@@ -173,6 +173,7 @@ class NewsScheduler {
         JOIN news_scores ns ON ns.news_item_id = ni.id
         LEFT JOIN news_sources nsrc ON nsrc.id = ni.source_id
         WHERE ni.published_at > NOW() - INTERVAL '2 hours'
+          AND ni.published_at <= NOW()
         ORDER BY ns.composite_score DESC, ni.published_at DESC
         LIMIT 20
       `);
@@ -203,6 +204,7 @@ class NewsScheduler {
           JOIN news_scores ns ON ns.news_item_id = ni.id
           LEFT JOIN news_sources nsrc ON nsrc.id = ni.source_id
           WHERE ni.published_at > NOW() - INTERVAL '12 hours'
+            AND ni.published_at <= NOW()
           ORDER BY ns.composite_score DESC, ni.published_at DESC
           LIMIT 20
         `);
