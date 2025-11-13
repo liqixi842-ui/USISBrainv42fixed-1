@@ -1652,8 +1652,8 @@ async function fetchPeerBenchmarks(symbol, existingMetrics = null) {
           pb: metrics?.pbRatio || null,
           ps: metrics?.psRatio || null,
           marketCap: metrics?.marketCap || null,
-          profitMargin: metrics?.profitMargin ? (metrics.profitMargin * 100) : null, // 转换为百分比
-          roe: metrics?.roe ? (metrics.roe * 100) : null, // 转换为百分比
+          profitMargin: metrics?.profitMargin || null, // 🔧 v4.0 FIX: Finnhub已返回百分比，不要再×100
+          roe: metrics?.roe || null, // 🔧 v4.0 FIX: Finnhub已返回百分比，不要再×100
           status: 'success'
         }))
         .catch((e) => ({
@@ -1681,8 +1681,8 @@ async function fetchPeerBenchmarks(symbol, existingMetrics = null) {
       pb: targetMetricsData?.pbRatio || null,
       ps: targetMetricsData?.psRatio || null,
       marketCap: targetMetricsData?.marketCap || null,
-      profitMargin: targetMetricsData?.profitMargin ? (targetMetricsData.profitMargin * 100) : null,
-      roe: targetMetricsData?.roe ? (targetMetricsData.roe * 100) : null
+      profitMargin: targetMetricsData?.profitMargin || null, // 🔧 v4.0 FIX: Finnhub已返回百分比，不要再×100
+      roe: targetMetricsData?.roe || null // 🔧 v4.0 FIX: Finnhub已返回百分比，不要再×100
     };
     
     // 5. 计算行业平均值（排除null和failed值）
