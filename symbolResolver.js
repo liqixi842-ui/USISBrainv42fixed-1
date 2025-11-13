@@ -366,30 +366,101 @@ async function lookupSymbolFromTwelveData(query, exchangeHint = null) {
 
 /**
  * 根据交易所筛选结果
+ * 🔧 v6.2: 修复Twelve Data过滤逻辑 - 正确检查exchange和country字段
  */
 function filterByExchange(results, exchangeHint) {
   const exchangeKeywords = {
-    [EXCHANGES.US]: ['us', 'nasdaq', 'nyse', 'american'],
-    [EXCHANGES.SPAIN]: ['madrid', 'bmad', 'spain', 'mc', 'bcn'],
-    [EXCHANGES.HK]: ['hong kong', 'hk', 'hkex'],
-    [EXCHANGES.CN]: ['shanghai', 'shenzhen', 'china', 'ss', 'sz'],
-    [EXCHANGES.UK]: ['london', 'lse', 'uk'],
-    [EXCHANGES.EU]: ['euronext', 'paris', 'amsterdam', 'frankfurt'],
-    [EXCHANGES.JP]: ['tokyo', 'japan', 'tyo']
+    [EXCHANGES.US]: {
+      exchanges: ['nasdaq', 'nyse', 'amex', 'otc', 'us'],
+      countries: ['united states', 'usa'],
+      symbols: []
+    },
+    [EXCHANGES.SPAIN]: {
+      exchanges: ['madrid', 'bmad', 'bme', 'mta', 'spain'],
+      countries: ['spain'],
+      symbols: ['.mc', '.bcn']
+    },
+    [EXCHANGES.HK]: {
+      exchanges: ['hong kong', 'hk', 'hkex', 'hkg'],
+      countries: ['hong kong'],
+      symbols: ['.hk']
+    },
+    [EXCHANGES.CN]: {
+      exchanges: ['shanghai', 'shenzhen', 'china', 'ss', 'sz', 'sse', 'szse'],
+      countries: ['china'],
+      symbols: ['.ss', '.sz']
+    },
+    [EXCHANGES.UK]: {
+      exchanges: ['london', 'lse', 'uk'],
+      countries: ['united kingdom', 'uk'],
+      symbols: ['.l']
+    },
+    [EXCHANGES.EU]: {
+      exchanges: ['euronext', 'paris', 'amsterdam', 'frankfurt', 'xetra'],
+      countries: ['france', 'netherlands', 'germany'],
+      symbols: ['.pa', '.as', '.de']
+    },
+    [EXCHANGES.JP]: {
+      exchanges: ['tokyo', 'japan', 'tyo', 'tse'],
+      countries: ['japan'],
+      symbols: ['.t']
+    },
+    'canada': {
+      exchanges: ['tsx', 'tsxv', 'toronto'],
+      countries: ['canada'],
+      symbols: ['.to', '.v']
+    },
+    'brazil': {
+      exchanges: ['bovespa', 'b3', 'bvmf'],
+      countries: ['brazil'],
+      symbols: ['.sa']
+    },
+    'australia': {
+      exchanges: ['asx', 'australia'],
+      countries: ['australia'],
+      symbols: ['.ax']
+    }
   };
   
-  const keywords = exchangeKeywords[exchangeHint] || [];
+  const criteria = exchangeKeywords[exchangeHint] || exchangeKeywords[exchangeHint?.toLowerCase()];
   
-  if (keywords.length === 0) return results;
+  if (!criteria) {
+    console.log(`   ⚠️  未知交易所提示: ${exchangeHint}，返回所有结果`);
+    return results;
+  }
   
-  return results.filter(result => {
-    const exchangeLower = (result.displaySymbol || '').toLowerCase();
-    const typeLower = (result.type || '').toLowerCase();
+  const filtered = results.filter(result => {
+    // 🔧 关键修复：检查正确的字段
+    const resultExchange = (result.exchange || '').toLowerCase();
+    const resultCountry = (result.country || '').toLowerCase();
+    const resultSymbol = (result.symbol || result.displaySymbol || '').toLowerCase();
+    const resultType = (result.type || '').toLowerCase();
     
-    return keywords.some(kw => 
-      exchangeLower.includes(kw) || typeLower.includes(kw)
+    // 检查交易所名称匹配
+    const exchangeMatch = criteria.exchanges.some(kw => 
+      resultExchange.includes(kw) || resultType.includes(kw)
     );
+    
+    // 检查国家匹配
+    const countryMatch = criteria.countries.some(kw => 
+      resultCountry.includes(kw)
+    );
+    
+    // 检查符号后缀匹配（如.MC, .TO等）
+    const symbolMatch = criteria.symbols.some(suffix => 
+      resultSymbol.includes(suffix)
+    );
+    
+    const matched = exchangeMatch || countryMatch || symbolMatch;
+    
+    if (matched) {
+      console.log(`   ✅ 匹配: ${result.symbol} (交易所: ${result.exchange}, 国家: ${result.country})`);
+    }
+    
+    return matched;
   });
+  
+  return filtered;
 }
 
 /**
