@@ -15,6 +15,33 @@ const DATA_SOURCE_PRIORITY = {
 };
 
 /**
+ * 🆕 v6.1: 提取查询关键词（避免公司全名太长导致API失败）
+ * "Colonial SFL SOCIMI SA" → "Colonial"
+ * "Apple Inc." → "Apple"
+ * "Royal Bank of Canada" → "Royal Bank"
+ */
+function extractSearchKeyword(companyName) {
+  // 移除常见公司后缀
+  const suffixes = [
+    'Inc\\.?', 'Corp\\.?', 'Corporation', 'Company', 'Co\\.?',
+    'Ltd\\.?', 'Limited', 'S\\.A\\.?', 'SA', 'SOCIMI', 'SFL',
+    'Group', 'Holdings', 'PLC', 'LLC', 'LP', 'AG'
+  ];
+  
+  let keyword = companyName;
+  const suffixPattern = new RegExp(`\\s+(${suffixes.join('|')})\\s*$`, 'i');
+  keyword = keyword.replace(suffixPattern, '').trim();
+  
+  // 如果还是太长（>20字符），取前2-3个单词
+  if (keyword.length > 20) {
+    const words = keyword.split(/\s+/);
+    keyword = words.slice(0, Math.min(3, words.length)).join(' ');
+  }
+  
+  return keyword.trim();
+}
+
+/**
  * 🆕 v4.2: 符号归一化（欧洲后缀 → Finnhub前缀）
  * GRF.MC → BME:GRF (Madrid)
  * SAP.DE → XETRA:SAP (Frankfurt)
@@ -53,10 +80,65 @@ async function resolveSymbols(intent) {
   const companyEntities = entities.filter(e => e.type === ENTITY_TYPES.COMPANY);
   const symbolEntities = entities.filter(e => e.type === ENTITY_TYPES.SYMBOL);
   
-  // 1. 直接使用已识别的符号
+  // 1. 处理已识别的符号
+  // 🆕 v6.1: 如果有交易所提示且符号不明确，需要查询验证
   for (const entity of symbolEntities) {
-    symbols.push(entity.value);
-    console.log(`   ✓ 使用符号实体: ${entity.value}`);
+    const symbolValue = entity.value;
+    
+    // 如果符号已经带交易所前缀（如"BME:COL", "TSX:RY"），直接使用
+    if (symbolValue.includes(':') || symbolValue.includes('.')) {
+      symbols.push(symbolValue);
+      console.log(`   ✓ 使用符号实体（已带交易所）: ${symbolValue}`);
+      continue;
+    }
+    
+    // 🆕 如果有交易所提示，查询API确认正确的交易所代码
+    if (intent.exchange) {
+      console.log(`   🔍 符号"${symbolValue}"需要验证交易所 (提示: ${intent.exchange})`);
+      
+      try {
+        let resolved = false;
+        const providers = DATA_SOURCE_PRIORITY.symbol_search;
+        
+        for (const provider of providers) {
+          if (resolved) break;
+          
+          try {
+            let resolvedSymbols = [];
+            
+            if (provider === 'finnhub' && FINNHUB_KEY) {
+              resolvedSymbols = await lookupSymbol(symbolValue, intent.exchange);
+            } else if (provider === 'twelvedata' && TWELVE_DATA_KEY) {
+              resolvedSymbols = await lookupSymbolFromTwelveData(symbolValue, intent.exchange);
+            } else {
+              continue;
+            }
+            
+            if (resolvedSymbols.length > 0) {
+              const bestMatch = selectBestMatch(resolvedSymbols, intent.exchange, symbolValue);
+              symbols.push(bestMatch.symbol);
+              console.log(`   ✅ [${provider.toUpperCase()}] ${symbolValue} → ${bestMatch.symbol} (${bestMatch.description})`);
+              resolved = true;
+            }
+          } catch (apiError) {
+            console.warn(`   ⚠️  [${provider.toUpperCase()}] 失败: ${apiError.message}`);
+          }
+        }
+        
+        // 如果API查询失败，使用原始符号
+        if (!resolved) {
+          symbols.push(symbolValue);
+          console.log(`   ⚠️  API查询失败，使用原始符号: ${symbolValue}`);
+        }
+      } catch (error) {
+        symbols.push(symbolValue);
+        console.log(`   ⚠️  验证失败，使用原始符号: ${symbolValue}`);
+      }
+    } else {
+      // 无交易所提示，直接使用
+      symbols.push(symbolValue);
+      console.log(`   ✓ 使用符号实体: ${symbolValue}`);
+    }
   }
   
   // 2. 解析公司名称 → 股票代码
@@ -65,8 +147,11 @@ async function resolveSymbols(intent) {
     console.log(`   🔍 查找: ${companyName}`);
     
     try {
-      // 🆕 策略重排：Finnhub API优先（支持全球股票）
       let resolved = false;
+      
+      // 🆕 v6.1: 提取查询关键词（避免公司全名太长）
+      const searchQuery = extractSearchKeyword(companyName);
+      console.log(`   🔑 查询关键词: "${searchQuery}"`);
       
       // Layer 1: 多数据源API查询（智能编排）
       // 🆕 v6.0: 支持Finnhub + Twelve Data双数据源
@@ -79,9 +164,9 @@ async function resolveSymbols(intent) {
           let resolvedSymbols = [];
           
           if (provider === 'finnhub' && FINNHUB_KEY) {
-            resolvedSymbols = await lookupSymbol(companyName, intent.exchange);
+            resolvedSymbols = await lookupSymbol(searchQuery, intent.exchange);
           } else if (provider === 'twelvedata' && TWELVE_DATA_KEY) {
-            resolvedSymbols = await lookupSymbolFromTwelveData(companyName, intent.exchange);
+            resolvedSymbols = await lookupSymbolFromTwelveData(searchQuery, intent.exchange);
           } else {
             continue; // 跳过未配置的数据源
           }
@@ -92,7 +177,7 @@ async function resolveSymbols(intent) {
             console.log(`   ✅ [${provider.toUpperCase()}] ${companyName} → ${bestMatch.symbol} (${bestMatch.description})`);
             resolved = true;
           } else {
-            console.log(`   ⚠️  [${provider.toUpperCase()}] 没有找到: ${companyName}`);
+            console.log(`   ⚠️  [${provider.toUpperCase()}] 没有找到: ${searchQuery}`);
           }
         } catch (apiError) {
           console.warn(`   ⚠️  [${provider.toUpperCase()}] 失败: ${apiError.message}`);
@@ -328,35 +413,84 @@ function selectBestMatch(matches, exchangeHint, originalQuery) {
     };
   }
   
-  // 评分机制：交易所匹配 + 名称相似度
+  // 🆕 v6.1: 改进评分机制 - 交易所匹配优先级大幅提升
   const scored = matches.map(match => {
     let score = 0;
     
-    // 1. 交易所匹配（如果有提示）
+    // 1. 交易所匹配（最高优先级）⭐
     if (exchangeHint) {
-      const matchExchange = (match.displaySymbol || '').toLowerCase();
+      const matchSymbol = (match.displaySymbol || match.symbol || '').toLowerCase();
+      const matchExchange = (match.exchange || match.type || '').toLowerCase();
+      const matchCountry = (match.country || '').toLowerCase();
+      
+      // 🆕 扩展交易所映射表（支持Twelve Data + Finnhub）
       const exchangeMap = {
-        'Spain': ['.mc', '.bcn', 'madrid'],
-        'US': ['nasdaq', 'nyse', 'us'],
-        'HK': ['.hk', 'hong kong'],
-        'CN': ['.ss', '.sz', 'shanghai', 'shenzhen']
+        'spain': {
+          exchanges: ['bme', 'madrid', 'mta', 'bmad'],
+          suffixes: ['.mc', '.bcn'],
+          countries: ['spain']
+        },
+        'us': {
+          exchanges: ['nasdaq', 'nyse', 'amex', 'otc', 'us'],
+          suffixes: [],
+          countries: ['united states']
+        },
+        'canada': {
+          exchanges: ['tsx', 'tsxv', 'toronto'],
+          suffixes: ['.to', '.v'],
+          countries: ['canada']
+        },
+        'hk': {
+          exchanges: ['hkex', 'hong kong', 'hkg'],
+          suffixes: ['.hk'],
+          countries: ['hong kong']
+        },
+        'cn': {
+          exchanges: ['shanghai', 'shenzhen', 'sse', 'szse'],
+          suffixes: ['.ss', '.sz'],
+          countries: ['china']
+        },
+        'brazil': {
+          exchanges: ['bovespa', 'b3', 'bvmf'],
+          suffixes: [],
+          countries: ['brazil']
+        },
+        'australia': {
+          exchanges: ['asx'],
+          suffixes: ['.ax'],
+          countries: ['australia']
+        }
       };
       
-      const keywords = exchangeMap[exchangeHint] || [];
-      if (keywords.some(kw => matchExchange.includes(kw))) {
-        score += 10;
+      const hintKey = exchangeHint.toLowerCase();
+      const criteria = exchangeMap[hintKey];
+      
+      if (criteria) {
+        // 交易所代码匹配（最高分）
+        if (criteria.exchanges.some(ex => matchExchange.includes(ex))) {
+          score += 100; // 🔥 之前只有10分，现在100分确保优先
+        }
+        // 国家匹配
+        if (criteria.countries.some(country => matchCountry.includes(country))) {
+          score += 80;
+        }
+        // 符号后缀匹配
+        if (criteria.suffixes.some(suffix => matchSymbol.endsWith(suffix))) {
+          score += 60;
+        }
       }
     }
     
-    // 2. 名称相似度（简单字符串包含）
-    const descLower = (match.description || '').toLowerCase();
+    // 2. 名称相似度
+    const descLower = (match.description || match.instrument_name || '').toLowerCase();
     const queryLower = originalQuery.toLowerCase();
     
     if (descLower.includes(queryLower)) score += 5;
     if (descLower.startsWith(queryLower)) score += 3;
     
     // 3. 优先股票而非其他类型
-    if ((match.type || '').toLowerCase().includes('common stock')) score += 2;
+    const typeStr = (match.type || '').toLowerCase();
+    if (typeStr.includes('common stock') || typeStr.includes('stock')) score += 2;
     
     return { ...match, score };
   });
@@ -370,8 +504,8 @@ function selectBestMatch(matches, exchangeHint, originalQuery) {
   
   return {
     symbol: best.symbol || best.displaySymbol,
-    description: best.description,
-    exchange: best.type
+    description: best.description || best.instrument_name,
+    exchange: best.type || best.exchange
   };
 }
 
