@@ -1234,6 +1234,10 @@ async function renderDeepReportPDF(symbol, data, sections, rating) {
   const { quote, profile } = data;
   const companyName = profile.companyName || profile.name || symbol;
   
+  // 🆕 v4.0: 提取同行对比数据（安全检查）
+  const peerBenchmarks = data.peerBenchmarks || {};
+  console.log(`   📊 [同行数据] 提取状态: ${peerBenchmarks.peers ? `${peerBenchmarks.peers.length}个同行` : '无数据'}`);
+  
   // 🆕 v4.0: 生成增强版价格图（含EMA线、支撑/压力位）
   const chartURL = generatePriceChartURL(
     data.historicalPrices, 
@@ -1260,7 +1264,9 @@ async function renderDeepReportPDF(symbol, data, sections, rating) {
     rating,
     sections,
     chartURL,
-    financialChartURL // 🆕 v4.0
+    volumeChartURL, // 🆕 v4.0
+    financialChartURL, // 🆕 v4.0
+    peerBenchmarks // 🆕 v4.0: 传入同行对比数据
   });
   
   // 生成PDF
@@ -1272,7 +1278,20 @@ async function renderDeepReportPDF(symbol, data, sections, rating) {
 /**
  * 构建深度报告HTML模板
  */
-function buildDeepReportHTML({ symbol, companyName, exchange, date, price, change, rating, sections, chartURL, financialChartURL }) {
+function buildDeepReportHTML({ 
+  symbol, 
+  companyName, 
+  exchange, 
+  date, 
+  price, 
+  change, 
+  rating, 
+  sections, 
+  chartURL, 
+  volumeChartURL, 
+  financialChartURL, 
+  peerBenchmarks = {} // 🆕 v4.0: 默认空对象，防止undefined
+}) {
   return `
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -1590,7 +1609,7 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
   
   <p><em>注：${sections.financials.tableData.recentYears}</em></p>
   
-  ${peerBenchmarks?.peers?.length > 0 ? `
+  ${peerBenchmarks && peerBenchmarks.peers && peerBenchmarks.peers.length > 0 ? `
   <h3>🆕 同行对比分析</h3>
   <table>
     <thead>
@@ -1605,10 +1624,10 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
     <tbody>
       <tr style="background: #e8f5e9; font-weight: bold;">
         <td>${symbol} (目标)</td>
-        <td>${peerBenchmarks.targetMetrics.pe ? peerBenchmarks.targetMetrics.pe.toFixed(2) : 'N/A'}</td>
-        <td>${formatMarketCap(peerBenchmarks.targetMetrics.marketCap)}</td>
-        <td>${peerBenchmarks.targetMetrics.profitMargin ? peerBenchmarks.targetMetrics.profitMargin.toFixed(2) : 'N/A'}</td>
-        <td>${peerBenchmarks.targetMetrics.roe ? peerBenchmarks.targetMetrics.roe.toFixed(2) : 'N/A'}</td>
+        <td>${peerBenchmarks.targetMetrics?.pe ? peerBenchmarks.targetMetrics.pe.toFixed(2) : 'N/A'}</td>
+        <td>${formatMarketCap(peerBenchmarks.targetMetrics?.marketCap)}</td>
+        <td>${peerBenchmarks.targetMetrics?.profitMargin ? peerBenchmarks.targetMetrics.profitMargin.toFixed(2) : 'N/A'}</td>
+        <td>${peerBenchmarks.targetMetrics?.roe ? peerBenchmarks.targetMetrics.roe.toFixed(2) : 'N/A'}</td>
       </tr>
       ${peerBenchmarks.peers.map(peer => `
       <tr>
@@ -1621,15 +1640,18 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
       `).join('')}
       <tr style="background: #fff3e0; font-weight: bold;">
         <td>行业平均</td>
-        <td>${peerBenchmarks.benchmarks.avgPE ? peerBenchmarks.benchmarks.avgPE.toFixed(2) : 'N/A'}</td>
+        <td>${peerBenchmarks.benchmarks?.avgPE ? peerBenchmarks.benchmarks.avgPE.toFixed(2) : 'N/A'}</td>
         <td>-</td>
         <td>-</td>
-        <td>${peerBenchmarks.benchmarks.avgROE ? peerBenchmarks.benchmarks.avgROE.toFixed(2) : 'N/A'}</td>
+        <td>${peerBenchmarks.benchmarks?.avgROE ? peerBenchmarks.benchmarks.avgROE.toFixed(2) : 'N/A'}</td>
       </tr>
     </tbody>
   </table>
-  <p style="font-size: 13px; color: #7f8c8d;"><em>数据来源：Finnhub | ${peerBenchmarks.benchmarks.failedCount > 0 ? `⚠️ ${peerBenchmarks.benchmarks.failedCount}个同行数据获取失败` : `共${peerBenchmarks.benchmarks.peerCount}个同行公司`}</em></p>
-  ` : ''}
+  <p style="font-size: 13px; color: #7f8c8d;"><em>数据来源：Finnhub | ${peerBenchmarks.benchmarks?.failedCount > 0 ? `⚠️ ${peerBenchmarks.benchmarks.failedCount}个同行数据获取失败` : `共${peerBenchmarks.benchmarks?.peerCount || 0}个同行公司`}</em></p>
+  ` : `
+  <h3>同行对比分析</h3>
+  <p style="color: #7f8c8d; font-style: italic;">暂无可用同行数据</p>
+  `}
 
   <!-- 技术分析 -->
   <h2>五、股价与技术面分析</h2>
