@@ -65,7 +65,13 @@ A multi-tier screenshot architecture ensures stability, leveraging N8N for workf
 - **Perplexity API**: Sonar Pro.
 - **Google Translate API**: For translation.
 - **Finnhub API**: Real-time quotes, news, symbol lookup (primary US).
-- **Twelve Data API**: Global stock market data.
+- **Twelve Data API**: Global stock market data across 80 exchanges (610 req/min capacity).
+  - 📚 Complete Documentation: https://twelvedata.com/docs
+  - 🚀 Quick Start Guide: https://twelvedata.com/docs#getting-started
+  - 🧪 API Playground: https://twelvedata.com/account/api-playground
+  - 🔧 Request Builder: https://twelvedata.com/request-builder
+  - Official SDKs: Python (twelvedata-python), R
+  - Key Endpoints: `/earliest_timestamp` (data availability), REST & WebSocket support
 - **Alpha Vantage API**: Backup global stock data.
 - **FRED API**: Federal Reserve Economic Data.
 - **SEC EDGAR API**: Company financial filings.
