@@ -3,7 +3,7 @@
 // 生成时间：2-5分钟 | 长度：8-20页
 
 const fetch = require("node-fetch");
-const { fetchMarketData, fetchCompanyProfile, fetchHistoricalPrices } = require("./dataBroker");
+const { fetchMarketData, fetchCompanyProfile, fetchHistoricalPrices, fetchTechnicalIndicators } = require("./dataBroker");
 const { fetchAndRankNews } = require("./newsBroker");
 const { getMultiAIProvider } = require("./multiAiProvider");
 const { buildStockChartURL } = require("./stockChartService");
@@ -98,14 +98,20 @@ async function collectEnrichedData(symbol) {
       .catch(() => ({ news: [] }))
   );
   
-  // 5. TODO: 财务历史数据（3-5年）- 后续实现
-  // 6. TODO: 竞争对手数据 - 后续实现
-  // 7. TODO: 技术指标详细数据 - 后续实现
+  // 5. 🆕 技术指标数据（RSI, MACD, EMA, BBANDS, ADX）
+  tasks.push(
+    fetchTechnicalIndicators(symbol, '1day')
+      .then(data => ({ technicalIndicators: data.indicators || {} }))
+      .catch(() => ({ technicalIndicators: {} }))
+  );
+  
+  // 6. TODO: 财务历史数据（3-5年）- 后续实现
+  // 7. TODO: 竞争对手数据 - 后续实现
   
   const results = await Promise.all(tasks);
   const enrichedData = results.reduce((acc, curr) => ({ ...acc, ...curr }), {});
   
-  console.log(`   ✅ 数据收集完成: 行情✓ 概况✓ 历史价格✓ 新闻✓`);
+  console.log(`   ✅ 数据收集完成: 行情✓ 概况✓ 历史✓ 新闻✓ 技术指标✓`);
   
   return {
     symbol,
@@ -358,38 +364,95 @@ async function generateSection_Financials(symbol, data, multiAI) {
 
 /**
  * 章节6：股价与技术面分析
+ * 🆕 v3.1: 使用Twelve Data真实技术指标
  */
 async function generateSection_Technical(symbol, data, multiAI) {
-  const { quote, historicalPrices } = data;
+  const { quote, historicalPrices, technicalIndicators = {} } = data;
+  
+  // 🆕 提取真实技术指标数据（修复：使用小写键名）
+  const indicatorsData = {};
+  
+  if (technicalIndicators.rsi && !technicalIndicators.rsi.error) {
+    indicatorsData.rsi = technicalIndicators.rsi.value;
+    indicatorsData.rsi_signal = indicatorsData.rsi > 70 ? '超买' : (indicatorsData.rsi < 30 ? '超卖' : '中性');
+  }
+  
+  if (technicalIndicators.macd && !technicalIndicators.macd.error) {
+    indicatorsData.macd = technicalIndicators.macd.macd;
+    indicatorsData.macd_signal = technicalIndicators.macd.signal;
+    indicatorsData.macd_histogram = technicalIndicators.macd.histogram;
+    indicatorsData.macd_trend = indicatorsData.macd_histogram > 0 ? '多头信号' : '空头信号';
+  }
+  
+  if (technicalIndicators.ema && !technicalIndicators.ema.error) {
+    indicatorsData.ema20 = technicalIndicators.ema.value;
+    indicatorsData.price_vs_ema20 = quote.c > indicatorsData.ema20 ? '突破均线' : '跌破均线';
+  }
+  
+  if (technicalIndicators.bbands && !technicalIndicators.bbands.error) {
+    indicatorsData.bbands_upper = technicalIndicators.bbands.upper;
+    indicatorsData.bbands_lower = technicalIndicators.bbands.lower;
+    const position = quote.c > indicatorsData.bbands_upper ? '超买区' : (quote.c < indicatorsData.bbands_lower ? '超卖区' : '正常区');
+    indicatorsData.bbands_position = position;
+  }
+  
+  // 🆕 计算支撑/压力位（基于历史价格）
+  let supportResistance = '数据不足';
+  if (historicalPrices.length > 0) {
+    const recentPrices = historicalPrices.slice(-60); // 最近60天
+    const highs = recentPrices.map(p => p.high);
+    const lows = recentPrices.map(p => p.low);
+    const resistance = Math.max(...highs).toFixed(2);
+    const support = Math.min(...lows).toFixed(2);
+    supportResistance = `支撑位$${support}，阻力位$${resistance}`;
+  }
+  
+  const hasRealData = Object.keys(indicatorsData).length > 0;
   
   const prompt = `你是技术分析师，请分析${symbol}的股价走势：
 
 当前股价：$${quote.c || 'N/A'} (${quote.dp ? (quote.dp > 0 ? '+' : '') + quote.dp.toFixed(2) + '%' : 'N/A'})
 历史数据点数：${historicalPrices.length}
 
+🆕 **真实技术指标数据**（来自Twelve Data）：
+${hasRealData ? `
+- RSI(14): ${indicatorsData.rsi?.toFixed(2) || 'N/A'} (${indicatorsData.rsi_signal || 'N/A'})
+- MACD: ${indicatorsData.macd?.toFixed(2) || 'N/A'} / Signal: ${indicatorsData.macd_signal?.toFixed(2) || 'N/A'} (${indicatorsData.macd_trend || 'N/A'})
+- EMA(20): $${indicatorsData.ema20?.toFixed(2) || 'N/A'} (价格${indicatorsData.price_vs_ema20 || 'N/A'})
+- 布林带: 上轨$${indicatorsData.bbands_upper?.toFixed(2) || 'N/A'} / 下轨$${indicatorsData.bbands_lower?.toFixed(2) || 'N/A'} (${indicatorsData.bbands_position || 'N/A'})
+- 支撑/压力: ${supportResistance}
+` : '⚠️ 技术指标数据缺失（可能是免费API限制），请基于历史价格推断'}
+
 请输出JSON格式：
 {
-  "trend": "主要趋势（上涨/下跌/震荡）",
-  "supportResistance": "关键支撑/压力区间（价格范围）",
-  "indicators": "技术指标简评（MACD/RSI/均线等）",
-  "conclusion": "技术面结论（2-3句人话）"
+  "trend": "主要趋势（上涨/下跌/震荡），结合RSI、MACD说明",
+  "supportResistance": "${supportResistance}",
+  "indicators": "${hasRealData ? '基于真实指标的详细分析（RSI+MACD+EMA+布林带）' : '数据有限，基于价格行为推断'}",
+  "conclusion": "技术面结论（2-3句人话），明确说明${hasRealData ? '指标显示的方向' : '数据局限性'}"
 }
 
-要求：用人话解释，避免堆砌术语。如果数据不足，说明局限性。`;
+要求：${hasRealData ? '直接使用提供的真实指标数据，不要猜测' : '说明缺乏详细指标数据'}。`;
 
   const response = await multiAI.generate('gpt-4o-mini', [
     { role: 'user', content: prompt }
-  ], { maxTokens: 500, temperature: 0.6 });
+  ], { maxTokens: 600, temperature: 0.5 });
   
   try {
     const parsed = JSON.parse(response.text.replace(/```json\n?|\n?```/g, ''));
-    return parsed;
+    
+    // 🆕 附加真实指标数据到返回值（供PDF使用）
+    return {
+      ...parsed,
+      realIndicators: indicatorsData, // 真实指标数据
+      historicalDataPoints: historicalPrices.length
+    };
   } catch (e) {
     return {
       trend: '数据不足',
-      supportResistance: '无法判断',
-      indicators: '数据有限',
-      conclusion: '技术分析数据缺失'
+      supportResistance: supportResistance,
+      indicators: hasRealData ? 'AI解析失败，但已获取真实指标' : '数据有限',
+      conclusion: '技术分析生成失败',
+      realIndicators: indicatorsData
     };
   }
 }
@@ -842,15 +905,64 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
 
   <!-- 技术分析 -->
   <h2>五、股价与技术面分析</h2>
-  <div class="chart-container">
-    <h3>股价走势图（6-12个月）</h3>
-    <a href="${chartURL}" class="chart-link" target="_blank">📊 查看完整图表</a>
+  
+  <h3>股价走势图（6-12个月）</h3>
+  <div class="chart-container" style="text-align: center; margin: 20px 0;">
+    <img src="${chartURL}" alt="${symbol} Stock Chart" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 5px;" />
+    <p style="font-size: 12px; color: #7f8c8d; margin-top: 10px;">数据来源：TradingView | 历史数据点：${sections.technical.historicalDataPoints || 0}条</p>
   </div>
   
-  <h3>技术面分析</h3>
+  ${sections.technical.realIndicators && Object.keys(sections.technical.realIndicators).length > 0 ? `
+  <h3>🆕 技术指标（Twelve Data实时数据）</h3>
+  <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+    <thead>
+      <tr style="background: #ecf0f1;">
+        <th style="border: 1px solid #bdc3c7; padding: 10px; text-align: left;">指标</th>
+        <th style="border: 1px solid #bdc3c7; padding: 10px; text-align: right;">数值</th>
+        <th style="border: 1px solid #bdc3c7; padding: 10px; text-align: center;">信号</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${sections.technical.realIndicators.rsi ? `
+      <tr>
+        <td style="border: 1px solid #bdc3c7; padding: 10px;"><strong>RSI(14)</strong></td>
+        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: right;">${sections.technical.realIndicators.rsi.toFixed(2)}</td>
+        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: center;">
+          <span style="padding: 5px 10px; border-radius: 3px; ${sections.technical.realIndicators.rsi_signal === '超买' ? 'background: #e74c3c; color: white;' : (sections.technical.realIndicators.rsi_signal === '超卖' ? 'background: #27ae60; color: white;' : 'background: #f39c12; color: white;')}">${sections.technical.realIndicators.rsi_signal}</span>
+        </td>
+      </tr>
+      ` : ''}
+      ${sections.technical.realIndicators.macd !== undefined ? `
+      <tr>
+        <td style="border: 1px solid #bdc3c7; padding: 10px;"><strong>MACD</strong></td>
+        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: right;">${sections.technical.realIndicators.macd.toFixed(4)}</td>
+        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: center;">
+          <span style="padding: 5px 10px; border-radius: 3px; ${sections.technical.realIndicators.macd_trend === '多头信号' ? 'background: #27ae60; color: white;' : 'background: #e74c3c; color: white;'}">${sections.technical.realIndicators.macd_trend}</span>
+        </td>
+      </tr>
+      ` : ''}
+      ${sections.technical.realIndicators.ema20 ? `
+      <tr>
+        <td style="border: 1px solid #bdc3c7; padding: 10px;"><strong>EMA(20)</strong></td>
+        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: right;">$${sections.technical.realIndicators.ema20.toFixed(2)}</td>
+        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: center;">${sections.technical.realIndicators.price_vs_ema20}</td>
+      </tr>
+      ` : ''}
+      ${sections.technical.realIndicators.bbands_upper ? `
+      <tr>
+        <td style="border: 1px solid #bdc3c7; padding: 10px;"><strong>布林带</strong></td>
+        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: right;">上轨$${sections.technical.realIndicators.bbands_upper.toFixed(2)} / 下轨$${sections.technical.realIndicators.bbands_lower.toFixed(2)}</td>
+        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: center;">${sections.technical.realIndicators.bbands_position}</td>
+      </tr>
+      ` : ''}
+    </tbody>
+  </table>
+  ` : '<p style="color: #e67e22;"><em>⚠️ 技术指标数据暂不可用（可能受API限制）</em></p>'}
+  
+  <h3>技术面综合分析</h3>
   <p><strong>主要趋势：</strong>${sections.technical.trend}</p>
   <p><strong>支撑/压力：</strong>${sections.technical.supportResistance}</p>
-  <p><strong>技术指标：</strong>${sections.technical.indicators}</p>
+  <p><strong>指标解读：</strong>${sections.technical.indicators}</p>
   
   <div class="highlight-box">
     <strong>技术面结论：</strong>${sections.technical.conclusion}
