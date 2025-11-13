@@ -6230,6 +6230,12 @@ if (!TOKEN_IS_SAFE) {
         }
       } else if (isStockAnalysis) {
         // 🧠 个股分析（大脑）→ 📸 调用n8n截图（眼睛）→ 📊 AI分析
+        console.log('🚦 [TELEGRAM_STOCK_ANALYSIS] 收到请求:', {
+          text: text,
+          userId: userId,
+          chatId: chatId,
+          extractedSymbols: symbols
+        });
         console.log(`📈 个股分析请求: ${symbols.join(', ')}`);
         
         // 🆕 v3.2: 解析意图以获取持仓信息 + v6.2: 使用symbolResolver
