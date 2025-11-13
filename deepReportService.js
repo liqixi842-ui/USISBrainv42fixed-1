@@ -1391,6 +1391,47 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
   </div>
   
   <p><em>注：${sections.financials.tableData.recentYears}</em></p>
+  
+  ${peerBenchmarks?.peers?.length > 0 ? `
+  <h3>🆕 同行对比分析</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>公司</th>
+        <th>PE比率</th>
+        <th>市值</th>
+        <th>净利率 (%)</th>
+        <th>ROE (%)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="background: #e8f5e9; font-weight: bold;">
+        <td>${symbol} (目标)</td>
+        <td>${peerBenchmarks.targetMetrics.pe ? peerBenchmarks.targetMetrics.pe.toFixed(2) : 'N/A'}</td>
+        <td>${formatMarketCap(peerBenchmarks.targetMetrics.marketCap)}</td>
+        <td>${peerBenchmarks.targetMetrics.profitMargin ? peerBenchmarks.targetMetrics.profitMargin.toFixed(2) : 'N/A'}</td>
+        <td>${peerBenchmarks.targetMetrics.roe ? peerBenchmarks.targetMetrics.roe.toFixed(2) : 'N/A'}</td>
+      </tr>
+      ${peerBenchmarks.peers.map(peer => `
+      <tr>
+        <td>${peer.symbol}</td>
+        <td>${peer.pe ? peer.pe.toFixed(2) : 'N/A'}</td>
+        <td>${formatMarketCap(peer.marketCap)}</td>
+        <td>${peer.profitMargin ? peer.profitMargin.toFixed(2) : 'N/A'}</td>
+        <td>${peer.roe ? peer.roe.toFixed(2) : 'N/A'}</td>
+      </tr>
+      `).join('')}
+      <tr style="background: #fff3e0; font-weight: bold;">
+        <td>行业平均</td>
+        <td>${peerBenchmarks.benchmarks.avgPE ? peerBenchmarks.benchmarks.avgPE.toFixed(2) : 'N/A'}</td>
+        <td>-</td>
+        <td>-</td>
+        <td>${peerBenchmarks.benchmarks.avgROE ? peerBenchmarks.benchmarks.avgROE.toFixed(2) : 'N/A'}</td>
+      </tr>
+    </tbody>
+  </table>
+  <p style="font-size: 13px; color: #7f8c8d;"><em>数据来源：Finnhub | ${peerBenchmarks.benchmarks.failedCount > 0 ? `⚠️ ${peerBenchmarks.benchmarks.failedCount}个同行数据获取失败` : `共${peerBenchmarks.benchmarks.peerCount}个同行公司`}</em></p>
+  ` : ''}
 
   <!-- 技术分析 -->
   <h2>五、股价与技术面分析</h2>
