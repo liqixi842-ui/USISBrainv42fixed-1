@@ -83,8 +83,6 @@ function mapExchangeToTradingView(finnhubExchange) {
   const exchange = finnhubExchange.toUpperCase();
   
   // 🧠 智能映射：匹配关键词而非硬编码列表
-  // 🔧 v6.2: 西班牙交易所优先（关键修复）
-  if (exchange.includes('BME') || exchange.includes('XMAD') || exchange.includes('MADRID') || exchange.includes('SPAIN')) return 'BME';
   if (exchange.includes('OTC') || exchange.includes('PINK') || exchange.includes('OTCMKTS')) return 'OTC';
   if (exchange.includes('NASDAQ')) return 'NASDAQ';
   if (exchange.includes('NYSE') || exchange.includes('NEW YORK')) return 'NYSE';
@@ -132,8 +130,7 @@ function buildStockChartURL(symbol, options = {}) {
     timezone = 'America/New_York',
     studies = 'BB@tv-basicstudies,MACD@tv-basicstudies', // 布林带+MACD
     locale = 'en',
-    exchangeInfo = null,   // 🆕 智能分析师：使用API查询的真实交易所信息
-    exchangePreference = null  // 🆕 v6.2: 交易所偏好（用于降级模式）
+    exchangeInfo = null    // 🆕 智能分析师：使用API查询的真实交易所信息
   } = options;
   
   // 标准化symbol格式
@@ -147,78 +144,8 @@ function buildStockChartURL(symbol, options = {}) {
       normalizedSymbol = `${tvExchange}:${normalizedSymbol}`;
       console.log(`   🧠 [智能映射] ${symbol} → ${normalizedSymbol} (来源: Finnhub API)`);
     } else {
-      // ⚠️ 降级路径：根据exchangePreference决定交易所
-      let fallbackExchange = 'NASDAQ';  // 默认美股
-      let downgradeDisabled = false;
-      
-      // 🆕 v6.2: 检查exchangePreference，禁止美股降级（如果明确指定了其他地区）
-      if (exchangePreference) {
-        // 🔧 Normalize: 提取关键词（处理 "Spain/BME", "BME:COL", "XMAD" 等格式）
-        const normalized = exchangePreference.toUpperCase().trim();
-        const tokens = normalized.split(/[\/:\s,]+/);  // 分割: "Spain/BME" → ["SPAIN", "BME"]
-        const pref = normalized.toLowerCase();
-        
-        // 检查tokens中是否包含关键词
-        const hasToken = (keywords) => tokens.some(t => keywords.includes(t.toLowerCase()));
-        
-        // 西班牙交易所
-        if (hasToken(['spain', 'es', 'españa', 'bme', 'xmad', 'madrid'])) {
-          fallbackExchange = 'BME';
-          downgradeDisabled = true;
-          console.log(`🎯 [Symbol Policy] region=ES, downgradeDisabled=true, input=${symbol}, hint=${exchangePreference}`);
-        }
-        // 加拿大交易所
-        else if (hasToken(['canada', 'ca', 'tsx', 'tsxv'])) {
-          fallbackExchange = 'TSX';
-          downgradeDisabled = true;
-          console.log(`🎯 [Symbol Policy] region=CA, downgradeDisabled=true, input=${symbol}, hint=${exchangePreference}`);
-        }
-        // 香港交易所（使用后缀格式）
-        else if (hasToken(['hk', 'hong', 'kong', 'hkex', 'hongkong'])) {
-          // 香港股票使用后缀格式（如0700.HK），不添加前缀
-          normalizedSymbol = `${normalizedSymbol}.HK`;
-          console.log(`🎯 [Symbol Policy] region=HK, using suffix format, input=${symbol}`);
-          console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
-          console.log(`📊 [final_symbol_for_tv] "${normalizedSymbol}" → TradingView`);
-          
-          const params = new URLSearchParams({
-            symbol: normalizedSymbol,
-            interval: interval,
-            theme: theme,
-            style: style,
-            timezone: timezone,
-            locale: locale
-          });
-          if (studies) params.append('studies', studies);
-          return `https://www.tradingview.com/chart/?${params.toString()}`;
-        }
-        // 中国交易所（使用后缀格式）
-        else if (hasToken(['cn', 'china', 'shanghai', 'shenzhen', 'sse', 'szse'])) {
-          // 中国A股使用后缀格式（如600519.SS），暂时默认上海
-          normalizedSymbol = `${normalizedSymbol}.SS`;
-          console.log(`🎯 [Symbol Policy] region=CN, using suffix format, input=${symbol}`);
-          console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
-          console.log(`📊 [final_symbol_for_tv] "${normalizedSymbol}" → TradingView`);
-          
-          const params = new URLSearchParams({
-            symbol: normalizedSymbol,
-            interval: interval,
-            theme: theme,
-            style: style,
-            timezone: timezone,
-            locale: locale
-          });
-          if (studies) params.append('studies', studies);
-          return `https://www.tradingview.com/chart/?${params.toString()}`;
-        }
-        // 美国（明确允许）
-        else if (hasToken(['us', 'usa', 'united', 'states', 'nasdaq', 'nyse'])) {
-          fallbackExchange = 'NASDAQ';
-          // 美国是默认值，不设置downgradeDisabled
-        }
-      }
-      
-      normalizedSymbol = `${fallbackExchange}:${normalizedSymbol}`;
+      // ⚠️ 降级路径：无API数据时使用默认值
+      normalizedSymbol = `NASDAQ:${normalizedSymbol}`;
       console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
     }
   }

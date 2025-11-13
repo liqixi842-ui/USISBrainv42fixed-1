@@ -792,77 +792,6 @@ app.post("/api/news/ingest", async (req, res) => {
   }
 });
 
-// 🆕 v6.2: 公司研究报告生成API
-const { generateCompanyReport } = require("./reportService");
-const { generateDeepReport } = require("./deepReportService");
-
-// 简单的日内缓存（symbol → { pdf, timestamp }）
-const reportCache = new Map();
-const REPORT_CACHE_TTL = 24 * 60 * 60 * 1000; // 24小时
-
-app.post("/api/report/company", async (req, res) => {
-  const { symbol } = req.body;
-  
-  if (!symbol) {
-    return res.status(400).json({ error: 'symbol参数必填' });
-  }
-  
-  try {
-    const normalizedSymbol = symbol.toUpperCase();
-    const cacheKey = `${normalizedSymbol}-${new Date().toISOString().split('T')[0]}`; // symbol-YYYY-MM-DD
-    
-    // 检查缓存
-    if (reportCache.has(cacheKey)) {
-      const cached = reportCache.get(cacheKey);
-      if (Date.now() - cached.timestamp < REPORT_CACHE_TTL) {
-        console.log(`✅ [Report API] 缓存命中: ${cacheKey}`);
-        return res.status(200).json({
-          success: true,
-          cached: true,
-          symbol: normalizedSymbol,
-          summary: cached.summary,
-          metadata: cached.metadata,
-          pdfSize: cached.pdfBuffer.length,
-          pdfBase64: cached.pdfBuffer.toString('base64'), // 🆕 从缓存返回PDF
-          downloadFilename: `${normalizedSymbol}_研究报告_${new Date().toISOString().split('T')[0]}.pdf`
-        });
-      } else {
-        reportCache.delete(cacheKey);
-      }
-    }
-    
-    // 生成报告
-    console.log(`\n📄 [Report API] 生成报告: ${normalizedSymbol}`);
-    const result = await generateCompanyReport(normalizedSymbol);
-    
-    // 缓存结果
-    reportCache.set(cacheKey, {
-      pdfBuffer: result.pdfBuffer,
-      summary: result.summary,
-      metadata: result.metadata,
-      timestamp: Date.now()
-    });
-    
-    // 返回PDF作为base64（客户端可以解码并下载）
-    return res.status(200).json({
-      success: true,
-      cached: false,
-      symbol: normalizedSymbol,
-      summary: result.summary,
-      metadata: result.metadata,
-      pdfSize: result.pdfBuffer.length,
-      pdfBase64: result.pdfBuffer.toString('base64'), // 🆕 PDF数据
-      downloadFilename: `${normalizedSymbol}_研究报告_${new Date().toISOString().split('T')[0]}.pdf`
-    });
-    
-  } catch (error) {
-    console.error(`❌ [Report API] 生成失败: ${error.message}`);
-    return res.status(500).json({
-      error: `报告生成失败: ${error.message}`
-    });
-  }
-});
-
 // ---- 🆕 v6.3: Manual RSS Collection Trigger
 app.post("/api/news/collect-rss", async (req, res) => {
   try {
@@ -6205,22 +6134,6 @@ if (!TOKEN_IS_SAFE) {
     }
     
     try {
-      // 🎯 版本查询命令（用于确认运行环境）
-      if (text === '/版本' || text.toLowerCase() === '/version') {
-        const versionInfo = `📍 **USIS Brain v6.2 (2025-11-13)**
-🔧 西班牙交易所修复版 (XMAD→BME)
-🏢 环境: ${process.env.REPLIT_ENVIRONMENT || 'unknown'}
-⏱ 运行时长: ${Math.floor((Date.now() - APP_START_TIME) / 1000 / 60)}分钟`;
-        
-        await telegramAPI('sendMessage', { 
-          chat_id: chatId, 
-          text: versionInfo,
-          parse_mode: 'Markdown'
-        });
-        console.log('✅ 版本信息已发送');
-        return;
-      }
-      
       // 🆕 v6.2: 优先检测对话类意图（greeting/help/casual）
       if (isGreeting(text) || isHelpRequest(text) || isSystemCommand(text)) {
         console.log('💬 检测到对话类意图，路由到对话系统');
@@ -6275,103 +6188,6 @@ if (!TOKEN_IS_SAFE) {
         return; // 不继续执行分析流程
       }
       
-      // 🆕 v3.0: 深度研究报告请求
-      const reportKeywords = ['研报', '研究报告', '生成报告', 'report'];
-      const isReportRequest = reportKeywords.some(kw => text.includes(kw)) || text.startsWith('/研报');
-      
-      if (isReportRequest) {
-        console.log('📊 [Deep Report v3.0] 研究报告请求');
-        
-        // 提取股票代码
-        const reportSymbols = extractSymbols(text);
-        if (reportSymbols.length === 0) {
-          await telegramAPI('sendMessage', { 
-            chat_id: chatId, 
-            text: '❌ 请指定股票代码，例如：\n📊 /研报 RMBS\n📊 生成研报 SAN\n📊 研究报告 NVDA' 
-          });
-          return;
-        }
-        
-        const symbol = reportSymbols[0]; // 只取第一个股票
-        
-        // 检测是否为深度模式（默认深度模式，除非明确指定"简易"）
-        const isLiteMode = text.includes('简易') || text.includes('快速') || text.includes('lite');
-        const isDeepMode = !isLiteMode; // 默认深度模式
-        
-        try {
-          if (isDeepMode) {
-            // 深度版：2-5分钟
-            await telegramAPI('sendMessage', { 
-              chat_id: chatId, 
-              text: `📊 **正在生成机构级深度研报** (${symbol})\n\n⏱ 预计需要 2-5 分钟\n📄 包含9大章节 + 专业评级\n\n请稍候，AI正在分析中...`
-            });
-            
-            const result = await generateDeepReport(symbol);
-            
-            // 构建完整摘要
-            const summaryText = `📊 **${symbol} 深度研报**
-
-🎯 **评级**: ${result.rating}
-💡 **核心观点**: ${result.coreView}
-
-${result.summary}
-
-📄 详细分析请见附件PDF（${result.metadata.pages}页）`;
-            
-            // 发送PDF文件
-            const filename = `${symbol}_USIS_Research_${new Date().toISOString().split('T')[0]}.pdf`;
-            await sendDocumentBuffer(
-              TELEGRAM_TOKEN, 
-              chatId, 
-              result.pdfBuffer, 
-              filename,
-              summaryText
-            );
-            
-            console.log(`✅ [Deep Report] 深度研报已发送: ${symbol} (${result.metadata.duration}s)`);
-            
-          } else {
-            // 简易版：30-60秒
-            await telegramAPI('sendMessage', { 
-              chat_id: chatId, 
-              text: `📄 正在生成简易研报 (${symbol})，预计30-60秒...` 
-            });
-            
-            const result = await generateCompanyReport(symbol);
-            
-            await sendDocumentBuffer(
-              TELEGRAM_TOKEN, 
-              chatId, 
-              result.pdfBuffer, 
-              `${symbol}_研究报告_${new Date().toISOString().split('T')[0]}.pdf`,
-              `📄 **${symbol} 简易研报**（Beta版）\n\n${result.summary}`
-            );
-            
-            console.log(`✅ [Report] 简易研报已发送: ${symbol}`);
-          }
-          
-        } catch (error) {
-          console.error(`❌ 报告生成失败: ${error.message}`);
-          
-          // 详细错误提示
-          let errorHint = '';
-          if (error.message.includes('数据')) {
-            errorHint = '\n💡 可能原因：数据源暂时不可用，请稍后重试';
-          } else if (error.message.includes('AI') || error.message.includes('模型')) {
-            errorHint = '\n💡 可能原因：AI服务繁忙，请稍后重试';
-          } else if (error.message.includes('PDF')) {
-            errorHint = '\n💡 可能原因：PDF渲染失败，请联系管理员';
-          }
-          
-          await telegramAPI('sendMessage', { 
-            chat_id: chatId, 
-            text: `❌ 报告生成失败\n\n**股票**: ${symbol}\n**错误**: ${error.message}${errorHint}\n\n请稍后重试或尝试其他股票代码` 
-          });
-        }
-        
-        return; // 不继续执行其他流程
-      }
-      
       const isHeatmap = text.includes('热力图') || text.toLowerCase().includes('heatmap');
       
       // 🆕 v1.0: 检测个股分析请求（扩展逻辑：单独股票代码也算）
@@ -6398,12 +6214,6 @@ ${result.summary}
         }
       } else if (isStockAnalysis) {
         // 🧠 个股分析（大脑）→ 📸 调用n8n截图（眼睛）→ 📊 AI分析
-        console.log('🚦 [TELEGRAM_STOCK_ANALYSIS] 收到请求:', {
-          text: text,
-          userId: userId,
-          chatId: chatId,
-          extractedSymbols: symbols
-        });
         console.log(`📈 个股分析请求: ${symbols.join(', ')}`);
         
         // 🆕 v3.2: 解析意图以获取持仓信息 + v6.2: 使用symbolResolver
@@ -6481,23 +6291,6 @@ ${result.summary}
         // 正常流程：继续分析
         const finalSymbol = validatedSymbols[0];
         
-        // 🆕 v6.2: 提取交易所偏好（用于降级模式）
-        let exchangePreference = null;
-        if (semanticIntent) {
-          // 优先使用entity级别的exchangeHint
-          const entityWithHint = semanticIntent.entities?.find(e => e.exchangeHint);
-          if (entityWithHint) {
-            exchangePreference = entityWithHint.exchangeHint;
-          } else if (semanticIntent.exchange) {
-            // 降级到intent级别的exchange
-            exchangePreference = semanticIntent.exchange;
-          }
-          
-          if (exchangePreference) {
-            console.log(`🎯 [Symbol Policy] exchangePreference="${exchangePreference}" (从semantic intent提取)`);
-          }
-        }
-        
         // 🆕 发送进度提示（告知用户预期等待时间）
         const progressMsg = await telegramAPI('sendMessage', { 
           chat_id: chatId, 
@@ -6508,8 +6301,7 @@ ${result.summary}
           const result = await generateStockChart(finalSymbol, {
             interval: 'D',
             userText: text,
-            positionContext: positionContext,  // 🆕 v3.2: 传递持仓信息
-            exchangePreference: exchangePreference  // 🆕 v6.2: 传递交易所偏好（用于降级模式）
+            positionContext: positionContext  // 🆕 v3.2: 传递持仓信息
           });
           
           // 🆕 删除进度提示消息（成功后清理）
