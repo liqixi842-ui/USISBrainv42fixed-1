@@ -174,10 +174,11 @@ class NewsScheduler {
         LEFT JOIN news_sources nsrc ON nsrc.id = ni.source_id
         WHERE ni.published_at > NOW() - INTERVAL '2 hours'
         ORDER BY ns.composite_score DESC, ni.published_at DESC
-        LIMIT 10
+        LIMIT 20
       `);
 
-      let items = result.rows;
+      // Deduplicate by translated_title (in-memory, more reliable than DISTINCT ON)
+      let items = this.deduplicateByTitle(result.rows).slice(0, 10);
       let timeWindow = '2h';
       
       // Step 2: Fallback to 12 hours if insufficient items
@@ -203,10 +204,10 @@ class NewsScheduler {
           LEFT JOIN news_sources nsrc ON nsrc.id = ni.source_id
           WHERE ni.published_at > NOW() - INTERVAL '12 hours'
           ORDER BY ns.composite_score DESC, ni.published_at DESC
-          LIMIT 10
+          LIMIT 20
         `);
         
-        items = result.rows;
+        items = this.deduplicateByTitle(result.rows).slice(0, 10);
         timeWindow = '12h (fallback)';
       }
       
@@ -225,6 +226,28 @@ class NewsScheduler {
     } catch (error) {
       console.error(`❌ [NewsScheduler] Failed to send ${channel} digest:`, error.message);
     }
+  }
+
+  /**
+   * Deduplicate news items by title (v3.2: Fix duplicate Form 13G, etc.)
+   * Keeps highest scored item for each unique title
+   */
+  deduplicateByTitle(items) {
+    const seen = new Map();
+    const result = [];
+    
+    for (const item of items) {
+      const title = item.translated_title || item.title;
+      
+      if (!seen.has(title)) {
+        seen.set(title, true);
+        result.push(item);
+      }
+      // Skip duplicates (already sorted by score DESC, so we keep the highest)
+    }
+    
+    console.log(`🔄 [Dedup] ${items.length} items → ${result.length} unique (removed ${items.length - result.length} duplicates)`);
+    return result;
   }
 
   /**
