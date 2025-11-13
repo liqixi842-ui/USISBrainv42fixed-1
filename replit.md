@@ -1,8 +1,10 @@
 # Overview
-USIS Brain v6.2 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system is built for deployment on Replit's Reserved VM platform, aiming for institutional-grade analysis with multilingual support and cost optimization.
+USIS Brain v6.2 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, automated workflow management, and **deep research reports with professional ratings** (v3.0). The system is built for deployment on Replit's Reserved VM platform, aiming for institutional-grade analysis with multilingual support and cost optimization.
 
-## Recent Changes (v6.2 - 2025-11-13)
-**International Stock Symbol Resolution Fix** - Resolved critical issue where Spanish stocks (e.g., "分析西班牙股票 COL") were incorrectly mapped to NASDAQ:COL instead of BME:COL. The fix implements exchange-aware fallback logic that respects user intent across 80+ global exchanges.
+## Recent Changes
+**v3.0 Deep Research Reports (2025-11-13)** - Launched institutional-grade deep research reports with 9-section structure, AI-driven analysis, and BUY/HOLD/SELL ratings. Features: (1) Section-by-section AI generation for quality; (2) Professional PDF reports (8-20 pages); (3) Telegram command `/研报 SYMBOL` generates deep reports by default; (4) 2-5 minute generation time; (5) Comprehensive coverage: company overview, industry analysis, financials, technical analysis, news synthesis, risk assessment, and investment rating.
+
+**v6.2 Symbol Resolution Fix (2025-11-13)** - Resolved critical issue where Spanish stocks (e.g., "分析西班牙股票 COL") were incorrectly mapped to NASDAQ:COL instead of BME:COL. The fix implements exchange-aware fallback logic that respects user intent across 80+ global exchanges.
 
 **Key Improvements**:
 - Added `exchangePreference` parameter threading from semantic intent to chart service
