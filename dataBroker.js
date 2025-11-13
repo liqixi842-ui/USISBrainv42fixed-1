@@ -1304,72 +1304,108 @@ async function fetchTechnicalIndicators(symbol, interval = '1day') {
 }
 
 /**
- * 🆕 v6.2: Twelve Data基本面数据获取 - 财报三表
+ * 🆕 v4.0.2: Finnhub统一财务数据获取 - 100% Finnhub原始数据
+ * 聚合 /stock/financials-reported + /stock/metric 提供一致的财务数据
  * @param {string} symbol - 股票代码
- * @returns {Promise<Object>} 基本面数据
+ * @returns {Promise<Object>} 统一的Finnhub财务数据
  */
 async function fetchFundamentals(symbol) {
-  console.log(`\n📊 [Twelve Data] 获取${symbol}基本面数据...`);
+  console.log(`\n📊 [Finnhub Financials] 获取${symbol}财务数据（100% Finnhub原始值）...`);
   
-  if (!TWELVE_DATA_KEY) {
-    console.warn('   ⚠️  TWELVE_DATA_API_KEY未配置，跳过基本面数据');
+  if (!FINNHUB_KEY) {
+    console.warn('   ⚠️  FINNHUB_API_KEY未配置，跳过财务数据');
     return { fundamentals: null, source: null };
   }
   
-  const baseUrl = 'https://api.twelvedata.com';
   const startTime = Date.now();
   
-  // 🔧 辅助函数：检查HTTP响应和API错误
-  const fetchFundamental = async (url) => {
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-    }
-    const data = await res.json();
-    if (data.status === 'error') {
-      throw new Error(data.message || 'API returned error status');
-    }
-    return data;
-  };
-  
-  // 并行获取4个基本面数据源
-  const fundamentals = await Promise.allSettled([
-    // 利润表 (Income Statement)
-    fetchFundamental(`${baseUrl}/income_statement?symbol=${symbol}&period=annual&apikey=${TWELVE_DATA_KEY}`)
-      .then(data => ({ name: 'income_statement', data: data.income_statement?.[0], timestamp: data.income_statement?.[0]?.fiscal_date })),
+  try {
+    // 并行获取 Finnhub 的两个核心端点
+    const [reportedResponse, metricsResponse] = await Promise.allSettled([
+      // 1. /stock/financials-reported - GAAP原始财报（Revenue/NetIncome/EPS时间序列）
+      fetch(`https://finnhub.io/api/v1/stock/financials-reported?symbol=${symbol}&freq=annual&token=${FINNHUB_KEY}`, { timeout: 10000 })
+        .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))),
+      
+      // 2. /stock/metric - TTM比率（Margins/PE/MarketCap）
+      fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${symbol}&metric=all&token=${FINNHUB_KEY}`, { timeout: 10000 })
+        .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
+    ]);
     
-    // 资产负债表 (Balance Sheet)
-    fetchFundamental(`${baseUrl}/balance_sheet?symbol=${symbol}&period=annual&apikey=${TWELVE_DATA_KEY}`)
-      .then(data => ({ name: 'balance_sheet', data: data.balance_sheet?.[0], timestamp: data.balance_sheet?.[0]?.fiscal_date })),
+    const elapsed = Date.now() - startTime;
     
-    // 现金流量表 (Cash Flow)
-    fetchFundamental(`${baseUrl}/cash_flow?symbol=${symbol}&period=annual&apikey=${TWELVE_DATA_KEY}`)
-      .then(data => ({ name: 'cash_flow', data: data.cash_flow?.[0], timestamp: data.cash_flow?.[0]?.fiscal_date })),
-    
-    // 统计数据 (Statistics - PE, Market Cap等)
-    fetchFundamental(`${baseUrl}/statistics?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`)
-      .then(data => ({ name: 'statistics', data: data.statistics }))
-  ]);
-  
-  const elapsed = Date.now() - startTime;
-  
-  const results = {
-    income_statement: fundamentals[0].status === 'fulfilled' ? fundamentals[0].value : { error: fundamentals[0].reason?.message },
-    balance_sheet: fundamentals[1].status === 'fulfilled' ? fundamentals[1].value : { error: fundamentals[1].reason?.message },
-    cash_flow: fundamentals[2].status === 'fulfilled' ? fundamentals[2].value : { error: fundamentals[2].reason?.message },
-    statistics: fundamentals[3].status === 'fulfilled' ? fundamentals[3].value : { error: fundamentals[3].reason?.message },
-    metadata: {
-      symbol,
-      timestamp: Date.now(),
-      elapsed_ms: elapsed,
-      source: 'Twelve Data',
-      success_count: fundamentals.filter(r => r.status === 'fulfilled').length,
-      total_count: fundamentals.length
+    // 提取财报数据（选择10-K年报，最多5期）
+    let statements = [];
+    if (reportedResponse.status === 'fulfilled' && reportedResponse.value?.data) {
+      const annualReports = reportedResponse.value.data.filter(r => r.form === '10-K').slice(0, 5);
+      statements = annualReports.map(report => ({
+        fiscalDate: report.endDate,
+        year: report.year,
+        // 🔧 从report.ic映射核心财务指标（Finnhub使用XBRL概念名）
+        revenue: report.report?.ic?.find(item => item.concept === 'RevenueFromContractWithCustomerExcludingAssessedTax' || item.concept === 'Revenues')?.value || null,
+        netIncome: report.report?.ic?.find(item => item.concept === 'NetIncomeLoss')?.value || null,
+        eps: report.report?.ic?.find(item => item.concept === 'EarningsPerShareDiluted')?.value || null,
+        grossProfit: report.report?.ic?.find(item => item.concept === 'GrossProfit')?.value || null,
+        operatingIncome: report.report?.ic?.find(item => item.concept === 'OperatingIncomeLoss')?.value || null,
+        currency: report.report?.ic?.[0]?.unit || 'USD'
+      }));
     }
-  };
-  
-  console.log(`✅ [Fundamentals] 完成 (${elapsed}ms, 成功率: ${results.metadata.success_count}/${results.metadata.total_count})`);
-  return { fundamentals: results, source: 'Twelve Data' };
+    
+    // 提取TTM比率（已经是百分比或正确单位）
+    let ratios = {};
+    if (metricsResponse.status === 'fulfilled' && metricsResponse.value?.metric) {
+      const m = metricsResponse.value.metric;
+      ratios = {
+        peRatio: m.peBasicTTM || m.peNormalizedAnnual || null,
+        marketCap: m.marketCapitalization || null, // 单位：百万美元
+        grossMarginTTM: m.grossMarginTTM || null, // 已经是百分比（如65.2表示65.2%）
+        operatingMarginTTM: m.operatingMarginTTM || null,
+        netProfitMarginTTM: m.netProfitMarginTTM || null,
+        roeTTM: m.roeTTM || null,
+        roaTTM: m.roaTTM || null,
+        revenueGrowthTTMYoy: m.revenueGrowthTTMYoy || null
+      };
+    }
+    
+    const successCount = (reportedResponse.status === 'fulfilled' ? 1 : 0) + (metricsResponse.status === 'fulfilled' ? 1 : 0);
+    
+    console.log(`✅ [Finnhub Financials] 完成 (${elapsed}ms)`);
+    console.log(`   - 财报期数: ${statements.length}`);
+    console.log(`   - 最新Revenue: ${statements[0]?.revenue ? '$' + (statements[0].revenue / 1e9).toFixed(2) + 'B' : 'N/A'}`);
+    console.log(`   - PE比率: ${ratios.peRatio || 'N/A'}`);
+    console.log(`   - 数据源: 100% Finnhub (financials-reported + metric)`);
+    
+    return {
+      fundamentals: {
+        statements, // 时间序列数据（5期年报）
+        ratios, // TTM比率
+        metadata: {
+          symbol,
+          timestamp: Date.now(),
+          elapsed_ms: elapsed,
+          source: 'Finnhub (financials-reported + metric)',
+          success_count: successCount,
+          total_count: 2
+        }
+      },
+      source: 'Finnhub'
+    };
+    
+  } catch (error) {
+    console.error(`❌ [Finnhub Financials] 获取失败: ${error.message}`);
+    return {
+      fundamentals: {
+        statements: [],
+        ratios: {},
+        metadata: {
+          symbol,
+          timestamp: Date.now(),
+          source: 'Finnhub',
+          error: error.message
+        }
+      },
+      source: 'Finnhub'
+    };
+  }
 }
 
 /**

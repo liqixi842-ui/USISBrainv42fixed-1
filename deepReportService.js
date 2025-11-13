@@ -65,9 +65,9 @@ function formatFinancialValue(value) {
 }
 
 /**
- * 🆕 v4.0: 标准化财务数据为时间序列（用于图表和分析）
- * @param {Object} fundamentals - Twelve Data基本面数据
- * @param {Object} metrics - Finnhub估值指标
+ * 🆕 v4.0.2: 标准化财务数据 - 100% Finnhub原始值，零计算逻辑
+ * @param {Object} fundamentals - Finnhub财务数据（from fetchFundamentals）
+ * @param {Object} metrics - DEPRECATED（数据已包含在fundamentals.ratios中）
  * @returns {Object} 标准化的财务时间序列
  */
 function normalizeFinancialData(fundamentals, metrics) {
@@ -79,107 +79,67 @@ function normalizeFinancialData(fundamentals, metrics) {
     grossMargin: [],
     operatingMargin: [],
     netMargin: [],
-    pe: metrics?.peRatio || null,
-    industryPE: null, // TODO: 需要行业平均PE数据
-    marketCap: metrics?.symbol ? (metrics.marketCap || null) : null,
+    pe: null,
+    industryPE: null,
+    marketCap: null,
+    roe: null,
     missing: []
   };
   
-  // 🔧 v4.0 FIX: Twelve Data返回 .quarterly 或 .annual 数组，不是 .data
-  // Helper: 去除逗号并转数字（Twelve Data可能返回 "24,000,000,000" 格式）
-  // 重要：零值(0)是合法的财务数据，必须保留
-  const parseFinancialNumber = (value) => {
-    // 只在真正为空时返回null（null/undefined/空字符串）
-    if (value === null || value === undefined || value === '') return null;
-    const cleaned = String(value).replace(/,/g, '');
-    const num = Number(cleaned);
-    return isNaN(num) ? null : num;
-  };
+  // 🔧 v4.0.2: 使用新的Finnhub统一数据结构
+  if (!fundamentals || !fundamentals.statements || !fundamentals.ratios) {
+    console.warn(`      ⚠️  Finnhub财务数据缺失或格式错误`);
+    normalized.missing.push('finnhub_fundamentals');
+    return normalized;
+  }
   
-  // 🔧 FIX: 优先使用年度数据（如果有内容），否则使用季度数据
-  // 重要：空数组会导致||短路失败，必须检查length
-  const annual = fundamentals?.income_statement?.annual;
-  const quarterly = fundamentals?.income_statement?.quarterly;
-  const incomeData = (annual && annual.length > 0) ? annual : (quarterly && quarterly.length > 0) ? quarterly : null;
+  const { statements, ratios } = fundamentals;
   
-  if (incomeData && Array.isArray(incomeData) && incomeData.length > 0) {
-    const dataType = (annual && annual.length > 0) ? '年度' : '季度';
-    console.log(`      📊 获取到${incomeData.length}期财务数据 (${dataType})`);
+  // 1. 时间序列数据：直接使用Finnhub财报数据（无需计算）
+  if (statements && statements.length > 0) {
+    console.log(`      📊 使用${statements.length}期Finnhub财报数据 (100% 原始值)`);
     
-    // 取最近的5期数据（足够绘制趋势图）
-    const recentData = incomeData.slice(0, 5);
-    
-    recentData.forEach(income => {
-      if (income.fiscal_date) normalized.fiscalPeriods.push(income.fiscal_date);
+    statements.forEach(stmt => {
+      if (stmt.fiscalDate) normalized.fiscalPeriods.push(stmt.fiscalDate);
       
-      const revenue = parseFinancialNumber(income.revenue);
-      const netIncome = parseFinancialNumber(income.net_income);
-      const grossProfit = parseFinancialNumber(income.gross_profit);
-      const operatingIncome = parseFinancialNumber(income.operating_income);
-      
-      // 🔧 FIX: 允许零值（零是合法的财务数据）
-      if (revenue !== null) normalized.revenue.push(revenue);
-      if (netIncome !== null) normalized.netIncome.push(netIncome);
-      
-      // 计算毛利率和营业利润率（基于原始数值，允许零值）
-      if (grossProfit !== null && revenue !== null && revenue !== 0) {
-        normalized.grossMargin.push((grossProfit / revenue * 100).toFixed(2));
-      }
-      
-      if (operatingIncome !== null && revenue !== null && revenue !== 0) {
-        normalized.operatingMargin.push((operatingIncome / revenue * 100).toFixed(2));
-      }
-      
-      if (netIncome !== null && revenue !== null && revenue !== 0) {
-        normalized.netMargin.push((netIncome / revenue * 100).toFixed(2));
-      }
+      // 🔧 直接使用Finnhub原始值，不做任何转换或计算
+      if (stmt.revenue !== null) normalized.revenue.push(stmt.revenue);
+      if (stmt.netIncome !== null) normalized.netIncome.push(stmt.netIncome);
+      if (stmt.eps !== null) normalized.eps.push(stmt.eps);
     });
   } else {
-    console.log(`      ⚠️  未找到income_statement数据`);
-    normalized.missing.push('income_statement');
+    console.warn(`      ⚠️  Finnhub statements为空`);
+    normalized.missing.push('statements');
   }
   
-  // 处理统计数据（EPS）
-  if (fundamentals?.statistics?.data) {
-    const stats = fundamentals.statistics.data;
-    if (stats.eps) {
-      normalized.eps.push(Number(stats.eps));
+  // 2. TTM比率：直接使用Finnhub提供的百分比值（已经是正确单位）
+  if (ratios) {
+    // PE比率
+    normalized.pe = ratios.peRatio || null;
+    
+    // 市值（单位：百万美元）
+    normalized.marketCap = ratios.marketCap || null;
+    
+    // 利润率（Finnhub已返回百分比，如52.41表示52.41%）
+    if (ratios.grossMarginTTM !== null) {
+      normalized.grossMargin = [Number(ratios.grossMarginTTM).toFixed(2)];
     }
-  }
-  
-  // 🔧 CRITICAL FIX: Finnhub metrics嵌套在metrics.metric下
-  if (metrics && metrics.metric) {
-    // PE比率（多个变体）
-    if (!normalized.pe) {
-      normalized.pe = metrics.metric.peBasicTTM || metrics.metric.peNormalizedAnnual || metrics.metric.peRatio || null;
+    if (ratios.operatingMarginTTM !== null) {
+      normalized.operatingMargin = [Number(ratios.operatingMarginTTM).toFixed(2)];
+    }
+    if (ratios.netProfitMarginTTM !== null) {
+      normalized.netMargin = [Number(ratios.netProfitMarginTTM).toFixed(2)];
     }
     
-    // 市值
-    if (!normalized.marketCap && metrics.metric.marketCapitalization) {
-      normalized.marketCap = metrics.metric.marketCapitalization;
+    // ROE（已经是百分比）
+    if (ratios.roeTTM !== null) {
+      normalized.roe = Number(ratios.roeTTM).toFixed(2);
     }
     
-    // 🔧 v4.0 FIX: Finnhub netProfitMarginTTM 已经是百分比，不要再乘100
-    // 利润率（如果财务数据缺失，使用Finnhub TTM数据）
-    if (!normalized.netMargin.length && metrics.metric.netProfitMarginTTM) {
-      // Finnhub返回值已经是百分比（例如52.41表示52.41%）
-      normalized.netMargin = [Number(metrics.metric.netProfitMarginTTM).toFixed(2)];
-    }
-    
-    // 🆕 v4.0: 同样处理 ROE（避免10522%这种错误）
-    if (metrics.metric.returnOnEquityTTM) {
-      normalized.roe = Number(metrics.metric.returnOnEquityTTM).toFixed(2);  // 已经是百分比
-    }
-  } else if (metrics && !metrics.metric) {
-    // 备用：有些API直接返回平铺结构
-    if (!normalized.pe && metrics.peRatio) {
-      normalized.pe = metrics.peRatio;
-    }
-    if (!normalized.marketCap && metrics.marketCap) {
-      normalized.marketCap = metrics.marketCap;
-    }
+    console.log(`      ✅ Finnhub比率: PE=${normalized.pe}, MarketCap=${normalized.marketCap}M, NetMargin=${normalized.netMargin[0] || 'N/A'}%`);
   } else {
-    normalized.missing.push('metrics');
+    console.warn(`      ⚠️  Finnhub ratios为空`);
+    normalized.missing.push('ratios');
   }
   
   return normalized;
