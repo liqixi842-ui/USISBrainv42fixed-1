@@ -944,14 +944,17 @@ async function convertHTMLtoPDF(htmlContent) {
         data: {
           user_credentials: DOCRAPTOR_API_KEY,
           doc: {
-            test: false, // 生产模式（无水印，计费）
+            test: false, // 生产模式（无水印，需API额度）
             document_type: 'pdf',
             document_content: htmlContent,
             javascript: false,
             prince_options: {
               media: 'print',
               pdf_title: 'USIS Research Report',
-              pdf_forms: false
+              pdf_forms: false,
+              // 中文字体支持优化
+              no_xinclude: true,
+              no_network: false // 允许加载Google Fonts中文字体
             }
           }
         },
