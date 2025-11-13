@@ -1,0 +1,144 @@
+2025-11-13 15:18:37.62
+9b4bb9f3
+User
+- 并行耗时: {"quotes":270}
+2025-11-13 15:18:37.62
+9b4bb9f3
+User
+- 缓存命中: 0/1
+2025-11-13 15:18:37.62
+9b4bb9f3
+User
+NFLX_DIAG|COL|phase=dataFetch|status=success|ms=468|price=5.54
+2025-11-13 15:18:37.62
+9b4bb9f3
+User
+⚠️ [降级模式] COL → NASDAQ:COL (未查询API)
+2025-11-13 15:18:37.62
+9b4bb9f3
+User
+📊 [final_symbol_for_tv] "NASDAQ:COL" → TradingView
+2025-11-13 15:18:37.62
+9b4bb9f3
+User
+🔄 [LazyLoad] screenshotProviders已加载
+2025-11-13 15:18:37.62
+9b4bb9f3
+User
+📸 [Stock Chart N8n] 调用个股截图服务 (超时: 45000ms, 最大重试: 2次)
+2025-11-13 15:18:37.62
+9b4bb9f3
+User
+🔄 个股截图尝试 1/2
+2025-11-13 15:18:37.62
+9b4bb9f3
+User
+🔗 [Webhook] https://qian.app.n8n.cloud/webhook/stock_analysis_full
+2025-11-13 15:18:40.64
+9b4bb9f3
+User
+🤖 [AI] Response: 388 chars, 566 tokens used
+2025-11-13 15:18:40.64
+9b4bb9f3
+User
+💡 [Enhancement] Generated 404-char analysis
+2025-11-13 15:18:40.82
+9b4bb9f3
+User
+📥 POST /api/news/ingest from 127.0.0.1
+2025-11-13 15:18:40.82
+9b4bb9f3
+User
+📰 [Ingest] Processing: Circle CFO on leading the blockchain ‘megatrend’ t...
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+❌ [DB] Query failed (36ms): duplicate key value violates unique constraint "news_items_url_key"
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+⏭️ [Ingest] Skipped - already exists in database
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+❌ [NewsIngestAPI] Processing failed: error: duplicate key value violates unique constraint "news_items_url_key"
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+at /home/runner/workspace/node_modules/pg-pool/index.js:45:11
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+at async safeQuery (/home/runner/workspace/dbUtils.js:54:20)
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+at async NewsIngestAPI.saveNewsItem (/home/runner/workspace/newsIngestAPI.js:281:5)
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+at async NewsIngestAPI.processNews (/home/runner/workspace/newsIngestAPI.js:75:26)
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+at async /home/runner/workspace/index.js:779:20 {
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+length: 293,
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+severity: 'ERROR',
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+code: '23505',
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+detail: 'Key (url)=(https://fortune.com/2025/11/13/circle-cfo-leading-blockchain-megatrend-transforming-finance/) already exists.',
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+hint: undefined,
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+position: undefined,
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+internalPosition: undefined,
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+internalQuery: undefined,
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+schema: 'public',
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+column: undefined,
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+dataType: undefined,
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+constraint: 'news_items_url_key',
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+file: 'nbtinsert.c',
+2025-11-13 15:18:40.96
+9b4bb9f3
+User
+routine: '_bt_check_unique'

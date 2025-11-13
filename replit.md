@@ -1,5 +1,15 @@
 # Overview
-USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system is built for deployment on Replit's Reserved VM platform, aiming for institutional-grade analysis with multilingual support and cost optimization.
+USIS Brain v6.2 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system is built for deployment on Replit's Reserved VM platform, aiming for institutional-grade analysis with multilingual support and cost optimization.
+
+## Recent Changes (v6.2 - 2025-11-13)
+**International Stock Symbol Resolution Fix** - Resolved critical issue where Spanish stocks (e.g., "分析西班牙股票 COL") were incorrectly mapped to NASDAQ:COL instead of BME:COL. The fix implements exchange-aware fallback logic that respects user intent across 80+ global exchanges.
+
+**Key Improvements**:
+- Added `exchangePreference` parameter threading from semantic intent to chart service
+- Enhanced `mapExchangeToTradingView` to recognize BME/XMAD/Madrid/Spain exchange codes
+- Implemented token normalization to handle compound hints like "Spain/BME" or "BME:COL"
+- Added Symbol Policy logging (🎯) for exchange routing transparency
+- Fixed version command (/版本) to show deployment environment and uptime
 
 # User Preferences
 Preferred communication style: Simple, everyday language.

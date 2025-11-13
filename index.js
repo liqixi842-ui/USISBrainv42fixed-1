@@ -6313,6 +6313,23 @@ if (!TOKEN_IS_SAFE) {
         // 正常流程：继续分析
         const finalSymbol = validatedSymbols[0];
         
+        // 🆕 v6.2: 提取交易所偏好（用于降级模式）
+        let exchangePreference = null;
+        if (semanticIntent) {
+          // 优先使用entity级别的exchangeHint
+          const entityWithHint = semanticIntent.entities?.find(e => e.exchangeHint);
+          if (entityWithHint) {
+            exchangePreference = entityWithHint.exchangeHint;
+          } else if (semanticIntent.exchange) {
+            // 降级到intent级别的exchange
+            exchangePreference = semanticIntent.exchange;
+          }
+          
+          if (exchangePreference) {
+            console.log(`🎯 [Symbol Policy] exchangePreference="${exchangePreference}" (从semantic intent提取)`);
+          }
+        }
+        
         // 🆕 发送进度提示（告知用户预期等待时间）
         const progressMsg = await telegramAPI('sendMessage', { 
           chat_id: chatId, 
@@ -6323,7 +6340,8 @@ if (!TOKEN_IS_SAFE) {
           const result = await generateStockChart(finalSymbol, {
             interval: 'D',
             userText: text,
-            positionContext: positionContext  // 🆕 v3.2: 传递持仓信息
+            positionContext: positionContext,  // 🆕 v3.2: 传递持仓信息
+            exchangePreference: exchangePreference  // 🆕 v6.2: 传递交易所偏好（用于降级模式）
           });
           
           // 🆕 删除进度提示消息（成功后清理）
