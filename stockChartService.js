@@ -23,7 +23,7 @@ function loadVisionAnalyzer() {
   return _VisionAnalyzer;
 }
 
-const { fetchMarketData, fetchCompanyProfile } = require('./dataBroker');
+const { fetchMarketData, fetchCompanyProfile, fetchComprehensiveAnalysis } = require('./dataBroker');
 const { runWithTimeout, RetryHelper } = require('./utils/asyncTools');
 
 // 🆕 v6.0: 阶段超时配置（环境变量可配置）
@@ -390,11 +390,62 @@ async function generateStockChart(symbol, options = {}) {
  * 🆕 v6.0: 构建降级响应
  * @private
  */
-function buildFallbackResponse(symbol, stockData, positionContext, diagnostics, startTime) {
-  const chartAnalysis = basicAnalysis(symbol, stockData, positionContext);
+async function buildFallbackResponse(symbol, stockData, positionContext, diagnostics, startTime) {
+  console.log(`🔄 [Fallback] 使用Twelve Data深度分析替代截图模式`);
+  
+  // 🛡️ 安全检查：如果没有基础数据，跳过Twelve Data调用
+  if (!stockData || !stockData.currentPrice) {
+    console.log(`⚠️ [Fallback] 缺少基础数据，跳过Twelve Data，返回基础分析`);
+    diagnostics.totalDuration = Date.now() - startTime;
+    
+    return {
+      ok: true,
+      success: false,
+      symbol,
+      buffer: null,
+      chartURL: null,
+      stockData: null,
+      chartAnalysis: basicAnalysis(symbol, null, positionContext),
+      provider: 'fallback',
+      meta: {
+        analysis: { analysis_type: 'basic_fallback', reason: 'no_stock_data' },
+        diagnostics
+      },
+      elapsed_ms: diagnostics.totalDuration
+    };
+  }
+  
+  // 🆕 v6.2: 调用Twelve Data综合分析（技术指标 + 基本面 + 分析师评级）
+  // 🛡️ 超时保护：15秒超时（避免延迟过长）
+  let comprehensiveData = null;
+  try {
+    comprehensiveData = await runWithTimeout(
+      'fetchComprehensiveAnalysis',
+      () => fetchComprehensiveAnalysis(symbol),
+      { timeout: 15000 } // 15秒超时
+    );
+    console.log(`✅ [Fallback] Twelve Data综合分析已获取`);
+  } catch (error) {
+    console.log(`⚠️ [Fallback] Twelve Data获取失败，降级到基础分析: ${error.message}`);
+  }
+  
+  // 生成分析文本（带错误保护）
+  let chartAnalysis;
+  if (comprehensiveData) {
+    try {
+      chartAnalysis = await buildEnhancedAnalysis(symbol, stockData, positionContext, comprehensiveData);
+    } catch (aiError) {
+      console.error(`❌ [Fallback] AI分析失败，降级到基础分析: ${aiError.message}`);
+      chartAnalysis = basicAnalysis(symbol, stockData, positionContext);
+      comprehensiveData = null; // 标记为未使用
+    }
+  } else {
+    chartAnalysis = basicAnalysis(symbol, stockData, positionContext);
+  }
+  
   diagnostics.totalDuration = Date.now() - startTime;
   
-  console.log(`NFLX_SUMMARY|${symbol}|data=${diagnostics.phases.dataFetch?.status || 'failed'}|chart=skipped|vision=skipped|duration=${diagnostics.totalDuration}|fallback=basic`);
+  console.log(`NFLX_SUMMARY|${symbol}|data=${diagnostics.phases.dataFetch?.status || 'failed'}|chart=skipped|vision=skipped|duration=${diagnostics.totalDuration}|fallback=${comprehensiveData ? 'twelve_data' : 'basic'}`);
   
   // 🎯 v6.1修复：即使截图失败，也返回ok: true让数据驱动分析能继续执行
   return {
@@ -404,18 +455,62 @@ function buildFallbackResponse(symbol, stockData, positionContext, diagnostics, 
     buffer: null,
     chartURL: null,
     stockData,  // ✅ 包含实时数据，供技术分析使用
-    chartAnalysis,  // 基础分析（fallback）
-    provider: 'fallback',
+    chartAnalysis,  // 增强分析（Twelve Data）或基础分析（fallback）
+    comprehensiveData,  // 🆕 v6.2: 传递综合数据供后续AI分析使用
+    provider: comprehensiveData ? 'twelve_data_fallback' : 'fallback',
     meta: {
       analysis: {
-        analysis_type: 'basic_fallback',  // 标记为fallback模式
+        analysis_type: comprehensiveData ? 'twelve_data_enhanced' : 'basic_fallback',
         reason: diagnostics.fallbackReason,
-        note: 'stockData available for data-driven analysis'  // 提示数据可用
+        note: comprehensiveData ? 'Twelve Data comprehensive analysis available' : 'stockData available for data-driven analysis'
       },
       diagnostics
     },
     elapsed_ms: diagnostics.totalDuration
   };
+}
+
+/**
+ * 🆕 v6.2: 增强分析函数（使用Twelve Data综合数据）
+ * @param {string} symbol - 股票代码
+ * @param {Object} stockData - 市场数据
+ * @param {Object} positionContext - 持仓信息
+ * @param {Object} comprehensiveData - Twelve Data综合分析数据
+ * @returns {Promise<string>} 增强分析文本
+ */
+async function buildEnhancedAnalysis(symbol, stockData, positionContext, comprehensiveData) {
+  const { generateWithGPT5 } = require('./gpt5Brain');
+  
+  console.log(`📊 [Enhanced Analysis] 使用Twelve Data生成深度分析`);
+  
+  // 构建数据包（兼容gpt5Brain的格式）
+  const dataPackage = {
+    symbol,
+    quote: stockData,
+    profile: comprehensiveData.profile || null,
+    metrics: comprehensiveData.statistics || null,
+    news: [], // Fallback模式下跳过新闻
+    technical_indicators: comprehensiveData.technical_indicators || null,
+    fundamentals: comprehensiveData.fundamentals || null,
+    analyst_ratings: comprehensiveData.analyst_ratings || null
+  };
+  
+  // 构建上下文
+  const context = {
+    userText: positionContext ? `我持有${symbol}，买入成本$${positionContext.buyPrice}` : `分析${symbol}`,
+    positionContext: positionContext || null,
+    language: 'zh' // 默认中文
+  };
+  
+  try {
+    // 调用GPT-5 Brain生成机构级分析（无截图模式）
+    const aiAnalysis = await generateWithGPT5(dataPackage, null, context);
+    return aiAnalysis;
+  } catch (aiError) {
+    console.error(`❌ [Enhanced Analysis] AI生成失败: ${aiError.message}`);
+    // 降级到基础分析
+    return basicAnalysis(symbol, stockData, positionContext);
+  }
 }
 
 /**
