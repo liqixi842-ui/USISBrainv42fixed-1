@@ -11,24 +11,33 @@ const QuickChart = require('quickchart-js');
 const PDFSHIFT_API_KEY = process.env.PDFSHIFT_API_KEY || '';
 
 /**
- * 🔧 格式化市值（自动单位：B/M/K）
- * @param {number} marketCap - 原始市值（以百万为单位）
+ * 🔧 v4.0 FIX: 格式化市值（自动单位：T/B/M/K）
+ * @param {number} marketCap - Finnhub返回的市值（单位：百万美元）
  * @returns {string} 格式化后的市值字符串
+ * 
+ * 示例：
+ * - Finnhub返回 4709340 → 表示$4,709,340M → 格式化为 $4.71T
+ * - Finnhub返回 15000 → 表示$15,000M → 格式化为 $15.00B
  */
 function formatMarketCap(marketCap) {
   if (!marketCap || isNaN(marketCap)) return 'N/A';
   
-  const numCap = Number(marketCap);
+  const numCap = Number(marketCap);  // 单位：百万美元
   
-  // 如果已经是以百万为单位（来自Finnhub profile.marketCapitalization）
-  if (numCap > 1000) {
-    // 转换为十亿（Billion）
+  // 转换为万亿（Trillion） - 如果 >= 1,000,000 百万 = 1 万亿
+  if (numCap >= 1000000) {
+    return `$${(numCap / 1000000).toFixed(2)}T`;
+  }
+  // 转换为十亿（Billion） - 如果 >= 1,000 百万 = 1 十亿
+  else if (numCap >= 1000) {
     return `$${(numCap / 1000).toFixed(2)}B`;
-  } else if (numCap >= 1) {
-    // 保持百万（Million）
+  }
+  // 保持百万（Million） - 如果 >= 1 百万
+  else if (numCap >= 1) {
     return `$${numCap.toFixed(2)}M`;
-  } else {
-    // 转换为千（Thousand）
+  }
+  // 转换为千（Thousand） - 如果 < 1 百万
+  else {
     return `$${(numCap * 1000).toFixed(2)}K`;
   }
 }
@@ -76,32 +85,57 @@ function normalizeFinancialData(fundamentals, metrics) {
     missing: []
   };
   
-  // 🔧 CRITICAL FIX: Twelve Data返回数组，不是单个对象
-  if (fundamentals?.income_statement?.data) {
-    const incomeData = fundamentals.income_statement.data;
+  // 🔧 v4.0 FIX: Twelve Data返回 .quarterly 或 .annual 数组，不是 .data
+  // Helper: 去除逗号并转数字（Twelve Data可能返回 "24,000,000,000" 格式）
+  // 重要：零值(0)是合法的财务数据，必须保留
+  const parseFinancialNumber = (value) => {
+    // 只在真正为空时返回null（null/undefined/空字符串）
+    if (value === null || value === undefined || value === '') return null;
+    const cleaned = String(value).replace(/,/g, '');
+    const num = Number(cleaned);
+    return isNaN(num) ? null : num;
+  };
+  
+  // 🔧 FIX: 优先使用年度数据（如果有内容），否则使用季度数据
+  // 重要：空数组会导致||短路失败，必须检查length
+  const annual = fundamentals?.income_statement?.annual;
+  const quarterly = fundamentals?.income_statement?.quarterly;
+  const incomeData = (annual && annual.length > 0) ? annual : (quarterly && quarterly.length > 0) ? quarterly : null;
+  
+  if (incomeData && Array.isArray(incomeData) && incomeData.length > 0) {
+    const dataType = (annual && annual.length > 0) ? '年度' : '季度';
+    console.log(`      📊 获取到${incomeData.length}期财务数据 (${dataType})`);
     
-    // 如果是数组，遍历所有期数（通常是季度或年度数据）
-    const incomeArray = Array.isArray(incomeData) ? incomeData : [incomeData];
+    // 取最近的5期数据（足够绘制趋势图）
+    const recentData = incomeData.slice(0, 5);
     
-    incomeArray.forEach(income => {
+    recentData.forEach(income => {
       if (income.fiscal_date) normalized.fiscalPeriods.push(income.fiscal_date);
-      if (income.revenue) normalized.revenue.push(Number(income.revenue));
-      if (income.net_income) normalized.netIncome.push(Number(income.net_income));
       
-      // 计算毛利率和营业利润率
-      if (income.gross_profit && income.revenue) {
-        normalized.grossMargin.push((Number(income.gross_profit) / Number(income.revenue) * 100).toFixed(2));
+      const revenue = parseFinancialNumber(income.revenue);
+      const netIncome = parseFinancialNumber(income.net_income);
+      const grossProfit = parseFinancialNumber(income.gross_profit);
+      const operatingIncome = parseFinancialNumber(income.operating_income);
+      
+      // 🔧 FIX: 允许零值（零是合法的财务数据）
+      if (revenue !== null) normalized.revenue.push(revenue);
+      if (netIncome !== null) normalized.netIncome.push(netIncome);
+      
+      // 计算毛利率和营业利润率（基于原始数值，允许零值）
+      if (grossProfit !== null && revenue !== null && revenue !== 0) {
+        normalized.grossMargin.push((grossProfit / revenue * 100).toFixed(2));
       }
       
-      if (income.operating_income && income.revenue) {
-        normalized.operatingMargin.push((Number(income.operating_income) / Number(income.revenue) * 100).toFixed(2));
+      if (operatingIncome !== null && revenue !== null && revenue !== 0) {
+        normalized.operatingMargin.push((operatingIncome / revenue * 100).toFixed(2));
       }
       
-      if (income.net_income && income.revenue) {
-        normalized.netMargin.push((Number(income.net_income) / Number(income.revenue) * 100).toFixed(2));
+      if (netIncome !== null && revenue !== null && revenue !== 0) {
+        normalized.netMargin.push((netIncome / revenue * 100).toFixed(2));
       }
     });
   } else {
+    console.log(`      ⚠️  未找到income_statement数据`);
     normalized.missing.push('income_statement');
   }
   
@@ -125,9 +159,16 @@ function normalizeFinancialData(fundamentals, metrics) {
       normalized.marketCap = metrics.metric.marketCapitalization;
     }
     
-    // 利润率（如果财务数据缺失）
+    // 🔧 v4.0 FIX: Finnhub netProfitMarginTTM 已经是百分比，不要再乘100
+    // 利润率（如果财务数据缺失，使用Finnhub TTM数据）
     if (!normalized.netMargin.length && metrics.metric.netProfitMarginTTM) {
-      normalized.netMargin = [(Number(metrics.metric.netProfitMarginTTM) * 100).toFixed(2)];
+      // Finnhub返回值已经是百分比（例如52.41表示52.41%）
+      normalized.netMargin = [Number(metrics.metric.netProfitMarginTTM).toFixed(2)];
+    }
+    
+    // 🆕 v4.0: 同样处理 ROE（避免10522%这种错误）
+    if (metrics.metric.returnOnEquityTTM) {
+      normalized.roe = Number(metrics.metric.returnOnEquityTTM).toFixed(2);  // 已经是百分比
     }
   } else if (metrics && !metrics.metric) {
     // 备用：有些API直接返回平铺结构
@@ -1093,8 +1134,20 @@ ${newsText}
     ], { maxTokens: 900, temperature: 0.6 });
     
     const parsed = JSON.parse(response.text.replace(/```json\n?|\n?```/g, ''));
+    
+    // 🔧 v4.0 FIX: 确保每个theme对象都有完整字段（防止undefined）
+    const safeThemes = (parsed.themes || []).map(theme => ({
+      topic: theme.topic || '未分类新闻',
+      sentiment: theme.sentiment || '中性',
+      analysis: theme.analysis || '暂无分析',
+      details: theme.details || '',
+      newsCount: theme.newsCount || 0
+    }));
+    
     return {
-      ...parsed,
+      themes: safeThemes,
+      summary: parsed.summary || '暂无综述',
+      overallSentiment: parsed.overallSentiment || '中性',
       newsCount: recentNews.length,
       rawNews: recentNews.slice(0, 5)
     };
@@ -1742,9 +1795,9 @@ function buildDeepReportHTML({
     <h3>新闻主题分析</h3>
     ${sections.newsAnalysis.themes.map(theme => `
       <div class="highlight-box">
-        <h4>${theme.topic}</h4>
-        <p><strong>影响判断：</strong>${theme.analysis}</p>
-        <p>${theme.details}</p>
+        <h4>${theme.topic || '未分类'}</h4>
+        <p><strong>影响判断：</strong>${theme.analysis || '暂无分析'}</p>
+        ${theme.details ? `<p>${theme.details}</p>` : ''}
       </div>
     `).join('')}
   ` : '<p>近期无重大新闻</p>'}
