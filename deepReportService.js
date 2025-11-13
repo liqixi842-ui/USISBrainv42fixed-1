@@ -877,49 +877,56 @@ async function generateSection_Financials(symbol, data, multiAI) {
 - 市值: ${formatMarketCap(financialData.marketCap || profile.marketCapitalization)}
 - 数据期数: ${financialData.fiscalPeriods.length}个周期` : '⚠️ 财务数据缺失';
   
+  // 🔧 v4.0 CRITICAL FIX: keyMetrics直接使用真实数据，不经过AI模板
+  // 避免AI返回模板字符串导致的N/A和异常值（如5241%）
+  const keyMetrics = {
+    revenue: financialData.revenue.length > 0 ? formatFinancialValue(financialData.revenue[0]) : 'N/A',
+    netIncome: financialData.netIncome.length > 0 ? formatFinancialValue(financialData.netIncome[0]) : 'N/A',
+    pe: financialData.pe ? Number(financialData.pe).toFixed(2) : 'N/A',
+    marketCap: formatMarketCap(financialData.marketCap || profile.marketCapitalization)
+  };
+  
+  console.log(`      ✅ keyMetrics构建完成: Revenue=${keyMetrics.revenue}, PE=${keyMetrics.pe}`);
+  
   const prompt = `你是财务分析师，请分析${companyName} (${symbol})的财务与估值：
 
 数据：
-- 市值: ${formatMarketCap(profile.marketCapitalization)}
+- 市值: ${keyMetrics.marketCap}
 - 股价: $${quote.c || 'N/A'}
 - 行业: ${profile.finnhubIndustry || '未知'}
 ${finContext}
 
-请输出JSON格式：
+请输出JSON格式（不要包含keyMetrics，只分析文字）：
 {
-  "revenueTrend": "${hasRealData ? '基于真实数据分析营收趋势' : '数据不足，推断'}",
-  "profitability": "${hasRealData ? '基于毛利率、净利率、ROE分析盈利能力' : '数据有限'}",
-  "valuationView": "${hasRealData ? '基于PE对比行业平均判断估值水平' : '数据不足'}",
-  "keyMetrics": {
-    "revenue": "${financialData.revenue[0] ? formatFinancialValue(financialData.revenue[0]) : 'N/A'}",
-    "netIncome": "${financialData.netIncome[0] ? formatFinancialValue(financialData.netIncome[0]) : 'N/A'}",
-    "pe": "${financialData.pe ? Number(financialData.pe).toFixed(2) : 'N/A'}",
-    "marketCap": "${formatMarketCap(financialData.marketCap || profile.marketCapitalization)}"
-  },
+  "revenueTrend": "${hasRealData ? '基于真实数据分析营收趋势（增长/下滑/稳定）' : '数据不足，基于行业推断'}",
+  "profitability": "${hasRealData ? '基于毛利率、净利率分析盈利能力' : '数据有限'}",
+  "valuationView": "${hasRealData ? '基于PE比率判断估值水平（高估/合理/低估）' : '数据不足'}",
   "tableData": {
-    "recentYears": "${hasRealData ? '基于真实数据' : '数据有限'}"
+    "recentYears": "${hasRealData ? `最近${financialData.fiscalPeriods.length}期财报` : '数据有限'}"
   }
 }`;
 
   const response = await multiAI.generate('gpt-4o', [
     { role: 'user', content: prompt }
-  ], { maxTokens: 700, temperature: 0.5 });
+  ], { maxTokens: 600, temperature: 0.5 });
   
   try {
     const parsed = JSON.parse(response.text.replace(/```json\n?|\n?```/g, ''));
-    return { ...parsed, realFinancialData: financialData, hasRealData };
+    // 🔧 CRITICAL: 使用代码构建的keyMetrics，不使用AI生成的
+    return { 
+      ...parsed, 
+      keyMetrics,  // 真实数据，非AI生成
+      realFinancialData: financialData, 
+      hasRealData 
+    };
   } catch (e) {
+    console.error('      ⚠️  财务分析AI解析失败:', e.message);
     return {
       revenueTrend: hasRealData ? 'AI解析失败，但已获取真实数据' : '数据不足',
-      profitability: '数据有限',
-      valuationView: '数据有限',
-      keyMetrics: {
-        revenue: financialData.revenue[0] ? formatFinancialValue(financialData.revenue[0]) : 'N/A',
-        netIncome: financialData.netIncome[0] ? formatFinancialValue(financialData.netIncome[0]) : 'N/A',
-        pe: financialData.pe ? Number(financialData.pe).toFixed(2) : 'N/A',
-        marketCap: formatMarketCap(financialData.marketCap || profile.marketCapitalization)
-      },
-      tableData: { recentYears: '数据缺失' },
+      profitability: hasRealData ? '数据已获取，AI解析失败' : '数据有限',
+      valuationView: hasRealData ? '数据已获取，AI解析失败' : '数据有限',
+      keyMetrics,  // 真实数据，确保显示正确
+      tableData: { recentYears: hasRealData ? `最近${financialData.fiscalPeriods.length}期财报` : '数据缺失' },
       realFinancialData: financialData,
       hasRealData
     };

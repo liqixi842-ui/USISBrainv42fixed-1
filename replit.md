@@ -2,7 +2,7 @@
 USIS Brain v4.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, automated workflow management, and **enhanced deep research reports with institutional-grade charts** (v4.0). The system is built for deployment on Replit's Reserved VM platform, aiming for institutional-grade analysis with multilingual support and cost optimization.
 
 ## Recent Changes
-**v4.0 Institutional-Grade Chart Enhancements (2025-11-13)** - Elevated technical analysis visualization to Bloomberg Terminal standards with three major chart upgrades. Features: (1) **Enhanced Price Charts** with EMA(20/50) overlay using exponential moving average calculation (warm-up with SMA); (2) **Support/Resistance Level Markers** displayed as color-coded horizontal lines (green support, red resistance) with robust type safety (Number() + isFinite() guards); (3) **Dedicated Volume Chart** (800×200px bar chart) with auto-scaling formatter (K/M/B units); (4) **QuickChart Integration** for static PNG charts (DocRaptor compatible); (5) **Graceful Fallback** when volume data unavailable. All charts display 90-day historical data with synchronized date ranges.
+**v4.0 Institutional-Grade Chart Enhancements + Financial Fix (2025-11-13)** - Elevated technical analysis visualization to Bloomberg Terminal standards with three major chart upgrades. Features: (1) **Enhanced Price Charts** with EMA(20/50) overlay using exponential moving average calculation (warm-up with SMA); (2) **Support/Resistance Level Markers** displayed as color-coded horizontal lines (green support, red resistance) with robust type safety (Number() + isFinite() guards); (3) **Dedicated Volume Chart** (800×200px bar chart) with auto-scaling formatter (K/M/B units); (4) **QuickChart Integration** for static PNG charts (DocRaptor compatible); (5) **Graceful Fallback** when volume data unavailable. All charts display 90-day historical data with synchronized date ranges. **CRITICAL BUG FIX**: Financial keyMetrics now use real data directly (bypassing AI template) to eliminate N/A and anomalous values like 5241%.
 **v3.1 Real Technical Indicators in Research Reports (2025-11-13)** - Enhanced deep research reports with real-time technical indicators from Twelve Data API. Fixed critical bugs preventing PDF generation. Features: (1) **Real indicator data** (RSI, MACD, EMA-20, Bollinger Bands) replaces AI guessing; (2) **Color-coded indicator table** in PDF with signal interpretation (超买/超卖/中性); (3) **QuickChart static PNG charts** embedded in PDF (DocRaptor compatible); (4) Robust type coercion (`Number()`) to handle string values from API; (5) Graceful fallback when indicators unavailable.
 
 **v3.0 Deep Research Reports (2025-11-13)** - Launched institutional-grade deep research reports with 9-section structure, AI-driven analysis, and BUY/HOLD/SELL ratings. Features: (1) Section-by-section AI generation for quality; (2) Professional PDF reports (8-20 pages); (3) Telegram command `/研报 SYMBOL` generates deep reports by default; (4) 2-5 minute generation time; (5) Comprehensive coverage: company overview, industry analysis, financials, technical analysis, news synthesis, risk assessment, and investment rating.
@@ -18,6 +18,13 @@ USIS Brain v4.0 is an Institutional-Grade Multi-AI Financial Analysis System des
 
 # User Preferences
 Preferred communication style: Simple, everyday language.
+
+## Data Source Strategy (v4.0)
+- **Price Data & Technical Indicators**: Primary source is **Twelve Data** (paid membership). Use Twelve Data exclusively for RSI, MACD, EMA, Bollinger Bands, ADX, and historical prices. Fallback to Alpha Vantage only if Twelve Data fails.
+- **Fundamentals (Revenue, Net Income, PE, Margins)**: Use **Finnhub** for financial statements and valuation metrics. Supplement with Twelve Data fundamentals when available.
+- **News**: 
+  - Current: Finnhub API (company news + market news) with ImpactRank scoring
+  - **Phase 2/v4.1**: Integrate 27-source news system (N8N → USIS Brain) with theme clustering and sentiment analysis
 
 # System Architecture
 
