@@ -111,6 +111,17 @@ function mapExchangeToTradingView(finnhubExchange) {
  * @param {string} options.exchangeInfo - 可选：Finnhub返回的交易所信息
  * @returns {string} TradingView图表URL
  */
+/**
+ * 🔧 验证TradingView符号格式（ChatGPT建议）
+ * @param {string} symbol - 符号字符串
+ * @returns {boolean} 是否有效
+ */
+function validateTVSymbol(symbol) {
+  // 格式：EXCHANGE:TICKER（如BME:COL, NASDAQ:AAPL, SSE:600519）
+  const validPattern = /^[A-Z0-9]+:[A-Z0-9.\-]+$/;
+  return validPattern.test(symbol);
+}
+
 function buildStockChartURL(symbol, options = {}) {
   const {
     interval = 'D',        // D=日线, 60=1小时, 15=15分钟
@@ -138,6 +149,16 @@ function buildStockChartURL(symbol, options = {}) {
       console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
     }
   }
+  
+  // 🔧 ChatGPT建议：输出前强校验
+  if (!validateTVSymbol(normalizedSymbol)) {
+    console.error(`❌ [Symbol Validation] 符号格式无效: "${normalizedSymbol}"`);
+    console.error(`   期望格式: EXCHANGE:TICKER (如 BME:COL, NASDAQ:AAPL)`);
+    throw new Error(`Invalid TradingView symbol format: ${normalizedSymbol}`);
+  }
+  
+  // 📊 ChatGPT建议：记录final_symbol_for_tv
+  console.log(`📊 [final_symbol_for_tv] "${normalizedSymbol}" → TradingView`);
   
   const params = new URLSearchParams({
     symbol: normalizedSymbol,
