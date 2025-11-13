@@ -3,12 +3,161 @@
 // 生成时间：2-5分钟 | 长度：8-20页
 
 const fetch = require("node-fetch");
-const { fetchMarketData, fetchCompanyProfile, fetchHistoricalPrices, fetchTechnicalIndicators } = require("./dataBroker");
+const { fetchMarketData, fetchCompanyProfile, fetchHistoricalPrices, fetchTechnicalIndicators, fetchFundamentals, fetchStockMetrics } = require("./dataBroker");
 const { fetchAndRankNews } = require("./newsBroker");
 const { getMultiAIProvider } = require("./multiAiProvider");
 const QuickChart = require('quickchart-js');
 
 const PDFSHIFT_API_KEY = process.env.PDFSHIFT_API_KEY || '';
+
+/**
+ * 🆕 v4.0: 标准化财务数据为时间序列（用于图表和分析）
+ * @param {Object} fundamentals - Twelve Data基本面数据
+ * @param {Object} metrics - Finnhub估值指标
+ * @returns {Object} 标准化的财务时间序列
+ */
+function normalizeFinancialData(fundamentals, metrics) {
+  const normalized = {
+    fiscalPeriods: [],
+    revenue: [],
+    netIncome: [],
+    eps: [],
+    grossMargin: [],
+    operatingMargin: [],
+    netMargin: [],
+    pe: metrics?.peRatio || null,
+    industryPE: null, // TODO: 需要行业平均PE数据
+    marketCap: metrics?.symbol ? (metrics.marketCap || null) : null,
+    missing: []
+  };
+  
+  // 处理利润表数据（Twelve Data）
+  if (fundamentals?.income_statement?.data) {
+    const income = fundamentals.income_statement.data;
+    
+    if (income.fiscal_date) normalized.fiscalPeriods.push(income.fiscal_date);
+    if (income.revenue) normalized.revenue.push(Number(income.revenue));
+    if (income.net_income) normalized.netIncome.push(Number(income.net_income));
+    
+    // 计算毛利率和营业利润率
+    if (income.gross_profit && income.revenue) {
+      normalized.grossMargin.push((Number(income.gross_profit) / Number(income.revenue) * 100).toFixed(2));
+    }
+    
+    if (income.operating_income && income.revenue) {
+      normalized.operatingMargin.push((Number(income.operating_income) / Number(income.revenue) * 100).toFixed(2));
+    }
+    
+    if (income.net_income && income.revenue) {
+      normalized.netMargin.push((Number(income.net_income) / Number(income.revenue) * 100).toFixed(2));
+    }
+  } else {
+    normalized.missing.push('income_statement');
+  }
+  
+  // 处理统计数据（EPS）
+  if (fundamentals?.statistics?.data) {
+    const stats = fundamentals.statistics.data;
+    if (stats.eps) {
+      normalized.eps.push(Number(stats.eps));
+    }
+  }
+  
+  // 补充Finnhub指标数据
+  if (metrics) {
+    if (!normalized.grossMargin.length && metrics.profitMargin) {
+      normalized.netMargin = [Number(metrics.profitMargin).toFixed(2)];
+    }
+  } else {
+    normalized.missing.push('metrics');
+  }
+  
+  return normalized;
+}
+
+/**
+ * 🆕 v4.0: 生成财务趋势图表URL（Revenue + Net Income）
+ * @param {Object} financialData - 标准化财务数据
+ * @param {string} symbol - 股票代码
+ * @returns {string} QuickChart图表URL
+ */
+function generateFinancialTrendChart(financialData, symbol) {
+  if (!financialData.revenue.length && !financialData.netIncome.length) {
+    return 'https://quickchart.io/chart?c={type:%27bar%27,data:{labels:[%27No%20Data%27],datasets:[{label:%27Revenue%27,data:[0]}]}}';
+  }
+  
+  const chart = new QuickChart();
+  const datasets = [];
+  
+  // Revenue dataset (柱状图)
+  if (financialData.revenue.length > 0) {
+    datasets.push({
+      label: '营业收入 (Revenue)',
+      data: financialData.revenue.map(v => (v / 1000000).toFixed(2)), // 转换为百万
+      backgroundColor: 'rgba(75, 192, 192, 0.6)',
+      borderColor: 'rgb(75, 192, 192)',
+      borderWidth: 2,
+      type: 'bar'
+    });
+  }
+  
+  // Net Income dataset (折线图)
+  if (financialData.netIncome.length > 0) {
+    datasets.push({
+      label: '净利润 (Net Income)',
+      data: financialData.netIncome.map(v => (v / 1000000).toFixed(2)), // 转换为百万
+      borderColor: 'rgb(255, 99, 132)',
+      backgroundColor: 'rgba(255, 99, 132, 0.1)',
+      fill: false,
+      type: 'line',
+      borderWidth: 3,
+      pointRadius: 5
+    });
+  }
+  
+  chart.setConfig({
+    type: 'bar',
+    data: {
+      labels: financialData.fiscalPeriods.length > 0 ? financialData.fiscalPeriods : ['Latest'],
+      datasets: datasets
+    },
+    options: {
+      title: {
+        display: true,
+        text: `${symbol} 财务趋势（单位：百万美元）`,
+        fontSize: 16,
+        fontColor: '#2c3e50'
+      },
+      scales: {
+        yAxes: [{
+          ticks: {
+            callback: function(value) {
+              return '$' + value + 'M';
+            }
+          },
+          gridLines: {
+            color: '#ecf0f1'
+          }
+        }],
+        xAxes: [{
+          gridLines: {
+            display: false
+          }
+        }]
+      },
+      legend: {
+        display: true,
+        position: 'top'
+      }
+    }
+  });
+  
+  chart.setWidth(800);
+  chart.setHeight(450);
+  chart.setBackgroundColor('#ffffff');
+  
+  return chart.getUrl();
+}
 
 /**
  * 🆕 生成QuickChart价格走势图URL（静态PNG，DocRaptor兼容）
@@ -183,13 +332,24 @@ async function collectEnrichedData(symbol) {
       .catch(() => ({ technicalIndicators: {} }))
   );
   
-  // 6. TODO: 财务历史数据（3-5年）- 后续实现
-  // 7. TODO: 竞争对手数据 - 后续实现
+  // 6. 🆕 v4.0: 财务报表数据（利润表、资产负债表、现金流）
+  tasks.push(
+    fetchFundamentals(symbol)
+      .then(data => ({ fundamentals: data.fundamentals || {} }))
+      .catch(() => ({ fundamentals: {} }))
+  );
+  
+  // 7. 🆕 v4.0: 估值指标数据（PE, PB, 毛利率等）
+  tasks.push(
+    fetchStockMetrics(symbol)
+      .then(data => ({ metrics: data.metrics || {} }))
+      .catch(() => ({ metrics: {} }))
+  );
   
   const results = await Promise.all(tasks);
   const enrichedData = results.reduce((acc, curr) => ({ ...acc, ...curr }), {});
   
-  console.log(`   ✅ 数据收集完成: 行情✓ 概况✓ 历史✓ 新闻✓ 技术指标✓`);
+  console.log(`   ✅ 数据收集完成: 行情✓ 概况✓ 历史✓ 新闻✓ 技术指标✓ 财务✓ 估值✓`);
   
   return {
     symbol,
@@ -400,42 +560,69 @@ async function generateSection_Industry(symbol, data, multiAI) {
  * 章节5：财务与估值分析
  */
 async function generateSection_Financials(symbol, data, multiAI) {
-  const { quote, profile } = data;
+  const { quote, profile, fundamentals = {}, metrics = {} } = data;
   const companyName = profile.companyName || profile.name || symbol;
+  
+  // 🆕 v4.0: 标准化财务数据
+  const financialData = normalizeFinancialData(fundamentals, metrics);
+  const hasRealData = fundamentals?.income_statement?.data || metrics?.peRatio;
+  
+  // 构建真实财务上下文
+  const finContext = hasRealData ? `
+**真实财务数据（Twelve Data + Finnhub）**：
+- 营业收入: ${financialData.revenue.length > 0 ? '$' + (financialData.revenue[0] / 1000000).toFixed(2) + 'M' : 'N/A'}
+- 净利润: ${financialData.netIncome.length > 0 ? '$' + (financialData.netIncome[0] / 1000000).toFixed(2) + 'M' : 'N/A'}
+- 毛利率: ${financialData.grossMargin[0] || 'N/A'}%
+- 净利率: ${financialData.netMargin[0] || metrics?.profitMargin ? (metrics.profitMargin * 100).toFixed(2) : 'N/A'}%
+- PE比率: ${metrics?.peRatio?.toFixed(2) || 'N/A'}
+- 营收增长: ${metrics?.revenueGrowth ? (metrics.revenueGrowth * 100).toFixed(2) + '%' : 'N/A'}
+- ROE: ${metrics?.roe ? (metrics.roe * 100).toFixed(2) + '%' : 'N/A'}` : '⚠️ 财务数据缺失';
   
   const prompt = `你是财务分析师，请分析${companyName} (${symbol})的财务与估值：
 
 数据：
 - 市值: $${profile.marketCapitalization || 'N/A'}M
 - 股价: $${quote.c || 'N/A'}
-- PE: ${quote.pe || 'N/A'}
 - 行业: ${profile.finnhubIndustry || '未知'}
+${finContext}
 
 请输出JSON格式：
 {
-  "revenueTrend": "营收趋势判断（增长/放缓/下滑）及原因推测",
-  "profitability": "盈利能力简评",
-  "valuationView": "估值判断：偏贵/合理/偏便宜，并说明理由（基于PE对比行业平均等）",
+  "revenueTrend": "${hasRealData ? '基于真实数据分析营收趋势' : '数据不足，推断'}",
+  "profitability": "${hasRealData ? '基于毛利率、净利率、ROE分析盈利能力' : '数据有限'}",
+  "valuationView": "${hasRealData ? '基于PE对比行业平均判断估值水平' : '数据不足'}",
+  "keyMetrics": {
+    "revenue": "${financialData.revenue[0] ? (financialData.revenue[0] / 1000000).toFixed(2) + 'M' : 'N/A'}",
+    "netIncome": "${financialData.netIncome[0] ? (financialData.netIncome[0] / 1000000).toFixed(2) + 'M' : 'N/A'}",
+    "pe": "${metrics?.peRatio?.toFixed(2) || 'N/A'}",
+    "marketCap": "${profile.marketCapitalization || 'N/A'}M"
+  },
   "tableData": {
-    "recentYears": "最近3年趋势（如果数据不足，标注'数据有限'）"
+    "recentYears": "${hasRealData ? '基于真实数据' : '数据有限'}"
   }
-}
-
-要求：基于有限数据给出方向性判断。`;
+}`;
 
   const response = await multiAI.generate('gpt-4o', [
     { role: 'user', content: prompt }
-  ], { maxTokens: 700, temperature: 0.6 });
+  ], { maxTokens: 700, temperature: 0.5 });
   
   try {
     const parsed = JSON.parse(response.text.replace(/```json\n?|\n?```/g, ''));
-    return parsed;
+    return { ...parsed, realFinancialData: financialData, hasRealData };
   } catch (e) {
     return {
-      revenueTrend: '数据不足',
-      profitability: '无法分析',
-      valuationView: '数据有限，无法判断',
-      tableData: { recentYears: '数据缺失' }
+      revenueTrend: hasRealData ? 'AI解析失败，但已获取真实数据' : '数据不足',
+      profitability: '数据有限',
+      valuationView: '数据有限',
+      keyMetrics: {
+        revenue: financialData.revenue[0] ? (financialData.revenue[0] / 1000000).toFixed(2) + 'M' : 'N/A',
+        netIncome: financialData.netIncome[0] ? (financialData.netIncome[0] / 1000000).toFixed(2) + 'M' : 'N/A',
+        pe: metrics?.peRatio?.toFixed(2) || 'N/A',
+        marketCap: profile.marketCapitalization || 'N/A'
+      },
+      tableData: { recentYears: '数据缺失' },
+      realFinancialData: financialData,
+      hasRealData
     };
   }
 }
