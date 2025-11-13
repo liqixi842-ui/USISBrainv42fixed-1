@@ -1333,16 +1333,18 @@ function buildDeepReportHTML({
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <title>USIS Research Report - ${symbol}</title>
   <style>
-    /* DocRaptor优化：中文字体支持 */
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap');
+    /* 🔧 v4.0.2: Enhanced Chinese font support with multiple fallbacks */
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap');
     
     body {
-      font-family: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", "SimHei", sans-serif;
+      font-family: "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", "微软雅黑", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", "Droid Sans Fallback", "SimHei", "黑体", "STHeiti", sans-serif;
       line-height: 1.8;
       color: #2c3e50;
       max-width: 900px;
       margin: 0 auto;
       padding: 30px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
     }
     
     /* 封面 */
@@ -1884,9 +1886,10 @@ async function convertHTMLtoPDF(htmlContent) {
               media: 'print',
               pdf_title: 'USIS Research Report',
               pdf_forms: false,
-              // 中文字体支持优化
+              // 🔧 v4.0.2: 中文字体支持优化
               no_xinclude: true,
-              no_network: false // 允许加载Google Fonts中文字体
+              no_network: false, // 允许加载Google Fonts中文字体
+              http_timeout: 30 // 给Google Fonts更多加载时间（秒）
             }
           }
         },
@@ -1916,7 +1919,9 @@ async function convertHTMLtoPDF(htmlContent) {
           source: htmlContent,
           format: 'A4',
           margin: '20mm 15mm',
-          print_background: true
+          print_background: true,
+          delay: 2000, // 🔧 v4.0.2: Wait 2s for Google Fonts to load
+          wait_for_selector: 'body' // Ensure body is rendered before PDF generation
         }),
         timeout: 45000
       });
