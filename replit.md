@@ -1,11 +1,7 @@
 # Overview
-USIS Brain v4.0 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, automated workflow management, and **enhanced deep research reports with institutional-grade charts** (v4.0). The system is built for deployment on Replit's Reserved VM platform, aiming for institutional-grade analysis with multilingual support and cost optimization.
+USIS Brain v6.2 is an Institutional-Grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, automated workflow management, and **deep research reports with professional ratings** (v3.0). The system is built for deployment on Replit's Reserved VM platform, aiming for institutional-grade analysis with multilingual support and cost optimization.
 
 ## Recent Changes
-**v4.0.2 Unified Data Sources Architecture (2025-11-13 20:06 UTC)** - Complete refactoring of data pipeline to eliminate cross-contamination between market, financial, and news data sources. **CRITICAL FIXES**: (1) **Finnhub-Only Financials**: Rewrote `fetchFundamentals()` to exclusively use Finnhub API (`/stock/financials-reported` for statements + `/stock/metric` for ratios), removing all Twelve Data mixing; (2) **Zero-Calculation Normalization**: Rewrote `normalizeFinancialData()` to use 100% raw Finnhub values with direct field mapping, eliminating all AI templates and computed margins; (3) **News Module Disabled**: Added `ENABLE_NEWS_IN_REPORTS` flag (default=false) to prevent Finnhub general news pollution until Phase 2 27-source system integration; (4) **Data Source Tracing**: Added comprehensive logs showing Market/Technical=TwelveData, Financials=FinnhubRaw, News=Disabled for every report. This resolves "N/A revenue" and percentage anomalies by enforcing strict separation: Twelve Data handles quotes/indicators, Finnhub handles fundamentals, Phase 2 will handle news.
-
-**v4.0 Institutional-Grade Chart Enhancements + Financial Fix (2025-11-13)** - Elevated technical analysis visualization to Bloomberg Terminal standards with three major chart upgrades. Features: (1) **Enhanced Price Charts** with EMA(20/50) overlay using exponential moving average calculation (warm-up with SMA); (2) **Support/Resistance Level Markers** displayed as color-coded horizontal lines (green support, red resistance) with robust type safety (Number() + isFinite() guards); (3) **Dedicated Volume Chart** (800×200px bar chart) with auto-scaling formatter (K/M/B units); (4) **QuickChart Integration** for static PNG charts (DocRaptor compatible); (5) **Graceful Fallback** when volume data unavailable. All charts display 90-day historical data with synchronized date ranges. **CRITICAL BUG FIX**: Financial keyMetrics now use real data directly (bypassing AI template) to eliminate N/A and anomalous values like 5241%.
-
 **v3.0 Deep Research Reports (2025-11-13)** - Launched institutional-grade deep research reports with 9-section structure, AI-driven analysis, and BUY/HOLD/SELL ratings. Features: (1) Section-by-section AI generation for quality; (2) Professional PDF reports (8-20 pages); (3) Telegram command `/研报 SYMBOL` generates deep reports by default; (4) 2-5 minute generation time; (5) Comprehensive coverage: company overview, industry analysis, financials, technical analysis, news synthesis, risk assessment, and investment rating.
 
 **v6.2 Symbol Resolution Fix (2025-11-13)** - Resolved critical issue where Spanish stocks (e.g., "分析西班牙股票 COL") were incorrectly mapped to NASDAQ:COL instead of BME:COL. The fix implements exchange-aware fallback logic that respects user intent across 80+ global exchanges.
@@ -19,13 +15,6 @@ USIS Brain v4.0 is an Institutional-Grade Multi-AI Financial Analysis System des
 
 # User Preferences
 Preferred communication style: Simple, everyday language.
-
-## Data Source Strategy (v4.0)
-- **Price Data & Technical Indicators**: Primary source is **Twelve Data** (paid membership). Use Twelve Data exclusively for RSI, MACD, EMA, Bollinger Bands, ADX, and historical prices. Fallback to Alpha Vantage only if Twelve Data fails.
-- **Fundamentals (Revenue, Net Income, PE, Margins)**: Use **Finnhub** for financial statements and valuation metrics. Supplement with Twelve Data fundamentals when available.
-- **News**: 
-  - Current: Finnhub API (company news + market news) with ImpactRank scoring
-  - **Phase 2/v4.1**: Integrate 27-source news system (N8N → USIS Brain) with theme clustering and sentiment analysis
 
 # System Architecture
 

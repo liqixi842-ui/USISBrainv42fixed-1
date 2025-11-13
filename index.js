@@ -1,15 +1,5 @@
 // ====== USIS Brain · v6.0（多AI模型 + 多语言分析 + 数据驱动投研） ======
 
-// 🔍 BUILD VERSION TRACKING
-const BUILD_VERSION = 'v4.0.2-UNIFIED-DATA-SOURCES';
-const BUILD_TIMESTAMP = new Date('2025-11-13T20:06:00Z');
-console.log('\n🚀 ═══════════════════════════════════════════════════════');
-console.log(`   USIS Brain ${BUILD_VERSION}`);
-console.log(`   Build: ${BUILD_TIMESTAMP.toISOString()}`);
-console.log(`   Started: ${new Date().toISOString()}`);
-console.log(`   PID: ${process.pid}`);
-console.log('═══════════════════════════════════════════════════════\n');
-
 // Global error handlers（不退出进程，保持应用运行）
 process.on('unhandledRejection', (err) => {
   console.error('[ERROR] UnhandledRejection:', err.message);
@@ -6290,16 +6280,8 @@ if (!TOKEN_IS_SAFE) {
       const isReportRequest = reportKeywords.some(kw => text.includes(kw)) || text.startsWith('/研报');
       
       if (isReportRequest) {
-        console.log('📊 [Deep Report] 研究报告请求 - 功能维护中');
+        console.log('📊 [Deep Report v3.0] 研究报告请求');
         
-        // 🔧 v4.0.2: 暂时禁用研报功能（维护中）
-        await telegramAPI('sendMessage', { 
-          chat_id: chatId, 
-          text: '🔧 **深度研报功能维护中，暂不开放**\n\n我们正在优化：\n- PDF中文字体支持\n- 财务数据准确性\n- 新闻模块集成\n\n预计维护完成后将重新开放，感谢您的理解。' 
-        });
-        return;
-        
-        /* 原研报生成逻辑（维护期间禁用）
         // 提取股票代码
         const reportSymbols = extractSymbols(text);
         if (reportSymbols.length === 0) {
@@ -6388,7 +6370,6 @@ ${result.summary}
         }
         
         return; // 不继续执行其他流程
-        */ // 结束维护期间注释
       }
       
       const isHeatmap = text.includes('热力图') || text.toLowerCase().includes('heatmap');
