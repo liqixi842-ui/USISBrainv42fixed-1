@@ -726,46 +726,69 @@ ${hasRealData ? `
  * 章节7：重大事件与新闻综述
  */
 async function generateSection_News(symbol, data, multiAI) {
-  const { news } = data;
+  const { news = [] } = data; // 🆕 v4.0: 默认空数组
   const companyName = data.profile.companyName || data.profile.name || symbol;
+  
+  console.log(`      📰 新闻数量: ${news.length}条`);
   
   if (news.length === 0) {
     return {
       themes: [],
-      summary: '暂无重大新闻'
+      summary: '暂无重大新闻或新闻数据获取失败',
+      newsCount: 0
     };
   }
   
-  const newsText = news.slice(0, 10).map((n, i) => 
-    `${i + 1}. ${n.headline} (${new Date(n.datetime).toLocaleDateString()})`
+  // 🆕 v4.0: 过去1-4周新闻，增加ImpactRank信息
+  const recentNews = news.slice(0, 15); // 增加到15条以便聚类
+  const newsText = recentNews.map((n, i) => 
+    `${i + 1}. ${n.headline} (${new Date(n.datetime * 1000).toLocaleDateString()}) [影响力:${n.impactScore?.toFixed(1) || 'N/A'}]`
   ).join('\n');
   
-  const prompt = `你是新闻分析师，请分析${companyName} (${symbol})的最近新闻：
+  const prompt = `你是资深新闻分析师，请分析${companyName} (${symbol})的最近新闻，聚类成2-4个主题：
 
+**新闻列表（共${recentNews.length}条）**：
 ${newsText}
 
 请输出JSON格式：
 {
   "themes": [
-    {"topic": "主题1（如并购/监管/财报等）", "analysis": "对公司影响（利好/中性/利空）", "details": "简要说明"},
-    {"topic": "主题2", "analysis": "影响判断", "details": "说明"}
+    {"topic": "主题1（如业绩/并购/产品发布/监管）", "sentiment": "利好/中性/利空", "analysis": "事件内容+影响（30-50字）", "newsCount": 3},
+    {"topic": "主题2", "sentiment": "判断", "analysis": "分析", "newsCount": 2}
   ],
-  "summary": "新闻综述（3-5句话）"
+  "summary": "综合新闻综述（3-5句话，包含整体影响判断）",
+  "overallSentiment": "整体情绪（正面/中性/负面）"
 }
 
-要求：合并相似新闻，提炼3-5个主题。`;
+要求：
+1. 合并相似新闻为主题（例如多条财报新闻合并为"财报主题"）
+2. 每个主题标明利好/中性/利空
+3. 提炼2-4个核心主题`;
 
-  const response = await multiAI.generate('gpt-4o', [
-    { role: 'user', content: prompt }
-  ], { maxTokens: 800, temperature: 0.6 });
-  
   try {
+    const response = await multiAI.generate('gpt-4o', [
+      { role: 'user', content: prompt }
+    ], { maxTokens: 900, temperature: 0.6 });
+    
     const parsed = JSON.parse(response.text.replace(/```json\n?|\n?```/g, ''));
-    return parsed;
-  } catch (e) {
     return {
-      themes: [],
-      summary: '新闻分析生成失败'
+      ...parsed,
+      newsCount: recentNews.length,
+      rawNews: recentNews.slice(0, 5)
+    };
+  } catch (e) {
+    console.error('      ⚠️  新闻分析失败:', e.message);
+    return {
+      themes: recentNews.slice(0, 5).map(n => ({
+        topic: n.headline,
+        sentiment: '未分析',
+        analysis: n.summary || '无摘要',
+        newsCount: 1
+      })),
+      summary: `最近${recentNews.length}条新闻，AI分析失败，显示原始列表`,
+      overallSentiment: '未分析',
+      newsCount: recentNews.length,
+      rawNews: recentNews.slice(0, 5)
     };
   }
 }
@@ -876,6 +899,11 @@ async function renderDeepReportPDF(symbol, data, sections, rating) {
   // 🆕 生成QuickChart静态K线图（DocRaptor兼容）
   const chartURL = generatePriceChartURL(data.historicalPrices, symbol);
   
+  // 🆕 v4.0: 生成财务趋势图（如果有数据）
+  const financialChartURL = sections.financials?.realFinancialData 
+    ? generateFinancialTrendChart(sections.financials.realFinancialData, symbol)
+    : null;
+  
   // 构建HTML内容
   const htmlContent = buildDeepReportHTML({
     symbol,
@@ -886,7 +914,8 @@ async function renderDeepReportPDF(symbol, data, sections, rating) {
     change: quote.dp ? `${quote.dp > 0 ? '+' : ''}${quote.dp.toFixed(2)}%` : 'N/A',
     rating,
     sections,
-    chartURL
+    chartURL,
+    financialChartURL // 🆕 v4.0
   });
   
   // 生成PDF
@@ -898,7 +927,7 @@ async function renderDeepReportPDF(symbol, data, sections, rating) {
 /**
  * 构建深度报告HTML模板
  */
-function buildDeepReportHTML({ symbol, companyName, exchange, date, price, change, rating, sections, chartURL }) {
+function buildDeepReportHTML({ symbol, companyName, exchange, date, price, change, rating, sections, chartURL, financialChartURL }) {
   return `
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -1154,6 +1183,33 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
   <!-- 财务与估值 -->
   <div class="page-break"></div>
   <h2>四、财务与估值分析</h2>
+  
+  ${sections.financials.hasRealData ? `
+  <h3>关键财务指标</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>指标</th>
+        <th>数值</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>营业收入 (Revenue)</td><td>${sections.financials.keyMetrics.revenue}</td></tr>
+      <tr><td>净利润 (Net Income)</td><td>${sections.financials.keyMetrics.netIncome}</td></tr>
+      <tr><td>市值 (Market Cap)</td><td>$${sections.financials.keyMetrics.marketCap}</td></tr>
+      <tr><td>PE比率 (P/E Ratio)</td><td>${sections.financials.keyMetrics.pe}</td></tr>
+    </tbody>
+  </table>
+  
+  ${financialChartURL ? `
+  <h3>财务趋势图（Revenue & Net Income）</h3>
+  <div class="chart-container" style="text-align: center; margin: 20px 0;">
+    <img src="${financialChartURL}" alt="${symbol} Financial Trends" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 5px;" />
+    <p style="font-size: 12px; color: #7f8c8d; margin-top: 10px;">数据来源：Twelve Data + Finnhub | 单位：百万美元</p>
+  </div>
+  ` : ''}
+  ` : ''}
+  
   <h3>营收与盈利趋势</h3>
   <p><strong>营收趋势：</strong>${sections.financials.revenueTrend}</p>
   <p><strong>盈利能力：</strong>${sections.financials.profitability}</p>
