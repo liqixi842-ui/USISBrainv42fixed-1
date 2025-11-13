@@ -83,6 +83,7 @@ function mapExchangeToTradingView(finnhubExchange) {
   const exchange = finnhubExchange.toUpperCase();
   
   // 🧠 智能映射：匹配关键词而非硬编码列表
+  if (exchange.includes('OTC') || exchange.includes('PINK') || exchange.includes('OTCMKTS')) return 'OTC';
   if (exchange.includes('NASDAQ')) return 'NASDAQ';
   if (exchange.includes('NYSE') || exchange.includes('NEW YORK')) return 'NYSE';
   if (exchange.includes('HONG KONG') || exchange.includes('HKEX')) return 'HKEX';
@@ -92,7 +93,11 @@ function mapExchangeToTradingView(finnhubExchange) {
   if (exchange.includes('LONDON') || exchange.includes('LSE')) return 'LSE';
   if (exchange.includes('EURONEXT')) return 'EURONEXT';
   if (exchange.includes('XETRA') || exchange.includes('FRANKFURT')) return 'XETRA';
-  if (exchange.includes('TORONTO') || exchange.includes('TSX')) return 'TSX';
+  if (exchange.includes('TORONTO') || exchange.includes('TSX') || exchange.includes('CANADA')) {
+    // 区分TSX和TSXV（创业板）
+    if (exchange.includes('VENTURE') || exchange.includes('TSXV')) return 'TSXV';
+    return 'TSX';
+  }
   
   // 默认返回NASDAQ（最常见）
   console.log(`   ⚠️  未识别的交易所: ${finnhubExchange}，使用NASDAQ作为默认`);
