@@ -6210,10 +6210,13 @@ if (!TOKEN_IS_SAFE) {
         // 🧠 个股分析（大脑）→ 📸 调用n8n截图（眼睛）→ 📊 AI分析
         console.log(`📈 个股分析请求: ${symbols.join(', ')}`);
         
-        // 🆕 v3.2: 解析意图以获取持仓信息
+        // 🆕 v3.2: 解析意图以获取持仓信息 + v6.2: 使用symbolResolver
         let positionContext = null;
+        let semanticIntent = null;
+        let resolvedSymbols = [];
+        
         try {
-          const semanticIntent = await parseUserIntent(text, []);
+          semanticIntent = await parseUserIntent(text, []);
           positionContext = semanticIntent.positionContext || null;
           if (positionContext && positionContext.buyPrice) {
             console.log(`💼 检测到持仓信息: 买入成本 $${positionContext.buyPrice}`);
@@ -6225,12 +6228,23 @@ if (!TOKEN_IS_SAFE) {
             });
             console.log(`💾 已缓存用户${userId}的持仓信息`);
           }
+          
+          // 🆕 v6.2: 使用统一的symbolResolver（支持交易所消歧）
+          resolvedSymbols = await resolveSymbols(semanticIntent);
+          console.log(`✅ [Telegram] Symbol Resolver结果: [${resolvedSymbols.join(', ')}]`);
+          
+          // 如果symbolResolver返回空数组，降级到旧逻辑
+          if (resolvedSymbols.length === 0) {
+            console.log(`⚠️ Symbol Resolver未找到匹配，降级到validateAndFixSymbols`);
+            resolvedSymbols = await validateAndFixSymbols(symbols, { interactive: true });
+          }
         } catch (intentError) {
-          console.log(`⚠️ 意图解析失败（将使用通用分析）: ${intentError.message}`);
+          console.log(`⚠️ 意图解析失败，降级到旧逻辑: ${intentError.message}`);
+          // 降级：使用旧的validateAndFixSymbols
+          resolvedSymbols = await validateAndFixSymbols(symbols, { interactive: true });
         }
         
-        // 🆕 智能验证符号（交互式模式）
-        const validatedSymbols = await validateAndFixSymbols(symbols, { interactive: true });
+        const validatedSymbols = resolvedSymbols;
         
         // 🆕 检测是否需要用户选择
         if (validatedSymbols[0] && validatedSymbols[0]._needsChoice) {
