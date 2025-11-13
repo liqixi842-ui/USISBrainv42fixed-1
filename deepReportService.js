@@ -6,9 +6,87 @@ const fetch = require("node-fetch");
 const { fetchMarketData, fetchCompanyProfile, fetchHistoricalPrices, fetchTechnicalIndicators } = require("./dataBroker");
 const { fetchAndRankNews } = require("./newsBroker");
 const { getMultiAIProvider } = require("./multiAiProvider");
-const { buildStockChartURL } = require("./stockChartService");
+const QuickChart = require('quickchart-js');
 
 const PDFSHIFT_API_KEY = process.env.PDFSHIFT_API_KEY || '';
+
+/**
+ * 🆕 生成QuickChart价格走势图URL（静态PNG，DocRaptor兼容）
+ * @param {Array} historicalPrices - 历史价格数据
+ * @param {string} symbol - 股票代码
+ * @returns {string} QuickChart图表URL
+ */
+function generatePriceChartURL(historicalPrices, symbol) {
+  if (!historicalPrices || historicalPrices.length === 0) {
+    // 返回占位图
+    return 'https://quickchart.io/chart?c={type:%27line%27,data:{labels:[%27No%27,%27Data%27],datasets:[{label:%27Price%27,data:[0,0]}]}}';
+  }
+  
+  // 取最近90天数据（避免图表过于拥挤）
+  const recentPrices = historicalPrices.slice(-90);
+  
+  const labels = recentPrices.map(p => {
+    const date = new Date(p.date);
+    return `${date.getMonth() + 1}/${date.getDate()}`;
+  });
+  
+  const closes = recentPrices.map(p => p.close);
+  
+  const chart = new QuickChart();
+  chart.setConfig({
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: `${symbol} 收盘价`,
+        data: closes,
+        borderColor: 'rgb(75, 192, 192)',
+        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+        fill: true,
+        tension: 0.1,
+        pointRadius: 0,
+        borderWidth: 2
+      }]
+    },
+    options: {
+      title: {
+        display: true,
+        text: `${symbol} 股价走势（90天）`,
+        fontSize: 16,
+        fontColor: '#2c3e50'
+      },
+      scales: {
+        yAxes: [{
+          ticks: {
+            callback: function(value) {
+              return '$' + value.toFixed(2);
+            }
+          },
+          gridLines: {
+            color: '#ecf0f1'
+          }
+        }],
+        xAxes: [{
+          gridLines: {
+            display: false
+          },
+          ticks: {
+            maxTicksLimit: 10
+          }
+        }]
+      },
+      legend: {
+        display: false
+      }
+    }
+  });
+  
+  chart.setWidth(800);
+  chart.setHeight(400);
+  chart.setBackgroundColor('#ffffff');
+  
+  return chart.getUrl();
+}
 
 /**
  * 生成机构级深度研报
@@ -101,7 +179,7 @@ async function collectEnrichedData(symbol) {
   // 5. 🆕 技术指标数据（RSI, MACD, EMA, BBANDS, ADX）
   tasks.push(
     fetchTechnicalIndicators(symbol, '1day')
-      .then(data => ({ technicalIndicators: data.indicators || {} }))
+      .then(data => ({ technicalIndicators: data.technical || {} }))
       .catch(() => ({ technicalIndicators: {} }))
   );
   
@@ -369,29 +447,29 @@ async function generateSection_Financials(symbol, data, multiAI) {
 async function generateSection_Technical(symbol, data, multiAI) {
   const { quote, historicalPrices, technicalIndicators = {} } = data;
   
-  // 🆕 提取真实技术指标数据（修复：使用小写键名）
+  // 🆕 提取真实技术指标数据（修复：强制类型转换为数字）
   const indicatorsData = {};
   
-  if (technicalIndicators.rsi && !technicalIndicators.rsi.error) {
-    indicatorsData.rsi = technicalIndicators.rsi.value;
+  if (technicalIndicators.rsi && !technicalIndicators.rsi.error && !isNaN(technicalIndicators.rsi.value)) {
+    indicatorsData.rsi = Number(technicalIndicators.rsi.value);
     indicatorsData.rsi_signal = indicatorsData.rsi > 70 ? '超买' : (indicatorsData.rsi < 30 ? '超卖' : '中性');
   }
   
-  if (technicalIndicators.macd && !technicalIndicators.macd.error) {
-    indicatorsData.macd = technicalIndicators.macd.macd;
-    indicatorsData.macd_signal = technicalIndicators.macd.signal;
-    indicatorsData.macd_histogram = technicalIndicators.macd.histogram;
+  if (technicalIndicators.macd && !technicalIndicators.macd.error && !isNaN(technicalIndicators.macd.macd)) {
+    indicatorsData.macd = Number(technicalIndicators.macd.macd);
+    indicatorsData.macd_signal = Number(technicalIndicators.macd.signal);
+    indicatorsData.macd_histogram = Number(technicalIndicators.macd.histogram);
     indicatorsData.macd_trend = indicatorsData.macd_histogram > 0 ? '多头信号' : '空头信号';
   }
   
-  if (technicalIndicators.ema && !technicalIndicators.ema.error) {
-    indicatorsData.ema20 = technicalIndicators.ema.value;
+  if (technicalIndicators.ema && !technicalIndicators.ema.error && !isNaN(technicalIndicators.ema.value)) {
+    indicatorsData.ema20 = Number(technicalIndicators.ema.value);
     indicatorsData.price_vs_ema20 = quote.c > indicatorsData.ema20 ? '突破均线' : '跌破均线';
   }
   
-  if (technicalIndicators.bbands && !technicalIndicators.bbands.error) {
-    indicatorsData.bbands_upper = technicalIndicators.bbands.upper;
-    indicatorsData.bbands_lower = technicalIndicators.bbands.lower;
+  if (technicalIndicators.bbands && !technicalIndicators.bbands.error && !isNaN(technicalIndicators.bbands.upper) && technicalIndicators.bbands.lower !== undefined) {
+    indicatorsData.bbands_upper = Number(technicalIndicators.bbands.upper);
+    indicatorsData.bbands_lower = Number(technicalIndicators.bbands.lower);
     const position = quote.c > indicatorsData.bbands_upper ? '超买区' : (quote.c < indicatorsData.bbands_lower ? '超卖区' : '正常区');
     indicatorsData.bbands_position = position;
   }
@@ -608,11 +686,8 @@ async function renderDeepReportPDF(symbol, data, sections, rating) {
   const { quote, profile } = data;
   const companyName = profile.companyName || profile.name || symbol;
   
-  // 生成图表URL
-  const chartURL = buildStockChartURL(symbol, {
-    interval: 'D',
-    theme: 'light'
-  });
+  // 🆕 生成QuickChart静态K线图（DocRaptor兼容）
+  const chartURL = generatePriceChartURL(data.historicalPrices, symbol);
   
   // 构建HTML内容
   const htmlContent = buildDeepReportHTML({
@@ -923,36 +998,36 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
       </tr>
     </thead>
     <tbody>
-      ${sections.technical.realIndicators.rsi ? `
+      ${sections.technical.realIndicators && sections.technical.realIndicators.rsi ? `
       <tr>
         <td style="border: 1px solid #bdc3c7; padding: 10px;"><strong>RSI(14)</strong></td>
         <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: right;">${sections.technical.realIndicators.rsi.toFixed(2)}</td>
         <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: center;">
-          <span style="padding: 5px 10px; border-radius: 3px; ${sections.technical.realIndicators.rsi_signal === '超买' ? 'background: #e74c3c; color: white;' : (sections.technical.realIndicators.rsi_signal === '超卖' ? 'background: #27ae60; color: white;' : 'background: #f39c12; color: white;')}">${sections.technical.realIndicators.rsi_signal}</span>
+          <span style="padding: 5px 10px; border-radius: 3px; ${sections.technical.realIndicators.rsi_signal === '超买' ? 'background: #e74c3c; color: white;' : (sections.technical.realIndicators.rsi_signal === '超卖' ? 'background: #27ae60; color: white;' : 'background: #f39c12; color: white;')}">${sections.technical.realIndicators.rsi_signal || '暂无'}</span>
         </td>
       </tr>
       ` : ''}
-      ${sections.technical.realIndicators.macd !== undefined ? `
+      ${sections.technical.realIndicators && sections.technical.realIndicators.macd !== undefined && !isNaN(sections.technical.realIndicators.macd) ? `
       <tr>
         <td style="border: 1px solid #bdc3c7; padding: 10px;"><strong>MACD</strong></td>
         <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: right;">${sections.technical.realIndicators.macd.toFixed(4)}</td>
         <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: center;">
-          <span style="padding: 5px 10px; border-radius: 3px; ${sections.technical.realIndicators.macd_trend === '多头信号' ? 'background: #27ae60; color: white;' : 'background: #e74c3c; color: white;'}">${sections.technical.realIndicators.macd_trend}</span>
+          <span style="padding: 5px 10px; border-radius: 3px; ${sections.technical.realIndicators.macd_trend === '多头信号' ? 'background: #27ae60; color: white;' : 'background: #e74c3c; color: white;'}">${sections.technical.realIndicators.macd_trend || '暂无'}</span>
         </td>
       </tr>
       ` : ''}
-      ${sections.technical.realIndicators.ema20 ? `
+      ${sections.technical.realIndicators && sections.technical.realIndicators.ema20 ? `
       <tr>
         <td style="border: 1px solid #bdc3c7; padding: 10px;"><strong>EMA(20)</strong></td>
         <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: right;">$${sections.technical.realIndicators.ema20.toFixed(2)}</td>
-        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: center;">${sections.technical.realIndicators.price_vs_ema20}</td>
+        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: center;">${sections.technical.realIndicators.price_vs_ema20 || '暂无'}</td>
       </tr>
       ` : ''}
-      ${sections.technical.realIndicators.bbands_upper ? `
+      ${sections.technical.realIndicators && sections.technical.realIndicators.bbands_upper ? `
       <tr>
         <td style="border: 1px solid #bdc3c7; padding: 10px;"><strong>布林带</strong></td>
         <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: right;">上轨$${sections.technical.realIndicators.bbands_upper.toFixed(2)} / 下轨$${sections.technical.realIndicators.bbands_lower.toFixed(2)}</td>
-        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: center;">${sections.technical.realIndicators.bbands_position}</td>
+        <td style="border: 1px solid #bdc3c7; padding: 10px; text-align: center;">${sections.technical.realIndicators.bbands_position || '暂无'}</td>
       </tr>
       ` : ''}
     </tbody>
