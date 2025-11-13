@@ -1579,6 +1579,118 @@ async function fetchHistoricalPrices(symbol, options = {}) {
   }
 }
 
+/**
+ * 🆕 v4.0: 获取同行基准数据（用于深度研报对比表）
+ * @param {string} symbol - 股票代码
+ * @returns {Promise<Object>} - 同行公司列表及其关键指标
+ */
+async function fetchPeerBenchmarks(symbol) {
+  console.log(`\n📊 [Peer Benchmarks] 获取${symbol}的同行对比数据`);
+  
+  if (!FINNHUB_KEY) {
+    console.warn('   ⚠️  Finnhub API密钥缺失，跳过同行分析');
+    return {
+      targetSymbol: symbol,
+      peers: [],
+      benchmarks: {},
+      source: 'unavailable'
+    };
+  }
+  
+  try {
+    // 1. 获取同行公司列表（Finnhub /stock/peers）
+    const peersUrl = `https://finnhub.io/api/v1/stock/peers?symbol=${symbol}&token=${FINNHUB_KEY}`;
+    const peersResponse = await fetch(peersUrl, { timeout: 10000 });
+    
+    if (!peersResponse.ok) {
+      throw new Error(`Finnhub peers API error: ${peersResponse.status}`);
+    }
+    
+    const peersData = await peersResponse.json();
+    const peerSymbols = Array.isArray(peersData) ? peersData.slice(0, 4) : []; // 取前4个同行
+    
+    if (peerSymbols.length === 0) {
+      console.warn(`   ⚠️  未找到${symbol}的同行公司`);
+      return {
+        targetSymbol: symbol,
+        peers: [],
+        benchmarks: {},
+        source: 'finnhub'
+      };
+    }
+    
+    console.log(`   ✅ 找到${peerSymbols.length}个同行: ${peerSymbols.join(', ')}`);
+    
+    // 2. 并行获取目标公司 + 同行公司的metrics
+    const allSymbols = [symbol, ...peerSymbols];
+    const metricsPromises = allSymbols.map(async (sym) => {
+      try {
+        const { metrics } = await fetchStockMetrics(sym);
+        return {
+          symbol: sym,
+          pe: metrics?.peRatio || null,
+          pb: metrics?.pbRatio || null,
+          ps: metrics?.psRatio || null,
+          marketCap: metrics?.marketCap || null,
+          profitMargin: metrics?.profitMargin || null,
+          roe: metrics?.roe || null
+        };
+      } catch (e) {
+        console.warn(`   ⚠️  获取${sym}的metrics失败: ${e.message}`);
+        return {
+          symbol: sym,
+          pe: null,
+          pb: null,
+          ps: null,
+          marketCap: null,
+          profitMargin: null,
+          roe: null
+        };
+      }
+    });
+    
+    const allMetrics = await Promise.all(metricsPromises);
+    
+    // 3. 分离目标公司和同行数据
+    const targetMetrics = allMetrics[0];
+    const peerMetrics = allMetrics.slice(1);
+    
+    // 4. 计算行业平均值（排除null值）
+    const validMetrics = peerMetrics.filter(m => m.pe !== null || m.marketCap !== null);
+    const avgPE = validMetrics.length > 0 
+      ? validMetrics.reduce((sum, m) => sum + (m.pe || 0), 0) / validMetrics.filter(m => m.pe).length
+      : null;
+    const avgROE = validMetrics.length > 0
+      ? validMetrics.reduce((sum, m) => sum + (m.roe || 0), 0) / validMetrics.filter(m => m.roe).length
+      : null;
+    
+    console.log(`   📈 行业平均PE: ${avgPE ? avgPE.toFixed(2) : 'N/A'}, 平均ROE: ${avgROE ? (avgROE * 100).toFixed(2) + '%' : 'N/A'}`);
+    
+    return {
+      targetSymbol: symbol,
+      targetMetrics,
+      peers: peerMetrics,
+      benchmarks: {
+        avgPE: avgPE ? Number(avgPE.toFixed(2)) : null,
+        avgROE: avgROE ? Number((avgROE * 100).toFixed(2)) : null,
+        peerCount: peerMetrics.length
+      },
+      source: 'finnhub',
+      timestamp: Date.now()
+    };
+    
+  } catch (error) {
+    console.error(`   ❌ [Peer Benchmarks] 获取失败: ${error.message}`);
+    return {
+      targetSymbol: symbol,
+      peers: [],
+      benchmarks: {},
+      source: 'failed',
+      error: error.message
+    };
+  }
+}
+
 module.exports = {
   fetchMarketData,
   validateDataForAnalysis,
@@ -1591,5 +1703,6 @@ module.exports = {
   fetchFundamentals,
   fetchAnalystRatings,
   fetchComprehensiveAnalysis,
-  fetchHistoricalPrices  // 🆕 历史价格数据
+  fetchHistoricalPrices,  // 🆕 历史价格数据
+  fetchPeerBenchmarks     // 🆕 v4.0: 同行基准数据
 };
