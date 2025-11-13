@@ -674,15 +674,19 @@ async function generateSection_Technical(symbol, data, multiAI) {
     indicatorsData.bbands_position = position;
   }
   
-  // 🆕 计算支撑/压力位（基于历史价格）
-  let supportResistance = '数据不足';
+  // 🆕 v4.0: 计算支撑/压力位（对象格式）
+  let supportResistance = { support: 'N/A', resistance: 'N/A', summary: '数据不足' };
   if (historicalPrices.length > 0) {
     const recentPrices = historicalPrices.slice(-60); // 最近60天
     const highs = recentPrices.map(p => p.high);
     const lows = recentPrices.map(p => p.low);
     const resistance = Math.max(...highs).toFixed(2);
     const support = Math.min(...lows).toFixed(2);
-    supportResistance = `支撑位$${support}，阻力位$${resistance}`;
+    supportResistance = {
+      support,
+      resistance,
+      summary: `支撑位$${support}，阻力位$${resistance}`
+    };
   }
   
   const hasRealData = Object.keys(indicatorsData).length > 0;
@@ -698,13 +702,13 @@ ${hasRealData ? `
 - MACD: ${indicatorsData.macd?.toFixed(2) || 'N/A'} / Signal: ${indicatorsData.macd_signal?.toFixed(2) || 'N/A'} (${indicatorsData.macd_trend || 'N/A'})
 - EMA(20): $${indicatorsData.ema20?.toFixed(2) || 'N/A'} (价格${indicatorsData.price_vs_ema20 || 'N/A'})
 - 布林带: 上轨$${indicatorsData.bbands_upper?.toFixed(2) || 'N/A'} / 下轨$${indicatorsData.bbands_lower?.toFixed(2) || 'N/A'} (${indicatorsData.bbands_position || 'N/A'})
-- 支撑/压力: ${supportResistance}
+- 支撑位: $${supportResistance.support}, 压力位: $${supportResistance.resistance}
 ` : '⚠️ 技术指标数据缺失（可能是免费API限制），请基于历史价格推断'}
 
 请输出JSON格式：
 {
   "trend": "主要趋势（上涨/下跌/震荡），结合RSI、MACD说明",
-  "supportResistance": "${supportResistance}",
+  "supportResistanceSummary": "${supportResistance.summary}",
   "indicators": "${hasRealData ? '基于真实指标的详细分析（RSI+MACD+EMA+布林带）' : '数据有限，基于价格行为推断'}",
   "conclusion": "技术面结论（2-3句人话），明确说明${hasRealData ? '指标显示的方向' : '数据局限性'}"
 }
@@ -718,19 +722,24 @@ ${hasRealData ? `
   try {
     const parsed = JSON.parse(response.text.replace(/```json\n?|\n?```/g, ''));
     
-    // 🆕 附加真实指标数据到返回值（供PDF使用）
+    // 🆕 v4.0: 附加结构化数据到返回值
     return {
       ...parsed,
+      supportResistance, // 🆕 对象格式 {support, resistance, summary}
       realIndicators: indicatorsData, // 真实指标数据
       historicalDataPoints: historicalPrices.length
     };
   } catch (e) {
+    console.error('      ⚠️  技术分析失败:', e.message);
+    // 🆕 v4.0: 返回完整结构化字段（防止undefined）
     return {
       trend: '数据不足',
-      supportResistance: supportResistance,
+      supportResistance, // 对象格式
+      supportResistanceSummary: supportResistance.summary,
       indicators: hasRealData ? 'AI解析失败，但已获取真实指标' : '数据有限',
       conclusion: '技术分析生成失败',
-      realIndicators: indicatorsData
+      realIndicators: indicatorsData,
+      historicalDataPoints: historicalPrices.length
     };
   }
 }
@@ -1339,7 +1348,7 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
   
   <h3>技术面综合分析</h3>
   <p><strong>主要趋势：</strong>${sections.technical.trend}</p>
-  <p><strong>支撑/压力：</strong>${sections.technical.supportResistance}</p>
+  <p><strong>支撑/压力：</strong>${sections.technical.supportResistance?.summary || sections.technical.supportResistanceSummary || '数据不足'}</p>
   <p><strong>指标解读：</strong>${sections.technical.indicators}</p>
   
   <div class="highlight-box">
