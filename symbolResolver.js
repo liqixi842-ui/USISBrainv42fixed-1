@@ -4,6 +4,13 @@
 
 const fetch = require("node-fetch");
 const { ENTITY_TYPES, EXCHANGES } = require("./schemas");
+const { 
+  normalizeCountry, 
+  toTradingView, 
+  toTwelveData, 
+  normalizeCandidate,
+  scoreExchangeMatch 
+} = require("./normalize");
 
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
 const TWELVE_DATA_KEY = process.env.TWELVE_DATA_API_KEY;
@@ -581,17 +588,19 @@ function selectBestMatch(matches, exchangeHint, originalQuery) {
   if (exchangeHint && bestExchange) {
     const exchangeLower = bestExchange.toLowerCase();
     
-    // 映射交易所代码到标准前缀/后缀
+    // 🔧 映射交易所代码到标准前缀（仅限前缀格式的交易所）
+    // ⚠️ 注意：HKEX/SSE/SZSE使用后缀格式（如0700.HK），不应添加前缀
     const exchangePrefixMap = {
       'bme': 'BME:',
       'mta': 'BME:',
       'madrid': 'BME:',
+      'xmad': 'BME:',      // ⭐ Twelve Data西班牙代码（关键修复）
       'tsx': 'TSX:',
       'tsxv': 'TSXV:',
       'nasdaq': 'NASDAQ:',
       'nyse': 'NYSE:',
       'otc': 'OTC:',
-      'hkex': '',  // 香港用后缀.HK
+      'hkex': '',          // 香港用后缀.HK，不添加前缀
       'bovespa': 'BOVESPA:',
       'b3': 'BOVESPA:',
       'asx': 'ASX:'

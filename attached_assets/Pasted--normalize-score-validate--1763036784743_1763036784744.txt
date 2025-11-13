@@ -1,0 +1,316 @@
+棒，问题描述很清楚。你现在的设计“八九不离十”，主要缺三件事：正规化（normalize）→ 评分（score）→ 验证（validate）。下面给出一套在你现有栈上可直接落地的方案与代码骨架。
+结论先讲
+
+
+架构合理，但要把“AI 意图”与“交易所解析”彻底解耦：AI 只给 ticker/name + country_hint，真正的交易所决策由可重复、可审计的规则+评分器完成。
+
+
+多交易所解析的最佳实践：候选集（search）→ 统一字段（normalize）→ 多维评分（score）→ 快速验证（quote/candles ping）。
+
+
+歧义处理：给出top-1 + 备选top-3，并附 confidence 与 reasons[]；当置信度<阈值时，不要报错，要求用户澄清或自动降级到“最常用交易所映射”。
+
+
+
+1) 统一映射与格式规范（非常关键）
+
+
+国家/交易所同义词表（最小子集即可）：
+
+
+"Spain"|"ES"|"España" → {preferred: "BME", aliases:["XMAD","BME"]}
+
+
+"US" → {preferred:"NASDAQ/NYSE"}
+
+
+
+
+符号输出格式固定两种，用于不同服务：
+
+
+Twelve Data：{TICKER}:{EXCHANGE_CODE}（如 COL:XMAD）
+
+
+TradingView：{EXCHANGE}:{TICKER}（如 BME:COL）
+
+
+
+
+给 SymbolCandidate 统一字段：ticker, exchange, name, country, currency, isin.
+
+
+
+2) 评分器（SymbolCandidate Scoring）
+推荐权重（0–100 总分）：
+
+
+交易所/国家匹配（40）
+
+
+exact exchange match +40；country match +20；仅区域匹配 +10
+
+
+
+
+符号匹配（25）
+
+
+exact ticker +25；大小写/同义 +10
+
+
+
+
+公司名相似度（15）
+
+
+余弦/编辑距离；出现 “Inmobiliaria Colonial SOCIMI, S.A.” 命中 +15
+
+
+
+
+货币/时区（10）
+
+
+EUR +5；Europe/Madrid +5
+
+
+
+
+活跃/交易状态 & 最近成交（10）
+
+
+last_trade_time < 5d +10；退市/停牌 -∞
+
+
+
+
+验证步：top-1 拿到后，立刻打一个轻量验证（/price 或 /time_series?interval=1d&outputsize=1）：
+
+
+成功返回有效价格 → +10 分并“锁定”；
+
+
+失败或 0 值 → 降级选择第二名。
+
+
+
+3) Node.js 最小实现（可直接改进你当前模块）
+// types.ts
+export interface Intent {
+  raw: string;
+  ticker?: string;              // 如 "COL"
+  nameHint?: string;            // 如 "Colonial"
+  countryHint?: "ES" | "US" | string; // 来自 AI
+  exchangeHint?: string;        // 如 "BME" / "XMAD"
+}
+
+export interface Candidate {
+  ticker: string;               // "COL"
+  exchange: string;             // "BME" or "XMAD"
+  name?: string;                // "Inmobiliaria Colonial SOCIMI, S.A."
+  country?: string;             // "Spain"
+  currency?: string;            // "EUR"
+  isin?: string;                // optional
+  source?: "twelvedata"|"cache"|"manual";
+  score?: number;
+  reasons?: string[];
+}
+
+export interface ResolveResult {
+  qualified: { tv: string; td: string }; // "BME:COL", "COL:XMAD"
+  confidence: number;                    // 0-100
+  winner: Candidate;
+  alternates: Candidate[];               // top-3 备选
+}
+
+// normalize.ts
+const EX_MAP = {
+  ES: { preferred: "BME", aliases: ["BME","XMAD","MC"] },
+  SPAIN: { preferred: "BME", aliases: ["BME","XMAD","MC"] },
+};
+export function normalizeCountry(code?: string) {
+  if (!code) return undefined;
+  const k = code.toUpperCase();
+  if (EX_MAP[k]) return EX_MAP[k];
+  if (k === "SPAIN" || k === "ESPAÑA") return EX_MAP.ES;
+  return undefined;
+}
+export const toTV = (c: Candidate) => `${c.exchange}:${c.ticker}`;
+export const toTD = (c: Candidate) => `${c.ticker}:${c.exchange === "BME" ? "XMAD" : c.exchange}`;
+
+// symbolResolver.ts  (核心流程)
+import { normalizeCountry, toTV, toTD } from "./normalize";
+
+export async function resolveSymbol(intent: Intent): Promise<ResolveResult> {
+  const exchPref = normalizeCountry(intent.countryHint || intent.exchangeHint);
+  const tdCandidates = await searchTwelveData(intent.ticker!, intent.nameHint);
+
+  const norm = tdCandidates.map(raw => ({
+    ticker: raw.symbol,               // "COL"
+    exchange: mapTdExchange(raw.exchange), // "XMAD" -> 统一到 "BME" 或保留
+    name: raw.name,
+    country: raw.country,
+    currency: raw.currency,
+    source: "twelvedata",
+  }));
+
+  const scored = await scoreCandidates(norm, intent, exchPref);
+  const ranked = scored.sort((a,b)=> (b.score||0)-(a.score||0));
+
+  // 轻量验证：对前2名试拉一次价格
+  for (const c of ranked.slice(0,2)) {
+    const ok = await quickValidate(c); // /price 或 1d K 线
+    if (ok) c.score! += 10, c.reasons!.push("validated:quote");
+  }
+
+  const winner = ranked[0];
+  if (!winner) throw new Error("SYMBOL_RESOLVE_EMPTY");
+
+  return {
+    winner,
+    confidence: Math.min(100, winner.score || 0),
+    qualified: { tv: toTV(winner), td: toTD(winner) },
+    alternates: ranked.slice(1,4),
+  };
+}
+
+function mapTdExchange(ex: string) {
+  // Twelve Data 常返 "XMAD"；TradingView常用 "BME"
+  if (ex?.toUpperCase() === "XMAD") return "BME";
+  return ex?.toUpperCase();
+}
+
+async function scoreCandidates(cs: Candidate[], intent: Intent, pref?: {preferred:string, aliases:string[]}) {
+  return cs.map(c => {
+    const reasons: string[] = [];
+    let s = 0;
+
+    // 交易所/国家
+    if (pref) {
+      if (c.exchange === pref.preferred) s += 40, reasons.push("exchange:preferred");
+      else if (pref.aliases.includes(c.exchange!)) s += 30, reasons.push("exchange:alias");
+    }
+    if ((c.country||"").toUpperCase().startsWith("SPAIN")) s += 10, reasons.push("country:ES");
+
+    // ticker
+    if (intent.ticker && c.ticker.toUpperCase() === intent.ticker.toUpperCase())
+      s += 25, reasons.push("ticker:exact");
+
+    // 名称相似（很简化的距离；可替换 string-similarity）
+    if (intent.nameHint && c.name) {
+      const hit = c.name.toLowerCase().includes(intent.nameHint.toLowerCase());
+      if (hit) s += 12, reasons.push("name:includes");
+    }
+
+    // 货币/时区（可从候选返回或二次调用 profile）
+    if ((c.currency||"").toUpperCase() === "EUR") s += 5, reasons.push("currency:EUR");
+
+    return { ...c, score: s, reasons };
+  });
+}
+
+async function quickValidate(c: Candidate) {
+  try {
+    // 用 Twelve Data /price 做快速验证
+    const resp = await fetch(`https://api.twelvedata.com/price?symbol=${c.ticker}:XMAD&apikey=${process.env.TD_KEY}`);
+    const j = await resp.json();
+    return !!j?.price && Number(j.price) > 0;
+  } catch { return false; }
+}
+
+
+上面把 XMAD→BME 做了简易映射：Twelve Data 要 COL:XMAD，TradingView 要 BME:COL。你也可以把 toTD() 做成更完整的映射表。
+
+
+4) 歧义符号的优雅处理
+
+
+当 confidence < 70：返回 winner + alternates[3]，并在回复里带：
+
+
+disambiguation_prompt: “你想看 BME:COL（西班牙）还是 ASX:COL（澳大利亚）？”
+
+
+
+
+在 Telegram 里做 inline keyboard 两个按钮，点哪个就写死映射到缓存（Redis）：
+
+
+USER_ALIAS["COL"|"ES"] = "BME:COL"（有效期 90 天）
+
+
+
+
+给 Brain 增加一个**“符号别名表”**（Neon 表）：
+
+
+user_id, query_text, resolved_symbol, exchange, created_at, expires_at
+
+
+命中则跳过搜索与评分，1ms 返回。
+
+
+
+
+
+5) 把 AI 的角色降到“提示器”
+
+
+AI 负责：提取 ticker/name/country，提供 exchangeHint 与置信度；
+
+
+决策完全由评分器 + 验证完成；
+
+
+这样“可测试、可回放”，避免“AI 有时猜错”。
+
+
+
+6) COL 案例（期望效果）
+
+
+搜索返回：COL@ASX、COL@BME、COL@PSE、COL@CXA、COL@VSE…
+
+
+评分器：因 countryHint=ES 且名称包含 Inmobiliaria Colonial、货币 EUR → BME:COL 得分最高；
+
+
+quickValidate：/price 返回有效价格 → 再加 10 分；
+
+
+最终返回：
+
+
+qualified.tv = "BME:COL"
+
+
+qualified.td = "COL:XMAD"
+
+
+confidence ≈ 85–95
+
+
+alternates = [ASX:COL, …]
+
+
+
+
+
+7) 你问的三个问题逐条回答
+
+
+架构合理吗？
+合理。把解析从 AI 中抽出来、加“评分+验证+缓存”，就达到生产级。
+
+
+有没有更好的 multi-exchange 方案？
+有：双源交叉（Twelve Data + TradingView symbol search / Yahoo query）取交集；再跑评分器，稳定性更高。
+
+
+如何优雅处理歧义？
+引入 confidence + reasons + alternates，置信度低时走人机澄清；命中后写入别名缓存，以后同类问题 0ms 命中。
+
+
+
+如果你愿意，我可以把上面这套resolver 模块打包成一个可直接 npm install 的小库接口（或者直接给你一份完整的 Node 文件），再附上 N8N 的“符号解析工作流骨架”（HTTP → Function评分 → 验证 → 返回top-1+备选）。
