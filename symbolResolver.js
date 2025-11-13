@@ -1,11 +1,18 @@
 // ====== Symbol Resolver ======
-// 智能股票代码解析器 - 使用Finnhub Symbol Lookup API
+// 🌍 全球股票代码解析器 - 多数据源编排（Finnhub + Twelve Data）
 // 将公司名称（如"Grifols", "Sabadell"）转换为正确的股票代码
 
 const fetch = require("node-fetch");
 const { ENTITY_TYPES, EXCHANGES } = require("./schemas");
 
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
+const TWELVE_DATA_KEY = process.env.TWELVE_DATA_API_KEY;
+
+// 🆕 数据源优先级配置（可根据需要调整）
+const DATA_SOURCE_PRIORITY = {
+  // 当Twelve Data Pro可用时，优先使用它（更高限额、更多市场）
+  symbol_search: TWELVE_DATA_KEY ? ['twelvedata', 'finnhub'] : ['finnhub', 'twelvedata']
+};
 
 /**
  * 🆕 v4.2: 符号归一化（欧洲后缀 → Finnhub前缀）
@@ -55,35 +62,65 @@ async function resolveSymbols(intent) {
   // 2. 解析公司名称 → 股票代码
   for (const entity of companyEntities) {
     const companyName = entity.value;
-    console.log(`   🔍 查找公司: ${companyName}`);
+    console.log(`   🔍 查找: ${companyName}`);
     
     try {
-      // 优先尝试静态映射（更快、更准确）
-      const staticResults = lookupStatic(companyName);
-      if (staticResults.length > 0) {
-        symbols.push(staticResults[0].symbol);
-        console.log(`   ✓ 静态映射找到: ${staticResults[0].symbol}`);
-        continue;
+      // 🆕 策略重排：Finnhub API优先（支持全球股票）
+      let resolved = false;
+      
+      // Layer 1: 多数据源API查询（智能编排）
+      // 🆕 v6.0: 支持Finnhub + Twelve Data双数据源
+      const providers = DATA_SOURCE_PRIORITY.symbol_search;
+      
+      for (const provider of providers) {
+        if (resolved) break; // 已找到，跳过其他数据源
+        
+        try {
+          let resolvedSymbols = [];
+          
+          if (provider === 'finnhub' && FINNHUB_KEY) {
+            resolvedSymbols = await lookupSymbol(companyName, intent.exchange);
+          } else if (provider === 'twelvedata' && TWELVE_DATA_KEY) {
+            resolvedSymbols = await lookupSymbolFromTwelveData(companyName, intent.exchange);
+          } else {
+            continue; // 跳过未配置的数据源
+          }
+          
+          if (resolvedSymbols.length > 0) {
+            const bestMatch = selectBestMatch(resolvedSymbols, intent.exchange, companyName);
+            symbols.push(bestMatch.symbol);
+            console.log(`   ✅ [${provider.toUpperCase()}] ${companyName} → ${bestMatch.symbol} (${bestMatch.description})`);
+            resolved = true;
+          } else {
+            console.log(`   ⚠️  [${provider.toUpperCase()}] 没有找到: ${companyName}`);
+          }
+        } catch (apiError) {
+          console.warn(`   ⚠️  [${provider.toUpperCase()}] 失败: ${apiError.message}`);
+          // 继续尝试下一个数据源
+        }
       }
       
-      // 如果静态映射失败，尝试Finnhub API
-      try {
-        const resolvedSymbols = await lookupSymbol(companyName, intent.exchange);
-        
-        if (resolvedSymbols.length > 0) {
-          const bestMatch = selectBestMatch(resolvedSymbols, intent.exchange, companyName);
-          symbols.push(bestMatch.symbol);
-          console.log(`   ✓ Finnhub找到: ${bestMatch.symbol} (${bestMatch.description})`);
-        } else {
-          console.log(`   ⚠️  未找到符号: ${companyName}`);
+      // Layer 2: 静态映射（备用，常见股票快速查找）
+      if (!resolved) {
+        const staticResults = lookupStatic(companyName);
+        if (staticResults.length > 0) {
+          symbols.push(staticResults[0].symbol);
+          console.log(`   ✅ [静态映射] ${companyName} → ${staticResults[0].symbol}`);
+          resolved = true;
         }
-      } catch (apiError) {
-        // 🛡️ Fallback: API失败时，将公司名作为符号尝试（适用于已知代码如AAPL, TSLA等）
-        console.log(`   ⚠️  Finnhub API失败，尝试使用公司名作为代码: ${companyName}`);
-        symbols.push(companyName.toUpperCase());
       }
+      
+      // Layer 3: 直接使用输入（用户可能直接输入了代码）
+      if (!resolved) {
+        const normalized = companyName.toUpperCase().trim();
+        symbols.push(normalized);
+        console.log(`   ⚠️  [Fallback] 使用原始输入: ${normalized}`);
+      }
+      
     } catch (error) {
-      console.error(`   ❌ 查找失败: ${companyName} - ${error.message}`);
+      console.error(`   ❌ 解析失败: ${companyName} - ${error.message}`);
+      // 最终Fallback：使用原始输入
+      symbols.push(companyName.toUpperCase());
     }
   }
   
@@ -123,14 +160,28 @@ async function lookupSymbol(query, exchangeHint = null) {
     
     clearTimeout(timeoutId);
     
+    // 🆕 详细错误处理
     if (!response.ok) {
-      throw new Error(`Finnhub API error: ${response.status}`);
+      const errorBody = await response.text();
+      const errorMsg = `Finnhub API HTTP ${response.status}: ${errorBody.substring(0, 200)}`;
+      console.error(`   ❌ ${errorMsg}`);
+      
+      // 🔧 区分错误类型，决定是否重试
+      if (response.status === 401) {
+        throw new Error('Finnhub API认证失败 - 检查FINNHUB_API_KEY');
+      } else if (response.status === 429) {
+        throw new Error('Finnhub API限流 - 请稍后重试');
+      } else if (response.status >= 500) {
+        throw new Error('Finnhub服务器错误 - 使用备用数据源');
+      } else {
+        throw new Error(errorMsg);
+      }
     }
     
     const data = await response.json();
     const results = data.result || [];
     
-    console.log(`   📊 找到 ${results.length} 个匹配结果`);
+    console.log(`   📊 Finnhub返回 ${results.length} 个匹配结果`);
     
     // 如果有交易所提示，优先返回该交易所的结果
     if (exchangeHint && results.length > 0) {
@@ -144,8 +195,87 @@ async function lookupSymbol(query, exchangeHint = null) {
     return results;
     
   } catch (error) {
-    console.error(`   ❌ Finnhub查询失败:`, error.message);
-    return [];
+    // 🆕 不再静默失败，抛出异常让调用方处理
+    console.error(`   ❌ Finnhub Symbol Lookup失败:`, error.message);
+    throw error;  // ⭐ 关键：抛出异常而非返回[]
+  }
+}
+
+/**
+ * 🆕 v6.0: 使用Twelve Data Symbol Search API查找股票代码
+ * 支持80个全球交易所（Pro计划）
+ * @param {string} query - 搜索查询（公司名称或部分符号）
+ * @param {string|null} exchangeHint - 交易所提示
+ * @returns {Promise<Array>} - 匹配的股票列表
+ */
+async function lookupSymbolFromTwelveData(query, exchangeHint = null) {
+  if (!TWELVE_DATA_KEY) {
+    throw new Error("TWELVE_DATA_API_KEY not configured");
+  }
+  
+  const url = `https://api.twelvedata.com/symbol_search?symbol=${encodeURIComponent(query)}&apikey=${TWELVE_DATA_KEY}`;
+  
+  console.log(`   🌐 Twelve Data查询: "${query}" (交易所提示: ${exchangeHint || '无'})`);
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    
+    const response = await fetch(url, { 
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    // 错误处理
+    if (!response.ok) {
+      const errorBody = await response.text();
+      const errorMsg = `Twelve Data API HTTP ${response.status}: ${errorBody.substring(0, 200)}`;
+      console.error(`   ❌ ${errorMsg}`);
+      
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Twelve Data API认证失败 - 检查TWELVE_DATA_API_KEY');
+      } else if (response.status === 429) {
+        throw new Error('Twelve Data API限流 - 每分钟610次已用完');
+      } else if (response.status >= 500) {
+        throw new Error('Twelve Data服务器错误 - 使用备用数据源');
+      } else {
+        throw new Error(errorMsg);
+      }
+    }
+    
+    const data = await response.json();
+    
+    // Twelve Data返回格式: { data: [...], status: "ok" }
+    const results = data.data || [];
+    
+    console.log(`   📊 Twelve Data返回 ${results.length} 个匹配结果`);
+    
+    // 转换为标准格式（与Finnhub兼容）
+    const normalizedResults = results.map(item => ({
+      symbol: item.symbol,
+      displaySymbol: item.symbol,
+      description: item.instrument_name || item.symbol,
+      type: `${item.exchange} ${item.type}`,
+      exchange: item.exchange,
+      country: item.country,
+      currency: item.currency
+    }));
+    
+    // 如果有交易所提示，优先返回该交易所的结果
+    if (exchangeHint && normalizedResults.length > 0) {
+      const exchangeFiltered = filterByExchange(normalizedResults, exchangeHint);
+      if (exchangeFiltered.length > 0) {
+        console.log(`   🎯 交易所筛选后: ${exchangeFiltered.length} 个结果`);
+        return exchangeFiltered;
+      }
+    }
+    
+    return normalizedResults;
+    
+  } catch (error) {
+    console.error(`   ❌ Twelve Data Symbol Search失败:`, error.message);
+    throw error;
   }
 }
 
@@ -432,5 +562,6 @@ function levenshteinDistance(str1, str2) {
 module.exports = {
   resolveSymbols,
   lookupSymbol,
+  lookupSymbolFromTwelveData,
   STATIC_SYMBOL_MAP
 };
