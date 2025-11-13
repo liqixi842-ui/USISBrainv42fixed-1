@@ -394,7 +394,14 @@ async function collectEnrichedData(symbol) {
   const results = await Promise.all(tasks);
   const enrichedData = results.reduce((acc, curr) => ({ ...acc, ...curr }), {});
   
+  // 🔍 v4.0: 详细数据诊断日志
   console.log(`   ✅ 数据收集完成: 行情✓ 概况✓ 历史✓ 新闻✓ 技术指标✓ 财务✓ 估值✓`);
+  console.log(`   🔍 [诊断] 财务数据状态:`);
+  console.log(`      - Fundamentals: ${enrichedData.fundamentals?.income_statement ? '有数据' : '⚠️ 缺失'}`);
+  console.log(`      - Metrics: ${enrichedData.metrics?.peRatio ? '有数据' : '⚠️ 缺失'}`);
+  console.log(`      - 新闻数量: ${enrichedData.news?.length || 0}条`);
+  console.log(`      - 历史价格点数: ${enrichedData.historicalPrices?.length || 0}`);
+  console.log(`      - 技术指标: RSI=${enrichedData.technicalIndicators?.rsi ? '✓' : '✗'} MACD=${enrichedData.technicalIndicators?.macd ? '✓' : '✗'}`);
   
   return {
     symbol,
@@ -625,6 +632,15 @@ async function generateSection_Financials(symbol, data, multiAI) {
   const financialData = normalizeFinancialData(fundamentals, metrics);
   const hasRealData = fundamentals?.income_statement?.data || metrics?.peRatio;
   
+  // 🔍 诊断日志
+  console.log(`      📊 财务数据标准化结果:`);
+  console.log(`         - Revenue数据点: ${financialData.revenue.length}`);
+  console.log(`         - NetIncome数据点: ${financialData.netIncome.length}`);
+  console.log(`         - PE比率: ${financialData.pe || 'N/A'}`);
+  console.log(`         - 市值: ${formatMarketCap(profile.marketCapitalization)}`);
+  console.log(`         - 缺失字段: ${financialData.missing.join(', ') || '无'}`);
+  console.log(`         - hasRealData: ${hasRealData}`);
+  
   // 构建真实财务上下文
   const finContext = hasRealData ? `
 **真实财务数据（Twelve Data + Finnhub）**：
@@ -799,12 +815,19 @@ async function generateSection_News(symbol, data, multiAI) {
   console.log(`      📰 新闻数量: ${news.length}条`);
   
   if (news.length === 0) {
+    console.log(`      ⚠️  新闻数据为空，返回空结果`);
     return {
       themes: [],
       summary: '暂无重大新闻或新闻数据获取失败',
-      newsCount: 0
+      overallSentiment: '无数据',
+      newsCount: 0,
+      rawNews: []
     };
   }
+  
+  // 🔍 诊断日志：检查新闻数据质量
+  console.log(`      🔍 新闻数据样本: ${news[0]?.headline?.substring(0, 50)}...`);
+  console.log(`      🔍 ImpactScore: ${news[0]?.impactScore || 'N/A'}`);
   
   // 🆕 v4.0: 过去1-4周新闻，增加ImpactRank信息
   const recentNews = news.slice(0, 15); // 增加到15条以便聚类
@@ -1310,7 +1333,7 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
     <tbody>
       <tr><td>营业收入 (Revenue)</td><td>${sections.financials.keyMetrics.revenue}</td></tr>
       <tr><td>净利润 (Net Income)</td><td>${sections.financials.keyMetrics.netIncome}</td></tr>
-      <tr><td>市值 (Market Cap)</td><td>$${sections.financials.keyMetrics.marketCap}</td></tr>
+      <tr><td>市值 (Market Cap)</td><td>${sections.financials.keyMetrics.marketCap}</td></tr>
       <tr><td>PE比率 (P/E Ratio)</td><td>${sections.financials.keyMetrics.pe}</td></tr>
     </tbody>
   </table>
