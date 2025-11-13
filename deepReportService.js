@@ -523,14 +523,19 @@ async function generateSection_Company(symbol, data, multiAI) {
 async function generateSection_Industry(symbol, data, multiAI) {
   const { profile } = data;
   const companyName = profile.companyName || profile.name || symbol;
+  const industry = profile.finnhubIndustry || '未知';
   
-  const prompt = `你是行业分析师，请分析${companyName} (${symbol})所在行业：
+  // 🆕 v4.0: 增强为结构化行业分析
+  const prompt = `你是首席行业分析师，请深入分析${companyName} (${symbol})所在行业：
 
-行业：${profile.finnhubIndustry || '未知'}
+行业：${industry}
 
 请输出JSON格式：
 {
-  "industryTrend": "行业现状与趋势（2-3句）",
+  "industryCycle": "行业当前周期状态（例如：库存周期复苏/下行周期/成长期/成熟期，30字内）",
+  "keyDrivers": ["驱动因素1（如AI需求/政策支持）", "驱动因素2", "驱动因素3"],
+  "industryRisks": ["行业风险1（如供应链/监管）", "行业风险2"],
+  "outlook6_12m": "未来6-12个月展望（60字内，明确方向和关键变量）",
   "competitors": [
     {"name": "竞争对手1", "position": "一句话定位"},
     {"name": "竞争对手2", "position": "一句话定位"}
@@ -538,7 +543,10 @@ async function generateSection_Industry(symbol, data, multiAI) {
   "companyPosition": "公司在行业中的位置（领先/追赶/小众/新进入者）"
 }
 
-要求：基于行业常识给出合理分析。`;
+要求：
+1. 基于${industry}行业的常识和2024-2025年趋势
+2. 驱动因素要具体（不要泛泛而谈）
+3. 展望要包含关键判断节点`;
 
   const response = await multiAI.generate('gpt-4o', [
     { role: 'user', content: prompt }
@@ -548,8 +556,13 @@ async function generateSection_Industry(symbol, data, multiAI) {
     const parsed = JSON.parse(response.text.replace(/```json\n?|\n?```/g, ''));
     return parsed;
   } catch (e) {
+    console.error('      ⚠️  行业分析失败:', e.message);
+    // 🆕 v4.0: 返回完整结构化字段（防止undefined）
     return {
-      industryTrend: '行业分析生成失败',
+      industryCycle: '行业周期分析失败',
+      keyDrivers: ['数据不足', '无法分析', '请人工判断'],
+      industryRisks: ['分析失败', '请人工评估'],
+      outlook6_12m: '展望生成失败，请人工判断',
       competitors: [],
       companyPosition: '未知'
     };
@@ -852,13 +865,28 @@ async function generateRatingAndConclusion(symbol, data, sections) {
 新闻综述：${sections.newsAnalysis.summary}
 `;
 
-  const prompt = `你是首席分析师，请给出最终评级与建议：
+  // 🆕 v4.0: 添加技术面数据到上下文
+  const technicalContext = sections.technical?.realIndicators ? `
+技术指标：
+- RSI(14): ${sections.technical.realIndicators.rsi || 'N/A'}
+- MACD: ${sections.technical.realIndicators.macd || 'N/A'}
+- 支撑位: ${sections.technical.supportResistance?.support || 'N/A'}
+- 压力位: ${sections.technical.supportResistance?.resistance || 'N/A'}
+` : '';
+  
+  const prompt = `你是首席分析师，请给出最终评级与结构化投资策略：
 
-${context}
+${context}${technicalContext}
 
 请输出JSON格式：
 {
   "ratingCode": "BUY或HOLD或SELL（三选一）",
+  "shortTermView": "1-4周短期观点（30字内）",
+  "supportLevel": "${sections.technical?.supportResistance?.support || '基于60日低点推测'}",
+  "resistanceLevel": "${sections.technical?.supportResistance?.resistance || '基于60日高点推测'}",
+  "breakoutTrigger": "突破触发点（例如：突破$XX+放量 或 特定事件催化）",
+  "breakdownRisk": "下行风险触发点（例如：跌破$XX 或 负面财报）",
+  "riskTier": "风险等级（A-低风险/B-中风险/C-高风险，基于波动性和不确定性）",
   "valuation": "估值判断：偏贵/合理/偏便宜",
   "rationale": "评级理由（3-5句话）",
   "suggestion": "对应建议（BUY=长期配置逻辑；HOLD=观望+触发点；SELL=主要担忧）",
@@ -878,12 +906,20 @@ ${context}
       coreView: sections.cover.coreView // 封面核心观点
     };
   } catch (e) {
+    console.error('      ⚠️  评级生成失败:', e.message);
+    // 🆕 v4.0: 返回完整结构化策略字段（防止undefined）
     return {
       ratingCode: 'HOLD',
+      shortTermView: '数据不足，建议观望',
+      supportLevel: sections.technical?.supportResistance?.support || 'N/A',
+      resistanceLevel: sections.technical?.supportResistance?.resistance || 'N/A',
+      breakoutTrigger: '评级失败，无法提供触发点',
+      breakdownRisk: '评级失败，无法评估风险',
+      riskTier: 'B',
       valuation: '无法判断',
-      rationale: '评级生成失败',
-      suggestion: '建议人工复核',
-      investmentSummary: '评级系统错误，请人工分析',
+      rationale: '评级生成失败，AI解析错误',
+      suggestion: '建议人工复核财务和技术指标后决策',
+      investmentSummary: '评级系统错误，请人工分析。建议审查财务数据、技术指标和新闻后做出投资决定。',
       coreView: sections.cover.coreView
     };
   }
