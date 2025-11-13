@@ -76,26 +76,31 @@ function normalizeFinancialData(fundamentals, metrics) {
     missing: []
   };
   
-  // 处理利润表数据（Twelve Data）
+  // 🔧 CRITICAL FIX: Twelve Data返回数组，不是单个对象
   if (fundamentals?.income_statement?.data) {
-    const income = fundamentals.income_statement.data;
+    const incomeData = fundamentals.income_statement.data;
     
-    if (income.fiscal_date) normalized.fiscalPeriods.push(income.fiscal_date);
-    if (income.revenue) normalized.revenue.push(Number(income.revenue));
-    if (income.net_income) normalized.netIncome.push(Number(income.net_income));
+    // 如果是数组，遍历所有期数（通常是季度或年度数据）
+    const incomeArray = Array.isArray(incomeData) ? incomeData : [incomeData];
     
-    // 计算毛利率和营业利润率
-    if (income.gross_profit && income.revenue) {
-      normalized.grossMargin.push((Number(income.gross_profit) / Number(income.revenue) * 100).toFixed(2));
-    }
-    
-    if (income.operating_income && income.revenue) {
-      normalized.operatingMargin.push((Number(income.operating_income) / Number(income.revenue) * 100).toFixed(2));
-    }
-    
-    if (income.net_income && income.revenue) {
-      normalized.netMargin.push((Number(income.net_income) / Number(income.revenue) * 100).toFixed(2));
-    }
+    incomeArray.forEach(income => {
+      if (income.fiscal_date) normalized.fiscalPeriods.push(income.fiscal_date);
+      if (income.revenue) normalized.revenue.push(Number(income.revenue));
+      if (income.net_income) normalized.netIncome.push(Number(income.net_income));
+      
+      // 计算毛利率和营业利润率
+      if (income.gross_profit && income.revenue) {
+        normalized.grossMargin.push((Number(income.gross_profit) / Number(income.revenue) * 100).toFixed(2));
+      }
+      
+      if (income.operating_income && income.revenue) {
+        normalized.operatingMargin.push((Number(income.operating_income) / Number(income.revenue) * 100).toFixed(2));
+      }
+      
+      if (income.net_income && income.revenue) {
+        normalized.netMargin.push((Number(income.net_income) / Number(income.revenue) * 100).toFixed(2));
+      }
+    });
   } else {
     normalized.missing.push('income_statement');
   }
@@ -108,10 +113,29 @@ function normalizeFinancialData(fundamentals, metrics) {
     }
   }
   
-  // 补充Finnhub指标数据
-  if (metrics) {
-    if (!normalized.grossMargin.length && metrics.profitMargin) {
-      normalized.netMargin = [Number(metrics.profitMargin).toFixed(2)];
+  // 🔧 CRITICAL FIX: Finnhub metrics嵌套在metrics.metric下
+  if (metrics && metrics.metric) {
+    // PE比率（多个变体）
+    if (!normalized.pe) {
+      normalized.pe = metrics.metric.peBasicTTM || metrics.metric.peNormalizedAnnual || metrics.metric.peRatio || null;
+    }
+    
+    // 市值
+    if (!normalized.marketCap && metrics.metric.marketCapitalization) {
+      normalized.marketCap = metrics.metric.marketCapitalization;
+    }
+    
+    // 利润率（如果财务数据缺失）
+    if (!normalized.netMargin.length && metrics.metric.netProfitMarginTTM) {
+      normalized.netMargin = [(Number(metrics.metric.netProfitMarginTTM) * 100).toFixed(2)];
+    }
+  } else if (metrics && !metrics.metric) {
+    // 备用：有些API直接返回平铺结构
+    if (!normalized.pe && metrics.peRatio) {
+      normalized.pe = metrics.peRatio;
+    }
+    if (!normalized.marketCap && metrics.marketCap) {
+      normalized.marketCap = metrics.marketCap;
     }
   } else {
     normalized.missing.push('metrics');
