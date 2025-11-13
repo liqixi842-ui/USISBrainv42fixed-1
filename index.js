@@ -6134,6 +6134,22 @@ if (!TOKEN_IS_SAFE) {
     }
     
     try {
+      // 🎯 版本查询命令（用于确认运行环境）
+      if (text === '/版本' || text.toLowerCase() === '/version') {
+        const versionInfo = `📍 **USIS Brain v6.2 (2025-11-13)**
+🔧 西班牙交易所修复版 (XMAD→BME)
+🏢 环境: ${process.env.REPLIT_ENVIRONMENT || 'unknown'}
+⏱ 运行时长: ${Math.floor((Date.now() - APP_START_TIME) / 1000 / 60)}分钟`;
+        
+        await telegramAPI('sendMessage', { 
+          chat_id: chatId, 
+          text: versionInfo,
+          parse_mode: 'Markdown'
+        });
+        console.log('✅ 版本信息已发送');
+        return;
+      }
+      
       // 🆕 v6.2: 优先检测对话类意图（greeting/help/casual）
       if (isGreeting(text) || isHelpRequest(text) || isSystemCommand(text)) {
         console.log('💬 检测到对话类意图，路由到对话系统');
