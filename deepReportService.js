@@ -579,10 +579,14 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
   <title>USIS Research Report - ${symbol}</title>
   <style>
+    /* DocRaptor优化：中文字体支持 */
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap');
+    
     body {
-      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+      font-family: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "WenQuanYi Micro Hei", "SimHei", sans-serif;
       line-height: 1.8;
       color: #2c3e50;
       max-width: 900px;
@@ -602,7 +606,8 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
       font-size: 28px;
       color: #2c3e50;
       margin-bottom: 15px;
-      font-weight: bold;
+      font-weight: 700;
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
     }
     .cover .company {
       font-size: 24px;
@@ -649,13 +654,16 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
       margin-top: 40px;
       margin-bottom: 25px;
       page-break-after: avoid;
+      font-weight: 700;
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
     }
     h3 {
       font-size: 18px;
       color: #34495e;
       margin-top: 25px;
       margin-bottom: 15px;
-      font-weight: bold;
+      font-weight: 700;
+      font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
     }
     
     /* 段落 */
@@ -915,45 +923,85 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
 }
 
 /**
- * 使用PDFShift或PDFKit生成PDF
+ * 使用DocRaptor或PDFKit生成PDF（完美支持中文UTF-8）
  */
 async function convertHTMLtoPDF(htmlContent) {
-  if (!PDFSHIFT_API_KEY) {
-    console.warn('⚠️  PDFShift API Key未配置，使用PDFKit备用方案');
-    return generateFallbackPDF(htmlContent);
+  const DOCRAPTOR_API_KEY = process.env.DOCRAPTOR_API_KEY;
+  
+  // 优先使用DocRaptor（专业HTML→PDF，完美中文支持）
+  if (DOCRAPTOR_API_KEY) {
+    try {
+      console.log('📄 [DocRaptor] 开始生成专业PDF（中文支持）...');
+      const axios = require('axios');
+      
+      const response = await axios({
+        url: 'https://api.docraptor.com/docs',
+        method: 'POST',
+        responseType: 'arraybuffer', // 获取二进制PDF
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        data: {
+          user_credentials: DOCRAPTOR_API_KEY,
+          doc: {
+            test: false, // 生产模式（无水印，计费）
+            document_type: 'pdf',
+            document_content: htmlContent,
+            javascript: false,
+            prince_options: {
+              media: 'print',
+              pdf_title: 'USIS Research Report',
+              pdf_forms: false
+            }
+          }
+        },
+        timeout: 60000 // 深度报告允许60秒
+      });
+      
+      console.log('✅ [DocRaptor] 专业PDF生成成功（完整中文排版）');
+      return Buffer.from(response.data);
+      
+    } catch (error) {
+      console.error('❌ DocRaptor API调用失败:', error.response?.data?.toString() || error.message);
+      console.warn('⚠️  降级到备用方案');
+    }
   }
   
-  try {
-    console.log('📄 [PDFShift] 开始生成深度研报PDF...');
-    const response = await fetch('https://api.pdfshift.io/v3/convert/pdf', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Basic ${Buffer.from('api:' + PDFSHIFT_API_KEY).toString('base64')}`
-      },
-      body: JSON.stringify({
-        source: htmlContent,
-        format: 'A4',
-        margin: '20mm 15mm',
-        print_background: true
-      }),
-      timeout: 45000 // 深度报告允许更长时间
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`PDFShift API错误: ${response.status} - ${errorText}`);
+  // 备用方案1: PDFShift（如果配置）
+  if (PDFSHIFT_API_KEY) {
+    try {
+      console.log('📄 [PDFShift] 尝试备用PDF服务...');
+      const response = await fetch('https://api.pdfshift.io/v3/convert/pdf', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${Buffer.from('api:' + PDFSHIFT_API_KEY).toString('base64')}`
+        },
+        body: JSON.stringify({
+          source: htmlContent,
+          format: 'A4',
+          margin: '20mm 15mm',
+          print_background: true
+        }),
+        timeout: 45000
+      });
+      
+      if (!response.ok) {
+        throw new Error(`PDFShift错误: ${response.status}`);
+      }
+      
+      const arrayBuffer = await response.arrayBuffer();
+      console.log('✅ [PDFShift] PDF生成成功');
+      return Buffer.from(arrayBuffer);
+      
+    } catch (error) {
+      console.error('❌ PDFShift失败:', error.message);
     }
-    
-    const arrayBuffer = await response.arrayBuffer();
-    console.log('✅ [PDFShift] 深度研报PDF生成成功');
-    return Buffer.from(arrayBuffer);
-    
-  } catch (error) {
-    console.error('❌ PDFShift API调用失败:', error.message);
-    console.warn('⚠️  降级到PDFKit备用方案');
-    return generateFallbackPDF(htmlContent);
   }
+  
+  // 最后备用方案：PDFKit（纯文本，无中文）
+  console.warn('⚠️  所有专业PDF服务不可用，使用PDFKit纯文本方案（不支持中文）');
+  return generateFallbackPDF(htmlContent);
 }
 
 /**
