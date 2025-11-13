@@ -5195,6 +5195,7 @@ app.post("/brain/orchestrate", async (req, res) => {
               console.log(`📊 [v5.0] 启动数据驱动分析: ${symbols[0]}`);
               
               // 🎯 优化：仅获取缺失的数据（profile + metrics），复用已有的quote和news
+              // 🆕 v6.2: Twelve Data仅在截图失败时调用（降级路径），避免性能开销
               const { fetchCompanyProfile, fetchStockMetrics } = require('./dataBroker');
               
               const [profileResult, metricsResult] = await Promise.all([
@@ -5203,12 +5204,17 @@ app.post("/brain/orchestrate", async (req, res) => {
               ]);
               
               // 构建数据包（复用marketData中的quote和news）
+              // 注意：Twelve Data技术指标在截图失败时由fallback路径提供
               const dataPackage = {
                 symbol: symbols[0],
                 quote: marketData.quotes[symbols[0]] || chartResult.stockData,
                 profile: profileResult.profile,
                 metrics: metricsResult.metrics,
                 news: marketData.news || [],
+                // 🆕 v6.2: 如果chartResult来自Twelve Data fallback，传递其comprehensive数据
+                technical_indicators: chartResult.comprehensiveData?.technical_indicators || null,
+                fundamentals: chartResult.comprehensiveData?.fundamentals || null,
+                analyst_ratings: chartResult.comprehensiveData?.analyst_ratings || null,
                 metadata: {
                   timestamp: Date.now(),
                   completeness: {
