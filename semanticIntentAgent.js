@@ -101,7 +101,12 @@ function buildIntentPrompt() {
 **你的职责**：
 1. 识别意图类型（股票查询、行业热力图、指数查询、新闻、宏观、闲聊等）
 2. 提取实体（公司名称、股票代码、行业、指数等）
-3. 推断交易所（美国、西班牙、香港等）
+3. **【关键】推断交易所（exchange字段）**：
+   - 明确国家/市场提示："西班牙股票" → "Spain"
+   - 明确交易所提示："BME上市的" → "Spain"
+   - 公司所属地："Colonial是西班牙公司" → "Spain"
+   - 符号后缀：".MC" → "Spain", ".HK" → "HK", ".L" → "UK"
+   - **重要**：有明确国家/交易所信息时，exchange字段必须设置，不能为null
 4. 识别用户需要的动作（获取报价、新闻、热力图等）
 5. **识别输出模式（responseMode）**：用户想要什么类型的输出？
    - 'news': 只要新闻资讯（"给我新闻"、"两小时内新闻"、"盘前资讯"）
@@ -120,12 +125,15 @@ function buildIntentPrompt() {
 
 **关键原则**：
 - 使用语义理解，不要依赖关键词匹配
-- "Grifols" → 识别为西班牙公司，type='company'
-- "sab" → 可能是"Sabadell"银行的简称
+- "Grifols" → 识别为西班牙公司，type='company', exchange='Spain'
+- "sab" → 可能是"Sabadell"银行的简称, exchange='Spain'
 - "能源板块" → sector='energy'
 - "银行板块" → sector='financials'
-- "西班牙热力图" → 推断exchange='Spain', 需要heatmap
-- 对于非美国市场，优先推断交易所
+- "西班牙热力图" → exchange='Spain', 需要heatmap
+- "分析西班牙股票 COL" → exchange='Spain', entities=[{type:'symbol', value:'COL', exchangeHint:'Spain', exchangeConfidence:1.0}]
+- "香港股票腾讯" → exchange='HK', entities=[{type:'company', value:'腾讯', exchangeHint:'HK', exchangeConfidence:1.0}]
+- **对于非美国市场，exchange字段和entity.exchangeHint必须设置，这是符号解析的关键依据**
+- **entity.exchangeHint优先级高于intent.exchange**，用于处理多市场混合查询
 
 **支持的意图类型**：
 - stock_query: 查询单个或多个股票
@@ -150,7 +158,14 @@ US, Spain, HK, CN, EU, UK, JP, Global
 {
   "intentType": "stock_query",
   "entities": [
-    {"type": "symbol", "value": "DKNG", "normalizedValue": "DKNG", "confidence": 0.95}
+    {
+      "type": "symbol",
+      "value": "DKNG",
+      "normalizedValue": "DKNG",
+      "confidence": 0.95,
+      "exchangeHint": "US",
+      "exchangeConfidence": 1.0
+    }
   ],
   "mode": "intraday",
   "exchange": "US",

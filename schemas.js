@@ -27,6 +27,8 @@
  * @property {string} value - 提取的值（如公司名"Grifols"、符号"AAPL"）
  * @property {string|null} normalizedValue - 规范化后的值（AI理解后的标准形式）
  * @property {number} confidence - 置信度 (0-1)
+ * @property {string|null} exchangeHint - 实体级交易所提示 (优先级高于intent.exchange)
+ * @property {number|null} exchangeConfidence - 交易所提示的置信度 (0-1)
  */
 
 // Intent类型枚举
@@ -233,13 +235,17 @@ function createEntity({
   type,
   value,
   normalizedValue = null,
-  confidence = 1.0
+  confidence = 1.0,
+  exchangeHint = null,           // 🆕 v6.2: 实体级交易所提示
+  exchangeConfidence = null      // 🆕 v6.2: 交易所提示置信度
 }) {
   return {
     type,
     value,
     normalizedValue,
-    confidence
+    confidence,
+    exchangeHint,
+    exchangeConfidence
   };
 }
 
