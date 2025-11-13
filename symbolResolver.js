@@ -502,10 +502,50 @@ function selectBestMatch(matches, exchangeHint, originalQuery) {
   
   console.log(`   🏆 最佳匹配: ${best.symbol} (分数: ${best.score})`);
   
+  // 🆕 v6.1: 返回带交易所前缀的符号（如果需要消歧）
+  let finalSymbol = best.symbol || best.displaySymbol;
+  const bestExchange = best.exchange || best.type || '';
+  
+  // 如果有交易所提示且符号需要消歧（同名股票在多个交易所）
+  if (exchangeHint && bestExchange) {
+    const exchangeLower = bestExchange.toLowerCase();
+    
+    // 映射交易所代码到标准前缀/后缀
+    const exchangePrefixMap = {
+      'bme': 'BME:',
+      'mta': 'BME:',
+      'madrid': 'BME:',
+      'tsx': 'TSX:',
+      'tsxv': 'TSXV:',
+      'nasdaq': 'NASDAQ:',
+      'nyse': 'NYSE:',
+      'otc': 'OTC:',
+      'hkex': '',  // 香港用后缀.HK
+      'bovespa': 'BOVESPA:',
+      'b3': 'BOVESPA:',
+      'asx': 'ASX:'
+    };
+    
+    // 查找匹配的交易所前缀
+    let prefix = '';
+    for (const [key, value] of Object.entries(exchangePrefixMap)) {
+      if (exchangeLower.includes(key)) {
+        prefix = value;
+        break;
+      }
+    }
+    
+    // 如果符号还没有前缀，添加交易所前缀
+    if (prefix && !finalSymbol.includes(':') && !finalSymbol.includes('.')) {
+      finalSymbol = prefix + finalSymbol;
+      console.log(`   📌 添加交易所前缀: ${finalSymbol}`);
+    }
+  }
+  
   return {
-    symbol: best.symbol || best.displaySymbol,
+    symbol: finalSymbol,
     description: best.description || best.instrument_name,
-    exchange: best.type || best.exchange
+    exchange: bestExchange
   };
 }
 
