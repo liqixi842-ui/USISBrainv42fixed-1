@@ -250,6 +250,26 @@ function selectBestMatch(matches, exchangeHint, originalQuery) {
  * 这不是主要方法，只是在Finnhub失败时的备用
  */
 const STATIC_SYMBOL_MAP = {
+  // 🆕 直接代码映射（1:1）- 支持直接输入股票代码
+  'aapl': 'AAPL', 'nvda': 'NVDA', 'tsla': 'TSLA', 'msft': 'MSFT', 'googl': 'GOOGL',
+  'amzn': 'AMZN', 'meta': 'META', 'nflx': 'NFLX', 'amd': 'AMD', 'intc': 'INTC',
+  
+  // 🆕 OTC股票（补充IGTA, SCPJ等）
+  'igta': 'OTC:IGTA',       // Inception Growth Acquisition
+  'scpj': 'OTC:SCPJ',       // Scope Industries
+  
+  // 🆕 加拿大主要股票
+  'ry': 'TSX:RY',           // Royal Bank of Canada
+  'td': 'TSX:TD',           // Toronto-Dominion Bank
+  'bns': 'TSX:BNS',         // Bank of Nova Scotia
+  'bmo': 'TSX:BMO',         // Bank of Montreal
+  'shop': 'TSX:SHOP',       // Shopify
+  'shopify': 'TSX:SHOP',
+  'enb': 'TSX:ENB',         // Enbridge
+  'cnq': 'TSX:CNQ',         // Canadian Natural Resources
+  '加拿大皇家银行': 'TSX:RY',
+  '多伦多道明银行': 'TSX:TD',
+  
   // 西班牙主要股票（使用美国OTC ADR代码，Finnhub免费版不支持欧洲交易所）
   'grifols': 'GRFS',        // Grifols ADR (OTC)
   'sabadell': 'BNDSY',      // Banco de Sabadell ADR (OTC)
@@ -328,19 +348,85 @@ const STATIC_SYMBOL_MAP = {
 };
 
 /**
- * 使用静态映射表查找（备用方案）
+ * 🆕 v5.0: 智能分层查找（精确 → 模糊 → Levenshtein）
+ * 优先级：
+ * 1. 精确ticker匹配（AAPL → AAPL）
+ * 2. 别名字典匹配（苹果 → AAPL）
+ * 3. Levenshtein模糊匹配（Appple → Apple → AAPL）
  */
 function lookupStatic(query) {
-  const lowerQuery = query.toLowerCase();
+  const normalized = query.toLowerCase().trim();
   
+  // Layer 1: 精确ticker匹配（最快）
+  if (STATIC_SYMBOL_MAP[normalized]) {
+    console.log(`   🎯 [精确匹配] ${query} → ${STATIC_SYMBOL_MAP[normalized]}`);
+    return [{ symbol: STATIC_SYMBOL_MAP[normalized], description: query, type: 'exact' }];
+  }
+  
+  // Layer 2: 别名部分匹配（支持中文、缩写）
   for (const [key, symbol] of Object.entries(STATIC_SYMBOL_MAP)) {
-    if (key.includes(lowerQuery) || lowerQuery.includes(key)) {
-      console.log(`   📚 静态映射匹配: ${query} → ${symbol}`);
-      return [{ symbol, description: query, type: 'static' }];
+    // 双向包含（支持"苹果公司" → "apple"）
+    if (key.includes(normalized) || normalized.includes(key)) {
+      // 🆕 最小匹配长度过滤（避免"a" → "apple"）
+      if (key.length >= 2 && normalized.length >= 2) {
+        console.log(`   📚 [别名匹配] ${query} → ${symbol} (via ${key})`);
+        return [{ symbol, description: query, type: 'alias' }];
+      }
     }
   }
   
+  // Layer 3: Levenshtein模糊匹配（容错拼写错误）
+  const fuzzyMatches = [];
+  for (const [key, symbol] of Object.entries(STATIC_SYMBOL_MAP)) {
+    const distance = levenshteinDistance(normalized, key);
+    const maxDistance = Math.max(2, Math.floor(key.length * 0.3)); // 30%容错
+    
+    if (distance <= maxDistance && key.length >= 3) {
+      fuzzyMatches.push({ symbol, key, distance, description: query });
+    }
+  }
+  
+  if (fuzzyMatches.length > 0) {
+    // 返回距离最小的匹配
+    fuzzyMatches.sort((a, b) => a.distance - b.distance);
+    const best = fuzzyMatches[0];
+    console.log(`   🔍 [模糊匹配] ${query} → ${best.symbol} (距离: ${best.distance}, via ${best.key})`);
+    return [{ symbol: best.symbol, description: best.description, type: 'fuzzy' }];
+  }
+  
   return [];
+}
+
+/**
+ * Levenshtein距离算法（编辑距离）
+ * 计算两个字符串的相似度
+ */
+function levenshteinDistance(str1, str2) {
+  const len1 = str1.length;
+  const len2 = str2.length;
+  const matrix = [];
+  
+  // 初始化矩阵
+  for (let i = 0; i <= len1; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= len2; j++) {
+    matrix[0][j] = j;
+  }
+  
+  // 填充矩阵
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,      // 删除
+        matrix[i][j - 1] + 1,      // 插入
+        matrix[i - 1][j - 1] + cost // 替换
+      );
+    }
+  }
+  
+  return matrix[len1][len2];
 }
 
 module.exports = {
