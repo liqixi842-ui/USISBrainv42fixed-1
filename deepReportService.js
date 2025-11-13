@@ -10,6 +10,11 @@ const QuickChart = require('quickchart-js');
 
 const PDFSHIFT_API_KEY = process.env.PDFSHIFT_API_KEY || '';
 
+// 🔧 v4.0.2: News control flag (disable Finnhub news until Phase 2 - 27-source system)
+const ENABLE_NEWS_IN_REPORTS = process.env.ENABLE_NEWS_IN_REPORTS === 'true' || false;
+console.log(`📰 [Deep Report Config] News Module: ${ENABLE_NEWS_IN_REPORTS ? 'ENABLED' : 'DISABLED (awaiting Phase 2)'}`);
+
+
 /**
  * 🔧 v4.0 FIX: 格式化市值（自动单位：T/B/M/K）
  * @param {number} marketCap - Finnhub返回的市值（单位：百万美元）
@@ -580,11 +585,13 @@ async function collectEnrichedData(symbol) {
       .catch(() => ({ historicalPrices: [] }))
   );
   
-  // 4. 新闻数据（深度版：取前10条）
+  // 4. 新闻数据（🔧 v4.0.2: 禁用Finnhub news，等待Phase 2 - 27源新闻系统）
   tasks.push(
-    fetchAndRankNews({ symbols: [symbol], topN: 10 })
-      .then(data => ({ news: data || [] }))
-      .catch(() => ({ news: [] }))
+    ENABLE_NEWS_IN_REPORTS
+      ? fetchAndRankNews({ symbols: [symbol], topN: 10 })
+          .then(data => ({ news: data || [] }))
+          .catch(() => ({ news: [] }))
+      : Promise.resolve({ news: [] }) // Stub: 空新闻，避免Finnhub general news乱码
   );
   
   // 5. 🆕 技术指标数据（RSI, MACD, EMA, BBANDS, ADX）
