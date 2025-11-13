@@ -921,6 +921,7 @@ async function fetchStockMetrics(symbol) {
       pbRatio: data.metric?.pbAnnual,
       psRatio: data.metric?.psTTM,
       dividendYield: data.metric?.dividendYieldIndicatedAnnual,
+      marketCap: data.metric?.marketCapitalization, // 🔧 v4.0: 添加市值
       
       // 盈利能力
       profitMargin: data.metric?.netProfitMarginTTM,
@@ -941,7 +942,8 @@ async function fetchStockMetrics(symbol) {
       averageVolume: data.metric?.['10DayAverageTradingVolume'],
       
       source: 'finnhub',
-      timestamp: fetchTime
+      timestamp: fetchTime,
+      metric: data.metric // 🔧 v4.0: 保留原始metric对象供normalizeFinancialData使用
     };
     
     const source = {
@@ -1582,10 +1584,20 @@ async function fetchHistoricalPrices(symbol, options = {}) {
 /**
  * 🆕 v4.0: 获取同行基准数据（用于深度研报对比表）
  * @param {string} symbol - 股票代码
+ * @param {Object} existingMetrics - 可选，已获取的目标公司metrics（避免重复调用）
  * @returns {Promise<Object>} - 同行公司列表及其关键指标
  */
-async function fetchPeerBenchmarks(symbol) {
+async function fetchPeerBenchmarks(symbol, existingMetrics = null) {
   console.log(`\n📊 [Peer Benchmarks] 获取${symbol}的同行对比数据`);
+  
+  // 🔒 先查缓存（TTL 20分钟，因为同行关系准静态）
+  const cacheKey = getCacheKey('peer_benchmarks', symbol);
+  const cached = getFromCache(cacheKey);
+  
+  if (cached && (Date.now() - cached.timestamp) < 20 * 60 * 1000) {
+    console.log(`   💾 [Cache Hit] 同行基准数据命中缓存`);
+    return cached;
+  }
   
   if (!FINNHUB_KEY) {
     console.warn('   ⚠️  Finnhub API密钥缺失，跳过同行分析');
@@ -1611,73 +1623,105 @@ async function fetchPeerBenchmarks(symbol) {
     
     if (peerSymbols.length === 0) {
       console.warn(`   ⚠️  未找到${symbol}的同行公司`);
-      return {
+      const result = {
         targetSymbol: symbol,
         peers: [],
         benchmarks: {},
-        source: 'finnhub'
+        source: 'finnhub',
+        timestamp: Date.now()
       };
+      setCache(cacheKey, result);
+      return result;
     }
     
     console.log(`   ✅ 找到${peerSymbols.length}个同行: ${peerSymbols.join(', ')}`);
     
-    // 2. 并行获取目标公司 + 同行公司的metrics
-    const allSymbols = [symbol, ...peerSymbols];
-    const metricsPromises = allSymbols.map(async (sym) => {
-      try {
-        const { metrics } = await fetchStockMetrics(sym);
-        return {
+    // 2. 🔧 重用目标公司已获取的metrics（避免重复调用）
+    let targetMetricsData = existingMetrics;
+    if (!targetMetricsData) {
+      const { metrics } = await fetchStockMetrics(symbol);
+      targetMetricsData = metrics;
+    }
+    
+    // 3. 🔧 使用Promise.allSettled并行获取同行metrics（支持部分成功）
+    const peerMetricsPromises = peerSymbols.map((sym) => 
+      fetchStockMetrics(sym)
+        .then(({ metrics }) => ({
           symbol: sym,
           pe: metrics?.peRatio || null,
           pb: metrics?.pbRatio || null,
           ps: metrics?.psRatio || null,
           marketCap: metrics?.marketCap || null,
-          profitMargin: metrics?.profitMargin || null,
-          roe: metrics?.roe || null
-        };
-      } catch (e) {
-        console.warn(`   ⚠️  获取${sym}的metrics失败: ${e.message}`);
-        return {
+          profitMargin: metrics?.profitMargin ? (metrics.profitMargin * 100) : null, // 转换为百分比
+          roe: metrics?.roe ? (metrics.roe * 100) : null, // 转换为百分比
+          status: 'success'
+        }))
+        .catch((e) => ({
           symbol: sym,
           pe: null,
           pb: null,
           ps: null,
           marketCap: null,
           profitMargin: null,
-          roe: null
-        };
-      }
-    });
+          roe: null,
+          status: 'failed',
+          error: e.message
+        }))
+    );
     
-    const allMetrics = await Promise.all(metricsPromises);
+    const peerResults = await Promise.allSettled(peerMetricsPromises);
+    const peerMetrics = peerResults
+      .filter(r => r.status === 'fulfilled')
+      .map(r => r.value);
     
-    // 3. 分离目标公司和同行数据
-    const targetMetrics = allMetrics[0];
-    const peerMetrics = allMetrics.slice(1);
+    // 4. 构建目标公司metrics
+    const targetMetrics = {
+      symbol,
+      pe: targetMetricsData?.peRatio || null,
+      pb: targetMetricsData?.pbRatio || null,
+      ps: targetMetricsData?.psRatio || null,
+      marketCap: targetMetricsData?.marketCap || null,
+      profitMargin: targetMetricsData?.profitMargin ? (targetMetricsData.profitMargin * 100) : null,
+      roe: targetMetricsData?.roe ? (targetMetricsData.roe * 100) : null
+    };
     
-    // 4. 计算行业平均值（排除null值）
-    const validMetrics = peerMetrics.filter(m => m.pe !== null || m.marketCap !== null);
-    const avgPE = validMetrics.length > 0 
-      ? validMetrics.reduce((sum, m) => sum + (m.pe || 0), 0) / validMetrics.filter(m => m.pe).length
+    // 5. 计算行业平均值（排除null和failed值）
+    const successfulPeers = peerMetrics.filter(m => m.status === 'success');
+    const peValues = successfulPeers.map(m => m.pe).filter(v => v !== null);
+    const roeValues = successfulPeers.map(m => m.roe).filter(v => v !== null);
+    
+    const avgPE = peValues.length > 0 
+      ? peValues.reduce((sum, v) => sum + v, 0) / peValues.length
       : null;
-    const avgROE = validMetrics.length > 0
-      ? validMetrics.reduce((sum, m) => sum + (m.roe || 0), 0) / validMetrics.filter(m => m.roe).length
+    const avgROE = roeValues.length > 0
+      ? roeValues.reduce((sum, v) => sum + v, 0) / roeValues.length
       : null;
     
-    console.log(`   📈 行业平均PE: ${avgPE ? avgPE.toFixed(2) : 'N/A'}, 平均ROE: ${avgROE ? (avgROE * 100).toFixed(2) + '%' : 'N/A'}`);
+    const failedCount = peerMetrics.filter(m => m.status === 'failed').length;
     
-    return {
+    console.log(`   📈 行业平均PE: ${avgPE ? avgPE.toFixed(2) : 'N/A'}, 平均ROE: ${avgROE ? avgROE.toFixed(2) + '%' : 'N/A'}`);
+    if (failedCount > 0) {
+      console.warn(`   ⚠️  ${failedCount}/${peerMetrics.length}个同行数据获取失败`);
+    }
+    
+    const result = {
       targetSymbol: symbol,
       targetMetrics,
       peers: peerMetrics,
       benchmarks: {
         avgPE: avgPE ? Number(avgPE.toFixed(2)) : null,
-        avgROE: avgROE ? Number((avgROE * 100).toFixed(2)) : null,
-        peerCount: peerMetrics.length
+        avgROE: avgROE ? Number(avgROE.toFixed(2)) : null,
+        peerCount: successfulPeers.length,
+        failedCount
       },
       source: 'finnhub',
       timestamp: Date.now()
     };
+    
+    // 🔒 存入缓存（20分钟TTL）
+    setCache(cacheKey, result);
+    
+    return result;
     
   } catch (error) {
     console.error(`   ❌ [Peer Benchmarks] 获取失败: ${error.message}`);
@@ -1686,7 +1730,8 @@ async function fetchPeerBenchmarks(symbol) {
       peers: [],
       benchmarks: {},
       source: 'failed',
-      error: error.message
+      error: error.message,
+      timestamp: Date.now()
     };
   }
 }

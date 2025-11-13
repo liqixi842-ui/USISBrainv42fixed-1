@@ -3,7 +3,7 @@
 // 生成时间：2-5分钟 | 长度：8-20页
 
 const fetch = require("node-fetch");
-const { fetchMarketData, fetchCompanyProfile, fetchHistoricalPrices, fetchTechnicalIndicators, fetchFundamentals, fetchStockMetrics } = require("./dataBroker");
+const { fetchMarketData, fetchCompanyProfile, fetchHistoricalPrices, fetchTechnicalIndicators, fetchFundamentals, fetchStockMetrics, fetchPeerBenchmarks } = require("./dataBroker");
 const { fetchAndRankNews } = require("./newsBroker");
 const { getMultiAIProvider } = require("./multiAiProvider");
 const QuickChart = require('quickchart-js');
@@ -415,11 +415,18 @@ async function collectEnrichedData(symbol) {
       .catch(() => ({ metrics: {} }))
   );
   
+  // 8. 🆕 v4.0: 同行基准数据（Peer Comparison）
+  tasks.push(
+    fetchPeerBenchmarks(symbol, null) // null=让函数自己获取metrics，利用缓存避免重复
+      .then(data => ({ peerBenchmarks: data || {} }))
+      .catch(() => ({ peerBenchmarks: {} }))
+  );
+  
   const results = await Promise.all(tasks);
   const enrichedData = results.reduce((acc, curr) => ({ ...acc, ...curr }), {});
   
   // 🔍 v4.0: 详细数据诊断日志
-  console.log(`   ✅ 数据收集完成: 行情✓ 概况✓ 历史✓ 新闻✓ 技术指标✓ 财务✓ 估值✓`);
+  console.log(`   ✅ 数据收集完成: 行情✓ 概况✓ 历史✓ 新闻✓ 技术指标✓ 财务✓ 估值✓ 同行✓`);
   console.log(`   🔍 [诊断] 财务数据状态:`);
   console.log(`      - Fundamentals: ${enrichedData.fundamentals?.income_statement ? '有数据' : '⚠️ 缺失'}`);
   console.log(`      - Metrics(嵌套): ${enrichedData.metrics?.metric?.peBasicTTM || enrichedData.metrics?.peRatio ? '有数据' : '⚠️ 缺失'}`);
@@ -427,6 +434,7 @@ async function collectEnrichedData(symbol) {
   console.log(`      - 新闻数量: ${enrichedData.news?.length || 0}条`);
   console.log(`      - 历史价格点数: ${enrichedData.historicalPrices?.length || 0}`);
   console.log(`      - 技术指标: RSI=${enrichedData.technicalIndicators?.rsi ? '✓' : '✗'} MACD=${enrichedData.technicalIndicators?.macd ? '✓' : '✗'}`);
+  console.log(`      - 同行公司数: ${enrichedData.peerBenchmarks?.peers?.length || 0}个`);
   
   return {
     symbol,
