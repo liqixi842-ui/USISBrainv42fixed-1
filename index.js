@@ -792,6 +792,76 @@ app.post("/api/news/ingest", async (req, res) => {
   }
 });
 
+// 🆕 v6.2: 公司研究报告生成API
+const { generateCompanyReport } = require("./reportService");
+
+// 简单的日内缓存（symbol → { pdf, timestamp }）
+const reportCache = new Map();
+const REPORT_CACHE_TTL = 24 * 60 * 60 * 1000; // 24小时
+
+app.post("/api/report/company", async (req, res) => {
+  const { symbol } = req.body;
+  
+  if (!symbol) {
+    return res.status(400).json({ error: 'symbol参数必填' });
+  }
+  
+  try {
+    const normalizedSymbol = symbol.toUpperCase();
+    const cacheKey = `${normalizedSymbol}-${new Date().toISOString().split('T')[0]}`; // symbol-YYYY-MM-DD
+    
+    // 检查缓存
+    if (reportCache.has(cacheKey)) {
+      const cached = reportCache.get(cacheKey);
+      if (Date.now() - cached.timestamp < REPORT_CACHE_TTL) {
+        console.log(`✅ [Report API] 缓存命中: ${cacheKey}`);
+        return res.status(200).json({
+          success: true,
+          cached: true,
+          symbol: normalizedSymbol,
+          summary: cached.summary,
+          metadata: cached.metadata,
+          pdfSize: cached.pdfBuffer.length,
+          pdfBase64: cached.pdfBuffer.toString('base64'), // 🆕 从缓存返回PDF
+          downloadFilename: `${normalizedSymbol}_研究报告_${new Date().toISOString().split('T')[0]}.pdf`
+        });
+      } else {
+        reportCache.delete(cacheKey);
+      }
+    }
+    
+    // 生成报告
+    console.log(`\n📄 [Report API] 生成报告: ${normalizedSymbol}`);
+    const result = await generateCompanyReport(normalizedSymbol);
+    
+    // 缓存结果
+    reportCache.set(cacheKey, {
+      pdfBuffer: result.pdfBuffer,
+      summary: result.summary,
+      metadata: result.metadata,
+      timestamp: Date.now()
+    });
+    
+    // 返回PDF作为base64（客户端可以解码并下载）
+    return res.status(200).json({
+      success: true,
+      cached: false,
+      symbol: normalizedSymbol,
+      summary: result.summary,
+      metadata: result.metadata,
+      pdfSize: result.pdfBuffer.length,
+      pdfBase64: result.pdfBuffer.toString('base64'), // 🆕 PDF数据
+      downloadFilename: `${normalizedSymbol}_研究报告_${new Date().toISOString().split('T')[0]}.pdf`
+    });
+    
+  } catch (error) {
+    console.error(`❌ [Report API] 生成失败: ${error.message}`);
+    return res.status(500).json({
+      error: `报告生成失败: ${error.message}`
+    });
+  }
+});
+
 // ---- 🆕 v6.3: Manual RSS Collection Trigger
 app.post("/api/news/collect-rss", async (req, res) => {
   try {
@@ -6202,6 +6272,50 @@ if (!TOKEN_IS_SAFE) {
         
         console.log('✅ 对话响应已发送');
         return; // 不继续执行分析流程
+      }
+      
+      // 🆕 v6.2: 检测研究报告请求
+      const reportKeywords = ['研报', '研究报告', '生成报告', 'report'];
+      const isReportRequest = reportKeywords.some(kw => text.includes(kw)) || text.startsWith('/研报');
+      
+      if (isReportRequest) {
+        console.log('📄 研究报告请求');
+        await telegramAPI('sendMessage', { chat_id: chatId, text: '📄 正在生成研究报告，预计需要30-60秒...' });
+        
+        // 提取股票代码
+        const reportSymbols = extractSymbols(text);
+        if (reportSymbols.length === 0) {
+          await telegramAPI('sendMessage', { 
+            chat_id: chatId, 
+            text: '❌ 请指定股票代码，例如：\n生成研报 RMBS\n/研报 SAN' 
+          });
+          return;
+        }
+        
+        const symbol = reportSymbols[0]; // 只取第一个股票
+        
+        try {
+          const result = await generateCompanyReport(symbol);
+          
+          // 发送PDF文件
+          await sendDocumentBuffer(
+            TELEGRAM_TOKEN, 
+            chatId, 
+            result.pdfBuffer, 
+            `${symbol}_研究报告_${new Date().toISOString().split('T')[0]}.pdf`,
+            `📊 **${symbol} 研究报告**（Beta草稿版）\n\n${result.summary}`
+          );
+          
+          console.log(`✅ 研究报告已发送: ${symbol}`);
+        } catch (error) {
+          console.error(`❌ 报告生成失败: ${error.message}`);
+          await telegramAPI('sendMessage', { 
+            chat_id: chatId, 
+            text: `❌ 报告生成失败: ${error.message}\n\n💡 请稍后重试或尝试其他股票代码` 
+          });
+        }
+        
+        return; // 不继续执行其他流程
       }
       
       const isHeatmap = text.includes('热力图') || text.toLowerCase().includes('heatmap');

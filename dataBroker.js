@@ -1504,6 +1504,81 @@ async function fetchComprehensiveAnalysis(symbol) {
   };
 }
 
+/**
+ * 🆕 v6.2: 获取历史价格数据（用于研报）
+ * @param {string} symbol - 股票代码
+ * @param {Object} options - { months: 12 } 获取月数
+ * @returns {Promise<Array>} - 历史价格数组
+ */
+async function fetchHistoricalPrices(symbol, options = {}) {
+  const { months = 12 } = options;
+  console.log(`\n📈 [Data Broker] 获取${symbol}历史价格（${months}个月）`);
+  
+  try {
+    // 计算日期范围
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - months);
+    
+    const formatDate = (date) => {
+      return date.toISOString().split('T')[0]; // YYYY-MM-DD
+    };
+    
+    // 优先使用Twelve Data（支持全球交易所）
+    if (TWELVE_DATA_KEY) {
+      const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1day&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&apikey=${TWELVE_DATA_KEY}`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.status === 'ok' && data.values) {
+        console.log(`✅ [Twelve Data] 获取到${data.values.length}条历史数据`);
+        return data.values.map(v => ({
+          date: v.datetime,
+          open: parseFloat(v.open),
+          high: parseFloat(v.high),
+          low: parseFloat(v.low),
+          close: parseFloat(v.close),
+          volume: parseInt(v.volume)
+        }));
+      }
+    }
+    
+    // 降级到Alpha Vantage
+    if (ALPHA_VANTAGE_KEY) {
+      const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=full&apikey=${ALPHA_VANTAGE_KEY}`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data['Time Series (Daily)']) {
+        const timeSeries = data['Time Series (Daily)'];
+        const prices = Object.keys(timeSeries)
+          .filter(date => new Date(date) >= startDate)
+          .map(date => ({
+            date,
+            open: parseFloat(timeSeries[date]['1. open']),
+            high: parseFloat(timeSeries[date]['2. high']),
+            low: parseFloat(timeSeries[date]['3. low']),
+            close: parseFloat(timeSeries[date]['4. close']),
+            volume: parseInt(timeSeries[date]['5. volume'])
+          }))
+          .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        console.log(`✅ [Alpha Vantage] 获取到${prices.length}条历史数据`);
+        return prices;
+      }
+    }
+    
+    console.warn('⚠️  历史价格数据获取失败，返回空数组');
+    return [];
+    
+  } catch (error) {
+    console.error(`❌ [Historical Prices] 获取失败: ${error.message}`);
+    return [];
+  }
+}
+
 module.exports = {
   fetchMarketData,
   validateDataForAnalysis,
@@ -1515,5 +1590,6 @@ module.exports = {
   fetchTechnicalIndicators,
   fetchFundamentals,
   fetchAnalystRatings,
-  fetchComprehensiveAnalysis
+  fetchComprehensiveAnalysis,
+  fetchHistoricalPrices  // 🆕 历史价格数据
 };
