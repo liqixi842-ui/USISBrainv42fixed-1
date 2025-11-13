@@ -422,7 +422,8 @@ async function collectEnrichedData(symbol) {
   console.log(`   ✅ 数据收集完成: 行情✓ 概况✓ 历史✓ 新闻✓ 技术指标✓ 财务✓ 估值✓`);
   console.log(`   🔍 [诊断] 财务数据状态:`);
   console.log(`      - Fundamentals: ${enrichedData.fundamentals?.income_statement ? '有数据' : '⚠️ 缺失'}`);
-  console.log(`      - Metrics: ${enrichedData.metrics?.peRatio ? '有数据' : '⚠️ 缺失'}`);
+  console.log(`      - Metrics(嵌套): ${enrichedData.metrics?.metric?.peBasicTTM || enrichedData.metrics?.peRatio ? '有数据' : '⚠️ 缺失'}`);
+  console.log(`      - 市值来源: ${enrichedData.metrics?.metric?.marketCapitalization ? 'Finnhub nested' : (enrichedData.metrics?.marketCap ? 'Finnhub flat' : enrichedData.profile?.marketCapitalization ? 'Profile' : '⚠️ 缺失')}`);
   console.log(`      - 新闻数量: ${enrichedData.news?.length || 0}条`);
   console.log(`      - 历史价格点数: ${enrichedData.historicalPrices?.length || 0}`);
   console.log(`      - 技术指标: RSI=${enrichedData.technicalIndicators?.rsi ? '✓' : '✗'} MACD=${enrichedData.technicalIndicators?.macd ? '✓' : '✗'}`);
@@ -654,27 +655,28 @@ async function generateSection_Financials(symbol, data, multiAI) {
   
   // 🆕 v4.0: 标准化财务数据
   const financialData = normalizeFinancialData(fundamentals, metrics);
-  const hasRealData = fundamentals?.income_statement?.data || metrics?.peRatio;
+  // 🔧 CRITICAL FIX: 基于normalized数据判断是否有真实数据
+  const hasRealData = financialData.revenue.length > 0 || financialData.netIncome.length > 0 || financialData.pe !== null;
   
   // 🔍 诊断日志
   console.log(`      📊 财务数据标准化结果:`);
   console.log(`         - Revenue数据点: ${financialData.revenue.length}`);
   console.log(`         - NetIncome数据点: ${financialData.netIncome.length}`);
   console.log(`         - PE比率: ${financialData.pe || 'N/A'}`);
-  console.log(`         - 市值: ${formatMarketCap(profile.marketCapitalization)}`);
+  console.log(`         - 市值(normalized): ${formatMarketCap(financialData.marketCap || profile.marketCapitalization)}`);
   console.log(`         - 缺失字段: ${financialData.missing.join(', ') || '无'}`);
   console.log(`         - hasRealData: ${hasRealData}`);
   
-  // 构建真实财务上下文
+  // 🔧 CRITICAL FIX: 使用normalized数据构建上下文
   const finContext = hasRealData ? `
 **真实财务数据（Twelve Data + Finnhub）**：
-- 营业收入: ${financialData.revenue.length > 0 ? '$' + (financialData.revenue[0] / 1000000).toFixed(2) + 'M' : 'N/A'}
-- 净利润: ${financialData.netIncome.length > 0 ? '$' + (financialData.netIncome[0] / 1000000).toFixed(2) + 'M' : 'N/A'}
+- 营业收入: ${financialData.revenue.length > 0 ? formatFinancialValue(financialData.revenue[0]) : 'N/A'}
+- 净利润: ${financialData.netIncome.length > 0 ? formatFinancialValue(financialData.netIncome[0]) : 'N/A'}
 - 毛利率: ${financialData.grossMargin[0] || 'N/A'}%
-- 净利率: ${financialData.netMargin[0] || metrics?.profitMargin ? (metrics.profitMargin * 100).toFixed(2) : 'N/A'}%
-- PE比率: ${metrics?.peRatio?.toFixed(2) || 'N/A'}
-- 营收增长: ${metrics?.revenueGrowth ? (metrics.revenueGrowth * 100).toFixed(2) + '%' : 'N/A'}
-- ROE: ${metrics?.roe ? (metrics.roe * 100).toFixed(2) + '%' : 'N/A'}` : '⚠️ 财务数据缺失';
+- 净利率: ${financialData.netMargin[0] || 'N/A'}%
+- PE比率: ${financialData.pe ? Number(financialData.pe).toFixed(2) : 'N/A'}
+- 市值: ${formatMarketCap(financialData.marketCap || profile.marketCapitalization)}
+- 数据期数: ${financialData.fiscalPeriods.length}个周期` : '⚠️ 财务数据缺失';
   
   const prompt = `你是财务分析师，请分析${companyName} (${symbol})的财务与估值：
 
@@ -692,8 +694,8 @@ ${finContext}
   "keyMetrics": {
     "revenue": "${financialData.revenue[0] ? formatFinancialValue(financialData.revenue[0]) : 'N/A'}",
     "netIncome": "${financialData.netIncome[0] ? formatFinancialValue(financialData.netIncome[0]) : 'N/A'}",
-    "pe": "${metrics?.peRatio?.toFixed(2) || 'N/A'}",
-    "marketCap": "${formatMarketCap(profile.marketCapitalization)}"
+    "pe": "${financialData.pe ? Number(financialData.pe).toFixed(2) : 'N/A'}",
+    "marketCap": "${formatMarketCap(financialData.marketCap || profile.marketCapitalization)}"
   },
   "tableData": {
     "recentYears": "${hasRealData ? '基于真实数据' : '数据有限'}"
@@ -715,8 +717,8 @@ ${finContext}
       keyMetrics: {
         revenue: financialData.revenue[0] ? formatFinancialValue(financialData.revenue[0]) : 'N/A',
         netIncome: financialData.netIncome[0] ? formatFinancialValue(financialData.netIncome[0]) : 'N/A',
-        pe: metrics?.peRatio?.toFixed(2) || 'N/A',
-        marketCap: formatMarketCap(profile.marketCapitalization)
+        pe: financialData.pe ? Number(financialData.pe).toFixed(2) : 'N/A',
+        marketCap: formatMarketCap(financialData.marketCap || profile.marketCapitalization)
       },
       tableData: { recentYears: '数据缺失' },
       realFinancialData: financialData,
