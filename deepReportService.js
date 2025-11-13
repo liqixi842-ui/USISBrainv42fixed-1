@@ -229,12 +229,42 @@ function generateFinancialTrendChart(financialData, symbol) {
 }
 
 /**
- * 🆕 生成QuickChart价格走势图URL（静态PNG，DocRaptor兼容）
+ * 🔧 v4.0: 计算EMA（指数移动平均线）
+ * @param {Array<number>} prices - 价格数组
+ * @param {number} period - 周期（如20日、50日）
+ * @returns {Array<number>} EMA数组
+ */
+function calculateEMA(prices, period) {
+  if (prices.length < period) return [];
+  
+  const ema = [];
+  const multiplier = 2 / (period + 1);
+  
+  // 第一个EMA值是前N天的简单平均
+  let sum = 0;
+  for (let i = 0; i < period; i++) {
+    sum += prices[i];
+  }
+  ema.push(sum / period);
+  
+  // 后续EMA = (当前价格 - 昨日EMA) * 乘数 + 昨日EMA
+  for (let i = period; i < prices.length; i++) {
+    const value = (prices[i] - ema[ema.length - 1]) * multiplier + ema[ema.length - 1];
+    ema.push(value);
+  }
+  
+  // 填充前N-1个位置为null（EMA需要warm-up）
+  return [...Array(period - 1).fill(null), ...ema];
+}
+
+/**
+ * 🆕 v4.0: 生成增强版价格走势图（含EMA线、支撑/压力位）
  * @param {Array} historicalPrices - 历史价格数据
  * @param {string} symbol - 股票代码
+ * @param {Object} supportResistance - 支撑/压力位数据 {support, resistance}
  * @returns {string} QuickChart图表URL
  */
-function generatePriceChartURL(historicalPrices, symbol) {
+function generatePriceChartURL(historicalPrices, symbol, supportResistance = null) {
   if (!historicalPrices || historicalPrices.length === 0) {
     // 返回占位图
     return 'https://quickchart.io/chart?c={type:%27line%27,data:{labels:[%27No%27,%27Data%27],datasets:[{label:%27Price%27,data:[0,0]}]}}';
@@ -250,26 +280,99 @@ function generatePriceChartURL(historicalPrices, symbol) {
   
   const closes = recentPrices.map(p => p.close);
   
+  // 🆕 v4.0: 计算EMA20和EMA50
+  const ema20 = calculateEMA(closes, 20);
+  const ema50 = calculateEMA(closes, 50);
+  
+  const datasets = [
+    {
+      label: `${symbol} 收盘价`,
+      data: closes,
+      borderColor: 'rgb(75, 192, 192)',
+      backgroundColor: 'rgba(75, 192, 192, 0.1)',
+      fill: true,
+      tension: 0.1,
+      pointRadius: 0,
+      borderWidth: 2.5,
+      order: 1
+    }
+  ];
+  
+  // 🆕 v4.0: 添加EMA20线
+  if (ema20.length > 0) {
+    datasets.push({
+      label: 'EMA(20)',
+      data: ema20,
+      borderColor: 'rgb(255, 159, 64)',
+      backgroundColor: 'rgba(255, 159, 64, 0)',
+      fill: false,
+      tension: 0.4,
+      pointRadius: 0,
+      borderWidth: 2,
+      borderDash: [5, 5],
+      order: 2
+    });
+  }
+  
+  // 🆕 v4.0: 添加EMA50线
+  if (ema50.length > 0) {
+    datasets.push({
+      label: 'EMA(50)',
+      data: ema50,
+      borderColor: 'rgb(153, 102, 255)',
+      backgroundColor: 'rgba(153, 102, 255, 0)',
+      fill: false,
+      tension: 0.4,
+      pointRadius: 0,
+      borderWidth: 2,
+      borderDash: [10, 5],
+      order: 3
+    });
+  }
+  
+  // 🆕 v4.0: 添加支撑位水平线（数值验证）
+  const supportValue = Number(supportResistance?.support);
+  if (supportResistance && Number.isFinite(supportValue)) {
+    datasets.push({
+      label: `支撑位 $${supportValue.toFixed(2)}`,
+      data: Array(closes.length).fill(supportValue),
+      borderColor: 'rgb(46, 204, 113)',
+      backgroundColor: 'rgba(46, 204, 113, 0)',
+      fill: false,
+      pointRadius: 0,
+      borderWidth: 1.5,
+      borderDash: [2, 2],
+      order: 4
+    });
+  }
+  
+  // 🆕 v4.0: 添加压力位水平线（数值验证）
+  const resistanceValue = Number(supportResistance?.resistance);
+  if (supportResistance && Number.isFinite(resistanceValue)) {
+    datasets.push({
+      label: `压力位 $${resistanceValue.toFixed(2)}`,
+      data: Array(closes.length).fill(resistanceValue),
+      borderColor: 'rgb(231, 76, 60)',
+      backgroundColor: 'rgba(231, 76, 60, 0)',
+      fill: false,
+      pointRadius: 0,
+      borderWidth: 1.5,
+      borderDash: [2, 2],
+      order: 5
+    });
+  }
+  
   const chart = new QuickChart();
   chart.setConfig({
     type: 'line',
     data: {
       labels: labels,
-      datasets: [{
-        label: `${symbol} 收盘价`,
-        data: closes,
-        borderColor: 'rgb(75, 192, 192)',
-        backgroundColor: 'rgba(75, 192, 192, 0.1)',
-        fill: true,
-        tension: 0.1,
-        pointRadius: 0,
-        borderWidth: 2
-      }]
+      datasets: datasets
     },
     options: {
       title: {
         display: true,
-        text: `${symbol} 股价走势（90天）`,
+        text: `${symbol} 股价走势 + 技术指标（90天）`,
         fontSize: 16,
         fontColor: '#2c3e50'
       },
@@ -294,13 +397,101 @@ function generatePriceChartURL(historicalPrices, symbol) {
         }]
       },
       legend: {
+        display: true,
+        position: 'top',
+        labels: {
+          fontSize: 11,
+          boxWidth: 15
+        }
+      }
+    }
+  });
+  
+  chart.setWidth(800);
+  chart.setHeight(450);  // 增加高度以容纳图例
+  chart.setBackgroundColor('#ffffff');
+  
+  return chart.getUrl();
+}
+
+/**
+ * 🆕 v4.0: 生成成交量柱状图
+ * @param {Array} historicalPrices - 历史价格数据（需包含volume字段）
+ * @param {string} symbol - 股票代码
+ * @returns {string} QuickChart图表URL
+ */
+function generateVolumeChartURL(historicalPrices, symbol) {
+  if (!historicalPrices || historicalPrices.length === 0) {
+    return null; // 无数据返回null，PDF模板会跳过
+  }
+  
+  // 取最近90天数据
+  const recentPrices = historicalPrices.slice(-90);
+  
+  const labels = recentPrices.map(p => {
+    const date = new Date(p.date);
+    return `${date.getMonth() + 1}/${date.getDate()}`;
+  });
+  
+  const volumes = recentPrices.map(p => p.volume || 0);
+  
+  // 检查是否有有效的成交量数据
+  const hasVolume = volumes.some(v => v > 0);
+  if (!hasVolume) {
+    return null;
+  }
+  
+  const chart = new QuickChart();
+  chart.setConfig({
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: `${symbol} 成交量`,
+        data: volumes,
+        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+        borderColor: 'rgb(54, 162, 235)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      title: {
+        display: true,
+        text: `${symbol} 成交量趋势（90天）`,
+        fontSize: 14,
+        fontColor: '#2c3e50'
+      },
+      scales: {
+        yAxes: [{
+          ticks: {
+            callback: function(value) {
+              if (value >= 1000000000) return (value / 1000000000).toFixed(1) + 'B';
+              if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
+              if (value >= 1000) return (value / 1000).toFixed(1) + 'K';
+              return value;
+            }
+          },
+          gridLines: {
+            color: '#ecf0f1'
+          }
+        }],
+        xAxes: [{
+          gridLines: {
+            display: false
+          },
+          ticks: {
+            maxTicksLimit: 10
+          }
+        }]
+      },
+      legend: {
         display: false
       }
     }
   });
   
   chart.setWidth(800);
-  chart.setHeight(400);
+  chart.setHeight(200);  // 较矮的图表（适合作为副图）
   chart.setBackgroundColor('#ffffff');
   
   return chart.getUrl();
@@ -1043,8 +1234,15 @@ async function renderDeepReportPDF(symbol, data, sections, rating) {
   const { quote, profile } = data;
   const companyName = profile.companyName || profile.name || symbol;
   
-  // 🆕 生成QuickChart静态K线图（DocRaptor兼容）
-  const chartURL = generatePriceChartURL(data.historicalPrices, symbol);
+  // 🆕 v4.0: 生成增强版价格图（含EMA线、支撑/压力位）
+  const chartURL = generatePriceChartURL(
+    data.historicalPrices, 
+    symbol, 
+    sections.technical?.supportResistance || null
+  );
+  
+  // 🆕 v4.0: 生成成交量图
+  const volumeChartURL = generateVolumeChartURL(data.historicalPrices, symbol);
   
   // 🆕 v4.0: 生成财务趋势图（如果有数据）
   const financialChartURL = sections.financials?.realFinancialData 
@@ -1436,11 +1634,19 @@ function buildDeepReportHTML({ symbol, companyName, exchange, date, price, chang
   <!-- 技术分析 -->
   <h2>五、股价与技术面分析</h2>
   
-  <h3>股价走势图（6-12个月）</h3>
+  <h3>🆕 股价走势图 + 技术指标（90天）</h3>
   <div class="chart-container" style="text-align: center; margin: 20px 0;">
     <img src="${chartURL}" alt="${symbol} Stock Chart" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 5px;" />
-    <p style="font-size: 12px; color: #7f8c8d; margin-top: 10px;">数据来源：TradingView | 历史数据点：${sections.technical.historicalDataPoints || 0}条</p>
+    <p style="font-size: 12px; color: #7f8c8d; margin-top: 10px;">价格曲线 + EMA(20/50) + 支撑/压力位 | 历史数据点：${sections.technical.historicalDataPoints || 0}条</p>
   </div>
+  
+  ${volumeChartURL ? `
+  <h3>🆕 成交量趋势（90天）</h3>
+  <div class="chart-container" style="text-align: center; margin: 20px 0;">
+    <img src="${volumeChartURL}" alt="${symbol} Volume Chart" style="max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 5px;" />
+    <p style="font-size: 12px; color: #7f8c8d; margin-top: 10px;">数据来源：Twelve Data / Alpha Vantage | 成交量单位：自动（K/M/B）</p>
+  </div>
+  ` : ''}
   
   ${sections.technical.realIndicators && Object.keys(sections.technical.realIndicators).length > 0 ? `
   <h3>🆕 技术指标（Twelve Data实时数据）</h3>
