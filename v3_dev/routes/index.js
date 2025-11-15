@@ -2,6 +2,9 @@
 const express = require('express');
 const router = express.Router();
 
+// Import report routes
+const reportRouter = require('./report');
+
 // Test route
 router.get('/test', (req, res) => {
   res.json({
@@ -24,13 +27,7 @@ router.get('/health', (req, res) => {
   });
 });
 
-// Report routes (placeholder)
-router.get('/report/test', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'Report endpoint ready',
-    note: 'Research report system in development'
-  });
-});
+// Mount report routes at /v3/report/*
+router.use('/report', reportRouter);
 
 module.exports = router;
