@@ -6067,6 +6067,15 @@ app.post("/brain/analyze_no_screenshot", async (req, res) => {
   }
 });
 
+// 🚀 v3-dev: Mount v3 routes (isolated from v2)
+try {
+  const v3Routes = require('./v3_dev/routes/index');
+  app.use('/v3', v3Routes);
+  console.log('✅ [v3-dev] Routes mounted at /v3/*');
+} catch (error) {
+  console.error('⚠️  [v3-dev] Failed to load v3 routes:', error.message);
+}
+
 console.log("🔍 ENV PORT =", process.env.PORT);
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
@@ -6075,6 +6084,7 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`🔗 Health check available at http://0.0.0.0:${PORT}/health`);
   console.log(`🧪 Heatmap test available at http://0.0.0.0:${PORT}/api/test-heatmap`);
   console.log(`🔵 n8n API available at http://0.0.0.0:${PORT}/brain/analyze_no_screenshot`);
+  console.log(`🔧 [v3-dev] Test route: http://0.0.0.0:${PORT}/v3/test`);
   
   // 🛡️ v6.1: N8N监控已禁用（节省内存 ~200MB）
   console.log('⚠️  N8N监控已禁用以节省内存');
