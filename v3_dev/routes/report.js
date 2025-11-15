@@ -5,7 +5,8 @@
 
 const express = require('express');
 const router = express.Router();
-const { buildSimpleReport, generatePDF } = require('../services/reportService');
+const fetch = require('node-fetch');
+const { buildSimpleReport, generateHTMLReport, generateMarkdownReport } = require('../services/reportService');
 
 // 尝试导入 dataBroker（如果可用）
 let fetchMarketData;
@@ -49,13 +50,13 @@ router.get('/test', (req, res) => {
 /**
  * GET /v3/report/:symbol
  * 根据股票代码生成研报
- * 支持 ?format=pdf 参数生成 PDF
+ * 支持 ?format=json|html|md|pdf 参数
  */
 router.get('/:symbol', async (req, res) => {
   const { symbol } = req.params;
-  const { format } = req.query;
+  const { format = 'json' } = req.query;
   
-  console.log(`📊 [v3-dev] GET /v3/report/${symbol}${format ? `?format=${format}` : ''}`);
+  console.log(`📊 [v3-dev] GET /v3/report/${symbol}?format=${format}`);
   
   try {
     // 标准化股票代码
@@ -111,12 +112,70 @@ router.get('/:symbol', async (req, res) => {
     // 生成研报
     const report = await buildSimpleReport(normalizedSymbol, basicData);
 
-    // 如果请求 PDF 格式
-    if (format === 'pdf') {
-      console.log(`📄 [v3-dev] 生成 PDF 格式: ${normalizedSymbol}`);
+    // ========== 根据格式返回不同内容 ==========
+    
+    if (format === 'html') {
+      // 返回 HTML 格式
+      console.log(`🌐 [v3-dev] 返回 HTML 格式: ${normalizedSymbol}`);
+      const html = generateHTMLReport(normalizedSymbol, report);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(html);
+      
+    } else if (format === 'md' || format === 'markdown') {
+      // 返回 Markdown 格式
+      console.log(`📝 [v3-dev] 返回 Markdown 格式: ${normalizedSymbol}`);
+      const markdown = generateMarkdownReport(normalizedSymbol, report);
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.setHeader('Content-Disposition', `inline; filename="${normalizedSymbol}_Report_v3dev.md"`);
+      res.send(markdown);
+      
+    } else if (format === 'pdf') {
+      // 调用外部 PDF 生成服务
+      console.log(`📄 [v3-dev] 请求 PDF 格式: ${normalizedSymbol}`);
+      
+      // 快速检查：PDF_SERVICE_URL 是否配置
+      const pdfServiceUrl = process.env.PDF_SERVICE_URL;
+      
+      if (!pdfServiceUrl) {
+        console.warn(`⚠️  [v3-dev PDF] PDF_SERVICE_URL 未配置，返回 503`);
+        return res.status(503).json({
+          ok: false,
+          env: 'v3-dev',
+          error: 'PDF service not configured',
+          message: 'PDF_SERVICE_URL environment variable is not set',
+          symbol: normalizedSymbol,
+          hint: 'Try ?format=html or ?format=md instead'
+        });
+      }
       
       try {
-        const pdfBuffer = await generatePDF(report);
+        // 先生成 HTML
+        const html = generateHTMLReport(normalizedSymbol, report);
+        
+        // 调用外部 PDF 服务 (快速超时)
+        console.log(`🌐 [v3-dev PDF] 调用外部服务: ${pdfServiceUrl}`);
+        
+        const pdfResponse = await fetch(pdfServiceUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            html: html,
+            symbol: normalizedSymbol,
+            title: `${normalizedSymbol} Research Report`,
+            locale: 'zh-CN'
+          }),
+          timeout: 10000 // 10秒快速超时
+        });
+        
+        if (!pdfResponse.ok) {
+          throw new Error(`PDF service responded with ${pdfResponse.status}`);
+        }
+        
+        // 获取 PDF 二进制
+        const pdfBuffer = await pdfResponse.buffer();
+        console.log(`✅ [v3-dev PDF] 外部服务返回 PDF: ${pdfBuffer.length} bytes`);
         
         // 设置响应头
         res.setHeader('Content-Type', 'application/pdf');
@@ -125,20 +184,21 @@ router.get('/:symbol', async (req, res) => {
         
         // 发送 PDF
         res.send(pdfBuffer);
-        console.log(`✅ [v3-dev] PDF 已发送: ${pdfBuffer.length} bytes`);
         
       } catch (pdfError) {
-        console.error(`❌ [v3-dev] PDF 生成失败:`, pdfError.message);
-        return res.status(500).json({
+        console.error(`❌ [v3-dev PDF] 外部服务失败:`, pdfError.message);
+        return res.status(503).json({
           ok: false,
           env: 'v3-dev',
-          error: 'PDF generation failed',
+          error: 'External PDF service unavailable',
           message: pdfError.message,
-          symbol: normalizedSymbol
+          symbol: normalizedSymbol,
+          hint: 'Try ?format=html or ?format=md instead'
         });
       }
+      
     } else {
-      // 返回 JSON 结果
+      // 默认：返回 JSON 格式
       res.json({
         ok: true,
         env: 'v3-dev',

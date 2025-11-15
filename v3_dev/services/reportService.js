@@ -4,15 +4,12 @@
  */
 
 const fetch = require('node-fetch');
-const PDFDocument = require('pdfkit');
-const path = require('path');
-const fs = require('fs');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// 中文字体路径
-const FONT_REGULAR = path.join(__dirname, '../../fonts/NotoSansCJK-Regular.otf');
-const FONT_BOLD = path.join(__dirname, '../../fonts/NotoSansCJK-Bold.otf');
+// ========== PDFKit 已移除 ==========
+// v3-dev 现使用外部 PDF 生成服务
+// 本地不再使用 pdfkit、字体文件等
 
 /**
  * 构建简易研报
@@ -24,6 +21,12 @@ async function buildSimpleReport(symbol, basicData = {}) {
   console.log(`📊 [v3-dev Report Service] 开始生成研报: ${symbol}`);
   
   const startTime = Date.now();
+  
+  // ========== 快速失败：无 API Key 直接用 fallback ==========
+  if (!OPENAI_API_KEY) {
+    console.warn(`⚠️  [v3-dev Report] 无 OPENAI_API_KEY，使用 fallback`);
+    return generateFallbackReport(symbol, basicData, startTime);
+  }
   
   try {
     // 准备数据上下文
@@ -107,7 +110,7 @@ async function buildSimpleReport(symbol, basicData = {}) {
     } catch (parseError) {
       console.warn(`⚠️  [v3-dev Report] AI返回非JSON格式，使用fallback`);
       // Fallback: 基于价格变化的简单判断
-      reportData = generateFallbackReport(symbol, basicData, startTime);
+      return generateFallbackReport(symbol, basicData, startTime);
     }
 
     const elapsed = Date.now() - startTime;
@@ -138,7 +141,7 @@ async function buildSimpleReport(symbol, basicData = {}) {
     };
 
   } catch (error) {
-    console.error(`❌ [v3-dev Report] 生成失败:`, error.message);
+    console.error(`❌ [v3-dev Report] AI 调用失败:`, error.message);
     
     // 完全失败时的 fallback
     return generateFallbackReport(symbol, basicData, startTime);
@@ -186,193 +189,305 @@ function generateFallbackReport(symbol, basicData, startTime = Date.now()) {
 }
 
 /**
- * 生成 PDF 格式研报
+ * 生成 HTML 格式研报
+ * @param {string} symbol - 股票代码
  * @param {object} report - 研报对象
- * @returns {Promise<Buffer>} PDF Buffer
+ * @returns {string} HTML 字符串
  */
-async function generatePDF(report) {
-  return new Promise((resolve, reject) => {
-    try {
-      // 验证字体文件存在
-      if (!fs.existsSync(FONT_REGULAR)) {
-        throw new Error(`字体文件不存在: ${FONT_REGULAR}`);
-      }
-      if (!fs.existsSync(FONT_BOLD)) {
-        throw new Error(`字体文件不存在: ${FONT_BOLD}`);
-      }
-
-      console.log(`📄 [v3-dev PDF] 开始生成 PDF: ${report.symbol}`);
-
-      const doc = new PDFDocument({
-        size: 'A4',
-        margins: { top: 50, bottom: 50, left: 50, right: 50 },
-        bufferPages: true
-      });
-
-      // 注册中文字体（关键：解决乱码）
-      doc.registerFont('Regular', FONT_REGULAR);
-      doc.registerFont('Bold', FONT_BOLD);
-
-      const chunks = [];
-      doc.on('data', chunk => chunks.push(chunk));
-      doc.on('end', () => {
-        const pdfBuffer = Buffer.concat(chunks);
-        console.log(`✅ [v3-dev PDF] PDF 生成完成: ${pdfBuffer.length} bytes`);
-        resolve(pdfBuffer);
-      });
-      doc.on('error', reject);
-
-      // 页面宽度
-      const pageWidth = doc.page.width - 100;
-      let y = 50;
-
-      // ========== 标题部分 ==========
-      doc.font('Bold').fontSize(24).fillColor('#4F46E5');
-      doc.text('USIS·研究报告', 50, y, { align: 'center' });
-      y += 35;
-
-      doc.font('Bold').fontSize(20).fillColor('#1F2937');
-      doc.text(String(report.symbol), 50, y, { align: 'center' });
-      y += 30;
-
-      // 评级徽章
-      const ratingColors = {
-        'STRONG_BUY': '#10B981',
-        'BUY': '#34D399',
-        'HOLD': '#FBBF24',
-        'SELL': '#F87171',
-        'STRONG_SELL': '#EF4444'
-      };
-      const ratingColor = ratingColors[report.rating] || '#6B7280';
-      
-      doc.fontSize(16).fillColor(ratingColor).font('Bold');
-      doc.text(`评级: ${report.rating}`, 50, y, { align: 'center' });
-      y += 25;
-
-      doc.fontSize(12).fillColor('#6B7280').font('Regular');
-      doc.text(`时间范围: ${report.horizon}`, 50, y, { align: 'center' });
-      y += 40;
-
-      // 分隔线
-      doc.moveTo(50, y).lineTo(doc.page.width - 50, y).stroke('#E5E7EB');
-      y += 25;
-
-      // ========== 价格信息 ==========
-      doc.font('Bold').fontSize(14).fillColor('#4F46E5');
-      doc.text('[价格信息]', 50, y);
-      y += 20;
-
-      doc.font('Regular').fontSize(11).fillColor('#1F2937');
-      const priceInfo = [
-        `当前价: ${report.price_info.current}`,
-        `涨跌: ${report.price_info.change} (${report.price_info.change_percent}%)`,
-        `最高: ${report.price_info.high}`,
-        `最低: ${report.price_info.low}`,
-        `成交量: ${report.price_info.volume}`
-      ];
-      
-      priceInfo.forEach(info => {
-        doc.text(String(info), 70, y);
-        y += 18;
-      });
-      y += 10;
-
-      // ========== 核心观点 ==========
-      doc.font('Bold').fontSize(14).fillColor('#4F46E5');
-      doc.text('[核心观点]', 50, y);
-      y += 20;
-
-      doc.font('Regular').fontSize(11).fillColor('#1F2937');
-      const summaryLines = doc.heightOfString(String(report.summary), {
-        width: pageWidth,
-        align: 'left'
-      });
-      
-      doc.text(String(report.summary), 70, y, {
-        width: pageWidth - 20,
-        align: 'left'
-      });
-      y += summaryLines + 15;
-
-      // ========== 驱动因素 ==========
-      doc.font('Bold').fontSize(14).fillColor('#4F46E5');
-      doc.text('[驱动因素]', 50, y);
-      y += 20;
-
-      doc.font('Regular').fontSize(11).fillColor('#1F2937');
-      if (report.drivers && report.drivers.length > 0) {
-        report.drivers.forEach((driver, index) => {
-          const text = `${index + 1}. ${String(driver)}`;
-          const height = doc.heightOfString(text, { width: pageWidth - 20 });
-          doc.text(text, 70, y, { width: pageWidth - 20 });
-          y += height + 8;
-        });
-      }
-      y += 10;
-
-      // ========== 风险提示 ==========
-      doc.font('Bold').fontSize(14).fillColor('#4F46E5');
-      doc.text('[风险提示]', 50, y);
-      y += 20;
-
-      doc.font('Regular').fontSize(11).fillColor('#1F2937');
-      if (report.risks && report.risks.length > 0) {
-        report.risks.forEach((risk, index) => {
-          const text = `${index + 1}. ${String(risk)}`;
-          const height = doc.heightOfString(text, { width: pageWidth - 20 });
-          doc.text(text, 70, y, { width: pageWidth - 20 });
-          y += height + 8;
-        });
-      }
-      y += 10;
-
-      // ========== 技术面分析 ==========
-      doc.font('Bold').fontSize(14).fillColor('#4F46E5');
-      doc.text('[技术面分析]', 50, y);
-      y += 20;
-
-      doc.font('Regular').fontSize(11).fillColor('#1F2937');
-      const technicalHeight = doc.heightOfString(String(report.technical_view), {
-        width: pageWidth - 20
-      });
-      doc.text(String(report.technical_view), 70, y, {
-        width: pageWidth - 20
-      });
-      y += technicalHeight + 20;
-
-      // ========== 元信息 ==========
-      y += 20;
-      doc.fontSize(10).fillColor('#6B7280').font('Regular');
-      doc.text(`AI 模型: ${report.model_used}`, 50, y);
-      y += 15;
-      doc.text(`生成时间: ${report.latency_ms}ms`, 50, y);
-      y += 15;
-      doc.text(`生成于: ${new Date(report.generated_at).toLocaleString('zh-CN')}`, 50, y);
-      y += 15;
-      doc.text('环境: v3-dev (测试版)', 50, y);
-      y += 25;
-
-      // ========== 免责声明 ==========
-      doc.rect(50, y, pageWidth, 60).fillAndStroke('#FEF3C7', '#F59E0B');
-      y += 10;
-      doc.fillColor('#92400E').fontSize(9).font('Regular');
-      doc.text('[免责声明]', 60, y);
-      y += 15;
-      doc.text(String(report.disclaimer), 60, y, {
-        width: pageWidth - 20
-      });
-
-      // 结束文档
-      doc.end();
-
-    } catch (error) {
-      console.error(`❌ [v3-dev PDF] 生成失败:`, error.message);
-      reject(error);
+function generateHTMLReport(symbol, report) {
+  console.log(`📄 [v3-dev HTML] 生成 HTML 研报: ${symbol}`);
+  
+  const ratingColors = {
+    'STRONG_BUY': '#10B981',
+    'BUY': '#34D399',
+    'HOLD': '#FBBF24',
+    'SELL': '#F87171',
+    'STRONG_SELL': '#EF4444'
+  };
+  const ratingColor = ratingColors[report.rating] || '#6B7280';
+  
+  const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${report.symbol} 研究报告 - USIS v3-dev</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      line-height: 1.6;
+      color: #1F2937;
+      background: #F9FAFB;
+      padding: 40px 20px;
     }
-  });
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #E5E7EB;
+    }
+    h1 {
+      color: #4F46E5;
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+    .symbol {
+      font-size: 24px;
+      font-weight: bold;
+      color: #1F2937;
+      margin: 10px 0;
+    }
+    .rating {
+      display: inline-block;
+      padding: 8px 20px;
+      background: ${ratingColor};
+      color: white;
+      border-radius: 20px;
+      font-weight: bold;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    .horizon {
+      color: #6B7280;
+      font-size: 14px;
+    }
+    .section {
+      margin: 25px 0;
+    }
+    .section-title {
+      color: #4F46E5;
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #E5E7EB;
+    }
+    .price-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin: 15px 0;
+    }
+    .price-item {
+      background: #F3F4F6;
+      padding: 12px;
+      border-radius: 6px;
+    }
+    .price-label {
+      color: #6B7280;
+      font-size: 12px;
+    }
+    .price-value {
+      color: #1F2937;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .summary-box {
+      background: #EEF2FF;
+      padding: 20px;
+      border-radius: 8px;
+      border-left: 4px solid #4F46E5;
+      margin: 15px 0;
+    }
+    ul {
+      margin: 15px 0;
+      padding-left: 20px;
+    }
+    li {
+      margin: 8px 0;
+      line-height: 1.8;
+    }
+    .meta {
+      margin-top: 30px;
+      padding-top: 20px;
+      border-top: 1px solid #E5E7EB;
+      font-size: 13px;
+      color: #6B7280;
+    }
+    .meta-item {
+      margin: 5px 0;
+    }
+    .disclaimer {
+      background: #FEF3C7;
+      border: 1px solid #F59E0B;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 25px;
+      font-size: 12px;
+      color: #92400E;
+    }
+    .disclaimer strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>USIS 研究报告</h1>
+      <div class="symbol">${report.symbol}</div>
+      <div class="rating">${report.rating}</div>
+      <div class="horizon">时间范围：${report.horizon}</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">价格信息</div>
+      <div class="price-grid">
+        <div class="price-item">
+          <div class="price-label">当前价</div>
+          <div class="price-value">${report.price_info.current}</div>
+        </div>
+        <div class="price-item">
+          <div class="price-label">涨跌</div>
+          <div class="price-value">${report.price_info.change} (${report.price_info.change_percent}%)</div>
+        </div>
+        <div class="price-item">
+          <div class="price-label">最高</div>
+          <div class="price-value">${report.price_info.high}</div>
+        </div>
+        <div class="price-item">
+          <div class="price-label">最低</div>
+          <div class="price-value">${report.price_info.low}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">核心观点</div>
+      <div class="summary-box">${report.summary}</div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">驱动因素</div>
+      <ul>
+        ${report.drivers.map(d => `<li>${d}</li>`).join('')}
+      </ul>
+    </div>
+
+    <div class="section">
+      <div class="section-title">风险提示</div>
+      <ul>
+        ${report.risks.map(r => `<li>${r}</li>`).join('')}
+      </ul>
+    </div>
+
+    <div class="section">
+      <div class="section-title">技术面分析</div>
+      <p>${report.technical_view}</p>
+    </div>
+
+    <div class="meta">
+      <div class="meta-item">🤖 AI 模型：${report.model_used}</div>
+      <div class="meta-item">⏱ 生成时间：${report.latency_ms}ms</div>
+      <div class="meta-item">📅 生成于：${new Date(report.generated_at).toLocaleString('zh-CN')}</div>
+      <div class="meta-item">🔬 环境：v3-dev (测试版)</div>
+    </div>
+
+    <div class="disclaimer">
+      <strong>免责声明</strong>
+      ${report.disclaimer}
+    </div>
+  </div>
+</body>
+</html>`;
+
+  console.log(`✅ [v3-dev HTML] HTML 生成完成`);
+  return html;
+}
+
+/**
+ * 生成 Markdown 格式研报
+ * @param {string} symbol - 股票代码
+ * @param {object} report - 研报对象
+ * @returns {string} Markdown 字符串
+ */
+function generateMarkdownReport(symbol, report) {
+  console.log(`📄 [v3-dev MD] 生成 Markdown 研报: ${symbol}`);
+  
+  const ratingEmoji = {
+    'STRONG_BUY': '🟢🟢',
+    'BUY': '🟢',
+    'HOLD': '🟡',
+    'SELL': '🔴',
+    'STRONG_SELL': '🔴🔴'
+  }[report.rating] || '⚪';
+
+  const markdown = `# USIS 研究报告
+
+## ${report.symbol}
+
+**评级**：${ratingEmoji} ${report.rating}  
+**时间范围**：${report.horizon}
+
+---
+
+## 💰 价格信息
+
+| 指标 | 数值 |
+|------|------|
+| 当前价 | ${report.price_info.current} |
+| 涨跌 | ${report.price_info.change} (${report.price_info.change_percent}%) |
+| 最高 | ${report.price_info.high} |
+| 最低 | ${report.price_info.low} |
+| 成交量 | ${report.price_info.volume} |
+
+---
+
+## 📈 核心观点
+
+${report.summary}
+
+---
+
+## 🎯 驱动因素
+
+${report.drivers.map((d, i) => `${i + 1}. ${d}`).join('\n')}
+
+---
+
+## ⚠️ 风险提示
+
+${report.risks.map((r, i) => `${i + 1}. ${r}`).join('\n')}
+
+---
+
+## 📉 技术面分析
+
+${report.technical_view}
+
+---
+
+## 📊 元信息
+
+- **🤖 AI 模型**：${report.model_used}
+- **⏱ 生成时间**：${report.latency_ms}ms
+- **📅 生成于**：${new Date(report.generated_at).toLocaleString('zh-CN')}
+- **🔬 环境**：v3-dev (测试版)
+
+---
+
+## ⚖️ 免责声明
+
+${report.disclaimer}
+`;
+
+  console.log(`✅ [v3-dev MD] Markdown 生成完成`);
+  return markdown;
 }
 
 module.exports = {
   buildSimpleReport,
-  generatePDF
+  generateHTMLReport,
+  generateMarkdownReport
 };

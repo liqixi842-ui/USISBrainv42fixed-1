@@ -72,7 +72,7 @@ async function handleDevBotMessage(message, telegramAPI) {
       return;
     }
     
-    // /report command
+    // /report command - 生成并发送 PDF 研报
     if (text.startsWith('/report')) {
       const parts = text.split(' ');
       
@@ -80,7 +80,7 @@ async function handleDevBotMessage(message, telegramAPI) {
       if (parts.length < 2 || !parts[1].trim()) {
         await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: '📊 请提供股票代码\n\n格式：/report AAPL\n\n示例：\n/report AAPL\n/report TSLA\n/report NVDA',
+          text: '📊 请提供股票代码\n\n格式：/report AAPL\n\n示例：\n/report AAPL\n/report TSLA\n/report NVDA\n\n将生成完整 PDF 研报发送给您。',
           parse_mode: 'Markdown'
         });
         return;
@@ -90,31 +90,60 @@ async function handleDevBotMessage(message, telegramAPI) {
       
       try {
         // Send "generating" message
-        await telegramAPI('sendMessage', {
+        const statusMsg = await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: `🔬 正在生成 ${symbol} 研报（v3-dev测试版）...\n\n请稍候...`,
+          text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n⏳ 步骤 1/3：获取市场数据...`,
           parse_mode: 'Markdown'
         });
         
-        // Call internal report API
-        const reportUrl = `http://localhost:3000/v3/report/${symbol}`;
-        console.log(`📡 [DEV_BOT] Calling: ${reportUrl}`);
+        // Step 1: Get report data (JSON)
+        const reportJsonUrl = `http://localhost:3000/v3/report/${symbol}?format=json`;
+        console.log(`📡 [DEV_BOT] Fetching report data: ${reportJsonUrl}`);
         
-        const response = await fetch(reportUrl, { timeout: 20000 });
+        const jsonResponse = await fetch(reportJsonUrl, { timeout: 20000 });
         
-        if (!response.ok) {
-          throw new Error(`API responded with ${response.status}`);
+        if (!jsonResponse.ok) {
+          throw new Error(`Report API responded with ${jsonResponse.status}`);
         }
         
-        const data = await response.json();
+        const reportData = await jsonResponse.json();
         
-        if (!data.ok || !data.report) {
+        if (!reportData.ok || !reportData.report) {
           throw new Error('Invalid report data');
         }
         
-        const report = data.report;
+        const report = reportData.report;
         
-        // Format report for Telegram
+        // Update status
+        await telegramAPI('editMessageText', {
+          chat_id: chatId,
+          message_id: statusMsg.result.message_id,
+          text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n✅ 步骤 1/3：市场数据获取完成\n⏳ 步骤 2/3：调用外部 PDF 生成服务...`,
+          parse_mode: 'Markdown'
+        });
+        
+        // Step 2: Get PDF from external service
+        const pdfUrl = `http://localhost:3000/v3/report/${symbol}?format=pdf`;
+        console.log(`📄 [DEV_BOT] Generating PDF: ${pdfUrl}`);
+        
+        const pdfResponse = await fetch(pdfUrl, { timeout: 45000 });
+        
+        if (!pdfResponse.ok) {
+          throw new Error(`PDF generation failed with ${pdfResponse.status}`);
+        }
+        
+        const pdfBuffer = await pdfResponse.buffer();
+        console.log(`✅ [DEV_BOT] PDF received: ${pdfBuffer.length} bytes`);
+        
+        // Update status
+        await telegramAPI('editMessageText', {
+          chat_id: chatId,
+          message_id: statusMsg.result.message_id,
+          text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n✅ 步骤 1/3：市场数据获取完成\n✅ 步骤 2/3：PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 步骤 3/3：正在发送...`,
+          parse_mode: 'Markdown'
+        });
+        
+        // Step 3: Send PDF as document
         const ratingEmoji = {
           'STRONG_BUY': '🟢🟢',
           'BUY': '🟢',
@@ -123,50 +152,30 @@ async function handleDevBotMessage(message, telegramAPI) {
           'STRONG_SELL': '🔴🔴'
         }[report.rating] || '⚪';
         
-        const reportText = `📊 **USIS·研报测试版（v3-dev）**
-
-**标的**：${report.symbol}
-**评级**：${ratingEmoji} ${report.rating}
-**时间范围**：${report.horizon}
-
-**💰 价格信息**
-• 当前价：${report.price_info.current}
-• 涨跌：${report.price_info.change} (${report.price_info.change_percent}%)
-• 最高/最低：${report.price_info.high} / ${report.price_info.low}
-
-**📈 核心观点**
-${report.summary}
-
-**🎯 驱动因素**
-${report.drivers.map((d, i) => `${i + 1}. ${d}`).join('\n')}
-
-**⚠️ 风险提示**
-${report.risks.map((r, i) => `${i + 1}. ${r}`).join('\n')}
-
-**📉 技术面**
-${report.technical_view}
-
----
-⏱ 生成时间：${report.latency_ms || 'N/A'}ms
-🤖 AI模型：${report.model_used || 'unknown'}
-🔬 环境：v3-dev (测试版)
-
-**免责声明**：${report.disclaimer || '本报告为测试版本，仅供参考。'}`;
+        const caption = `📊 **${symbol} 研究报告**（v3-dev）\n\n${ratingEmoji} 评级：**${report.rating}**\n⏱ 生成时间：${report.latency_ms}ms\n🤖 AI：${report.model_used}\n\n详细内容请查看附件 PDF。`;
         
-        await telegramAPI('sendMessage', {
+        await telegramAPI('sendDocument', {
           chat_id: chatId,
-          text: reportText,
+          document: pdfBuffer,
+          filename: `${symbol}_Report_USIS_v3dev.pdf`,
+          caption: caption,
           parse_mode: 'Markdown'
         });
         
-        console.log(`✅ [DEV_BOT] Report sent for ${symbol}`);
+        // Delete status message
+        await telegramAPI('deleteMessage', {
+          chat_id: chatId,
+          message_id: statusMsg.result.message_id
+        });
+        
+        console.log(`✅ [DEV_BOT] PDF report sent for ${symbol}`);
         
       } catch (error) {
         console.error(`❌ [DEV_BOT] Report generation failed:`, error.message);
         
         await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: `❌ 研报生成失败\n\n标的：${symbol}\n错误：${error.message}\n\n这是v3-dev测试版本，功能仍在完善中。`,
+          text: `❌ 研报生成失败\n\n标的：${symbol}\n错误：${error.message}\n\n💡 提示：如果是 PDF 服务问题，请联系管理员检查外部服务配置。\n\n这是 v3-dev 测试版本，功能仍在完善中。`,
           parse_mode: 'Markdown'
         });
       }
