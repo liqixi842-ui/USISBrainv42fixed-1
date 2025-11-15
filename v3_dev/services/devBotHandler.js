@@ -155,7 +155,8 @@ async function handleDevBotMessage(message, telegramAPI) {
             'STRONG_SELL': '--'
           }[report.rating] || '=';
           
-          const caption = `📊 **${symbol} 研究报告**（DocRaptor PDF，v3-dev）\n\n评级：**${report.rating}** (${ratingSymbol})\n⏱ 生成时间：${report.latency_ms}ms\n🤖 AI：${report.model_used}\n\n详细内容请查看附件 PDF。`;
+          // 使用纯文本 caption，避免 Markdown 解析错误
+          const caption = `📊 ${symbol} 研究报告 (DocRaptor PDF, v3-dev)\n\n评级: ${report.rating} (${ratingSymbol})\n生成时间: ${report.latency_ms}ms\nAI模型: ${report.model_used}\n\n详细内容请查看附件 PDF`;
           
           console.log(`📤 [DEV_BOT] Sending PDF document to ${chatId}...`);
           
@@ -163,8 +164,8 @@ async function handleDevBotMessage(message, telegramAPI) {
             chat_id: chatId,
             document: pdfBuffer,
             filename: `${symbol}_USIS_Research.pdf`,
-            caption: caption,
-            parse_mode: 'Markdown'
+            caption: caption
+            // 不使用 parse_mode，作为纯文本发送
           });
           
           console.log(`✅ [DEV_BOT] PDF report sent for ${symbol}`);
@@ -241,8 +242,8 @@ async function handleDevBotMessage(message, telegramAPI) {
         
         await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: `❌ 研报生成失败\n\n标的：${symbol}\n错误：${error.message}\n\n💡 提示：如果是 PDF 服务问题，请联系管理员检查外部服务配置。\n\n这是 v3-dev 测试版本，功能仍在完善中。`,
-          parse_mode: 'Markdown'
+          text: `❌ 研报生成失败\n\n标的: ${symbol}\n错误: ${error.message}\n\n提示: 如果是 PDF 服务问题，请联系管理员检查外部服务配置。\n\n这是 v3-dev 测试版本，功能仍在完善中。`
+          // 不使用 parse_mode，避免错误消息中的特殊字符导致解析失败
         });
       }
       return;

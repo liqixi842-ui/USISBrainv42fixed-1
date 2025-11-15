@@ -1,0 +1,99 @@
+现在 /report NVDA 的行为如下：
+
+- ✅ 步骤 1/3：市场数据获取完成
+- ✅ 步骤 2/3：PDF 生成完成 (4.2 KB)
+- ⏳ 步骤 3/3：正在发送...
+- ❌ 然后报错：
+
+错误信息：
+Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 97
+
+说明：
+- DocRaptor PDF 已经生成成功（4.2KB），
+- 问题出在 Telegram 消息格式（parse_mode + 文本里的特殊字符），
+- 这是典型的 Markdown / HTML entity 解析失败，而不是 PDF 问题。
+
+我的目标：
+👉 保证 /report NVDA 能正常发送 PDF 文件，
+👉 即使 caption 或提示文字中包含特殊字符，也不要再因为 parse_mode 报错。
+
+请按以下步骤修复 devBotHandler.js 中的 Telegram 发送逻辑：
+
+────────────────────────
+【1】检查 /report 流程中的 sendDocument 调用
+────────────────────────
+在 v3_dev/services/devBotHandler.js 中，找到发送 PDF 的代码，大概类似：
+
+await bot.sendDocument(chatId, pdfBuffer, {
+  filename: `${symbol}_USIS_Research.pdf`,
+  contentType: "application/pdf",
+  caption: "...",
+  parse_mode: "Markdown" 或 "MarkdownV2" 或 "HTML"
+});
+
+请确认这里是否设置了 parse_mode，以及 caption 是否包含下划线 `_`、括号 `(` `)`、加号 `+` 等特殊字符。
+
+────────────────────────
+【2】对发送 PDF 的 caption 关闭 parse_mode 或改为安全模式
+────────────────────────
+为了避免「can't parse entities」错误，请做以下修改之一（推荐方案 A）：
+
+方案 A（推荐，最简单）：
+- 对发送 PDF 的这条消息 **不使用 parse_mode**，即：
+
+await bot.sendDocument(
+  chatId,
+  pdfBuffer,
+  {
+    filename: `${symbol}_USIS_Research.pdf`,
+    contentType: "application/pdf"
+  },
+  {
+    caption: `USIS 研究报告 - ${symbol}（v3-dev PDF 测试）`,
+    parse_mode: undefined   // 或者直接不要这个字段
+  }
+);
+
+也就是说：caption 只当成普通文本，不让 Telegram 把它当 Markdown / HTML 解析。
+
+方案 B（如果你坚持用 MarkdownV2）：
+- 那就必须对 caption 中所有特殊字符做转义，包括：
+  - `_` `(` `)` `+` `-` `.` `!` 等
+- 例如：把 `${symbol}_USIS_Research.pdf` 换成不含下划线的形式，或者用函数进行转义。
+- 但为了简单和稳定，建议先用方案 A：关闭 parse_mode。
+
+────────────────────────
+【3】检查错误提示消息的 parse_mode
+────────────────────────
+同样地，对于错误提示：
+
+❌ 研报生成失败
+标的：NVDA
+错误：Bad Request: can't parse entities: ...
+
+如果 sendMessage 使用了 parse_mode: "Markdown" 或 "HTML"，而错误信息本身又带有冒号、括号、下划线等，也可能导致同样的问题。
+
+因此，请对错误提示消息也做类似处理：
+
+await bot.sendMessage(
+  chatId,
+  `❌ 研报生成失败\n\n标的：${symbol}\n错误：${err.message}`,
+  { parse_mode: undefined } // 不使用 Markdown / HTML
+);
+
+────────────────────────
+【4】修复后测试一次 /report NVDA，并返回日志
+────────────────────────
+修复完成后，请在开发环境中：
+
+1. 启动 node index.js；
+2. 在 dev bot 中发送：/report NVDA；
+3. 期待行为：
+   - Console 日志中不再出现 “can't parse entities” 错误；
+   - PDF 已生成（日志显示 buffer size 等信息）；
+   - Telegram 中实际收到一份 PDF 文件。
+
+请把：
+- 本次调用 /report NVDA 的 Console 日志（包含 PDF buffer size 和发送成功日志），
+- 以及你确认确实收到 PDF 的说明，
+一并返回给我。
