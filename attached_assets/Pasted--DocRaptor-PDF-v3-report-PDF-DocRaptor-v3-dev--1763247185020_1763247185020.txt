@@ -1,0 +1,112 @@
+我现在已经购买了 DocRaptor 作为外部 PDF 生成服务，希望用它来为 /v3/report 生成正式的 PDF 研报。  
+请帮我把 DocRaptor 集成到 v3-dev 的研报系统里，作为唯一的 PDF 生成方式。  
+ 
+目标行为：  
+- /v3/report/:symbol?format=pdf → 使用 DocRaptor 把 HTML 研报转换为 PDF 并返回 application/pdf  
+- /report SYMBOL（dev bot）→ 调用同一个接口生成 PDF，然后通过 sendDocument 发送给我  
+- 如果 DocRaptor 请求失败，则优雅降级为发送 Markdown 文本，并提示「PDF 服务暂不可用」。  
+ 
+请按下面步骤修改：  
+ 
+────────────────────────  
+【1】配置 DocRaptor 的环境变量  
+────────────────────────  
+请在当前项目环境中添加两个变量（你可以只先用 TEST key）：  
+ 
+- DOC_RAPTOR_API_KEY = "<我在 DocRaptor 后台看到的 API Key（test_xxx 或 prod_xxx）>"  
+- DOC_RAPTOR_TEST_MODE = "true"  （先用测试模式，等我确认没问题再改成 false）  
+ 
+同时，把之前用到的 PDF_SERVICE_URL 逻辑统一改为使用 DocRaptor：  
+- 不需要再依赖 PDF_SERVICE_URL（可以保留兼容，但首选 DocRaptor）。  
+ 
+────────────────────────  
+【2】在 reportService 中实现 DocRaptor 调用  
+────────────────────────  
+在 v3_dev/services/reportService.js 中：  
+ 
+1）新增一个函数：  
+ 
+  async function generatePdfWithDocRaptor(symbol, html) {  
+      // 使用 DocRaptor API 将 HTML 转换为 PDF  
+  }  
+ 
+实现要求（Node.js）：  
+- 使用 HTTPS POST 调用：  
+  https://docraptor.com/docs  
+- Content-Type: application/json  
+- 请求体结构（使用 DocRaptor 官方推荐的 JSON 格式）：  
+ 
+  {  
+    "user_credentials": process.env.DOC_RAPTOR_API_KEY,  
+    "test": process.env.DOC_RAPTOR_TEST_MODE === "true",  
+    "document_type": "pdf",  
+    "name": `${symbol}_USIS_Research.pdf`,  
+    "document_content": html,  
+    "prince_options": {  
+      "media": "print"  
+    }  
+  }  
+ 
+- 接收返回值为 PDF 二进制（arraybuffer / buffer），不要当作 JSON 解析。  
+- 出错（HTTP 非 2xx 或异常）时，抛出错误并在日志中打印 status / body。  
+ 
+2）在现有的 generateReport / buildHtmlReport 逻辑中：  
+- 当 format === "pdf" 时：  
+  - 先生成 HTML（已存在的 HTML 模板）  
+  - 调用 generatePdfWithDocRaptor(symbol, html)  
+  - 将得到的 Buffer 返回给调用者。  
+ 
+────────────────────────  
+【3】让 /v3/report/:symbol?format=pdf 返回 DocRaptor PDF  
+────────────────────────  
+在 v3_dev/routes/report.js 中：  
+ 
+- 对于 ?format=pdf：  
+  - 调用 reportService 中新的 PDF 生成函数  
+  - 设置响应头：  
+    res.setHeader("Content-Type", "application/pdf");  
+    res.setHeader("Content-Disposition", `inline; filename=\"${symbol}_USIS_Research.pdf\"`);  
+  - 将 Buffer 直接写入响应：res.send(pdfBuffer);  
+ 
+- 保留原有 html / md / json 分支不变。  
+ 
+────────────────────────  
+【4】让 dev Bot /report SYMBOL 发送 DocRaptor PDF  
+────────────────────────  
+在 v3_dev/services/devBotHandler.js 中：  
+ 
+- 在处理 /report SYMBOL 的流程中：  
+  1. 生成 HTML 研报（调用现有 HTML 函数）；  
+  2. 调用 generatePdfWithDocRaptor(symbol, html) 获得 pdfBuffer；  
+  3. 使用 bot.sendDocument 发送 PDF：  
+ 
+     await bot.sendDocument(chatId, {  
+       filename: `${symbol}_USIS_Research.pdf`,  
+       contentType: "application/pdf",  
+       source: pdfBuffer  
+     }, {  
+       caption: `USIS 研究报告 - ${symbol}（DocRaptor PDF，v3-dev）`  
+     });  
+ 
+- 若 PDF 生成失败（DocRaptor 返回错误 / 超时）：  
+  - 记录日志：[DEV_BOT] DocRaptor PDF generation failed: <error>  
+  - 退回到发送 Markdown 文本版本，并附加说明：  
+    「当前 PDF 服务暂不可用，已为您发送文本版研报。」  
+ 
+────────────────────────  
+【5】测试并返回结果  
+────────────────────────  
+修复完成后，请在开发环境中：  
+ 
+1. 启动 node index.js；  
+2. 测试：  
+   - curl -I "http://localhost:3000/v3/report/NVDA?format=pdf"  
+     → 期待：HTTP 200 + Content-Type: application/pdf  
+   - 在 Telegram 开发机器人中发送：/report NVDA  
+     → 期待：收到一份 PDF 文件（而不是纯文字）。  
+ 
+请将：  
+- curl 返回的响应头  
+- Console 中与 DocRaptor 调用相关的日志  
+- 以及 /report NVDA 成功发送 PDF 的日志片段  
+一并返回给我。  
