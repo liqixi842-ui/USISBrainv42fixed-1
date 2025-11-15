@@ -551,52 +551,66 @@ ${report.disclaimer}
 }
 
 /**
- * 使用 PDFShift API 将 HTML 转换为 PDF
+ * 使用 DocRaptor API 将 HTML 转换为 PDF（主要方案）
+ * @param {string} symbol - 股票代码
  * @param {string} htmlContent - HTML内容
  * @returns {Promise<Buffer>} PDF Buffer
  */
-async function convertHTMLtoPDF(htmlContent) {
-  const PDFSHIFT_API_KEY = process.env.PDFSHIFT_API_KEY || '';
+async function generatePdfWithDocRaptor(symbol, htmlContent) {
+  const DOC_RAPTOR_API_KEY = process.env.DOC_RAPTOR_API_KEY || '';
+  const DOC_RAPTOR_TEST_MODE = process.env.DOC_RAPTOR_TEST_MODE === 'true';
   
-  // 如果没有API Key，使用备用方案（纯文本PDF）
-  if (!PDFSHIFT_API_KEY) {
-    console.warn('⚠️  [v3-dev PDF] PDFShift API Key 未配置，使用 PDFKit 备用方案');
+  // 如果没有API Key，使用备用方案
+  if (!DOC_RAPTOR_API_KEY) {
+    console.warn('⚠️  [v3-dev PDF] DocRaptor API Key 未配置，使用 PDFKit 备用方案');
     return generateFallbackPDF(htmlContent);
   }
   
   try {
-    console.log('📄 [v3-dev PDFShift] 开始生成 PDF...');
+    console.log(`📄 [v3-dev DocRaptor] 开始生成 PDF (${DOC_RAPTOR_TEST_MODE ? '测试模式' : '生产模式'})...`);
     const fetch = require('node-fetch');
     
-    const response = await fetch('https://api.pdfshift.io/v3/convert/pdf', {
+    const response = await fetch('https://docraptor.com/docs', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Basic ${Buffer.from('api:' + PDFSHIFT_API_KEY).toString('base64')}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        source: htmlContent,
-        format: 'A4',
-        margin: '20mm 15mm',
-        print_background: true
+        user_credentials: DOC_RAPTOR_API_KEY,
+        test: DOC_RAPTOR_TEST_MODE,
+        document_type: 'pdf',
+        name: `${symbol}_USIS_Research.pdf`,
+        document_content: htmlContent,
+        prince_options: {
+          media: 'print'
+        }
       }),
       timeout: 30000
     });
     
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`PDFShift API错误: ${response.status} - ${errorText}`);
+      throw new Error(`DocRaptor API错误: ${response.status} - ${errorText}`);
     }
     
     const arrayBuffer = await response.arrayBuffer();
-    console.log(`✅ [v3-dev PDFShift] PDF生成成功 (${arrayBuffer.byteLength} bytes)`);
+    console.log(`✅ [v3-dev DocRaptor] PDF生成成功 (${arrayBuffer.byteLength} bytes)`);
     return Buffer.from(arrayBuffer);
     
   } catch (error) {
-    console.error('❌ [v3-dev PDFShift] API调用失败:', error.message);
+    console.error('❌ [v3-dev DocRaptor] API调用失败:', error.message);
     console.warn('⚠️  [v3-dev PDF] 降级到 PDFKit 备用方案');
     return generateFallbackPDF(htmlContent);
   }
+}
+
+/**
+ * 旧的 PDFShift API 函数（已弃用，保留向后兼容）
+ * @deprecated 请使用 generatePdfWithDocRaptor
+ */
+async function convertHTMLtoPDF(htmlContent, symbol = 'UNKNOWN') {
+  console.warn('⚠️  [v3-dev] convertHTMLtoPDF 已弃用，自动切换到 DocRaptor');
+  return generatePdfWithDocRaptor(symbol, htmlContent);
 }
 
 /**
@@ -649,5 +663,6 @@ module.exports = {
   buildSimpleReport,
   generateHTMLReport,
   generateMarkdownReport,
-  convertHTMLtoPDF
+  convertHTMLtoPDF,
+  generatePdfWithDocRaptor
 };

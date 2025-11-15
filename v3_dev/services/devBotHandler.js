@@ -2,7 +2,7 @@
 // This handles all messages for the development bot (TELEGRAM_BOT_TOKEN_DEV)
 
 const fetch = require('node-fetch');
-const { buildSimpleReport, generateMarkdownReport, generateHTMLReport, convertHTMLtoPDF } = require('./reportService');
+const { buildSimpleReport, generateMarkdownReport, generateHTMLReport, generatePdfWithDocRaptor } = require('./reportService');
 
 const VALID_COMMANDS = ['/test', '/status', '/v3', '/help', '/report'];
 
@@ -126,13 +126,13 @@ async function handleDevBotMessage(message, telegramAPI) {
         let reportSent = false;
         
         try {
-          console.log(`📄 [DEV_BOT] Generating PDF using PDFShift API...`);
+          console.log(`📄 [DEV_BOT] Generating PDF using DocRaptor API...`);
           
           // 生成 HTML
           const html = generateHTMLReport(symbol, report);
           
-          // 转换为 PDF (PDFShift API or PDFKit fallback)
-          const pdfBuffer = await convertHTMLtoPDF(html);
+          // 使用 DocRaptor 转换为 PDF (自动降级到 PDFKit)
+          const pdfBuffer = await generatePdfWithDocRaptor(symbol, html);
           
           console.log(`📦 [DEV_BOT] PDF buffer size: ${pdfBuffer?.length || 0} bytes`);
           
@@ -155,14 +155,14 @@ async function handleDevBotMessage(message, telegramAPI) {
             'STRONG_SELL': '--'
           }[report.rating] || '=';
           
-          const caption = `📊 **${symbol} 研究报告**（v3-dev 投行级）\n\n评级：**${report.rating}** (${ratingSymbol})\n⏱ 生成时间：${report.latency_ms}ms\n🤖 AI：${report.model_used}\n\n详细内容请查看附件 PDF。`;
+          const caption = `📊 **${symbol} 研究报告**（DocRaptor PDF，v3-dev）\n\n评级：**${report.rating}** (${ratingSymbol})\n⏱ 生成时间：${report.latency_ms}ms\n🤖 AI：${report.model_used}\n\n详细内容请查看附件 PDF。`;
           
           console.log(`📤 [DEV_BOT] Sending PDF document to ${chatId}...`);
           
           await telegramAPI('sendDocument', {
             chat_id: chatId,
             document: pdfBuffer,
-            filename: `${symbol}_Report_USIS_v3dev.pdf`,
+            filename: `${symbol}_USIS_Research.pdf`,
             caption: caption,
             parse_mode: 'Markdown'
           });
@@ -177,14 +177,14 @@ async function handleDevBotMessage(message, telegramAPI) {
           reportSent = true;
           
         } catch (pdfError) {
-          console.error(`❌ [DEV_BOT] PDF generation failed:`, pdfError.message);
+          console.error(`❌ [DEV_BOT] DocRaptor PDF generation failed:`, pdfError.message);
           console.log(`⚠️ [DEV_BOT] Falling back to Markdown`);
           
           // 通知用户降级
           await telegramAPI('editMessageText', {
             chat_id: chatId,
             message_id: statusMsg.result.message_id,
-            text: `⚠️ PDF 服务暂时不可用，已为您生成文本版研报。\n\n建议配置 PDFSHIFT_API_KEY 以获得完整 PDF 功能。`,
+            text: `⚠️ PDF 服务暂时不可用，已为您生成文本版研报。\n\n建议配置 DOC_RAPTOR_API_KEY 以获得完整 PDF 功能。`,
             parse_mode: 'Markdown'
           });
           

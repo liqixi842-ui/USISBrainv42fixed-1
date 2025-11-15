@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const fetch = require('node-fetch');
-const { buildSimpleReport, generateHTMLReport, generateMarkdownReport, convertHTMLtoPDF } = require('../services/reportService');
+const { buildSimpleReport, generateHTMLReport, generateMarkdownReport, generatePdfWithDocRaptor } = require('../services/reportService');
 
 // 尝试导入 dataBroker（如果可用）
 let fetchMarketData;
@@ -137,21 +137,21 @@ router.get('/:symbol', async (req, res) => {
       res.send(markdown);
       
     } else if (format === 'pdf') {
-      // 使用 PDFShift API 生成 PDF
+      // 使用 DocRaptor API 生成 PDF
       console.log(`📄 [v3-dev] 请求 PDF 格式: ${normalizedSymbol}`);
       
       try {
         // 先生成 HTML
         const html = generateHTMLReport(normalizedSymbol, report);
         
-        // 转换为 PDF (PDFShift API or PDFKit fallback)
-        const pdfBuffer = await convertHTMLtoPDF(html);
+        // 使用 DocRaptor 转换为 PDF (自动降级到 PDFKit)
+        const pdfBuffer = await generatePdfWithDocRaptor(normalizedSymbol, html);
         
         console.log(`✅ [v3-dev PDF] PDF 生成成功: ${pdfBuffer.length} bytes`);
         
         // 设置响应头
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${normalizedSymbol}_Report_v3dev.pdf"`);
+        res.setHeader('Content-Disposition', `inline; filename="${normalizedSymbol}_USIS_Research.pdf"`);
         res.setHeader('Content-Length', pdfBuffer.length);
         
         // 发送 PDF
