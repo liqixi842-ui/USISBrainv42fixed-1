@@ -15,7 +15,7 @@ packages = [
   "xorg.libXext",
   "xorg.libXfixes",
   "xorg.libXrandr",
-  "xorg.libxcb",
+  "xorg.libXxcb",
   "libxkbcommon",
   "alsa-lib",
   "mesa",
@@ -23,20 +23,14 @@ packages = [
   "try",
 ]
 
-# [[ports]] 对 Reserved VM 无效，可删除或保留都不会生效
-# 建议删除避免混淆
-# [[ports]]
-# localPort = 3000
-# externalPort = 80
-
 [deployment]
 deploymentTarget = "gce"
-run = ["sh", "-c", "ENABLE_TELEGRAM=true ENABLE_NEWS_SYSTEM=true node index.js"]
+run = [
+  "sh",
+  "-c",
+  "PORT=3000 ENABLE_TELEGRAM=true ENABLE_NEWS_SYSTEM=true node index.js",
+]
 
 [[ports]]
 localPort = 3000
-externalPort = 3000
-
-[[ports]]
-localPort = 8080
 externalPort = 80
