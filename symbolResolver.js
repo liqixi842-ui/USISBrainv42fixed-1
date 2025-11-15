@@ -559,14 +559,23 @@ function selectBestMatch(matches, exchangeHint, originalQuery) {
       }
     }
     
-    // 2. 名称相似度
+    // 2. 🆕 精确符号匹配（最高优先级）
+    const matchSymbol = (match.symbol || match.displaySymbol || '').toLowerCase();
+    const querySymbol = originalQuery.toLowerCase().trim();
+    
+    if (matchSymbol === querySymbol) {
+      score += 1000;  // 精确匹配 → 绝对优先
+      console.log(`   🎯 精确符号匹配: ${match.symbol}`);
+    }
+    
+    // 3. 名称相似度
     const descLower = (match.description || match.instrument_name || '').toLowerCase();
     const queryLower = originalQuery.toLowerCase();
     
     if (descLower.includes(queryLower)) score += 5;
     if (descLower.startsWith(queryLower)) score += 3;
     
-    // 3. 优先股票而非其他类型
+    // 4. 优先股票而非其他类型
     const typeStr = (match.type || '').toLowerCase();
     if (typeStr.includes('common stock') || typeStr.includes('stock')) score += 2;
     
