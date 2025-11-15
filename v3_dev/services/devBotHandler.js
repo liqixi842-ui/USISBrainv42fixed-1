@@ -122,53 +122,102 @@ async function handleDevBotMessage(message, telegramAPI) {
           parse_mode: 'Markdown'
         });
         
-        // Step 2: Get PDF from external service
-        const pdfUrl = `http://localhost:3000/v3/report/${symbol}?format=pdf`;
-        console.log(`📄 [DEV_BOT] Generating PDF: ${pdfUrl}`);
+        // Step 2: Try PDF first, fallback to Markdown if unavailable
+        let reportSent = false;
         
-        const pdfResponse = await fetch(pdfUrl, { timeout: 45000 });
-        
-        if (!pdfResponse.ok) {
-          throw new Error(`PDF generation failed with ${pdfResponse.status}`);
+        try {
+          const pdfUrl = `http://localhost:3000/v3/report/${symbol}?format=pdf`;
+          console.log(`📄 [DEV_BOT] Attempting PDF generation: ${pdfUrl}`);
+          
+          const pdfResponse = await fetch(pdfUrl, { timeout: 45000 });
+          
+          if (pdfResponse.ok) {
+            const pdfBuffer = await pdfResponse.buffer();
+            console.log(`✅ [DEV_BOT] PDF received: ${pdfBuffer.length} bytes`);
+            
+            await telegramAPI('editMessageText', {
+              chat_id: chatId,
+              message_id: statusMsg.result.message_id,
+              text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n✅ 步骤 1/3：市场数据获取完成\n✅ 步骤 2/3：PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 步骤 3/3：正在发送...`,
+              parse_mode: 'Markdown'
+            });
+            
+            const ratingEmoji = {
+              'STRONG_BUY': '🟢🟢',
+              'BUY': '🟢',
+              'HOLD': '🟡',
+              'SELL': '🔴',
+              'STRONG_SELL': '🔴🔴'
+            }[report.rating] || '⚪';
+            
+            const caption = `📊 **${symbol} 研究报告**（v3-dev）\n\n${ratingEmoji} 评级：**${report.rating}**\n⏱ 生成时间：${report.latency_ms}ms\n🤖 AI：${report.model_used}\n\n详细内容请查看附件 PDF。`;
+            
+            await telegramAPI('sendDocument', {
+              chat_id: chatId,
+              document: pdfBuffer,
+              filename: `${symbol}_Report_USIS_v3dev.pdf`,
+              caption: caption,
+              parse_mode: 'Markdown'
+            });
+            
+            await telegramAPI('deleteMessage', {
+              chat_id: chatId,
+              message_id: statusMsg.result.message_id
+            });
+            
+            reportSent = true;
+            console.log(`✅ [DEV_BOT] PDF report sent for ${symbol}`);
+          } else {
+            console.log(`⚠️ [DEV_BOT] PDF service unavailable (${pdfResponse.status}), falling back to Markdown`);
+          }
+        } catch (pdfError) {
+          console.log(`⚠️ [DEV_BOT] PDF generation failed: ${pdfError.message}, falling back to Markdown`);
         }
         
-        const pdfBuffer = await pdfResponse.buffer();
-        console.log(`✅ [DEV_BOT] PDF received: ${pdfBuffer.length} bytes`);
-        
-        // Update status
-        await telegramAPI('editMessageText', {
-          chat_id: chatId,
-          message_id: statusMsg.result.message_id,
-          text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n✅ 步骤 1/3：市场数据获取完成\n✅ 步骤 2/3：PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 步骤 3/3：正在发送...`,
-          parse_mode: 'Markdown'
-        });
-        
-        // Step 3: Send PDF as document
-        const ratingEmoji = {
-          'STRONG_BUY': '🟢🟢',
-          'BUY': '🟢',
-          'HOLD': '🟡',
-          'SELL': '🔴',
-          'STRONG_SELL': '🔴🔴'
-        }[report.rating] || '⚪';
-        
-        const caption = `📊 **${symbol} 研究报告**（v3-dev）\n\n${ratingEmoji} 评级：**${report.rating}**\n⏱ 生成时间：${report.latency_ms}ms\n🤖 AI：${report.model_used}\n\n详细内容请查看附件 PDF。`;
-        
-        await telegramAPI('sendDocument', {
-          chat_id: chatId,
-          document: pdfBuffer,
-          filename: `${symbol}_Report_USIS_v3dev.pdf`,
-          caption: caption,
-          parse_mode: 'Markdown'
-        });
-        
-        // Delete status message
-        await telegramAPI('deleteMessage', {
-          chat_id: chatId,
-          message_id: statusMsg.result.message_id
-        });
-        
-        console.log(`✅ [DEV_BOT] PDF report sent for ${symbol}`);
+        // Step 2B: Fallback to Markdown format
+        if (!reportSent) {
+          await telegramAPI('editMessageText', {
+            chat_id: chatId,
+            message_id: statusMsg.result.message_id,
+            text: `🔬 正在生成 ${symbol} 研报（v3-dev）...\n\n✅ 步骤 1/2：市场数据获取完成\n⏳ 步骤 2/2：格式化报告文本...`,
+            parse_mode: 'Markdown'
+          });
+          
+          // Use buildSimpleReport to generate Markdown
+          const mdReport = buildSimpleReport(report);
+          
+          await telegramAPI('deleteMessage', {
+            chat_id: chatId,
+            message_id: statusMsg.result.message_id
+          });
+          
+          // Split long report into chunks (Telegram max: 4096 chars)
+          const chunks = [];
+          const maxLen = 4000;
+          let currentChunk = mdReport;
+          
+          while (currentChunk.length > maxLen) {
+            let splitPos = currentChunk.lastIndexOf('\n', maxLen);
+            if (splitPos === -1) splitPos = maxLen;
+            chunks.push(currentChunk.substring(0, splitPos));
+            currentChunk = currentChunk.substring(splitPos).trim();
+          }
+          if (currentChunk.length > 0) chunks.push(currentChunk);
+          
+          // Send chunks
+          for (let i = 0; i < chunks.length; i++) {
+            await telegramAPI('sendMessage', {
+              chat_id: chatId,
+              text: chunks[i],
+              parse_mode: 'Markdown'
+            });
+            if (i < chunks.length - 1) {
+              await new Promise(r => setTimeout(r, 500)); // Avoid rate limit
+            }
+          }
+          
+          console.log(`✅ [DEV_BOT] Markdown report sent for ${symbol} (${chunks.length} parts)`);
+        }
         
       } catch (error) {
         console.error(`❌ [DEV_BOT] Report generation failed:`, error.message);
