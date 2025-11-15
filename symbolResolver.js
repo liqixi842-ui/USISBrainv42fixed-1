@@ -587,6 +587,28 @@ function selectBestMatch(matches, exchangeHint, originalQuery) {
   
   const best = scored[0];
   
+  // 🆕 结构化调试日志（仅在debug模式下）
+  if (process.env.ENABLE_SYMBOL_DEBUG === 'true') {
+    console.log('[SYMBOL_DEBUG] resolution_debug', JSON.stringify({
+      input: originalQuery,
+      exchange_hint: exchangeHint,
+      candidates: scored.slice(0, 10).map(c => ({
+        symbol: c.symbol || c.displaySymbol,
+        exchange: c.exchange || c.type,
+        country: c.country,
+        description: c.description || c.instrument_name,
+        score: c.score,
+        source: c.mic_code ? 'twelvedata' : 'finnhub'
+      })),
+      selected: {
+        symbol: best.symbol || best.displaySymbol,
+        exchange: best.exchange || best.type,
+        score: best.score,
+        description: best.description || best.instrument_name
+      }
+    }, null, 2));
+  }
+  
   console.log(`   🏆 最佳匹配: ${best.symbol} (分数: ${best.score})`);
   
   // 🆕 v6.1: 返回带交易所前缀的符号（如果需要消歧）

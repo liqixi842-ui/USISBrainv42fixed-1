@@ -742,6 +742,71 @@ app.get("/version", (_req, res) => {
   res.json({ version: 'v4.2_fixed', status: 'stable' });
 });
 
+// 🆕 Symbol Resolver专用调试接口
+app.post("/debug/symbol_resolver_test", async (req, res) => {
+  try {
+    // 默认测试集
+    const tickers = req.body?.tickers || ['NVDA', 'AAPL', 'TSLA', 'COL'];
+    
+    const results = [];
+    const startedAt = Date.now();
+    
+    for (const ticker of tickers) {
+      const t0 = Date.now();
+      
+      try {
+        // 模拟用户输入：创建intent对象
+        const mockIntent = await parseUserIntent(`分析${ticker}`);
+        
+        // 调用真实的Symbol Resolver
+        const resolved = await resolveSymbols(mockIntent);
+        
+        const durationMs = Date.now() - t0;
+        
+        results.push({
+          input: ticker,
+          intent: {
+            type: mockIntent.intentType,
+            entities: mockIntent.entities,
+            exchange: mockIntent.exchange
+          },
+          resolved: resolved,
+          duration_ms: durationMs,
+          status: 'success'
+        });
+      } catch (error) {
+        const durationMs = Date.now() - t0;
+        results.push({
+          input: ticker,
+          resolved: null,
+          duration_ms: durationMs,
+          status: 'error',
+          error: error.message
+        });
+      }
+    }
+    
+    const totalDurationMs = Date.now() - startedAt;
+    
+    return res.json({
+      ok: true,
+      tickers,
+      total_duration_ms: totalDurationMs,
+      avg_duration_ms: Math.round(totalDurationMs / tickers.length),
+      results,
+      debug_mode: process.env.ENABLE_SYMBOL_DEBUG === 'true',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[DEBUG] Symbol Resolver Test Error:', error);
+    return res.status(500).json({
+      ok: false,
+      error: error.message,
+      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+    });
+  }
+});
+
 app.post("/brain/ping", (req, res) => {
   res.json({ status: 'ok', echo: req.body || {} });
 });
