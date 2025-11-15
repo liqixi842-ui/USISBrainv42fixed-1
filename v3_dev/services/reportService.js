@@ -37,24 +37,26 @@ async function buildSimpleReport(symbol, basicData = {}) {
     const low = basicData.low || basicData.l || 'N/A';
     const volume = basicData.volume || basicData.v || 'N/A';
     
-    // 构建 AI prompt
-    const systemPrompt = `你是一位专业的股票分析师。请基于提供的市场数据，生成一份简明的股票研究报告。
+    // 构建 AI prompt - 投行级研报风格
+    const systemPrompt = `你是一位资深的卖方研究分析师。请基于提供的市场数据，生成一份机构级别的股票研究报告。
 
 要求：
-1. 评级只能是：STRONG_BUY（强烈买入）、BUY（买入）、HOLD（持有）、SELL（卖出）、STRONG_SELL（强烈卖出）之一
-2. 时间范围：短期（1-3月）、中期（3-12月）、长期（1年以上）
-3. 简明扼要，不要过度解读
-4. 明确标注这是基于有限数据的初步分析
-5. 必须用中文回复
+1. 语言风格：专业、正式、客观，避免使用口语化表达和emoji
+2. 评级只能是：STRONG_BUY、BUY、HOLD、SELL、STRONG_SELL 之一
+3. 时间范围：短期（1-3月）、中期（3-12月）、长期（1年以上）
+4. 必须用中文回复
 
 返回格式（纯JSON，不要markdown代码块）：
 {
   "rating": "评级",
   "horizon": "时间范围",
-  "summary": "核心观点（50-100字）",
-  "drivers": ["驱动因素1", "驱动因素2", "驱动因素3"],
-  "risks": ["风险点1", "风险点2"],
-  "technical_view": "技术面简评（30-50字）"
+  "company_name": "公司全称（如 NVIDIA Corporation）",
+  "investment_summary": "投资结论（2-3句话，专业措辞，明确操作建议和核心理由）",
+  "thesis": ["核心观点1（行业/赛道逻辑）", "核心观点2（竞争优势）", "核心观点3（财务表现）"],
+  "catalysts": ["催化剂1（产品/事件）", "催化剂2（市场/客户）", "催化剂3（财报/指引）"],
+  "risks": ["风险1（需求周期）", "风险2（竞争/监管）", "风险3（估值/市场）"],
+  "technical_view": "技术面简评（3-4句话，包含趋势、指标、操作建议）",
+  "action": "操作建议（1-2段话，针对不同持仓成本给出建议）"
 }`;
 
     const userPrompt = `请分析以下股票：
@@ -116,16 +118,19 @@ async function buildSimpleReport(symbol, basicData = {}) {
     const elapsed = Date.now() - startTime;
     console.log(`✅ [v3-dev Report] 研报生成完成 (${elapsed}ms)`);
 
-    // 构建最终报告结构
+    // 构建最终报告结构 - 投行级格式
     return {
-      title: `${symbol.toUpperCase()} 研究报告（测试版）`,
+      title: `${symbol.toUpperCase()} 研究报告`,
       symbol: symbol.toUpperCase(),
+      company_name: reportData.company_name || symbol.toUpperCase(),
       rating: reportData.rating || 'HOLD',
       horizon: reportData.horizon || '中期',
-      summary: reportData.summary || '数据不足，建议谨慎观察。',
-      drivers: reportData.drivers || ['市场波动', '行业趋势'],
-      risks: reportData.risks || ['市场风险', '数据有限'],
-      technical_view: reportData.technical_view || '技术面中性',
+      investment_summary: reportData.investment_summary || '基于当前数据，建议谨慎观察市场走势。',
+      thesis: reportData.thesis || ['市场环境分析', '公司基本面评估', '估值合理性判断'],
+      catalysts: reportData.catalysts || ['产品周期演进', '市场需求变化', '财报表现'],
+      risks: reportData.risks || ['宏观经济波动', '行业竞争加剧', '估值压力'],
+      technical_view: reportData.technical_view || '技术面呈现中性态势，建议关注成交量变化和关键支撑位。',
+      action: reportData.action || '建议投资者根据自身风险偏好和持仓成本，谨慎评估操作时机。',
       price_info: {
         current: price,
         change: change,
@@ -137,7 +142,7 @@ async function buildSimpleReport(symbol, basicData = {}) {
       generated_at: new Date().toISOString(),
       model_used: 'gpt-4o-mini',
       latency_ms: elapsed,
-      disclaimer: '⚠️ 本报告为 v3-dev 测试版本，基于有限数据生成，仅供参考，不构成投资建议。'
+      disclaimer: '本报告基于公开市场数据生成，仅供参考，不构成投资建议。投资者应独立判断并承担相应风险。'
     };
 
   } catch (error) {
@@ -168,26 +173,29 @@ function generateFallbackReport(symbol, basicData, startTime = Date.now()) {
   const elapsed = Date.now() - startTime;
 
   return {
-    title: `${sym} 研究报告（简化版）`,
+    title: `${sym} 研究报告`,
     symbol: sym,
+    company_name: sym,
     rating: rating,
     horizon: '短期',
-    summary: `${sym} 当前价格 ${price}，涨跌幅 ${changePercent}%。建议根据市场情况谨慎操作。`,
-    drivers: ['市场整体走势', '板块轮动', '资金流向'],
-    risks: ['市场波动风险', '政策不确定性', '数据时效性'],
-    technical_view: '基于当前价格走势的初步判断，建议关注成交量变化。',
+    investment_summary: `基于当前市场数据，${sym} 价格为 ${price}，日内涨跌幅 ${changePercent}%。鉴于数据有限，建议投资者保持谨慎，密切关注后续市场动态。`,
+    thesis: ['市场整体走势影响短期表现', '板块轮动带来结构性机会', '资金流向决定短期波动方向'],
+    catalysts: ['重要财报发布窗口', '行业政策动向', '宏观经济数据公布'],
+    risks: ['市场系统性波动风险', '政策不确定性影响', '数据时效性局限'],
+    technical_view: '基于当前价格走势的初步判断，技术面呈现观望态势。建议关注成交量变化和关键支撑位的有效性。',
+    action: '建议投资者根据自身风险承受能力和投资周期，审慎评估入场时机。对于已有持仓者，可根据成本区间适当调整仓位结构。',
     price_info: {
       current: price,
-      change: basicData.change || basicData.d || 'N/A',
+      change: basicData.change || basicData.d || '暂不提供',
       change_percent: changePercent,
-      high: basicData.high || basicData.h || 'N/A',
-      low: basicData.low || basicData.l || 'N/A',
-      volume: basicData.volume || basicData.v || 'N/A'
+      high: basicData.high || basicData.h || '暂不提供',
+      low: basicData.low || basicData.l || '暂不提供',
+      volume: basicData.volume || basicData.v || '暂不提供'
     },
     generated_at: new Date().toISOString(),
     model_used: 'fallback',
     latency_ms: elapsed,
-    disclaimer: '⚠️ 本报告为测试版本，数据有限，仅供参考。'
+    disclaimer: '本报告基于有限市场数据生成，仅供参考，不构成投资建议。投资者应独立判断并承担相应风险。'
   };
 }
 
@@ -214,124 +222,149 @@ function generateHTMLReport(symbol, report) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${report.symbol} 研究报告 - USIS v3-dev</title>
+  <title>${report.symbol} 研究报告 - USIS</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-      line-height: 1.6;
+      line-height: 1.8;
       color: #1F2937;
       background: #F9FAFB;
       padding: 40px 20px;
     }
     .container {
-      max-width: 800px;
+      max-width: 900px;
       margin: 0 auto;
       background: white;
-      padding: 40px;
-      border-radius: 12px;
+      padding: 50px;
+      border-radius: 8px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
     .header {
-      text-align: center;
-      margin-bottom: 30px;
-      padding-bottom: 20px;
-      border-bottom: 2px solid #E5E7EB;
+      margin-bottom: 40px;
+      padding-bottom: 30px;
+      border-bottom: 3px solid #E5E7EB;
     }
     h1 {
-      color: #4F46E5;
-      font-size: 28px;
-      margin-bottom: 10px;
+      color: #111827;
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 8px;
     }
-    .symbol {
-      font-size: 24px;
-      font-weight: bold;
-      color: #1F2937;
-      margin: 10px 0;
+    .symbol-line {
+      font-size: 26px;
+      font-weight: 600;
+      color: #374151;
+      margin: 15px 0;
     }
-    .rating {
+    .company-name {
+      color: #6B7280;
+      font-size: 16px;
+    }
+    .rating-badge {
       display: inline-block;
-      padding: 8px 20px;
+      padding: 10px 24px;
       background: ${ratingColor};
       color: white;
-      border-radius: 20px;
-      font-weight: bold;
-      font-size: 16px;
-      margin: 10px 0;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 18px;
+      margin: 15px 0;
     }
-    .horizon {
+    .meta-line {
       color: #6B7280;
-      font-size: 14px;
+      font-size: 15px;
+      margin: 8px 0;
+    }
+    h2 {
+      color: #111827;
+      font-size: 22px;
+      font-weight: 600;
+      margin: 35px 0 15px 0;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #E5E7EB;
+    }
+    h3 {
+      color: #374151;
+      font-size: 18px;
+      font-weight: 600;
+      margin: 25px 0 12px 0;
     }
     .section {
-      margin: 25px 0;
+      margin: 30px 0;
     }
-    .section-title {
-      color: #4F46E5;
-      font-size: 18px;
-      font-weight: bold;
-      margin-bottom: 12px;
-      padding-bottom: 6px;
-      border-bottom: 1px solid #E5E7EB;
-    }
-    .price-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-      margin: 15px 0;
-    }
-    .price-item {
-      background: #F3F4F6;
-      padding: 12px;
-      border-radius: 6px;
-    }
-    .price-label {
-      color: #6B7280;
-      font-size: 12px;
-    }
-    .price-value {
-      color: #1F2937;
-      font-weight: bold;
-      font-size: 16px;
-    }
-    .summary-box {
+    .investment-summary {
       background: #EEF2FF;
-      padding: 20px;
+      padding: 24px;
       border-radius: 8px;
       border-left: 4px solid #4F46E5;
-      margin: 15px 0;
+      margin: 20px 0;
+      font-size: 16px;
+      line-height: 1.9;
+    }
+    .price-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-size: 15px;
+    }
+    .price-table th {
+      background: #F3F4F6;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #374151;
+      border-bottom: 2px solid #E5E7EB;
+    }
+    .price-table td {
+      padding: 12px;
+      border-bottom: 1px solid #E5E7EB;
     }
     ul {
       margin: 15px 0;
-      padding-left: 20px;
+      padding-left: 24px;
     }
     li {
-      margin: 8px 0;
+      margin: 12px 0;
       line-height: 1.8;
     }
-    .meta {
-      margin-top: 30px;
-      padding-top: 20px;
-      border-top: 1px solid #E5E7EB;
+    .action-box {
+      background: #F0FDF4;
+      padding: 24px;
+      border-radius: 8px;
+      border-left: 4px solid #10B981;
+      margin: 20px 0;
+    }
+    .note {
+      color: #6B7280;
       font-size: 13px;
+      font-style: italic;
+      margin: 10px 0;
+    }
+    .meta {
+      margin-top: 40px;
+      padding-top: 25px;
+      border-top: 2px solid #E5E7EB;
+      font-size: 14px;
       color: #6B7280;
     }
     .meta-item {
-      margin: 5px 0;
+      margin: 6px 0;
     }
     .disclaimer {
       background: #FEF3C7;
       border: 1px solid #F59E0B;
       border-radius: 8px;
-      padding: 15px;
-      margin-top: 25px;
-      font-size: 12px;
+      padding: 20px;
+      margin-top: 30px;
+      font-size: 13px;
       color: #92400E;
+      line-height: 1.7;
     }
     .disclaimer strong {
       display: block;
-      margin-bottom: 8px;
-      font-size: 14px;
+      margin-bottom: 10px;
+      font-size: 15px;
     }
   </style>
 </head>
@@ -339,62 +372,71 @@ function generateHTMLReport(symbol, report) {
   <div class="container">
     <div class="header">
       <h1>USIS 研究报告</h1>
-      <div class="symbol">${report.symbol}</div>
-      <div class="rating">${report.rating}</div>
-      <div class="horizon">时间范围：${report.horizon}</div>
+      <div class="symbol-line">${report.symbol} - <span class="company-name">${report.company_name}</span></div>
+      <div class="rating-badge">${report.rating}</div>
+      <div class="meta-line">时间范围：${report.horizon}</div>
+      <div class="meta-line">最新价格：${report.price_info.current} 美元 | 日内涨跌：${report.price_info.change} (${report.price_info.change_percent}%)</div>
     </div>
 
-    <div class="section">
-      <div class="section-title">价格信息</div>
-      <div class="price-grid">
-        <div class="price-item">
-          <div class="price-label">当前价</div>
-          <div class="price-value">${report.price_info.current}</div>
-        </div>
-        <div class="price-item">
-          <div class="price-label">涨跌</div>
-          <div class="price-value">${report.price_info.change} (${report.price_info.change_percent}%)</div>
-        </div>
-        <div class="price-item">
-          <div class="price-label">最高</div>
-          <div class="price-value">${report.price_info.high}</div>
-        </div>
-        <div class="price-item">
-          <div class="price-label">最低</div>
-          <div class="price-value">${report.price_info.low}</div>
-        </div>
-      </div>
-    </div>
+    <h2>一、投资结论（Investment Summary）</h2>
+    <div class="investment-summary">${report.investment_summary}</div>
 
-    <div class="section">
-      <div class="section-title">核心观点</div>
-      <div class="summary-box">${report.summary}</div>
-    </div>
+    <h2>二、核心观点（Key Investment Thesis）</h2>
+    <ul>
+      ${report.thesis.map(t => `<li>${t}</li>`).join('')}
+    </ul>
 
-    <div class="section">
-      <div class="section-title">驱动因素</div>
-      <ul>
-        ${report.drivers.map(d => `<li>${d}</li>`).join('')}
-      </ul>
-    </div>
+    <h2>三、估值与财务概览（Valuation & Financials）</h2>
+    <h3>价格信息</h3>
+    <table class="price-table">
+      <tr>
+        <th>指标</th>
+        <th>数值</th>
+      </tr>
+      <tr>
+        <td>当前价格</td>
+        <td>${report.price_info.current} 美元</td>
+      </tr>
+      <tr>
+        <td>日内涨跌</td>
+        <td>${report.price_info.change} (${report.price_info.change_percent}%)</td>
+      </tr>
+      <tr>
+        <td>日内最高</td>
+        <td>${report.price_info.high} 美元</td>
+      </tr>
+      <tr>
+        <td>日内最低</td>
+        <td>${report.price_info.low} 美元</td>
+      </tr>
+      <tr>
+        <td>成交量</td>
+        <td>${report.price_info.volume}</td>
+      </tr>
+    </table>
+    <p class="note">注：部分估值指标（市盈率、市销率等）需接入更详细的财务数据源，当前版本暂不提供。</p>
 
-    <div class="section">
-      <div class="section-title">风险提示</div>
-      <ul>
-        ${report.risks.map(r => `<li>${r}</li>`).join('')}
-      </ul>
-    </div>
+    <h2>四、关键驱动因素（Catalysts）</h2>
+    <ul>
+      ${report.catalysts.map(c => `<li>${c}</li>`).join('')}
+    </ul>
 
-    <div class="section">
-      <div class="section-title">技术面分析</div>
-      <p>${report.technical_view}</p>
-    </div>
+    <h2>五、核心风险（Key Risks）</h2>
+    <ul>
+      ${report.risks.map(r => `<li>${r}</li>`).join('')}
+    </ul>
+
+    <h2>六、技术面简评（Technical View）</h2>
+    <p>${report.technical_view}</p>
+
+    <h2>七、操作建议（Action）</h2>
+    <div class="action-box">${report.action}</div>
 
     <div class="meta">
-      <div class="meta-item">🤖 AI 模型：${report.model_used}</div>
-      <div class="meta-item">⏱ 生成时间：${report.latency_ms}ms</div>
-      <div class="meta-item">📅 生成于：${new Date(report.generated_at).toLocaleString('zh-CN')}</div>
-      <div class="meta-item">🔬 环境：v3-dev (测试版)</div>
+      <div class="meta-item">生成时间：${new Date(report.generated_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</div>
+      <div class="meta-item">AI 模型：${report.model_used}</div>
+      <div class="meta-item">处理时长：${report.latency_ms}ms</div>
+      <div class="meta-item">报告版本：v3-dev</div>
     </div>
 
     <div class="disclaimer">
@@ -418,69 +460,88 @@ function generateHTMLReport(symbol, report) {
 function generateMarkdownReport(symbol, report) {
   console.log(`📄 [v3-dev MD] 生成 Markdown 研报: ${symbol}`);
   
-  const ratingEmoji = {
-    'STRONG_BUY': '🟢🟢',
-    'BUY': '🟢',
-    'HOLD': '🟡',
-    'SELL': '🔴',
-    'STRONG_SELL': '🔴🔴'
-  }[report.rating] || '⚪';
+  // 投行级风格 - 移除emoji，使用专业评级符号
+  const ratingSymbol = {
+    'STRONG_BUY': '++',
+    'BUY': '+',
+    'HOLD': '=',
+    'SELL': '-',
+    'STRONG_SELL': '--'
+  }[report.rating] || '=';
 
   const markdown = `# USIS 研究报告
 
-## ${report.symbol}
+## ${report.symbol} - ${report.company_name}
 
-**评级**：${ratingEmoji} ${report.rating}  
-**时间范围**：${report.horizon}
+**评级：${report.rating}** (${ratingSymbol})  
+**时间范围：${report.horizon}**  
+**最新价格：${report.price_info.current} 美元**  
+**日内涨跌：${report.price_info.change} (${report.price_info.change_percent}%)**
 
 ---
 
-## 💰 价格信息
+## 一、投资结论（Investment Summary）
+
+${report.investment_summary}
+
+---
+
+## 二、核心观点（Key Investment Thesis）
+
+${report.thesis.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+
+---
+
+## 三、估值与财务概览（Valuation & Financials）
+
+### 价格信息
 
 | 指标 | 数值 |
 |------|------|
-| 当前价 | ${report.price_info.current} |
-| 涨跌 | ${report.price_info.change} (${report.price_info.change_percent}%) |
-| 最高 | ${report.price_info.high} |
-| 最低 | ${report.price_info.low} |
+| 当前价格 | ${report.price_info.current} 美元 |
+| 日内涨跌 | ${report.price_info.change} (${report.price_info.change_percent}%) |
+| 日内最高 | ${report.price_info.high} 美元 |
+| 日内最低 | ${report.price_info.low} 美元 |
 | 成交量 | ${report.price_info.volume} |
 
----
-
-## 📈 核心观点
-
-${report.summary}
+_注：部分估值指标（市盈率、市销率等）需接入更详细的财务数据源，当前版本暂不提供。_
 
 ---
 
-## 🎯 驱动因素
+## 四、关键驱动因素（Catalysts）
 
-${report.drivers.map((d, i) => `${i + 1}. ${d}`).join('\n')}
+${report.catalysts.map((c, i) => `${i + 1}. ${c}`).join('\n')}
 
 ---
 
-## ⚠️ 风险提示
+## 五、核心风险（Key Risks）
 
 ${report.risks.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 
 ---
 
-## 📉 技术面分析
+## 六、技术面简评（Technical View）
 
 ${report.technical_view}
 
 ---
 
-## 📊 元信息
+## 七、操作建议（Action）
 
-- **🤖 AI 模型**：${report.model_used}
-- **⏱ 生成时间**：${report.latency_ms}ms
-- **📅 生成于**：${new Date(report.generated_at).toLocaleString('zh-CN')}
-- **🔬 环境**：v3-dev (测试版)
+${report.action}
 
 ---
 
-## ⚖️ 免责声明
+## 报告信息
+
+- **生成时间：** ${new Date(report.generated_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+- **AI 模型：** ${report.model_used}
+- **处理时长：** ${report.latency_ms}ms
+- **报告版本：** v3-dev
+
+---
+
+## 免责声明
 
 ${report.disclaimer}
 `;
