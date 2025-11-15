@@ -550,8 +550,104 @@ ${report.disclaimer}
   return markdown;
 }
 
+/**
+ * 使用 PDFShift API 将 HTML 转换为 PDF
+ * @param {string} htmlContent - HTML内容
+ * @returns {Promise<Buffer>} PDF Buffer
+ */
+async function convertHTMLtoPDF(htmlContent) {
+  const PDFSHIFT_API_KEY = process.env.PDFSHIFT_API_KEY || '';
+  
+  // 如果没有API Key，使用备用方案（纯文本PDF）
+  if (!PDFSHIFT_API_KEY) {
+    console.warn('⚠️  [v3-dev PDF] PDFShift API Key 未配置，使用 PDFKit 备用方案');
+    return generateFallbackPDF(htmlContent);
+  }
+  
+  try {
+    console.log('📄 [v3-dev PDFShift] 开始生成 PDF...');
+    const fetch = require('node-fetch');
+    
+    const response = await fetch('https://api.pdfshift.io/v3/convert/pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${Buffer.from('api:' + PDFSHIFT_API_KEY).toString('base64')}`
+      },
+      body: JSON.stringify({
+        source: htmlContent,
+        format: 'A4',
+        margin: '20mm 15mm',
+        print_background: true
+      }),
+      timeout: 30000
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`PDFShift API错误: ${response.status} - ${errorText}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    console.log(`✅ [v3-dev PDFShift] PDF生成成功 (${arrayBuffer.byteLength} bytes)`);
+    return Buffer.from(arrayBuffer);
+    
+  } catch (error) {
+    console.error('❌ [v3-dev PDFShift] API调用失败:', error.message);
+    console.warn('⚠️  [v3-dev PDF] 降级到 PDFKit 备用方案');
+    return generateFallbackPDF(htmlContent);
+  }
+}
+
+/**
+ * 备用方案：使用 PDFKit 生成纯文本 PDF
+ * @param {string} htmlContent - HTML内容
+ * @returns {Promise<Buffer>} PDF Buffer
+ */
+function generateFallbackPDF(htmlContent) {
+  console.log('📝 [v3-dev PDFKit] 使用备用方案生成PDF...');
+  
+  // 提取文本内容
+  const textContent = htmlContent
+    .replace(/<style>[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, '\n')
+    .replace(/\n+/g, '\n')
+    .trim();
+  
+  const PDFDocument = require('pdfkit');
+  const chunks = [];
+  
+  const doc = new PDFDocument({ 
+    size: 'A4',
+    margins: { top: 50, bottom: 50, left: 50, right: 50 }
+  });
+  
+  doc.on('data', chunk => chunks.push(chunk));
+  
+  // 标题
+  doc.fontSize(16).font('Helvetica-Bold').text('USIS Research Report', { align: 'center' });
+  doc.moveDown();
+  
+  // 内容
+  doc.fontSize(10).font('Helvetica').text(textContent, {
+    width: 500,
+    align: 'left'
+  });
+  
+  doc.end();
+  
+  return new Promise((resolve, reject) => {
+    doc.on('end', () => {
+      console.log('✅ [v3-dev PDFKit] PDF生成成功');
+      resolve(Buffer.concat(chunks));
+    });
+    doc.on('error', reject);
+  });
+}
+
 module.exports = {
   buildSimpleReport,
   generateHTMLReport,
-  generateMarkdownReport
+  generateMarkdownReport,
+  convertHTMLtoPDF
 };

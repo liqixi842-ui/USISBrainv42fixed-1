@@ -1,0 +1,85 @@
+目前 /report NVDA 的文本内容结构已经满足我的需求，但我需要 **真正的 PDF 研报文件**，而不是只在 Telegram 里发 Markdown。
+
+从之前的 Console 日志可以看到：
+
+- [DEV_BOT] External PDF service response status: 503
+- error: "PDF service not configured", "message": "PDF_SERVICE_URL environment variable is not set"
+
+说明现在 **外部 PDF 服务没有配置好**，导致每次都只能走 Markdown fallback。
+
+我的要求很简单：
+
+1）配置好 PDF_SERVICE_URL，让外部 PDF 服务真的工作；  
+2）让 /v3/report/:symbol?format=pdf 和 /report SYMBOL 返回一份 PDF 文件；  
+3）如果 PDF 服务挂了，再优雅降级为 Markdown。
+
+请按以下步骤处理：
+
+────────────────────────
+【1】检查并配置 PDF_SERVICE_URL 环境变量
+────────────────────────
+
+1. 请检查当前环境变量中是否存在 PDF_SERVICE_URL：
+   - 如果不存在，请根据我们之前已经接入的“专门 PDF 服务”（之前用于生成其他 PDF 报告的那个地址），把该服务的 HTTPS 端点写入：
+     PDF_SERVICE_URL = "<外部 PDF 服务 URL>"
+
+   （如果你有记录之前的 PDF 生成服务配置，请沿用同一个服务；如果没有记录，请新建一个可用的 PDF 转换服务并告知我用的是什么。）
+
+2. 确认在 v3_dev/services/reportService.js 中，调用外部 PDF 服务的逻辑使用的就是这个 PDF_SERVICE_URL。
+
+────────────────────────
+【2】确认 /v3/report/:symbol?format=pdf 能返回 PDF
+────────────────────────
+
+修复后，请在开发环境里执行以下测试：
+
+1. 启动开发服务器：  
+   cd /home/runner/workspace  
+   node index.js
+
+2. 用 curl 测试 PDF 端点（以 NVDA 为例）：  
+   curl -I "http://localhost:3000/v3/report/NVDA?format=pdf"
+
+   期待结果：
+   - HTTP 状态码 200
+   - Content-Type: application/pdf
+
+如失败，请将完整响应头和日志返回给我。
+
+────────────────────────
+【3】让 /report NVDA 通过 PDF 服务发送 PDF 文件
+────────────────────────
+
+在 v3_dev/services/devBotHandler.js 中：
+
+1. 处理 /report SYMBOL 时：
+   - 优先使用 HTML → 外部 PDF 服务 → 生成 PDF buffer → sendDocument
+   - 只有当 PDF 服务不可用（例如 5xx 或超时）时，才降级为发送 Markdown 文本，并明确提示：
+     「当前 PDF 服务不可用，已为您发送文本版研报。」
+
+2. 请确保：
+
+   - PDF buffer 的大小 > 0，并在日志中打印：
+     console.log("[DEV_BOT] PDF buffer size:", pdfBuffer?.length);
+
+   - sendDocument 调用成功后，在日志中打印：
+     console.log("[DEV_BOT] PDF report sent for", symbol);
+
+────────────────────────
+【4】验证完整链路
+────────────────────────
+
+修复完成后，请帮我在开发环境中做一次完整测试，并把结果返回给我：
+
+1. Console 日志中：
+   - 不再出现 "PDF_SERVICE_URL environment variable is not set"
+   - 出现类似：
+     [DEV_BOT] External PDF service response status: 200
+     [DEV_BOT] PDF buffer size: XXXXX
+     [DEV_BOT] PDF report sent for NVDA
+
+2. Telegram dev 机器人中：
+   - 发送 /report NVDA
+   - 实际收到一份 PDF 文件（而不仅是 Markdown）
+
+请把以上测试的 Console 日志片段和说明返回给我。
