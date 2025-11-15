@@ -921,6 +921,7 @@ async function fetchStockMetrics(symbol) {
       pbRatio: data.metric?.pbAnnual,
       psRatio: data.metric?.psTTM,
       dividendYield: data.metric?.dividendYieldIndicatedAnnual,
+      marketCap: data.metric?.marketCapitalization, // 🔧 v4.0: 添加市值
       
       // 盈利能力
       profitMargin: data.metric?.netProfitMarginTTM,
@@ -941,7 +942,8 @@ async function fetchStockMetrics(symbol) {
       averageVolume: data.metric?.['10DayAverageTradingVolume'],
       
       source: 'finnhub',
-      timestamp: fetchTime
+      timestamp: fetchTime,
+      metric: data.metric // 🔧 v4.0: 保留原始metric对象供normalizeFinancialData使用
     };
     
     const source = {
@@ -1302,72 +1304,108 @@ async function fetchTechnicalIndicators(symbol, interval = '1day') {
 }
 
 /**
- * 🆕 v6.2: Twelve Data基本面数据获取 - 财报三表
+ * 🆕 v4.0.2: Finnhub统一财务数据获取 - 100% Finnhub原始数据
+ * 聚合 /stock/financials-reported + /stock/metric 提供一致的财务数据
  * @param {string} symbol - 股票代码
- * @returns {Promise<Object>} 基本面数据
+ * @returns {Promise<Object>} 统一的Finnhub财务数据
  */
 async function fetchFundamentals(symbol) {
-  console.log(`\n📊 [Twelve Data] 获取${symbol}基本面数据...`);
+  console.log(`\n📊 [Finnhub Financials] 获取${symbol}财务数据（100% Finnhub原始值）...`);
   
-  if (!TWELVE_DATA_KEY) {
-    console.warn('   ⚠️  TWELVE_DATA_API_KEY未配置，跳过基本面数据');
+  if (!FINNHUB_KEY) {
+    console.warn('   ⚠️  FINNHUB_API_KEY未配置，跳过财务数据');
     return { fundamentals: null, source: null };
   }
   
-  const baseUrl = 'https://api.twelvedata.com';
   const startTime = Date.now();
   
-  // 🔧 辅助函数：检查HTTP响应和API错误
-  const fetchFundamental = async (url) => {
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-    }
-    const data = await res.json();
-    if (data.status === 'error') {
-      throw new Error(data.message || 'API returned error status');
-    }
-    return data;
-  };
-  
-  // 并行获取4个基本面数据源
-  const fundamentals = await Promise.allSettled([
-    // 利润表 (Income Statement)
-    fetchFundamental(`${baseUrl}/income_statement?symbol=${symbol}&period=annual&apikey=${TWELVE_DATA_KEY}`)
-      .then(data => ({ name: 'income_statement', data: data.income_statement?.[0], timestamp: data.income_statement?.[0]?.fiscal_date })),
+  try {
+    // 并行获取 Finnhub 的两个核心端点
+    const [reportedResponse, metricsResponse] = await Promise.allSettled([
+      // 1. /stock/financials-reported - GAAP原始财报（Revenue/NetIncome/EPS时间序列）
+      fetch(`https://finnhub.io/api/v1/stock/financials-reported?symbol=${symbol}&freq=annual&token=${FINNHUB_KEY}`, { timeout: 10000 })
+        .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))),
+      
+      // 2. /stock/metric - TTM比率（Margins/PE/MarketCap）
+      fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${symbol}&metric=all&token=${FINNHUB_KEY}`, { timeout: 10000 })
+        .then(res => res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`)))
+    ]);
     
-    // 资产负债表 (Balance Sheet)
-    fetchFundamental(`${baseUrl}/balance_sheet?symbol=${symbol}&period=annual&apikey=${TWELVE_DATA_KEY}`)
-      .then(data => ({ name: 'balance_sheet', data: data.balance_sheet?.[0], timestamp: data.balance_sheet?.[0]?.fiscal_date })),
+    const elapsed = Date.now() - startTime;
     
-    // 现金流量表 (Cash Flow)
-    fetchFundamental(`${baseUrl}/cash_flow?symbol=${symbol}&period=annual&apikey=${TWELVE_DATA_KEY}`)
-      .then(data => ({ name: 'cash_flow', data: data.cash_flow?.[0], timestamp: data.cash_flow?.[0]?.fiscal_date })),
-    
-    // 统计数据 (Statistics - PE, Market Cap等)
-    fetchFundamental(`${baseUrl}/statistics?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`)
-      .then(data => ({ name: 'statistics', data: data.statistics }))
-  ]);
-  
-  const elapsed = Date.now() - startTime;
-  
-  const results = {
-    income_statement: fundamentals[0].status === 'fulfilled' ? fundamentals[0].value : { error: fundamentals[0].reason?.message },
-    balance_sheet: fundamentals[1].status === 'fulfilled' ? fundamentals[1].value : { error: fundamentals[1].reason?.message },
-    cash_flow: fundamentals[2].status === 'fulfilled' ? fundamentals[2].value : { error: fundamentals[2].reason?.message },
-    statistics: fundamentals[3].status === 'fulfilled' ? fundamentals[3].value : { error: fundamentals[3].reason?.message },
-    metadata: {
-      symbol,
-      timestamp: Date.now(),
-      elapsed_ms: elapsed,
-      source: 'Twelve Data',
-      success_count: fundamentals.filter(r => r.status === 'fulfilled').length,
-      total_count: fundamentals.length
+    // 提取财报数据（选择10-K年报，最多5期）
+    let statements = [];
+    if (reportedResponse.status === 'fulfilled' && reportedResponse.value?.data) {
+      const annualReports = reportedResponse.value.data.filter(r => r.form === '10-K').slice(0, 5);
+      statements = annualReports.map(report => ({
+        fiscalDate: report.endDate,
+        year: report.year,
+        // 🔧 从report.ic映射核心财务指标（Finnhub使用XBRL概念名）
+        revenue: report.report?.ic?.find(item => item.concept === 'RevenueFromContractWithCustomerExcludingAssessedTax' || item.concept === 'Revenues')?.value || null,
+        netIncome: report.report?.ic?.find(item => item.concept === 'NetIncomeLoss')?.value || null,
+        eps: report.report?.ic?.find(item => item.concept === 'EarningsPerShareDiluted')?.value || null,
+        grossProfit: report.report?.ic?.find(item => item.concept === 'GrossProfit')?.value || null,
+        operatingIncome: report.report?.ic?.find(item => item.concept === 'OperatingIncomeLoss')?.value || null,
+        currency: report.report?.ic?.[0]?.unit || 'USD'
+      }));
     }
-  };
-  
-  console.log(`✅ [Fundamentals] 完成 (${elapsed}ms, 成功率: ${results.metadata.success_count}/${results.metadata.total_count})`);
-  return { fundamentals: results, source: 'Twelve Data' };
+    
+    // 提取TTM比率（已经是百分比或正确单位）
+    let ratios = {};
+    if (metricsResponse.status === 'fulfilled' && metricsResponse.value?.metric) {
+      const m = metricsResponse.value.metric;
+      ratios = {
+        peRatio: m.peBasicTTM || m.peNormalizedAnnual || null,
+        marketCap: m.marketCapitalization || null, // 单位：百万美元
+        grossMarginTTM: m.grossMarginTTM || null, // 已经是百分比（如65.2表示65.2%）
+        operatingMarginTTM: m.operatingMarginTTM || null,
+        netProfitMarginTTM: m.netProfitMarginTTM || null,
+        roeTTM: m.roeTTM || null,
+        roaTTM: m.roaTTM || null,
+        revenueGrowthTTMYoy: m.revenueGrowthTTMYoy || null
+      };
+    }
+    
+    const successCount = (reportedResponse.status === 'fulfilled' ? 1 : 0) + (metricsResponse.status === 'fulfilled' ? 1 : 0);
+    
+    console.log(`✅ [Finnhub Financials] 完成 (${elapsed}ms)`);
+    console.log(`   - 财报期数: ${statements.length}`);
+    console.log(`   - 最新Revenue: ${statements[0]?.revenue ? '$' + (statements[0].revenue / 1e9).toFixed(2) + 'B' : 'N/A'}`);
+    console.log(`   - PE比率: ${ratios.peRatio || 'N/A'}`);
+    console.log(`   - 数据源: 100% Finnhub (financials-reported + metric)`);
+    
+    return {
+      fundamentals: {
+        statements, // 时间序列数据（5期年报）
+        ratios, // TTM比率
+        metadata: {
+          symbol,
+          timestamp: Date.now(),
+          elapsed_ms: elapsed,
+          source: 'Finnhub (financials-reported + metric)',
+          success_count: successCount,
+          total_count: 2
+        }
+      },
+      source: 'Finnhub'
+    };
+    
+  } catch (error) {
+    console.error(`❌ [Finnhub Financials] 获取失败: ${error.message}`);
+    return {
+      fundamentals: {
+        statements: [],
+        ratios: {},
+        metadata: {
+          symbol,
+          timestamp: Date.now(),
+          source: 'Finnhub',
+          error: error.message
+        }
+      },
+      source: 'Finnhub'
+    };
+  }
 }
 
 /**
@@ -1504,6 +1542,236 @@ async function fetchComprehensiveAnalysis(symbol) {
   };
 }
 
+/**
+ * 🆕 v6.2: 获取历史价格数据（用于研报）
+ * @param {string} symbol - 股票代码
+ * @param {Object} options - { months: 12 } 获取月数
+ * @returns {Promise<Array>} - 历史价格数组
+ */
+async function fetchHistoricalPrices(symbol, options = {}) {
+  const { months = 12 } = options;
+  console.log(`\n📈 [Data Broker] 获取${symbol}历史价格（${months}个月）`);
+  
+  try {
+    // 计算日期范围
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - months);
+    
+    const formatDate = (date) => {
+      return date.toISOString().split('T')[0]; // YYYY-MM-DD
+    };
+    
+    // 优先使用Twelve Data（支持全球交易所）
+    if (TWELVE_DATA_KEY) {
+      const url = `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1day&start_date=${formatDate(startDate)}&end_date=${formatDate(endDate)}&apikey=${TWELVE_DATA_KEY}`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.status === 'ok' && data.values) {
+        console.log(`✅ [Twelve Data] 获取到${data.values.length}条历史数据`);
+        return data.values.map(v => ({
+          date: v.datetime,
+          open: parseFloat(v.open),
+          high: parseFloat(v.high),
+          low: parseFloat(v.low),
+          close: parseFloat(v.close),
+          volume: parseInt(v.volume)
+        }));
+      }
+    }
+    
+    // 降级到Alpha Vantage
+    if (ALPHA_VANTAGE_KEY) {
+      const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${symbol}&outputsize=full&apikey=${ALPHA_VANTAGE_KEY}`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data['Time Series (Daily)']) {
+        const timeSeries = data['Time Series (Daily)'];
+        const prices = Object.keys(timeSeries)
+          .filter(date => new Date(date) >= startDate)
+          .map(date => ({
+            date,
+            open: parseFloat(timeSeries[date]['1. open']),
+            high: parseFloat(timeSeries[date]['2. high']),
+            low: parseFloat(timeSeries[date]['3. low']),
+            close: parseFloat(timeSeries[date]['4. close']),
+            volume: parseInt(timeSeries[date]['5. volume'])
+          }))
+          .sort((a, b) => new Date(a.date) - new Date(b.date));
+        
+        console.log(`✅ [Alpha Vantage] 获取到${prices.length}条历史数据`);
+        return prices;
+      }
+    }
+    
+    console.warn('⚠️  历史价格数据获取失败，返回空数组');
+    return [];
+    
+  } catch (error) {
+    console.error(`❌ [Historical Prices] 获取失败: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * 🆕 v4.0: 获取同行基准数据（用于深度研报对比表）
+ * @param {string} symbol - 股票代码
+ * @param {Object} existingMetrics - 可选，已获取的目标公司metrics（避免重复调用）
+ * @returns {Promise<Object>} - 同行公司列表及其关键指标
+ */
+async function fetchPeerBenchmarks(symbol, existingMetrics = null) {
+  console.log(`\n📊 [Peer Benchmarks] 获取${symbol}的同行对比数据`);
+  
+  // 🔒 先查缓存（TTL 20分钟，因为同行关系准静态）
+  const cacheKey = getCacheKey('peer_benchmarks', symbol);
+  const cached = getFromCache(cacheKey);
+  
+  if (cached && (Date.now() - cached.timestamp) < 20 * 60 * 1000) {
+    console.log(`   💾 [Cache Hit] 同行基准数据命中缓存`);
+    return cached;
+  }
+  
+  if (!FINNHUB_KEY) {
+    console.warn('   ⚠️  Finnhub API密钥缺失，跳过同行分析');
+    return {
+      targetSymbol: symbol,
+      peers: [],
+      benchmarks: {},
+      source: 'unavailable'
+    };
+  }
+  
+  try {
+    // 1. 获取同行公司列表（Finnhub /stock/peers）
+    const peersUrl = `https://finnhub.io/api/v1/stock/peers?symbol=${symbol}&token=${FINNHUB_KEY}`;
+    const peersResponse = await fetch(peersUrl, { timeout: 10000 });
+    
+    if (!peersResponse.ok) {
+      throw new Error(`Finnhub peers API error: ${peersResponse.status}`);
+    }
+    
+    const peersData = await peersResponse.json();
+    const peerSymbols = Array.isArray(peersData) ? peersData.slice(0, 4) : []; // 取前4个同行
+    
+    if (peerSymbols.length === 0) {
+      console.warn(`   ⚠️  未找到${symbol}的同行公司`);
+      const result = {
+        targetSymbol: symbol,
+        peers: [],
+        benchmarks: {},
+        source: 'finnhub',
+        timestamp: Date.now()
+      };
+      setCache(cacheKey, result);
+      return result;
+    }
+    
+    console.log(`   ✅ 找到${peerSymbols.length}个同行: ${peerSymbols.join(', ')}`);
+    
+    // 2. 🔧 重用目标公司已获取的metrics（避免重复调用）
+    let targetMetricsData = existingMetrics;
+    if (!targetMetricsData) {
+      const { metrics } = await fetchStockMetrics(symbol);
+      targetMetricsData = metrics;
+    }
+    
+    // 3. 🔧 使用Promise.allSettled并行获取同行metrics（支持部分成功）
+    const peerMetricsPromises = peerSymbols.map((sym) => 
+      fetchStockMetrics(sym)
+        .then(({ metrics }) => ({
+          symbol: sym,
+          pe: metrics?.peRatio || null,
+          pb: metrics?.pbRatio || null,
+          ps: metrics?.psRatio || null,
+          marketCap: metrics?.marketCap || null,
+          profitMargin: metrics?.profitMargin || null, // 🔧 v4.0 FIX: Finnhub已返回百分比，不要再×100
+          roe: metrics?.roe || null, // 🔧 v4.0 FIX: Finnhub已返回百分比，不要再×100
+          status: 'success'
+        }))
+        .catch((e) => ({
+          symbol: sym,
+          pe: null,
+          pb: null,
+          ps: null,
+          marketCap: null,
+          profitMargin: null,
+          roe: null,
+          status: 'failed',
+          error: e.message
+        }))
+    );
+    
+    const peerResults = await Promise.allSettled(peerMetricsPromises);
+    const peerMetrics = peerResults
+      .filter(r => r.status === 'fulfilled')
+      .map(r => r.value);
+    
+    // 4. 构建目标公司metrics
+    const targetMetrics = {
+      symbol,
+      pe: targetMetricsData?.peRatio || null,
+      pb: targetMetricsData?.pbRatio || null,
+      ps: targetMetricsData?.psRatio || null,
+      marketCap: targetMetricsData?.marketCap || null,
+      profitMargin: targetMetricsData?.profitMargin || null, // 🔧 v4.0 FIX: Finnhub已返回百分比，不要再×100
+      roe: targetMetricsData?.roe || null // 🔧 v4.0 FIX: Finnhub已返回百分比，不要再×100
+    };
+    
+    // 5. 计算行业平均值（排除null和failed值）
+    const successfulPeers = peerMetrics.filter(m => m.status === 'success');
+    const peValues = successfulPeers.map(m => m.pe).filter(v => v !== null);
+    const roeValues = successfulPeers.map(m => m.roe).filter(v => v !== null);
+    
+    const avgPE = peValues.length > 0 
+      ? peValues.reduce((sum, v) => sum + v, 0) / peValues.length
+      : null;
+    const avgROE = roeValues.length > 0
+      ? roeValues.reduce((sum, v) => sum + v, 0) / roeValues.length
+      : null;
+    
+    const failedCount = peerMetrics.filter(m => m.status === 'failed').length;
+    
+    console.log(`   📈 行业平均PE: ${avgPE ? avgPE.toFixed(2) : 'N/A'}, 平均ROE: ${avgROE ? avgROE.toFixed(2) + '%' : 'N/A'}`);
+    if (failedCount > 0) {
+      console.warn(`   ⚠️  ${failedCount}/${peerMetrics.length}个同行数据获取失败`);
+    }
+    
+    const result = {
+      targetSymbol: symbol,
+      targetMetrics,
+      peers: peerMetrics,
+      benchmarks: {
+        avgPE: avgPE ? Number(avgPE.toFixed(2)) : null,
+        avgROE: avgROE ? Number(avgROE.toFixed(2)) : null,
+        peerCount: successfulPeers.length,
+        failedCount
+      },
+      source: 'finnhub',
+      timestamp: Date.now()
+    };
+    
+    // 🔒 存入缓存（20分钟TTL）
+    setCache(cacheKey, result);
+    
+    return result;
+    
+  } catch (error) {
+    console.error(`   ❌ [Peer Benchmarks] 获取失败: ${error.message}`);
+    return {
+      targetSymbol: symbol,
+      peers: [],
+      benchmarks: {},
+      source: 'failed',
+      error: error.message,
+      timestamp: Date.now()
+    };
+  }
+}
+
 module.exports = {
   fetchMarketData,
   validateDataForAnalysis,
@@ -1515,5 +1783,7 @@ module.exports = {
   fetchTechnicalIndicators,
   fetchFundamentals,
   fetchAnalystRatings,
-  fetchComprehensiveAnalysis
+  fetchComprehensiveAnalysis,
+  fetchHistoricalPrices,  // 🆕 历史价格数据
+  fetchPeerBenchmarks     // 🆕 v4.0: 同行基准数据
 };
