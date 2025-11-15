@@ -1,0 +1,129 @@
+现在 /report NVDA 已经能生成结构还不错的文字研报，但业务体验有一个我不能接受的问题：
+
+❌ 一旦 PDF 生成或发送阶段出错，Bot 直接给用户发一条「❌ 研报生成失败」，研报内容本身完全拿不到。
+
+我的硬性要求是：
+
+1）生成研报内容这件事优先级最高，**不能降级**，必须给我一份完整的研报（哪怕是纯文本）；  
+2）PDF 是加分项：能成功就发 PDF，发不出 PDF 也必须发完整的文本研报，而不是“失败”提示。
+
+请你按这个规则重构 /report 逻辑（v3-dev / dev bot 用），具体要求如下：
+
+────────────────────────
+【1】重构 /report 的整体流程（高层逻辑）
+────────────────────────
+
+请在 v3_dev/services/devBotHandler.js 中，将 `/report SYMBOL` 的处理逻辑重构为下面这种结构（伪代码）：
+
+1. **第一阶段：生成研报内容（必做）**
+
+   - 无论是否要发 PDF，先调用 reportService：
+     - 生成结构化的研报数据（JSON）
+     - 生成 Markdown 文本版（或 HTML，再转 MD）
+   - 如果这一步失败，才允许对用户说「研报生成失败」，并在日志中记录“内容生成失败”的原因。
+   - 换句话说：**只有在 AI / 数据层完全生成不出研报内容时，才允许出现业务级失败。**
+
+2. **第二阶段：尝试生成 PDF（可选，尽力而为）**
+
+   - 在研报内容已经成功生成的前提下：
+     - 尝试调用 DocRaptor 生成 PDF：
+       - 成功 → 得到 pdfBuffer
+       - 失败 → catch 错误，记录日志，但不要改变“研报已就绪”这个事实
+
+3. **第三阶段：发送给用户（有条件优先发 PDF，但保证一定有研报内容送达）**
+
+   - 如果 pdfBuffer 存在且安全可用：
+     - 首选行为：
+       - 发送 PDF 文件（sendDocument）
+       - 可附一段简短说明文字（纯文本，不用 parse_mode）
+   - 如果 PDF 生成失败 / DocRaptor 报错 / pdfBuffer 不存在：
+     - 发送 Markdown 文本版研报：
+       - 首行可以说明：
+         「当前 PDF 服务暂时不可用，以下是完整文本版研报：」
+       - 然后附上完整的文本报告（就是现在你已经生成的那一大段 MD）
+
+   **禁止**在“内容已经生成但 PDF 出问题”的情况下，对用户发送：
+   - 「❌ 研报生成失败」
+   - 或只发错误信息，不发正文。
+
+阶段顺序要严格保证：  
+✅ 内容 > PDF > 错误  
+而不是现在这种：PDF 出错就整体算失败。
+
+────────────────────────
+【2】移除或改写当前“业务级失败提示”
+────────────────────────
+
+在 devBotHandler.js 中，请查找所有类似：
+
+- 「❌ 研报生成失败」
+- 「错误：Bad Request: …」
+- 「如果是 PDF 服务问题，请联系管理员检查外部服务配置」
+
+这类直接当“最终答复”发给用户的代码分支。
+
+修改要求：
+
+1. 对于 **内容生成失败**（比如 AI 调用失败、关键数据缺失）：
+   - 保留“研报生成失败”的提示，可以加上一句「请稍后重试」；
+   - 并在日志中记录详细错误。
+   - 这是唯一允许出现「❌ 研报生成失败」的情况。
+
+2. 对于 **PDF 生成失败 / 发送 PDF 出错 / DocRaptor 出错**：
+   - 不再给用户发“研报失败”的提示；
+   - 改为：
+     - 日志中记录：
+       `[DEV_BOT] PDF failed for SYMBOL, falling back to Markdown: <error message>`
+     - 用户侧：
+       - 发一条文本版研报，前面加一句类似：
+         「⚠️ PDF 服务异常，已为您生成文本版研报：」
+       - 然后是完整的研报内容。
+
+3. 所有报错信息（err.message / err.stack）只写入服务器日志，不直接原样丢给用户作为“业务结论”。
+
+────────────────────────
+【3】明确日志输出，以便我能验证流程正确
+────────────────────────
+
+请在 /report 的处理流程中加入清晰的日志，用于验证“到底走到了哪一步”：
+
+- 当研报内容（JSON/Markdown）生成完成时：
+  - `console.log("[DEV_BOT] /report: content generated OK for", symbol);`
+
+- 当 DocRaptor 被调用时：
+  - `console.log("[DEV_BOT] /report: calling DocRaptor for", symbol);`
+
+- 当 DocRaptor 返回成功且拿到 PDF Buffer 时：
+  - `console.log("[DEV_BOT] /report: DocRaptor PDF generated, buffer size:", pdfBuffer?.length);`
+
+- 当 DocRaptor 调用失败时（包括 HTTP 非 2xx 或抛异常）：
+  - `console.error("[DEV_BOT] /report: DocRaptor PDF failed for", symbol, "error:", err);`
+  - 此时应继续走 Markdown fallback 分支，不要抛出未捕获异常。
+
+- 当最终发送的是 PDF 时：
+  - `console.log("[DEV_BOT] /report: PDF sent for", symbol);`
+
+- 当最终发送的是 Markdown 时（PDF 不可用）：
+  - `console.log("[DEV_BOT] /report: Markdown fallback sent for", symbol);`
+
+这样我在 Console 就能明确看到：  
+内容是否生成成功 → PDF 是否尝试 → PDF 是否成功 → 最终到底发了 PDF 还是文本。
+
+────────────────────────
+【4】修复完成后，请帮我做一次完整测试并返回日志
+────────────────────────
+
+修复完成后，请在开发环境中执行：
+
+1. 启动 node index.js；
+2. 在 dev bot 中发送：`/report NVDA`；
+3. 把这一次调用相关的 Console 日志（从命令收到到消息发出）完整返回给我，包括上述几条关键日志。
+
+我会根据日志确认：
+
+- 内容是否一定生成成功；
+- 是否优先尝试了 DocRaptor PDF；
+- 如果 PDF 失败，是否自动发送了文本版研报而不是失败提示；
+- 整个流程是否符合「研报不能降级，内容保证交付」的规则。
+
+只有在确认这一点之后，我们才会把这一套 /report 流程部署到生产环境。
