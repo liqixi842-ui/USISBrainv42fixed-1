@@ -75,7 +75,7 @@ app.get('/health', (_req, res) => {
     ok: true,
     status: 'ok',
     pid: process.pid,
-    port: Number(process.env.PORT) || 8080,
+    port: Number(process.env.PORT) || 3000,
     uptime: uptimeSeconds,
     ts: Date.now(),
     message: 'HTTPS verified and healthy ✅'
@@ -686,7 +686,7 @@ app.get("/brain/stats", (_req, res) => {
   });
 });
 
-app.get("/health", async (_req, res) => {
+app.get("/health/full", async (_req, res) => {
   try {
     const dbHealth = await checkDatabaseHealth();
     
