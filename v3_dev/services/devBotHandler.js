@@ -2,7 +2,7 @@
 // This handles all messages for the development bot (TELEGRAM_BOT_TOKEN_DEV)
 
 const fetch = require('node-fetch');
-const { buildSimpleReport } = require('./reportService');
+const { buildSimpleReport, generateMarkdownReport } = require('./reportService');
 
 const VALID_COMMANDS = ['/test', '/status', '/v3', '/help', '/report'];
 
@@ -125,100 +125,109 @@ async function handleDevBotMessage(message, telegramAPI) {
         // Step 2: Try PDF first, fallback to Markdown if unavailable
         let reportSent = false;
         
-        try {
-          const pdfUrl = `http://localhost:3000/v3/report/${symbol}?format=pdf`;
-          console.log(`📄 [DEV_BOT] Attempting PDF generation: ${pdfUrl}`);
-          
-          const pdfResponse = await fetch(pdfUrl, { timeout: 45000 });
-          
-          // ========== 诊断日志 1: 响应状态 ==========
-          console.log(`🌐 [DEV_BOT] External PDF service response status: ${pdfResponse.status}`);
-          console.log(`🌐 [DEV_BOT] External PDF service headers:`, JSON.stringify({
-            'content-type': pdfResponse.headers.get('content-type'),
-            'content-length': pdfResponse.headers.get('content-length'),
-            'content-disposition': pdfResponse.headers.get('content-disposition')
-          }));
-          
-          if (pdfResponse.ok) {
-            const pdfBuffer = await pdfResponse.buffer();
+        // 检查 PDF 服务是否配置
+        const pdfServiceUrl = process.env.PDF_SERVICE_URL;
+        
+        if (!pdfServiceUrl) {
+          console.log(`⚠️ [DEV_BOT] PDF service not configured, using Markdown only`);
+          // 直接跳过 PDF，走 Markdown 路径
+        } else {
+          // PDF 服务已配置，尝试生成 PDF
+          try {
+            const pdfUrl = `http://localhost:3000/v3/report/${symbol}?format=pdf`;
+            console.log(`📄 [DEV_BOT] Attempting PDF generation: ${pdfUrl}`);
             
-            // ========== 诊断日志 2: PDF Buffer 信息 ==========
-            console.log(`📦 [DEV_BOT] PDF Buffer Size: ${pdfBuffer?.length || 'undefined'} bytes`);
-            console.log(`📦 [DEV_BOT] PDF Buffer type: ${typeof pdfBuffer}`);
-            console.log(`📦 [DEV_BOT] PDF Buffer is Buffer: ${Buffer.isBuffer(pdfBuffer)}`);
+            const pdfResponse = await fetch(pdfUrl, { timeout: 45000 });
             
-            if (!pdfBuffer || pdfBuffer.length === 0) {
-              throw new Error('PDF buffer is empty or undefined');
-            }
+            // ========== 诊断日志 1: 响应状态 ==========
+            console.log(`🌐 [DEV_BOT] External PDF service response status: ${pdfResponse.status}`);
+            console.log(`🌐 [DEV_BOT] External PDF service headers:`, JSON.stringify({
+              'content-type': pdfResponse.headers.get('content-type'),
+              'content-length': pdfResponse.headers.get('content-length'),
+              'content-disposition': pdfResponse.headers.get('content-disposition')
+            }));
             
-            await telegramAPI('editMessageText', {
-              chat_id: chatId,
-              message_id: statusMsg.result.message_id,
-              text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n✅ 步骤 1/3：市场数据获取完成\n✅ 步骤 2/3：PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 步骤 3/3：正在发送...`,
-              parse_mode: 'Markdown'
-            });
-            
-            const ratingEmoji = {
-              'STRONG_BUY': '🟢🟢',
-              'BUY': '🟢',
-              'HOLD': '🟡',
-              'SELL': '🔴',
-              'STRONG_SELL': '🔴🔴'
-            }[report.rating] || '⚪';
-            
-            const caption = `📊 **${symbol} 研究报告**（v3-dev）\n\n${ratingEmoji} 评级：**${report.rating}**\n⏱ 生成时间：${report.latency_ms}ms\n🤖 AI：${report.model_used}\n\n详细内容请查看附件 PDF。`;
-            
-            // ========== 诊断日志 3: 发送前确认 ==========
-            console.log(`📤 [DEV_BOT] Preparing to send PDF document...`);
-            console.log(`📤 [DEV_BOT] Chat ID: ${chatId}`);
-            console.log(`📤 [DEV_BOT] Filename: ${symbol}_Report_USIS_v3dev.pdf`);
-            console.log(`📤 [DEV_BOT] Caption length: ${caption.length}`);
-            
-            try {
-              await telegramAPI('sendDocument', {
+            if (pdfResponse.ok) {
+              const pdfBuffer = await pdfResponse.buffer();
+              
+              // ========== 诊断日志 2: PDF Buffer 信息 ==========
+              console.log(`📦 [DEV_BOT] PDF Buffer Size: ${pdfBuffer?.length || 'undefined'} bytes`);
+              console.log(`📦 [DEV_BOT] PDF Buffer type: ${typeof pdfBuffer}`);
+              console.log(`📦 [DEV_BOT] PDF Buffer is Buffer: ${Buffer.isBuffer(pdfBuffer)}`);
+              
+              if (!pdfBuffer || pdfBuffer.length === 0) {
+                throw new Error('PDF buffer is empty or undefined');
+              }
+              
+              await telegramAPI('editMessageText', {
                 chat_id: chatId,
-                document: pdfBuffer,
-                filename: `${symbol}_Report_USIS_v3dev.pdf`,
-                caption: caption,
+                message_id: statusMsg.result.message_id,
+                text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n✅ 步骤 1/3：市场数据获取完成\n✅ 步骤 2/3：PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 步骤 3/3：正在发送...`,
                 parse_mode: 'Markdown'
               });
               
-              console.log(`✅ [DEV_BOT] sendDocument API call completed successfully`);
+              const ratingEmoji = {
+                'STRONG_BUY': '🟢🟢',
+                'BUY': '🟢',
+                'HOLD': '🟡',
+                'SELL': '🔴',
+                'STRONG_SELL': '🔴🔴'
+              }[report.rating] || '⚪';
               
-              await telegramAPI('deleteMessage', {
-                chat_id: chatId,
-                message_id: statusMsg.result.message_id
-              });
+              const caption = `📊 **${symbol} 研究报告**（v3-dev）\n\n${ratingEmoji} 评级：**${report.rating}**\n⏱ 生成时间：${report.latency_ms}ms\n🤖 AI：${report.model_used}\n\n详细内容请查看附件 PDF。`;
               
-              reportSent = true;
-              console.log(`✅ [DEV_BOT] PDF report sent for ${symbol}`);
+              // ========== 诊断日志 3: 发送前确认 ==========
+              console.log(`📤 [DEV_BOT] Preparing to send PDF document...`);
+              console.log(`📤 [DEV_BOT] Chat ID: ${chatId}`);
+              console.log(`📤 [DEV_BOT] Filename: ${symbol}_Report_USIS_v3dev.pdf`);
+              console.log(`📤 [DEV_BOT] Caption length: ${caption.length}`);
               
-            } catch (sendError) {
-              // ========== 诊断日志 4: 发送失败详细信息 ==========
-              console.error(`❌ [DEV_BOT] PDF 发送失败 - Error Name: ${sendError.name}`);
-              console.error(`❌ [DEV_BOT] PDF 发送失败 - Error Message: ${sendError.message}`);
-              console.error(`❌ [DEV_BOT] PDF 发送失败 - Error Stack:`, sendError.stack);
+              try {
+                await telegramAPI('sendDocument', {
+                  chat_id: chatId,
+                  document: pdfBuffer,
+                  filename: `${symbol}_Report_USIS_v3dev.pdf`,
+                  caption: caption,
+                  parse_mode: 'Markdown'
+                });
+                
+                console.log(`✅ [DEV_BOT] sendDocument API call completed successfully`);
+                
+                await telegramAPI('deleteMessage', {
+                  chat_id: chatId,
+                  message_id: statusMsg.result.message_id
+                });
+                
+                reportSent = true;
+                console.log(`✅ [DEV_BOT] PDF report sent for ${symbol}`);
+                
+              } catch (sendError) {
+                // ========== 诊断日志 4: 发送失败详细信息 ==========
+                console.error(`❌ [DEV_BOT] PDF 发送失败 - Error Name: ${sendError.name}`);
+                console.error(`❌ [DEV_BOT] PDF 发送失败 - Error Message: ${sendError.message}`);
+                console.error(`❌ [DEV_BOT] PDF 发送失败 - Error Stack:`, sendError.stack);
+                
+                // 向用户报告错误
+                await telegramAPI('sendMessage', {
+                  chat_id: chatId,
+                  text: `❌ PDF 发送失败\n\n错误详情：${sendError.message}\n\n将切换到文本格式...`
+                });
+                
+                throw sendError; // 重新抛出，进入 fallback
+              }
               
-              // 向用户报告错误
-              await telegramAPI('sendMessage', {
-                chat_id: chatId,
-                text: `❌ PDF 发送失败\n\n错误详情：${sendError.message}\n\n将切换到文本格式...`
-              });
-              
-              throw sendError; // 重新抛出，进入 fallback
+            } else {
+              // 响应不是 200 OK
+              const errorBody = await pdfResponse.text();
+              console.log(`⚠️ [DEV_BOT] PDF service unavailable (${pdfResponse.status})`);
+              console.log(`⚠️ [DEV_BOT] PDF service error body:`, errorBody.substring(0, 500));
+              console.log(`⚠️ [DEV_BOT] Falling back to Markdown`);
             }
-            
-          } else {
-            // 响应不是 200 OK
-            const errorBody = await pdfResponse.text();
-            console.log(`⚠️ [DEV_BOT] PDF service unavailable (${pdfResponse.status})`);
-            console.log(`⚠️ [DEV_BOT] PDF service error body:`, errorBody.substring(0, 500));
+          } catch (pdfError) {
+            console.error(`❌ [DEV_BOT] PDF generation/sending failed - Error Name: ${pdfError.name}`);
+            console.error(`❌ [DEV_BOT] PDF generation/sending failed - Error Message: ${pdfError.message}`);
             console.log(`⚠️ [DEV_BOT] Falling back to Markdown`);
           }
-        } catch (pdfError) {
-          console.error(`❌ [DEV_BOT] PDF generation/sending failed - Error Name: ${pdfError.name}`);
-          console.error(`❌ [DEV_BOT] PDF generation/sending failed - Error Message: ${pdfError.message}`);
-          console.log(`⚠️ [DEV_BOT] Falling back to Markdown`);
         }
         
         // Step 2B: Fallback to Markdown format
@@ -230,8 +239,8 @@ async function handleDevBotMessage(message, telegramAPI) {
             parse_mode: 'Markdown'
           });
           
-          // Use buildSimpleReport to generate Markdown
-          const mdReport = buildSimpleReport(report);
+          // 使用 generateMarkdownReport 生成 Markdown 文本
+          const mdReport = generateMarkdownReport(symbol, report);
           
           await telegramAPI('deleteMessage', {
             chat_id: chatId,

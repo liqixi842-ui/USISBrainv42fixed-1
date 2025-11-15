@@ -152,6 +152,9 @@ async function buildSimpleReport(symbol, basicData = {}) {
  * Fallback 报告生成（不调用 AI）
  */
 function generateFallbackReport(symbol, basicData, startTime = Date.now()) {
+  // 确保 symbol 是字符串，避免 toUpperCase 报错
+  const sym = String(symbol || "UNKNOWN").toUpperCase();
+  
   const price = basicData.price || basicData.c || 'N/A';
   const changePercent = basicData.changePercent || basicData.dp || 0;
   
@@ -165,11 +168,11 @@ function generateFallbackReport(symbol, basicData, startTime = Date.now()) {
   const elapsed = Date.now() - startTime;
 
   return {
-    title: `${symbol.toUpperCase()} 研究报告（简化版）`,
-    symbol: symbol.toUpperCase(),
+    title: `${sym} 研究报告（简化版）`,
+    symbol: sym,
     rating: rating,
     horizon: '短期',
-    summary: `${symbol.toUpperCase()} 当前价格 ${price}，涨跌幅 ${changePercent}%。建议根据市场情况谨慎操作。`,
+    summary: `${sym} 当前价格 ${price}，涨跌幅 ${changePercent}%。建议根据市场情况谨慎操作。`,
     drivers: ['市场整体走势', '板块轮动', '资金流向'],
     risks: ['市场波动风险', '政策不确定性', '数据时效性'],
     technical_view: '基于当前价格走势的初步判断，建议关注成交量变化。',

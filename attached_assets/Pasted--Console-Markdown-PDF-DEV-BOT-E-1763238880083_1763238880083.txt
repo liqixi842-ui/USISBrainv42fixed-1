@@ -1,0 +1,85 @@
+这是我刚才在 Console 里看到的完整现象，请帮我按“先让 Markdown 研报正常发送，暂时不管 PDF”的目标修复：
+
+关键日志摘录（你那边应该也能看到）：
+- [DEV_BOT] External PDF service response status: 503
+- error: "PDF service not configured", "message": "PDF_SERVICE_URL environment variable is not set"
+- [DEV_BOT] PDF service unavailable (503)
+- [DEV_BOT] Falling back to Markdown
+- TypeError: symbol.toUpperCase is not a function
+  at generateFallbackReport (.../v3_dev/services/reportService.js:168:22)
+  at handleDevBotMessage (.../v3_dev/services/devBotHandler.js:234:28)
+
+结论：
+1）当前环境里并没有配置 PDF_SERVICE_URL，所以外部 PDF 服务不可用（503）  
+2）本来应该走 Markdown fallback，但是在 generateFallbackReport 里对 symbol 调用了 toUpperCase，symbol 不是字符串，导致 fallback 报错，dev bot 没法发送任何东西。
+
+我的目标（今天先做到这个就好）：
+✅ 不管 PDF 服务有没有配置，只要我在 dev bot 里发 `/report NVDA`，都能收到一篇 Markdown/文本版的研报。  
+❌ PDF 今天可以先不管，PDF_SERVICE_URL 以后再配。
+
+请按下面步骤修改：
+
+────────────────────────
+【1】修复 generateFallbackReport 里的 symbol.toUpperCase 报错
+────────────────────────
+在 v3_dev/services/reportService.js 中：
+
+- 找到 generateFallbackReport 函数中对 symbol 调用 toUpperCase 的地方，比如：
+  const sym = symbol.toUpperCase();
+
+- 修改为对 symbol 做字符串包装，避免 symbol 不是字符串时报错，例如：
+  const sym = String(symbol || "").toUpperCase();
+
+- 确保整个 generateFallbackReport 在任何情况下都不会抛异常，而是老老实实返回一段 Markdown 文本（string）。
+
+────────────────────────
+【2】在 devBotHandler 中，如果 PDF 服务不可用，直接发 Markdown，不再尝试 PDF
+────────────────────────
+在 v3_dev/services/devBotHandler.js 中：
+
+- 查找处理 /report 命令的逻辑，那里应该有类似：
+
+  if (format === "pdf") {
+     // 调用外部 PDF 服务
+  } else {
+     // Markdown fallback
+  }
+
+- 根据当前日志，“PDF_SERVICE_URL not set” 会导致 503。  
+  请增加逻辑：
+
+  - 检查 process.env.PDF_SERVICE_URL 是否存在：
+    - 如果未设置：直接走 Markdown（调用 generateFallbackReport），不要再尝试 PDF。
+    - 记录日志：[DEV_BOT] PDF service not configured, using Markdown only.
+
+- 对于 /report NVDA 这样的命令，在 PDF 不可用的情况下：
+  - dev bot 应该发送一条清晰文本，比如：
+    - 「当前未配置 PDF 服务，已为您生成 Markdown 版本研报：…」
+  - 然后附上 Markdown 内容。
+
+────────────────────────
+【3】暂时不要求修 PDF_SERVICE_URL 或外部 PDF 服务
+────────────────────────
+现在先不要配置 PDF_SERVICE_URL，也不要再尝试修 PDF。  
+只要确保：
+
+- 外部 PDF 服务不可用时不会再报错
+- dev bot 可以稳定发送 Markdown 研报文本
+
+────────────────────────
+【4】修复后请用前台方式测试一次 /report NVDA，并把关键日志返回
+────────────────────────
+请执行：
+- 在开发环境启动 node index.js
+- 在 dev bot 上发送：/report NVDA
+
+期待行为：
+- Console 日志中不再出现 symbol.toUpperCase 报错
+- 日志显示：
+  - [DEV_BOT] PDF service not configured, using Markdown only
+  - [DEV_BOT] Markdown report sent for NVDA (或类似说明)
+
+然后请把：
+- 处理 /report NVDA 这一轮的日志（和上次截图类似的那一段）
+- 以及如果方便的话，把发给我的那段 Markdown 文本结构（标题、评级、结论）  
+一并返回给我。
