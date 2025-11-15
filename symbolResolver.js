@@ -471,6 +471,57 @@ function filterByExchange(results, exchangeHint) {
 }
 
 /**
+ * 🆕 统一的交易所前缀格式化函数
+ * @param {string} symbol - 原始符号
+ * @param {string} exchange - 交易所代码
+ * @returns {string} - 格式化后的符号（带交易所前缀）
+ */
+function formatSymbolWithExchange(symbol, exchange) {
+  if (!symbol) return null;
+
+  const sym = symbol.trim().toUpperCase();
+  const ex = (exchange || '').trim().toUpperCase();
+
+  // 西班牙交易所（BME / BMEX / XMAD / Bolsa de Madrid）
+  if (
+    ex === 'BME' ||
+    ex === 'BMEX' ||
+    ex === 'XMAD' ||
+    ex.includes('BOLSA DE MADRID') ||
+    ex.includes('MADRID')
+  ) {
+    return `BME:${sym}`;
+  }
+
+  // 纳斯达克
+  if (ex === 'NASDAQ' || ex === 'XNAS' || ex.includes('NASDAQ')) {
+    return `NASDAQ:${sym}`;
+  }
+
+  // 纽约证券交易所
+  if (ex === 'NYSE' || ex === 'XNYS' || ex.includes('NEW YORK')) {
+    return `NYSE:${sym}`;
+  }
+
+  // 多伦多证券交易所
+  if (ex === 'TSX' || ex === 'XTSE' || ex === 'TSE') {
+    return `TSX:${sym}`;
+  }
+
+  // OTC市场
+  if (ex === 'OTC' || ex.includes('OTC')) {
+    return `OTC:${sym}`;
+  }
+
+  // 默认行为：如果有exchange且符号未包含前缀，添加前缀
+  if (ex && !sym.includes(':')) {
+    return `${ex}:${sym}`;
+  }
+
+  return sym;
+}
+
+/**
  * 选择最佳匹配
  * @param {Array} matches - Finnhub返回的匹配列表
  * @param {string|null} exchangeHint - 交易所提示
@@ -482,12 +533,42 @@ function selectBestMatch(matches, exchangeHint, originalQuery) {
     throw new Error("No matches found");
   }
   
-  // 如果只有一个匹配，直接返回
+  // 如果只有一个匹配，使用格式化函数处理
   if (matches.length === 1) {
+    const match = matches[0];
+    const rawSymbol = match.symbol || match.displaySymbol;
+    const exchange = match.exchange || match.type;
+    const finalSymbol = formatSymbolWithExchange(rawSymbol, exchange);
+    
+    console.log(`   📌 单个匹配，最终符号: ${finalSymbol}`);
+    
+    // 🆕 单个匹配也输出调试日志
+    if (process.env.ENABLE_SYMBOL_DEBUG === 'true') {
+      console.log('[SYMBOL_DEBUG] resolution_debug', JSON.stringify({
+        input: originalQuery,
+        exchange_hint: exchangeHint,
+        candidates: [{
+          symbol: rawSymbol,
+          exchange: exchange,
+          country: match.country,
+          description: match.description || match.instrument_name,
+          score: 1000,
+          source: match.mic_code ? 'twelvedata' : 'finnhub'
+        }],
+        selected: {
+          symbol: rawSymbol,
+          exchange: exchange,
+          score: 1000,
+          description: match.description || match.instrument_name
+        },
+        final_symbol: finalSymbol
+      }, null, 2));
+    }
+    
     return {
-      symbol: matches[0].symbol || matches[0].displaySymbol,
-      description: matches[0].description,
-      exchange: matches[0].type
+      symbol: finalSymbol,
+      description: match.description || match.instrument_name,
+      exchange: exchange
     };
   }
   
@@ -587,6 +668,16 @@ function selectBestMatch(matches, exchangeHint, originalQuery) {
   
   const best = scored[0];
   
+  console.log(`   🏆 最佳匹配: ${best.symbol} (分数: ${best.score})`);
+  
+  // 🆕 使用统一的前缀格式化函数
+  const finalSymbol = formatSymbolWithExchange(
+    best.symbol || best.displaySymbol, 
+    best.exchange || best.type
+  );
+  
+  console.log(`   📌 最终符号: ${finalSymbol}`);
+  
   // 🆕 结构化调试日志（仅在debug模式下）
   if (process.env.ENABLE_SYMBOL_DEBUG === 'true') {
     console.log('[SYMBOL_DEBUG] resolution_debug', JSON.stringify({
@@ -605,58 +696,15 @@ function selectBestMatch(matches, exchangeHint, originalQuery) {
         exchange: best.exchange || best.type,
         score: best.score,
         description: best.description || best.instrument_name
-      }
+      },
+      final_symbol: finalSymbol
     }, null, 2));
-  }
-  
-  console.log(`   🏆 最佳匹配: ${best.symbol} (分数: ${best.score})`);
-  
-  // 🆕 v6.1: 返回带交易所前缀的符号（如果需要消歧）
-  let finalSymbol = best.symbol || best.displaySymbol;
-  const bestExchange = best.exchange || best.type || '';
-  
-  // 如果有交易所提示且符号需要消歧（同名股票在多个交易所）
-  if (exchangeHint && bestExchange) {
-    const exchangeLower = bestExchange.toLowerCase();
-    
-    // 🔧 映射交易所代码到标准前缀（仅限前缀格式的交易所）
-    // ⚠️ 注意：HKEX/SSE/SZSE使用后缀格式（如0700.HK），不应添加前缀
-    const exchangePrefixMap = {
-      'bme': 'BME:',
-      'mta': 'BME:',
-      'madrid': 'BME:',
-      'xmad': 'BME:',      // ⭐ Twelve Data西班牙代码（关键修复）
-      'tsx': 'TSX:',
-      'tsxv': 'TSXV:',
-      'nasdaq': 'NASDAQ:',
-      'nyse': 'NYSE:',
-      'otc': 'OTC:',
-      'hkex': '',          // 香港用后缀.HK，不添加前缀
-      'bovespa': 'BOVESPA:',
-      'b3': 'BOVESPA:',
-      'asx': 'ASX:'
-    };
-    
-    // 查找匹配的交易所前缀
-    let prefix = '';
-    for (const [key, value] of Object.entries(exchangePrefixMap)) {
-      if (exchangeLower.includes(key)) {
-        prefix = value;
-        break;
-      }
-    }
-    
-    // 如果符号还没有前缀，添加交易所前缀
-    if (prefix && !finalSymbol.includes(':') && !finalSymbol.includes('.')) {
-      finalSymbol = prefix + finalSymbol;
-      console.log(`   📌 添加交易所前缀: ${finalSymbol}`);
-    }
   }
   
   return {
     symbol: finalSymbol,
     description: best.description || best.instrument_name,
-    exchange: bestExchange
+    exchange: best.exchange || best.type
   };
 }
 
