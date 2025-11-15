@@ -162,53 +162,66 @@ async function handleDevBotMessage(message, telegramAPI) {
         // ═══════════════════════════════════════════════════════════════
         console.log(`📤 [DEV_BOT] /report: Stage 3 - Delivering report to user...`);
         
+        let pdfSent = false;
+        
         if (pdfBuffer && pdfBuffer.length > 0) {
           // ─────────────────────────────────────────────────────────────
-          // Path A: 发送 PDF 文件
+          // Path A: 尝试发送 PDF 文件
           // ─────────────────────────────────────────────────────────────
           console.log(`   └─ Path: PDF delivery`);
           
+          try {
+            await telegramAPI('editMessageText', {
+              chat_id: chatId,
+              message_id: statusMsg.result.message_id,
+              text: `🔬 正在生成 ${symbol} 研报（v3-dev）\n\n✅ 阶段 1/3：研报内容生成完成\n✅ 阶段 2/3：PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 阶段 3/3：正在发送 PDF...`
+            });
+            
+            const ratingSymbol = {
+              'STRONG_BUY': '++',
+              'BUY': '+',
+              'HOLD': '=',
+              'SELL': '-',
+              'STRONG_SELL': '--'
+            }[report.rating] || '=';
+            
+            const caption = `📊 ${symbol} 研究报告 (DocRaptor PDF, v3-dev)\n\n评级: ${report.rating} (${ratingSymbol})\n生成时间: ${report.latency_ms}ms\nAI模型: ${report.model_used}\n\n详细内容请查看附件 PDF`;
+            
+            await telegramAPI('sendDocument', {
+              chat_id: chatId,
+              document: pdfBuffer,
+              filename: `${symbol}_USIS_Research.pdf`,
+              caption: caption
+            });
+            
+            await telegramAPI('deleteMessage', {
+              chat_id: chatId,
+              message_id: statusMsg.result.message_id
+            });
+            
+            pdfSent = true;
+            console.log(`✅ [DEV_BOT] /report: Stage 3 COMPLETE - PDF sent for ${symbol}`);
+            console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+            
+          } catch (sendPdfError) {
+            // PDF 发送失败，降级到 Markdown（不影响整体流程）
+            console.error(`⚠️ [DEV_BOT] /report: Stage 3 PDF delivery FAILED for ${symbol}`);
+            console.error(`   ├─ Error: ${sendPdfError.message}`);
+            console.error(`   └─ Falling back to Markdown delivery\n`);
+            pdfBuffer = null; // 确保走 Markdown 分支
+          }
+        }
+        
+        // ─────────────────────────────────────────────────────────────
+        // Path B: 发送 Markdown 文本版（PDF 不可用或发送失败时的保底方案）
+        // ─────────────────────────────────────────────────────────────
+        if (!pdfSent) {
+          console.log(`   └─ Path: Markdown fallback (PDF ${pdfBuffer ? 'delivery failed' : 'unavailable'})`);
+          
           await telegramAPI('editMessageText', {
             chat_id: chatId,
             message_id: statusMsg.result.message_id,
-            text: `🔬 正在生成 ${symbol} 研报（v3-dev）\n\n✅ 阶段 1/3：研报内容生成完成\n✅ 阶段 2/3：PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 阶段 3/3：正在发送 PDF...`
-          });
-          
-          const ratingSymbol = {
-            'STRONG_BUY': '++',
-            'BUY': '+',
-            'HOLD': '=',
-            'SELL': '-',
-            'STRONG_SELL': '--'
-          }[report.rating] || '=';
-          
-          const caption = `📊 ${symbol} 研究报告 (DocRaptor PDF, v3-dev)\n\n评级: ${report.rating} (${ratingSymbol})\n生成时间: ${report.latency_ms}ms\nAI模型: ${report.model_used}\n\n详细内容请查看附件 PDF`;
-          
-          await telegramAPI('sendDocument', {
-            chat_id: chatId,
-            document: pdfBuffer,
-            filename: `${symbol}_USIS_Research.pdf`,
-            caption: caption
-          });
-          
-          await telegramAPI('deleteMessage', {
-            chat_id: chatId,
-            message_id: statusMsg.result.message_id
-          });
-          
-          console.log(`✅ [DEV_BOT] /report: Stage 3 COMPLETE - PDF sent for ${symbol}`);
-          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
-          
-        } else {
-          // ─────────────────────────────────────────────────────────────
-          // Path B: 发送 Markdown 文本版（PDF 不可用时的保底方案）
-          // ─────────────────────────────────────────────────────────────
-          console.log(`   └─ Path: Markdown fallback (PDF unavailable)`);
-          
-          await telegramAPI('editMessageText', {
-            chat_id: chatId,
-            message_id: statusMsg.result.message_id,
-            text: `⚠️ PDF 服务暂时不可用\n\n正在为您发送完整文本版研报...`
+            text: `⚠️ PDF ${pdfBuffer ? '发送失败' : '服务暂时不可用'}\n\n正在为您发送完整文本版研报...`
           });
           
           await new Promise(resolve => setTimeout(resolve, 1500));
@@ -219,7 +232,7 @@ async function handleDevBotMessage(message, telegramAPI) {
           });
           
           // 添加降级说明前缀
-          const fallbackPrefix = `⚠️ PDF 服务异常，以下是完整文本版研报：\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+          const fallbackPrefix = `⚠️ PDF ${pdfBuffer ? '发送异常（Telegram 限制）' : '服务异常'}，以下是完整文本版研报：\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
           const fullReport = fallbackPrefix + mdReport;
           
           // Split into chunks (Telegram max: 4096 chars)
