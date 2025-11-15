@@ -6149,11 +6149,26 @@ process.on('exit', () => {
 
 // 🔒 安全阀：检查Token状态，防止冲突
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const DEV_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN_DEV;
+
+// Token collision check
+if (DEV_BOT_TOKEN && DEV_BOT_TOKEN === BOT_TOKEN) {
+  console.error('❌ FATAL: TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_TOKEN_DEV must be different!');
+  console.error('💡 Please use different bot tokens for production and development');
+  process.exit(1);
+}
+
 const TOKEN_IS_SAFE = BOT_TOKEN && 
                       BOT_TOKEN !== 'ROTATING' && 
                       BOT_TOKEN.length > 10 &&
                       BOT_TOKEN !== 'undefined' &&
                       BOT_TOKEN !== 'null';
+
+const DEV_TOKEN_IS_SAFE = DEV_BOT_TOKEN && 
+                          DEV_BOT_TOKEN !== 'ROTATING' && 
+                          DEV_BOT_TOKEN.length > 10 &&
+                          DEV_BOT_TOKEN !== 'undefined' &&
+                          DEV_BOT_TOKEN !== 'null';
 
 if (!TOKEN_IS_SAFE) {
   console.log('🛡️  [SAFE MODE] Telegram bot disabled (no token or rotating)');
@@ -6967,6 +6982,135 @@ ${result.summary}
   } // 🆕 v1.1: 闭合acquireBotLock的else块
 } else {
   console.log('⚠️  未配置 TELEGRAM_BOT_TOKEN');
+}
+
+// 🚀 v3-dev: Development Bot启动（独立运行，完全隔离）
+if (DEV_TOKEN_IS_SAFE) {
+  console.log('\n🔧 [DEV_BOT] Starting v3-dev development bot...');
+  console.log(`🔧 [DEV_BOT] Token: ${DEV_BOT_TOKEN.substring(0, 10)}...`);
+  
+  const https = require('https');
+  const { handleDevBotMessage } = require('./v3_dev/services/devBotHandler');
+  
+  // Dev bot专用的telegramAPI函数
+  function devBotAPI(method, params = {}, timeout = 35000) {
+    return new Promise((resolve, reject) => {
+      const data = JSON.stringify(params);
+      const options = {
+        hostname: 'api.telegram.org',
+        port: 443,
+        path: `/bot${DEV_BOT_TOKEN}/${method}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(data, 'utf8')
+        },
+        timeout
+      };
+
+      const req = https.request(options, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(body);
+            if (!result.ok) {
+              reject(new Error(result.description || 'API call failed'));
+            } else {
+              resolve(result);
+            }
+          } catch (e) {
+            reject(e);
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error(`Timeout for ${method}`));
+      });
+
+      req.write(data);
+      req.end();
+    });
+  }
+  
+  // Dev bot轮询循环
+  let devOffset = 0;
+  let devPolling = false;
+  let devShouldStop = false;
+  
+  async function pollDevBot() {
+    if (devShouldStop) {
+      console.log('🛑 [DEV_BOT] Polling stopped gracefully');
+      return;
+    }
+    if (devPolling) return;
+    devPolling = true;
+    
+    try {
+      const result = await devBotAPI('getUpdates', { offset: devOffset, timeout: 25 }, 35000);
+      
+      if (result.result && result.result.length > 0) {
+        console.log(`📬 [DEV_BOT] Got ${result.result.length} updates`);
+        
+        for (const update of result.result) {
+          devOffset = update.update_id + 1;
+          
+          // 只处理消息，不处理callback_query等复杂功能
+          if (update.message && update.message.text) {
+            await handleDevBotMessage(update.message, devBotAPI);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[DEV_BOT] Poll error:', e.message);
+    } finally {
+      devPolling = false;
+      setTimeout(pollDevBot, 1000);
+    }
+  }
+  
+  // 延迟3秒启动dev bot轮询（避免与prod bot冲突）
+  setTimeout(async () => {
+    try {
+      console.log('🔄 [DEV_BOT] Deleting webhook before starting polling...');
+      const deleteResult = await devBotAPI('deleteWebhook', { drop_pending_updates: true }, 10000);
+      if (deleteResult.ok) {
+        console.log('✅ [DEV_BOT] Webhook deleted successfully');
+      }
+    } catch (deleteError) {
+      console.error('⚠️  [DEV_BOT] Failed to delete webhook:', deleteError.message);
+    }
+    
+    console.log('✅ [DEV_BOT] v3-dev Bot started (manual polling)');
+    console.log('💬 [DEV_BOT] Development bot is ready for testing');
+    
+    try {
+      pollDevBot().catch(err => {
+        console.error('[DEV_BOT] Poll startup error:', err.message);
+        setTimeout(pollDevBot, 5000);
+      });
+    } catch (syncError) {
+      console.error('[DEV_BOT] Poll sync error:', syncError.message);
+      setTimeout(pollDevBot, 5000);
+    }
+  }, 3000);
+  
+  // 优雅关闭dev bot
+  process.on('SIGTERM', () => {
+    console.log('📡 [DEV_BOT] Stopping dev bot polling...');
+    devShouldStop = true;
+  });
+  
+  process.on('SIGINT', () => {
+    console.log('📡 [DEV_BOT] Stopping dev bot polling...');
+    devShouldStop = true;
+  });
+  
+} else {
+  console.log('⚠️  [DEV_BOT] TELEGRAM_BOT_TOKEN_DEV not configured, dev bot disabled');
 }
 
 // 🆕 USIS News v2.0 - 新闻系统启动
