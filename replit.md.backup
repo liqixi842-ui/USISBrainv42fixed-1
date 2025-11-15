@@ -10,13 +10,10 @@ USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System des
 - Note: This version is locked and should not be modified. All new development should occur in v3-dev.
 
 **Development Version: v3-dev**
-- Status: Framework Established - Runtime Integration Pending
-- Created: 2025-11-15
+- Status: Active Development
 - Purpose: Research report system and new feature development
 - Path: /v3_dev/
-- ⚠️ **Isolation Status:** Framework documented, runtime integration NOT YET ACTIVE
-- Note: Will use separate bot token (TELEGRAM_BOT_TOKEN_DEV) after code integration
-- Documentation: See VERSION_CONTROL.md, ENVIRONMENT_VARIABLES.md, v3_dev/IMPLEMENTATION_GUIDE.md
+- Note: Isolated from v2-stable, uses separate bot token for testing
 
 # User Preferences
 Preferred communication style: Simple, everyday language.
