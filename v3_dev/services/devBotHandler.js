@@ -18,8 +18,7 @@ async function handleDevBotMessage(message, telegramAPI) {
     if (text === '/test') {
       await telegramAPI('sendMessage', {
         chat_id: chatId,
-        text: '✅ v3-dev Bot is working!\n\nVersion: v3-dev\nEnvironment: Development\nIsolation: Active',
-        parse_mode: 'Markdown'
+        text: '✅ v3-dev Bot is working!\n\nVersion: v3-dev\nEnvironment: Development\nIsolation: Active'
       });
       return;
     }
@@ -46,8 +45,7 @@ async function handleDevBotMessage(message, telegramAPI) {
       
       await telegramAPI('sendMessage', {
         chat_id: chatId,
-        text: status,
-        parse_mode: 'Markdown'
+        text: status
       });
       return;
     }
@@ -56,8 +54,7 @@ async function handleDevBotMessage(message, telegramAPI) {
     if (text === '/v3') {
       await telegramAPI('sendMessage', {
         chat_id: chatId,
-        text: '🔬 v3-dev Development Environment\n\nThis bot is for testing new features before production.\n\nCurrent focus: Research report system',
-        parse_mode: 'Markdown'
+        text: '🔬 v3-dev Development Environment\n\nThis bot is for testing new features before production.\n\nCurrent focus: Research report system'
       });
       return;
     }
@@ -66,8 +63,7 @@ async function handleDevBotMessage(message, telegramAPI) {
     if (text === '/help') {
       await telegramAPI('sendMessage', {
         chat_id: chatId,
-        text: '📚 v3-dev Bot Help\n\n/test - Test connectivity\n/status - Bot status\n/v3 - v3-dev info\n/report [SYMBOL] - Generate research report (v1 test)\n/help - This message',
-        parse_mode: 'Markdown'
+        text: '📚 v3-dev Bot Help\n\n/test - Test connectivity\n/status - Bot status\n/v3 - v3-dev info\n/report [SYMBOL] - Generate research report (v1 test)\n/help - This message'
       });
       return;
     }
@@ -80,8 +76,7 @@ async function handleDevBotMessage(message, telegramAPI) {
       if (parts.length < 2 || !parts[1].trim()) {
         await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: '📊 请提供股票代码\n\n格式：/report AAPL\n\n示例：\n/report AAPL\n/report TSLA\n/report NVDA\n\n将生成完整 PDF 研报发送给您。',
-          parse_mode: 'Markdown'
+          text: '📊 请提供股票代码\n\n格式：/report AAPL\n\n示例：\n/report AAPL\n/report TSLA\n/report NVDA\n\n将生成完整 PDF 研报发送给您。'
         });
         return;
       }
@@ -92,8 +87,7 @@ async function handleDevBotMessage(message, telegramAPI) {
         // Send "generating" message
         const statusMsg = await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n⏳ 步骤 1/3：获取市场数据...`,
-          parse_mode: 'Markdown'
+          text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n⏳ 步骤 1/3：获取市场数据...`
         });
         
         // Step 1: Get report data (JSON)
@@ -118,8 +112,7 @@ async function handleDevBotMessage(message, telegramAPI) {
         await telegramAPI('editMessageText', {
           chat_id: chatId,
           message_id: statusMsg.result.message_id,
-          text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n✅ 步骤 1/3：市场数据获取完成\n⏳ 步骤 2/3：调用外部 PDF 生成服务...`,
-          parse_mode: 'Markdown'
+          text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n✅ 步骤 1/3：市场数据获取完成\n⏳ 步骤 2/3：调用外部 PDF 生成服务...`
         });
         
         // Step 2: Try PDF first, fallback to Markdown if unavailable
@@ -143,8 +136,7 @@ async function handleDevBotMessage(message, telegramAPI) {
           await telegramAPI('editMessageText', {
             chat_id: chatId,
             message_id: statusMsg.result.message_id,
-            text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n✅ 步骤 1/3：市场数据获取完成\n✅ 步骤 2/3：PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 步骤 3/3：正在发送...`,
-            parse_mode: 'Markdown'
+            text: `🔬 正在生成 ${symbol} 研报 PDF（v3-dev）...\n\n✅ 步骤 1/3：市场数据获取完成\n✅ 步骤 2/3：PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 步骤 3/3：正在发送...`
           });
           
           const ratingSymbol = {
@@ -185,8 +177,7 @@ async function handleDevBotMessage(message, telegramAPI) {
           await telegramAPI('editMessageText', {
             chat_id: chatId,
             message_id: statusMsg.result.message_id,
-            text: `⚠️ PDF 服务暂时不可用，已为您生成文本版研报。\n\n建议配置 DOC_RAPTOR_API_KEY 以获得完整 PDF 功能。`,
-            parse_mode: 'Markdown'
+            text: `⚠️ PDF 服务暂时不可用，已为您生成文本版研报。\n\n建议配置 DOC_RAPTOR_API_KEY 以获得完整 PDF 功能。`
           });
           
           await new Promise(resolve => setTimeout(resolve, 2000));
@@ -197,8 +188,7 @@ async function handleDevBotMessage(message, telegramAPI) {
           await telegramAPI('editMessageText', {
             chat_id: chatId,
             message_id: statusMsg.result.message_id,
-            text: `🔬 正在生成 ${symbol} 研报（v3-dev）...\n\n✅ 步骤 1/2：市场数据获取完成\n⏳ 步骤 2/2：格式化报告文本...`,
-            parse_mode: 'Markdown'
+            text: `🔬 正在生成 ${symbol} 研报（v3-dev）...\n\n✅ 步骤 1/2：市场数据获取完成\n⏳ 步骤 2/2：格式化报告文本...`
           });
           
           // 使用 generateMarkdownReport 生成 Markdown 文本
@@ -226,8 +216,7 @@ async function handleDevBotMessage(message, telegramAPI) {
           for (let i = 0; i < chunks.length; i++) {
             await telegramAPI('sendMessage', {
               chat_id: chatId,
-              text: chunks[i],
-              parse_mode: 'Markdown'
+              text: chunks[i]
             });
             if (i < chunks.length - 1) {
               await new Promise(r => setTimeout(r, 500)); // Avoid rate limit
@@ -252,8 +241,7 @@ async function handleDevBotMessage(message, telegramAPI) {
     // Default response for other messages
     await telegramAPI('sendMessage', {
       chat_id: chatId,
-      text: '🔧 v3-dev Bot\n\nI\'m in development mode. Try /help for available commands.',
-      parse_mode: 'Markdown'
+      text: '🔧 v3-dev Bot\n\nI\'m in development mode. Try /help for available commands.'
     });
     
   } catch (error) {
