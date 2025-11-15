@@ -147,11 +147,11 @@ ${report.risks.map((r, i) => `${i + 1}. ${r}`).join('\n')}
 ${report.technical_view}
 
 ---
-⏱ 生成时间：${report.latency_ms}ms
-🤖 AI模型：${report.model_used}
+⏱ 生成时间：${report.latency_ms || 'N/A'}ms
+🤖 AI模型：${report.model_used || 'unknown'}
 🔬 环境：v3-dev (测试版)
 
-**免责声明**：${report.disclaimer}`;
+**免责声明**：${report.disclaimer || '本报告为测试版本，仅供参考。'}`;
         
         await telegramAPI('sendMessage', {
           chat_id: chatId,

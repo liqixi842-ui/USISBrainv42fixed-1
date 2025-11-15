@@ -100,7 +100,7 @@ async function buildSimpleReport(symbol, basicData = {}) {
     } catch (parseError) {
       console.warn(`⚠️  [v3-dev Report] AI返回非JSON格式，使用fallback`);
       // Fallback: 基于价格变化的简单判断
-      reportData = generateFallbackReport(symbol, basicData);
+      reportData = generateFallbackReport(symbol, basicData, startTime);
     }
 
     const elapsed = Date.now() - startTime;
@@ -134,14 +134,14 @@ async function buildSimpleReport(symbol, basicData = {}) {
     console.error(`❌ [v3-dev Report] 生成失败:`, error.message);
     
     // 完全失败时的 fallback
-    return generateFallbackReport(symbol, basicData);
+    return generateFallbackReport(symbol, basicData, startTime);
   }
 }
 
 /**
  * Fallback 报告生成（不调用 AI）
  */
-function generateFallbackReport(symbol, basicData) {
+function generateFallbackReport(symbol, basicData, startTime = Date.now()) {
   const price = basicData.price || basicData.c || 'N/A';
   const changePercent = basicData.changePercent || basicData.dp || 0;
   
@@ -151,6 +151,8 @@ function generateFallbackReport(symbol, basicData) {
   else if (changePercent > 10) rating = 'STRONG_BUY';
   else if (changePercent < -5) rating = 'SELL';
   else if (changePercent < -10) rating = 'STRONG_SELL';
+
+  const elapsed = Date.now() - startTime;
 
   return {
     title: `${symbol.toUpperCase()} 研究报告（简化版）`,
@@ -171,6 +173,7 @@ function generateFallbackReport(symbol, basicData) {
     },
     generated_at: new Date().toISOString(),
     model_used: 'fallback',
+    latency_ms: elapsed,
     disclaimer: '⚠️ 本报告为测试版本，数据有限，仅供参考。'
   };
 }
