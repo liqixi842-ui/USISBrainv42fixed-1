@@ -1,0 +1,192 @@
+2025-11-15 16:02:19.60
+ab8b7540
+User
+============================================================
+2025-11-15 16:02:19.73
+ab8b7540
+User
+✅ [RSS] SEC: 25 items
+2025-11-15 16:02:19.75
+ab8b7540
+User
+✅ [RSS] Fed: 20 items
+2025-11-15 16:02:19.76
+ab8b7540
+User
+✅ [RSS] CNBC: 30 items
+2025-11-15 16:02:19.88
+ab8b7540
+User
+✅ [RSS] Yahoo Finance: 41 items
+2025-11-15 16:02:19.92
+ab8b7540
+User
+✅ [RSS] Bloomberg Markets: 30 items
+2025-11-15 16:02:19.93
+ab8b7540
+User
+✅ [RSS] WSJ Markets: 20 items
+2025-11-15 16:02:20.03
+ab8b7540
+User
+✅ [RSS] Financial Post: 10 items
+2025-11-15 16:02:20.13
+ab8b7540
+User
+✅ [RSS] Expansión: 65 items
+2025-11-15 16:02:20.14
+ab8b7540
+User
+✅ [RSS] Bank of Canada: 10 items
+2025-11-15 16:02:20.15
+ab8b7540
+User
+✅ [RSS] ECB: 15 items
+2025-11-15 16:02:20.17
+ab8b7540
+User
+✅ [RSS] TechCrunch: 20 items
+2025-11-15 16:02:20.21
+ab8b7540
+User
+✅ [RSS] Fortune: 10 items
+2025-11-15 16:02:20.22
+ab8b7540
+User
+✅ [RSS] Investing.com: 10 items
+2025-11-15 16:02:20.24
+ab8b7540
+User
+✅ [RSS] Seeking Alpha: 30 items
+2025-11-15 16:02:20.25
+ab8b7540
+User
+❌ [RSS] Reuters Business failed: Status code 404
+2025-11-15 16:02:20.43
+ab8b7540
+User
+✅ [RSS] MarketWatch: 10 items
+2025-11-15 16:02:20.61
+ab8b7540
+User
+✅ [RSS] El Español - Invertia: 30 items
+2025-11-15 16:02:20.61
+ab8b7540
+User
+📊 [RSS] Total collected: 376 items
+2025-11-15 16:02:41.08
+ab8b7540
+User
+🔌 [DB Pool] 连接已移除
+2025-11-15 16:03:00.39
+ab8b7540
+User
+============================================================
+2025-11-15 16:03:00.39
+ab8b7540
+User
+✅ Collection Complete
+2025-11-15 16:03:00.39
+ab8b7540
+User
+============================================================
+2025-11-15 16:03:00.39
+ab8b7540
+User
+Total time: 40.8s
+2025-11-15 16:03:00.39
+ab8b7540
+User
+Processed: 0 | Skipped: 0 | Failed: 376
+2025-11-15 16:05:00.96
+ab8b7540
+User
+============================================================
+2025-11-15 16:05:00.96
+ab8b7540
+User
+⏰ [RSS] Scheduled collection triggered
+2025-11-15 16:05:00.96
+ab8b7540
+User
+🚀 RSS Collection Started - 2025/11/15 15:05:00
+2025-11-15 16:05:00.96
+ab8b7540
+User
+============================================================
+2025-11-15 16:05:00.96
+ab8b7540
+User
+📡 [RSS] Starting collection from 17 sources...
+2025-11-15 16:05:01.04
+ab8b7540
+User
+✅ [RSS] SEC: 25 items
+2025-11-15 16:05:01.07
+ab8b7540
+User
+✅ [RSS] Fed: 20 items
+2025-11-15 16:05:01.19
+ab8b7540
+User
+✅ [RSS] CNBC: 30 items
+2025-11-15 16:05:01.25
+ab8b7540
+User
+✅ [RSS] Yahoo Finance: 41 items
+2025-11-15 16:05:01.31
+ab8b7540
+User
+✅ [RSS] WSJ Markets: 20 items
+2025-11-15 16:05:01.36
+ab8b7540
+User
+✅ [RSS] Financial Post: 10 items
+2025-11-15 16:05:01.38
+ab8b7540
+User
+✅ [RSS] Bank of Canada: 10 items
+2025-11-15 16:05:01.40
+ab8b7540
+User
+✅ [RSS] Bloomberg Markets: 30 items
+2025-11-15 16:05:01.42
+ab8b7540
+User
+✅ [RSS] TechCrunch: 20 items
+2025-11-15 16:05:01.44
+ab8b7540
+User
+✅ [RSS] Expansión: 65 items
+2025-11-15 16:05:01.45
+ab8b7540
+User
+✅ [RSS] Seeking Alpha: 30 items
+2025-11-15 16:05:01.46
+ab8b7540
+User
+✅ [RSS] Fortune: 10 items
+2025-11-15 16:05:01.47
+ab8b7540
+User
+✅ [RSS] Investing.com: 10 items
+2025-11-15 16:05:01.58
+ab8b7540
+User
+✅ [RSS] ECB: 15 items
+2025-11-15 16:05:01.59
+ab8b7540
+User
+❌ [RSS] Reuters Business failed: Status code 404
+2025-11-15 16:05:01.73
+ab8b7540
+User
+✅ [RSS] MarketWatch: 10 items
+2025-11-15 16:05:01.80
+ab8b7540
+User
+✅ [RSS] El Español - Invertia: 30 items
+2025-11-15 16:05:01.80
+ab8b7540
+User
+📊 [RSS] Total collected: 376 items
