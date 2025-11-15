@@ -68,6 +68,11 @@ app.set('trust proxy', 1);
 // 🆕 App startup timestamp for uptime calculation
 const APP_START_TIME = Date.now();
 
+// 🔧 Replit Reserved VM health check endpoint (REQUIRED for load balancer)
+app.get('/_replit_health', (_req, res) => {
+  res.status(200).json({ ok: true });
+});
+
 // 🆕 Simple health check endpoint (before middleware)
 app.get('/health', (_req, res) => {
   const uptimeSeconds = Math.floor((Date.now() - APP_START_TIME) / 1000);

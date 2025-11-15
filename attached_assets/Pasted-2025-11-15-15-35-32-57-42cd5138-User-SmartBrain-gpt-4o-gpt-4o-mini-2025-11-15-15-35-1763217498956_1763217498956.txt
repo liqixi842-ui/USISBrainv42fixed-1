@@ -1,0 +1,144 @@
+2025-11-15 15:35:32.57
+42cd5138
+User
+🛡️ [SmartBrain] 保底链: gpt-4o → gpt-4o-mini
+2025-11-15 15:35:32.57
+42cd5138
+User
+🧠 [SmartBrain] 主脑: gpt-5-mini
+2025-11-15 15:35:32.60
+42cd5138
+User
+🏴 Feature Flags: DB=true, Telegram=true
+2025-11-15 15:35:32.60
+42cd5138
+User
+🔌 [尝试 1/5] 连接数据库...
+2025-11-15 15:35:32.60
+42cd5138
+User
+🔄 [LazyLoad] PostgreSQL连接池已创建（max=10, timeout=8s）
+2025-11-15 15:35:32.62
+42cd5138
+User
+✅ Using Replicate token: r8_ePsDg3M...
+2025-11-15 15:35:32.62
+42cd5138
+User
+⚠️ TWITTER_BEARER not found in environment
+2025-11-15 15:35:32.67
+42cd5138
+User
+📰 [Deep Report Config] News Module: DISABLED (awaiting Phase 2)
+2025-11-15 15:35:32.67
+42cd5138
+User
+🔍 ENV PORT = 3000
+2025-11-15 15:35:32.67
+42cd5138
+User
+🤖 [Bot Token] Token: 7944498422...
+2025-11-15 15:35:32.67
+42cd5138
+User
+🔒 [Bot Lock] 已获取Bot锁（PID: 30）
+2025-11-15 15:35:32.82
+42cd5138
+User
+🤖 启动 Telegram Bot (Manual Polling)...
+2025-11-15 15:35:32.82
+42cd5138
+User
+📰 [USIS News v2.0] 正在启动新闻系统...
+2025-11-15 15:35:32.97
+42cd5138
+User
+📡 [RSSCollector] Initialized with 22 sources
+2025-11-15 15:35:33.42
+42cd5138
+User
+📡 [RSS] Auto-collection scheduled every 5 minutes
+2025-11-15 15:35:33.43
+42cd5138
+User
+📍 Listening on 0.0.0.0:3000
+2025-11-15 15:35:33.43
+42cd5138
+User
+🔵 n8n API available at http://0.0.0.0:3000/brain/analyze_no_screenshot
+2025-11-15 15:35:33.43
+42cd5138
+User
+🔗 Health check available at http://0.0.0.0:3000/health
+2025-11-15 15:35:33.43
+42cd5138
+User
+🧪 Heatmap test available at http://0.0.0.0:3000/api/test-heatmap
+2025-11-15 15:35:33.43
+42cd5138
+User
+⚠️ N8N监控已禁用以节省内存
+2025-11-15 15:35:33.43
+42cd5138
+User
+🚀 USIS Brain v6.0 online on port 3000 🆕 [Multi-AI + n8n Integration]
+2025-11-15 15:35:34.11
+42cd5138
+User
+🔌 [DB Pool] 新连接已建立
+2025-11-15 15:35:34.19
+42cd5138
+User
+✅ 数据库已唤醒！时间: Sat Nov 15 2025 14:35:34 GMT+0000 (Coordinated Universal Time)
+2025-11-15 15:35:34.40
+42cd5138
+User
+✅ 数据库初始化完成: user_memory, cost_tracking 和 USIS News 表已就绪
+2025-11-15 15:35:34.83
+42cd5138
+User
+🔄 [TG] Deleting webhook before starting polling...
+2025-11-15 15:35:35.19
+42cd5138
+User
+💬 现在可以在 Telegram 里直接发消息了
+2025-11-15 15:35:35.19
+42cd5138
+User
+✅ Telegram Bot 已启动（手动轮询）
+2025-11-15 15:35:35.19
+42cd5138
+User
+✅ [TG] Webhook deleted successfully
+
+2025-11-15 15:35:37.83
+42cd5138
+User
+🚀 [NewsScheduler] Starting (N8N-optimized mode)...
+2025-11-15 15:35:37.83
+42cd5138
+User
+🔌 [DB] Connection pool created
+2025-11-15 15:35:38.11
+42cd5138
+User
+✅ [NewsScheduler] Database schema verified (7/7 tables)
+2025-11-15 15:35:38.11
+42cd5138
+User
+✅ [NewsScheduler] Telegram push service initialized
+2025-11-15 15:35:38.11
+42cd5138
+User
+✅ [NewsRouter] Router initialized
+2025-11-15 15:35:38.11
+42cd5138
+User
+⏰ [NewsScheduler] Top-10 digest scheduled for even hours (00:00, 02:00, 04:00, 06:00, 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00)
+2025-11-15 15:35:38.11
+42cd5138
+User
+✅ [NewsScheduler] Router initialized
+2025-11-15 15:35:38.11
+42cd5138
+User
