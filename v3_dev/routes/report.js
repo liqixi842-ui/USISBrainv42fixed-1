@@ -5,7 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { buildSimpleReport } = require('../services/reportService');
+const { buildSimpleReport, generatePDF } = require('../services/reportService');
 
 // 尝试导入 dataBroker（如果可用）
 let fetchMarketData;
@@ -49,10 +49,13 @@ router.get('/test', (req, res) => {
 /**
  * GET /v3/report/:symbol
  * 根据股票代码生成研报
+ * 支持 ?format=pdf 参数生成 PDF
  */
 router.get('/:symbol', async (req, res) => {
   const { symbol } = req.params;
-  console.log(`📊 [v3-dev] GET /v3/report/${symbol}`);
+  const { format } = req.query;
+  
+  console.log(`📊 [v3-dev] GET /v3/report/${symbol}${format ? `?format=${format}` : ''}`);
   
   try {
     // 标准化股票代码
@@ -108,15 +111,43 @@ router.get('/:symbol', async (req, res) => {
     // 生成研报
     const report = await buildSimpleReport(normalizedSymbol, basicData);
 
-    // 返回结果
-    res.json({
-      ok: true,
-      env: 'v3-dev',
-      version: '1.0-test',
-      symbol: normalizedSymbol,
-      generated_at: new Date().toISOString(),
-      report: report
-    });
+    // 如果请求 PDF 格式
+    if (format === 'pdf') {
+      console.log(`📄 [v3-dev] 生成 PDF 格式: ${normalizedSymbol}`);
+      
+      try {
+        const pdfBuffer = await generatePDF(report);
+        
+        // 设置响应头
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${normalizedSymbol}_Report_v3dev.pdf"`);
+        res.setHeader('Content-Length', pdfBuffer.length);
+        
+        // 发送 PDF
+        res.send(pdfBuffer);
+        console.log(`✅ [v3-dev] PDF 已发送: ${pdfBuffer.length} bytes`);
+        
+      } catch (pdfError) {
+        console.error(`❌ [v3-dev] PDF 生成失败:`, pdfError.message);
+        return res.status(500).json({
+          ok: false,
+          env: 'v3-dev',
+          error: 'PDF generation failed',
+          message: pdfError.message,
+          symbol: normalizedSymbol
+        });
+      }
+    } else {
+      // 返回 JSON 结果
+      res.json({
+        ok: true,
+        env: 'v3-dev',
+        version: '1.0-test',
+        symbol: normalizedSymbol,
+        generated_at: new Date().toISOString(),
+        report: report
+      });
+    }
 
   } catch (error) {
     console.error(`❌ [v3-dev Report] 生成研报失败:`, error.message);

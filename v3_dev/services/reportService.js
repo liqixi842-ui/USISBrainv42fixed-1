@@ -4,8 +4,15 @@
  */
 
 const fetch = require('node-fetch');
+const PDFDocument = require('pdfkit');
+const path = require('path');
+const fs = require('fs');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+// 中文字体路径
+const FONT_REGULAR = path.join(__dirname, '../../fonts/NotoSansCJK-Regular.otf');
+const FONT_BOLD = path.join(__dirname, '../../fonts/NotoSansCJK-Bold.otf');
 
 /**
  * 构建简易研报
@@ -178,6 +185,194 @@ function generateFallbackReport(symbol, basicData, startTime = Date.now()) {
   };
 }
 
+/**
+ * 生成 PDF 格式研报
+ * @param {object} report - 研报对象
+ * @returns {Promise<Buffer>} PDF Buffer
+ */
+async function generatePDF(report) {
+  return new Promise((resolve, reject) => {
+    try {
+      // 验证字体文件存在
+      if (!fs.existsSync(FONT_REGULAR)) {
+        throw new Error(`字体文件不存在: ${FONT_REGULAR}`);
+      }
+      if (!fs.existsSync(FONT_BOLD)) {
+        throw new Error(`字体文件不存在: ${FONT_BOLD}`);
+      }
+
+      console.log(`📄 [v3-dev PDF] 开始生成 PDF: ${report.symbol}`);
+
+      const doc = new PDFDocument({
+        size: 'A4',
+        margins: { top: 50, bottom: 50, left: 50, right: 50 },
+        bufferPages: true
+      });
+
+      // 注册中文字体（关键：解决乱码）
+      doc.registerFont('Regular', FONT_REGULAR);
+      doc.registerFont('Bold', FONT_BOLD);
+
+      const chunks = [];
+      doc.on('data', chunk => chunks.push(chunk));
+      doc.on('end', () => {
+        const pdfBuffer = Buffer.concat(chunks);
+        console.log(`✅ [v3-dev PDF] PDF 生成完成: ${pdfBuffer.length} bytes`);
+        resolve(pdfBuffer);
+      });
+      doc.on('error', reject);
+
+      // 页面宽度
+      const pageWidth = doc.page.width - 100;
+      let y = 50;
+
+      // ========== 标题部分 ==========
+      doc.font('Bold').fontSize(24).fillColor('#4F46E5');
+      doc.text('USIS·研究报告', 50, y, { align: 'center' });
+      y += 35;
+
+      doc.font('Bold').fontSize(20).fillColor('#1F2937');
+      doc.text(String(report.symbol), 50, y, { align: 'center' });
+      y += 30;
+
+      // 评级徽章
+      const ratingColors = {
+        'STRONG_BUY': '#10B981',
+        'BUY': '#34D399',
+        'HOLD': '#FBBF24',
+        'SELL': '#F87171',
+        'STRONG_SELL': '#EF4444'
+      };
+      const ratingColor = ratingColors[report.rating] || '#6B7280';
+      
+      doc.fontSize(16).fillColor(ratingColor).font('Bold');
+      doc.text(`评级: ${report.rating}`, 50, y, { align: 'center' });
+      y += 25;
+
+      doc.fontSize(12).fillColor('#6B7280').font('Regular');
+      doc.text(`时间范围: ${report.horizon}`, 50, y, { align: 'center' });
+      y += 40;
+
+      // 分隔线
+      doc.moveTo(50, y).lineTo(doc.page.width - 50, y).stroke('#E5E7EB');
+      y += 25;
+
+      // ========== 价格信息 ==========
+      doc.font('Bold').fontSize(14).fillColor('#4F46E5');
+      doc.text('[价格信息]', 50, y);
+      y += 20;
+
+      doc.font('Regular').fontSize(11).fillColor('#1F2937');
+      const priceInfo = [
+        `当前价: ${report.price_info.current}`,
+        `涨跌: ${report.price_info.change} (${report.price_info.change_percent}%)`,
+        `最高: ${report.price_info.high}`,
+        `最低: ${report.price_info.low}`,
+        `成交量: ${report.price_info.volume}`
+      ];
+      
+      priceInfo.forEach(info => {
+        doc.text(String(info), 70, y);
+        y += 18;
+      });
+      y += 10;
+
+      // ========== 核心观点 ==========
+      doc.font('Bold').fontSize(14).fillColor('#4F46E5');
+      doc.text('[核心观点]', 50, y);
+      y += 20;
+
+      doc.font('Regular').fontSize(11).fillColor('#1F2937');
+      const summaryLines = doc.heightOfString(String(report.summary), {
+        width: pageWidth,
+        align: 'left'
+      });
+      
+      doc.text(String(report.summary), 70, y, {
+        width: pageWidth - 20,
+        align: 'left'
+      });
+      y += summaryLines + 15;
+
+      // ========== 驱动因素 ==========
+      doc.font('Bold').fontSize(14).fillColor('#4F46E5');
+      doc.text('[驱动因素]', 50, y);
+      y += 20;
+
+      doc.font('Regular').fontSize(11).fillColor('#1F2937');
+      if (report.drivers && report.drivers.length > 0) {
+        report.drivers.forEach((driver, index) => {
+          const text = `${index + 1}. ${String(driver)}`;
+          const height = doc.heightOfString(text, { width: pageWidth - 20 });
+          doc.text(text, 70, y, { width: pageWidth - 20 });
+          y += height + 8;
+        });
+      }
+      y += 10;
+
+      // ========== 风险提示 ==========
+      doc.font('Bold').fontSize(14).fillColor('#4F46E5');
+      doc.text('[风险提示]', 50, y);
+      y += 20;
+
+      doc.font('Regular').fontSize(11).fillColor('#1F2937');
+      if (report.risks && report.risks.length > 0) {
+        report.risks.forEach((risk, index) => {
+          const text = `${index + 1}. ${String(risk)}`;
+          const height = doc.heightOfString(text, { width: pageWidth - 20 });
+          doc.text(text, 70, y, { width: pageWidth - 20 });
+          y += height + 8;
+        });
+      }
+      y += 10;
+
+      // ========== 技术面分析 ==========
+      doc.font('Bold').fontSize(14).fillColor('#4F46E5');
+      doc.text('[技术面分析]', 50, y);
+      y += 20;
+
+      doc.font('Regular').fontSize(11).fillColor('#1F2937');
+      const technicalHeight = doc.heightOfString(String(report.technical_view), {
+        width: pageWidth - 20
+      });
+      doc.text(String(report.technical_view), 70, y, {
+        width: pageWidth - 20
+      });
+      y += technicalHeight + 20;
+
+      // ========== 元信息 ==========
+      y += 20;
+      doc.fontSize(10).fillColor('#6B7280').font('Regular');
+      doc.text(`AI 模型: ${report.model_used}`, 50, y);
+      y += 15;
+      doc.text(`生成时间: ${report.latency_ms}ms`, 50, y);
+      y += 15;
+      doc.text(`生成于: ${new Date(report.generated_at).toLocaleString('zh-CN')}`, 50, y);
+      y += 15;
+      doc.text('环境: v3-dev (测试版)', 50, y);
+      y += 25;
+
+      // ========== 免责声明 ==========
+      doc.rect(50, y, pageWidth, 60).fillAndStroke('#FEF3C7', '#F59E0B');
+      y += 10;
+      doc.fillColor('#92400E').fontSize(9).font('Regular');
+      doc.text('[免责声明]', 60, y);
+      y += 15;
+      doc.text(String(report.disclaimer), 60, y, {
+        width: pageWidth - 20
+      });
+
+      // 结束文档
+      doc.end();
+
+    } catch (error) {
+      console.error(`❌ [v3-dev PDF] 生成失败:`, error.message);
+      reject(error);
+    }
+  });
+}
+
 module.exports = {
-  buildSimpleReport
+  buildSimpleReport,
+  generatePDF
 };
