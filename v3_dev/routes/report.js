@@ -70,13 +70,20 @@ router.get('/:symbol', async (req, res) => {
       });
     }
 
-    // 获取市场数据
+    // 获取市场数据（带超时保护）
     let basicData = {};
     
     if (fetchMarketData) {
       try {
         console.log(`📡 [v3-dev Report] 获取市场数据: ${normalizedSymbol}`);
-        const marketData = await fetchMarketData([normalizedSymbol], ['quote']);
+        
+        // 5秒超时保护
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Market data timeout')), 5000)
+        );
+        
+        const dataPromise = fetchMarketData([normalizedSymbol], ['quote']);
+        const marketData = await Promise.race([dataPromise, timeoutPromise]);
         
         if (marketData.quotes && marketData.quotes[normalizedSymbol]) {
           basicData = marketData.quotes[normalizedSymbol];
