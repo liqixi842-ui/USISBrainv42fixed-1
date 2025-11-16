@@ -124,16 +124,34 @@ async function refineNarrativeText(report) {
     }
     
     // Remove invented monetary impacts (e.g., "$1B revenue", "$500M growth")
-    // Only keep if the number exists in report.price, report.valuation, report.fundamentals, report.targets
-    const inventedMoneyPattern = /\$\d+(\.\d+)?[BM] (revenue|growth|impact|addition)/gi;
+    // Only keep if the FULL amount+scale appears in report data
+    const inventedMoneyPattern = /\$(\d+(?:\.\d+)?)\s*([BM])\s+(revenue|growth|impact|addition|increase)/gi;
     corrected = corrected.split('.').filter(sentence => {
-      const match = sentence.match(inventedMoneyPattern);
-      if (!match) return true;
+      const matches = [...sentence.matchAll(new RegExp(inventedMoneyPattern, 'gi'))];
+      if (matches.length === 0) return true;
       
-      // Check if this number appears in report data
-      const numberStr = JSON.stringify(report.price) + JSON.stringify(report.valuation) + 
-                        JSON.stringify(report.fundamentals) + JSON.stringify(report.targets);
-      return numberStr.includes(match[0].replace(/[^0-9.]/g, ''));
+      // Build comprehensive data string with actual amounts
+      const dataStr = JSON.stringify(report.price) + JSON.stringify(report.valuation) + 
+                      JSON.stringify(report.fundamentals) + JSON.stringify(report.targets);
+      
+      // Check if FULL amount+scale exists (e.g., "1.5B" not just "1")
+      for (const match of matches) {
+        const fullAmount = match[1]; // e.g., "1.5"
+        const scale = match[2].toUpperCase(); // "B" or "M"
+        
+        // Convert to comparable formats
+        const amountPatterns = [
+          fullAmount + scale,           // "1.5B"
+          fullAmount + scale.toLowerCase(), // "1.5b"
+          fullAmount + '0' + scale,      // "1.50B"
+          (parseFloat(fullAmount) * 1000).toFixed(0) + 'M' // "1500M" if scale is B
+        ];
+        
+        const found = amountPatterns.some(pattern => dataStr.includes(pattern));
+        if (!found) return false; // Invented amount - drop sentence
+      }
+      
+      return true; // All amounts verified
     }).join('.');
     
     // Remove invented percentage claims (e.g., "grow 20%", "increase 30%")
@@ -249,9 +267,25 @@ async function refineNarrativeText(report) {
   let refinedTechnical = applyTasteCorrection(applyTruthCorrection(originalTexts.technical));
   refinedTechnical = deduplicate(refinedTechnical);
   if (refinedTechnical && report.techs) {
-    // Ensure it mentions real technical data
-    if (!refinedTechnical.includes('RSI') && report.techs.rsi) {
-      refinedTechnical = `Current RSI: ${report.techs.rsi}. ` + refinedTechnical;
+    // Ensure it mentions real technical data from report.techs
+    const techDataParts = [];
+    
+    // Add RSI if not already mentioned
+    if (!refinedTechnical.includes('RSI') && report.techs.rsi_14) {
+      techDataParts.push(`RSI(14): ${report.techs.rsi_14.toFixed(2)}`);
+    }
+    
+    // Add support/resistance if available and not mentioned
+    if (!refinedTechnical.includes('support') && report.techs.support_level) {
+      techDataParts.push(`Support: $${report.techs.support_level.toFixed(2)}`);
+    }
+    if (!refinedTechnical.includes('resistance') && report.techs.resistance_level) {
+      techDataParts.push(`Resistance: $${report.techs.resistance_level.toFixed(2)}`);
+    }
+    
+    // Prepend technical data if any
+    if (techDataParts.length > 0) {
+      refinedTechnical = techDataParts.join(', ') + '. ' + refinedTechnical;
     }
   }
   
