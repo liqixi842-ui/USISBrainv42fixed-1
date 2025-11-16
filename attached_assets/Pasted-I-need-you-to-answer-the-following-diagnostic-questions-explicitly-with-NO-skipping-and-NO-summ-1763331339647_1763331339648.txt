@@ -1,0 +1,69 @@
+I need you to answer the following diagnostic questions **explicitly**, with NO skipping and NO summarizing.  
+This is a mandatory system interrogation.  
+Answer each question clearly:
+
+────────────────────────────────
+1) Are you 100% sure that refineNarrativeText(report)  
+   is overwriting the FINAL report fields:
+
+   - report.summary_text  
+   - report.thesis_text  
+   - report.valuation_text  
+   - report.macro_text  
+   - report.segment_text  
+   - report.catalysts_text  
+   - report.risks_text  
+   - report.tech_view_text  
+   - report.action_text  
+
+   YES or NO?  
+   If YES, paste the exact code block where overwrite happens.
+
+────────────────────────────────
+2) Is buildFinalInstitutionalHtml() using ONLY these refined fields?  
+   YES or NO?  
+   If YES, paste the exact code snippet where it reads report.summary_text etc.
+
+────────────────────────────────
+3) Inside buildFinalInstitutionalHtml,  
+   is ANY part reading old fields (raw multi-model output)  
+   or internal fields (like consolidated_text, raw_text, multi_model.*)?  
+   YES or NO?  
+   If YES, paste where.
+
+────────────────────────────────
+4) Show me EXACTLY what report.summary_text and report.catalysts_text  
+   look like *right before* HTML rendering.  
+   Output both.
+
+────────────────────────────────
+5) Are catalysts_text and risks_text arrays being replaced by the refined arrays  
+   returned from refineNarrativeText?  
+   YES or NO?  
+   If YES, paste the actual assignment.
+
+────────────────────────────────
+6) Is ANY page in Final Template v1.0  
+   still using placeholders like:
+
+   - "Technical Chart Placeholder"
+   - "RSI: N/A"
+   - "MACD: N/A"
+
+   YES or NO?  
+   If YES, paste the code that generates it.
+
+────────────────────────────────
+7) Is ANY part of the report still reading from:  
+   - multi_model.claude_thesis  
+   - multi_model.raw  
+   - consolidated_text  
+   Instead of refined fields?  
+   YES or NO?
+
+────────────────────────────────
+8) Right before PDF generation,  
+   dump the entire `report` object so I can verify  
+   which fields contain refined text and which contain raw text.
+
+Return the full answers.
