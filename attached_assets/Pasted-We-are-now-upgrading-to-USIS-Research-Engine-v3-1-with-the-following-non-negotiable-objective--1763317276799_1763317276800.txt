@@ -1,0 +1,202 @@
+We are now upgrading to **USIS Research Engine v3.1** with the following non-negotiable objective:
+
+──────────────────────────────────────────────
+GOAL (v3.1) — INSTITUTIONAL CONTENT DENSITY EXPANSION
+──────────────────────────────────────────────
+Maintain institutional multi-page PDF layout with page-break-before,
+BUT dramatically increase CONTENT DENSITY on every page.
+
+All empty/under-filled pages must be filled with:
+- real data  
+- real charts  
+- additional paragraphs  
+- segment insights  
+- industry/macro structure  
+- valuation details  
+- competitive landscape  
+- financial trends  
+- expanded technical commentary
+
+No page should look “empty” or “half-blank”.
+
+──────────────────────────────────────────────
+PAGE-BY-PAGE REQUIRED CONTENT DENSITY (MANDATORY)
+──────────────────────────────────────────────
+
+You must update buildHtmlFromReport() to ensure every page is fully populated.
+
+──────────────── PAGE 1 — COVER ────────────────
+Add:
+- Full-size hero banner styled header
+- Key stats grid (6 blocks):
+  - Last Price
+  - 12M Target
+  - Upside %
+  - Market Cap
+  - 52W Range
+  - Forward PE
+- “Why This Report Matters” (3 bullets)
+
+──────────────── PAGE 2 — EXEC SUMMARY ─────────
+Add:
+- 5 bullet “Why NVDA Now?”
+- 5 bullet “Key Risks to Monitor”
+- Small chart strip (3 mini-charts):
+  - Price trend 3M
+  - Volume trend 3M
+  - Relative strength vs sector
+
+──────────────── PAGE 3 — INVESTMENT THESIS ─────
+Add:
+- Expand to at least **3 paragraphs**
+- REQUIRED content:
+  1. Industry cycle → early/mid/late
+  2. Market positioning vs AMD/AVGO/MSFT
+  3. Profitability drivers (cite gross/operating/net margins)
+  4. Revenue growth commentary
+  5. Management strategic direction
+- Add: “Consensus vs Our View” table (2 columns)
+
+──────────────── PAGE 4 — SEGMENT ANALYSIS ──────
+Add:
+1. Full segment table (even if segment data = null)
+2. Add NVDA-typical segments:
+   - Data Center
+   - Gaming
+   - Auto
+   - Pro Visualization
+3. For each segment add:
+   - Industry growth
+   - NVDA positioning
+   - Margin characteristics
+4. Add: “Key Clients & End Markets” (list style)
+
+──────────────── PAGE 5 — VALUATION ─────────────
+Add:
+1. Historical PE chart (static fallback image allowed)
+2. Historical PS chart (static fallback image allowed)
+3. Table: 
+   - PE TTM  
+   - PE Forward  
+   - PS  
+   - PB  
+4. Paragraph “Valuation in Context” (cite 5Y high/median/low)
+5. Add “Earnings Sensitivity Table”:
+   EPS ↑10%, EPS ↓10% → Target price re-evaluated
+
+──────────────── PAGE 6 — PEER COMPARISON ───────
+Add:
+- Expand to 8 peers:
+  AMD, AVGO, AAPL, MSFT, META, GOOGL, AMZN, TSLA
+- Add table with:
+  Price | Market Cap | Fwd PE | PS | Gross Margin | Net Margin
+- Add Peer Radar Chart (QuickChart radar)
+
+──────────────── PAGE 7 — FINANCIALS ────────────
+Add:
+- 2 static fallback charts:
+  1. Revenue 5-year growth (bars)
+  2. EPS 5-year growth (line)
+- Add Financial Strength table:
+  - FCF margin
+  - ROE / ROA
+  - Operating cash flow
+  - CAPEX trend
+- Add: “Profitability Commentary” paragraph
+
+──────────────── PAGE 8 — PRICE TARGET MODEL ─────
+Add:
+- Full Price Target Model Table:
+  FY25E EPS  
+  FY26E EPS  
+  Target PE (base/bull/bear)  
+  Implied Prices  
+  Upside %
+
+- Add explanation paragraph:
+  “Why these multiples are justified”
+
+──────────────── PAGE 9 — CATALYSTS ─────────────
+Expand from 4 to **8 catalysts**, including:
+- Product launches (Hopper/Blackwell)
+- Cloud CAPEX cycle
+- Regulatory export controls
+- Competitor roadmap (AMD MI300)
+- AI adoption curve
+- Industry TAM growth
+- Data Center demand
+- Software ecosystem (CUDA)
+
+──────────────── PAGE 10 — RISKS ────────────────
+Expand from 4 to **8 risks**, including:
+- Competition risk
+- Margin compression
+- Macro slowdown
+- Supply chain risk
+- Inventory cycles
+- Regulatory export limits
+- Valuation risk
+- Execution risk
+
+──────────────── PAGE 11 — TECHNICAL ANALYSIS ──
+Expand:
+- Add EMA20/50/200 interpretation paragraphs
+- Add RSI/MACD interpretation
+- Add “Trade Setup Scenarios” table:
+  Bull Case / Base Case / Bear Case entries
+- Add technical chart (from QuickChart)
+
+──────────────── PAGE 12 — ACTION PLAN ──────────
+Add:
+- Positioning guidance:
+  - Long-only funds  
+  - Hedge funds  
+  - Retail  
+  - Momentum traders
+- 3 entry levels (Aggressive / Balanced / Conservative)
+- Stop-loss levels
+- Portfolio weight suggestion
+- Final “Analyst View” box
+
+──────────────────────────────────────────────
+3) PROMPT REQUIREMENTS (MANDATORY)
+──────────────────────────────────────────────
+
+Every section must be generated with:
+- real numbers  
+- real ratios  
+- peer references  
+- forward-looking statements  
+- specific rationale  
+
+You must explicitly require these in every prompt:
+“Do NOT produce generic AI text.  
+You MUST reference actual metrics in the report data.”
+
+──────────────────────────────────────────────
+4) V3.1 OUTPUT REQUIRED
+──────────────────────────────────────────────
+
+After implementing v3.1:
+
+You MUST output PDF files:
+
+1) /tmp/NVDA_v3.1_report.pdf  
+2) /tmp/AAPL_v3.1_report.pdf  
+3) /tmp/SPX_v3.1_report.pdf  
+
+Each must be:
+- 10+ pages  
+- Fully dense (no empty white pages)  
+- Filled with charts, tables, paragraphs  
+- Institutional sell-side tone  
+
+NO EXCEPTIONS.
+
+──────────────────────────────────────────────
+EXECUTE v3.1 NOW.
+──────────────────────────────────────────────
+
+Do NOT ask questions.  
+Do NOT propose options.  
+JUST IMPLEMENT.
