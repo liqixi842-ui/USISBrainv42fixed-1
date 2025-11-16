@@ -51,6 +51,48 @@ USIS Brain v6.0 is an Institutional-Grade Multi-AI Financial Analysis System des
   - Institutional-grade fallback content ensures zero placeholder sections
 - Verification: /tmp/V3_1_IMPLEMENTATION_SUMMARY.md
 
+**Multi-Model Research Pipeline (v3.2)**
+- Status: ✅ IMPLEMENTED - Testing in Progress
+- Implemented: 2025-11-16
+- Purpose: Parallel multi-AI specialist analysis with GPT-4o consolidation
+- Service: `v3_dev/services/reportService.js` (multiModelResearchPipeline function)
+- Architecture Pattern: **"Specialist Committee → Chief Analyst"**
+  - **Phase 1: Parallel Specialist Analysis** (5 AI models via Promise.all)
+    - Claude 3.5 Sonnet → Industry cycle, competitive positioning, tech moat
+    - Gemini 2.0 Pro → Macro environment, sector rotation, regulatory trends
+    - DeepSeek V3 → Valuation model, earnings sensitivity, FY25E/FY26E forecasts
+    - Mistral Large → Peer comparison, relative valuation, margin analysis
+    - GPT-4o-mini → 8 institutional catalysts + 8 institutional risks
+  - **Phase 2: Master Consolidation** (GPT-4o)
+    - Merges specialist outputs into unified institutional narrative
+    - Handles missing specialist inputs gracefully (no apologies, fills gaps from raw data)
+    - Normalizes schema (e.g., maps `8_institutional_catalysts` → `catalysts`)
+    - Ensures exactly 8 catalysts + 8 risks in final output
+- **Key Features:**
+  - Schema normalization layer for consistent specialist output format
+  - Enhanced JSON parsing (handles markdown code blocks, multiple fences, prepend text)
+  - Graceful degradation when specialist models fail (Claude 404, Gemini missing key)
+  - Consolidation prompt with explicit failure handling rules (Rule 4: "NO APOLOGIES for missing data")
+  - Multi-model transparency: All specialist outputs preserved in `report.multi_model` object
+- **Performance:**
+  - AI latency: ~28-48 seconds (parallel execution of 5 models + consolidation)
+  - Total latency: ~31-50 seconds (including data fetch)
+  - Models used: 5 (3-4 active depending on API availability)
+- **Output Quality (NVDA Test):**
+  - Summary: Cites real data ($190.17 price, 63.4x PE, $199.67 target)
+  - Thesis: Integrates DeepSeek margin analysis (70.2% vs AMD 46%), Mistral peer insights
+  - Valuation: Explicitly credits "DeepSeek's valuation model" with bull/base/bear scenarios
+  - Catalysts: 8 institutional catalysts with specific timelines and dollar impacts
+  - No generic "Without [Model] analysis" stubs - seamlessly fills gaps
+- **Known Issues:**
+  - Claude API: 404 error (endpoint issue, using fallback)
+  - Gemini API: No API key (expected, gracefully degraded)
+  - Mistral API: Occasional 429 rate limit (handled with error fallback)
+- **Next Steps:**
+  - Add per-provider timeout/retry safeguards
+  - Implement cost tracking for multi-model usage
+  - Generate comparison PDFs: NVDA_v3.1 vs NVDA_v3.2
+
 # User Preferences
 Preferred communication style: Simple, everyday language.
 
