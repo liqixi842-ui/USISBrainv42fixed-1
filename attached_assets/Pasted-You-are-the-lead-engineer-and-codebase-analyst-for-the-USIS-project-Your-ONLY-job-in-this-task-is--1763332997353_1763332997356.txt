@@ -1,0 +1,132 @@
+You are the lead engineer and codebase analyst for the USIS project.
+Your ONLY job in this task is:
+👉 Find out the current status of the PDF / research report (研报) system in this repo and write a status report.
+Do NOT design or implement a new system yet. Just analyze and document what already exists.
+
+STEP 0 – Scan the repo for anything related to “report” / “pdf”
+
+Please do a full-repo analysis and answer these questions, based ONLY on the actual code in this Repl:
+
+PDF / document libraries
+
+Check package.json (and any other dependency files) and list ALL libraries related to PDF / documents / exports, e.g.:
+
+pdfkit, @react-pdf/renderer, jspdf, puppeteer, playwright, html-pdf, docx, etc.
+
+For each such library, list:
+
+the library name
+
+version
+
+where it is imported/used (file paths).
+
+Existing “report” or “export” endpoints
+
+Search the codebase for keywords:
+report, reports, pdf, export, document, research, analysisReport
+
+For each HTTP route or handler that looks related (for example /report, /reports, /export, /download), list:
+
+HTTP method + path (e.g. POST /api/report/generate)
+
+file path
+
+handler function name.
+
+Existing report / template modules
+
+Search for any modules that look like templates or layout for reports, for example:
+
+files under folders named report, reports, pdf, templates, documents, exports
+
+or file names like *Report*, *Pdf*, *Template*, *Document*.
+
+For each such file, summarize in 1–2 lines what it seems to do:
+
+e.g. “renders HTML string for a stock report”, “defines TypeScript types for report sections”, etc.
+
+Backend framework and routing structure
+
+Identify what backend framework is being used:
+
+e.g. Express, Fastify, Hono, Next.js API routes, raw http, etc.
+
+Summarize how HTTP routes are organized:
+
+for example “src/server.ts registers routes from src/routes/*.ts”.
+
+AI analysis / long-form content modules
+
+Find any modules that generate long-form analysis for stocks / indices / markets, such as:
+
+orchestrate, brain, analysis, insights, news, summary, report.
+
+List:
+
+their file paths
+
+a short description of what they output (e.g. “multi-model voting summary for one symbol”).
+
+Environment variables / config related to reports or PDFs
+
+Scan configuration and env usage for keys containing:
+REPORT, PDF, DOC, EXPORT.
+
+List any such env vars or config keys, and where they are used.
+
+Deliverable
+
+Create a markdown file at the root of the repo named:
+
+USIS_REPORT_PDF_STATUS.md
+
+The file should have this structure:
+
+Overview
+
+One short paragraph summarizing:
+
+whether a report/PDF system already exists,
+
+whether it is partial / experimental / unused,
+
+or not present at all.
+
+PDF / Document Libraries
+
+Table listing each relevant library and where it is used.
+
+Existing Report / Export Endpoints
+
+Table of existing HTTP endpoints related to reports/exports (if any).
+
+Existing Templates or Report Modules
+
+Bullet list of files + 1–2 line descriptions.
+
+AI Analysis Modules Potentially Reusable for Reports
+
+Bullet list of modules that could feed content into a report.
+
+Config / Env Related to Reports/PDF
+
+Bullet list of env/config keys and their purpose (if known).
+
+Current Gaps / Open Questions
+
+A clear list of what is missing to have a production-ready research report PDF service,
+for example:
+
+“No PDF library installed”
+
+“Has HTML template but no PDF renderer”
+
+“Has PDF generator but no HTTP endpoint”
+
+etc.
+
+When you’re done, briefly summarize the main findings in the chat (5–10 bullet points) AND make sure USIS_REPORT_PDF_STATUS.md is saved in the repo.
+
+Do NOT start designing or implementing a new report system yet.
+This task is diagnostic only. Implementation will be a separate step after we review this status report.
