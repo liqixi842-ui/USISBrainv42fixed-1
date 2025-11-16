@@ -1760,7 +1760,7 @@ function generateFallbackPDF(htmlContent) {
  * @returns {string} HTML string
  */
 function buildHtmlFromReport(report) {
-  console.log(`📄 [HTML Generator] Building HTML for ${report.symbol}...`);
+  console.log(`📄 [HTML Generator v2.0] Building 10+ page institutional PDF for ${report.symbol}...`);
   
   const ratingColors = {
     'STRONG_BUY': '#10B981',
@@ -1793,397 +1793,361 @@ function buildHtmlFromReport(report) {
     return `$${val.toFixed(2)}`;
   };
   
+  // Helper: generate peer comparison table HTML
+  const buildPeerTable = () => {
+    if (!report.peers || report.peers.length === 0) return '<p class="text-muted">同业对比数据暂无 / Peer comparison data not available</p>';
+    
+    let html = `<table class="data-table peer-table">
+      <thead>
+        <tr>
+          <th>公司 / Company</th>
+          <th>价格 / Price</th>
+          <th>市值 / Market Cap</th>
+          <th>Forward PE</th>
+          <th>PS (TTM)</th>
+        </tr>
+      </thead>
+      <tbody>`;
+    
+    report.peers.forEach(peer => {
+      html += `<tr>
+        <td><strong>${peer.symbol}</strong></td>
+        <td>${fmtCurrency(peer.price)}</td>
+        <td>${fmtLarge(peer.market_cap)}</td>
+        <td>${fmt(peer.pe_forward, 2, 'x')}</td>
+        <td>${fmt(peer.ps_ttm, 2, 'x')}</td>
+      </tr>`;
+    });
+    
+    html += '</tbody></table>';
+    return html;
+  };
+  
+  // Helper: generate financials table HTML (5-year history + 2-year forecast)
+  const buildFinancialsTable = () => {
+    let html = '<div class="financials-section">';
+    
+    // Revenue History
+    if (report.fundamentals.revenue_5y && report.fundamentals.revenue_5y.length > 0) {
+      html += `<h3>营收历史 / Revenue History (5Y)</h3>
+      <table class="data-table">
+        <thead><tr><th>年份 / Year</th><th>营收 / Revenue</th></tr></thead>
+        <tbody>`;
+      report.fundamentals.revenue_5y.forEach(d => {
+        html += `<tr><td>${d.year}</td><td>$${(d.value / 1e9).toFixed(2)}B</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    
+    // EPS History
+    if (report.fundamentals.eps_5y && report.fundamentals.eps_5y.length > 0) {
+      html += `<h3>EPS 历史 / EPS History (5Y)</h3>
+      <table class="data-table">
+        <thead><tr><th>年份 / Year</th><th>EPS</th></tr></thead>
+        <tbody>`;
+      report.fundamentals.eps_5y.forEach(d => {
+        html += `<tr><td>${d.year}</td><td>$${d.value.toFixed(2)}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    
+    // Forecasts
+    if (report.fundamentals.eps_forecast_2y && report.fundamentals.eps_forecast_2y.length > 0) {
+      html += `<h3>EPS 预测 / EPS Forecast (2Y)</h3>
+      <table class="data-table">
+        <thead><tr><th>年份 / Year</th><th>预测 EPS / Forecast EPS</th></tr></thead>
+        <tbody>`;
+      report.fundamentals.eps_forecast_2y.forEach(d => {
+        html += `<tr><td>${d.year}</td><td>$${d.value.toFixed(2)}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    
+    html += '</div>';
+    return html;
+  };
+  
+  // Helper: embed charts
+  const embedCharts = () => {
+    if (!report.charts) return '';
+    
+    let html = '';
+    if (report.charts.revenue_chart) {
+      html += `<div class="chart-container">
+        <img src="${report.charts.revenue_chart}" alt="Revenue Chart" class="chart-img" />
+      </div>`;
+    }
+    if (report.charts.eps_chart) {
+      html += `<div class="chart-container">
+        <img src="${report.charts.eps_chart}" alt="EPS Chart" class="chart-img" />
+      </div>`;
+    }
+    if (report.charts.peer_chart) {
+      html += `<div class="chart-container">
+        <img src="${report.charts.peer_chart}" alt="Peer Comparison Chart" class="chart-img" />
+      </div>`;
+    }
+    
+    return html;
+  };
+  
   const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${report.symbol} 研究报告 - USIS</title>
+  <title>${report.symbol} 研究报告 - USIS v2.0</title>
   <style>
+    @page { size: A4; margin: 20mm; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-      line-height: 1.8;
-      color: #1F2937;
-      background: #F9FAFB;
-      padding: 40px 20px;
-    }
-    .container {
-      max-width: 900px;
-      margin: 0 auto;
+      font-family: 'Times New Roman', Georgia, 'PingFang SC', 'Microsoft YaHei', serif;
+      line-height: 1.6;
+      color: #1a1a1a;
       background: white;
-      padding: 50px;
-      border-radius: 8px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      font-size: 11pt;
     }
-    .header {
-      margin-bottom: 40px;
-      padding-bottom: 30px;
-      border-bottom: 3px solid #E5E7EB;
-    }
-    h1 {
-      color: #111827;
-      font-size: 32px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    .symbol-line {
-      font-size: 26px;
-      font-weight: 600;
-      color: #374151;
-      margin: 15px 0;
-    }
-    .company-name {
-      color: #6B7280;
-      font-size: 16px;
-    }
-    .asset-type {
-      display: inline-block;
-      padding: 4px 12px;
-      background: #EEF2FF;
-      color: #4F46E5;
-      border-radius: 4px;
-      font-size: 13px;
-      font-weight: 500;
-      margin-left: 10px;
-    }
-    .rating-badge {
-      display: inline-block;
-      padding: 10px 24px;
-      background: ${ratingColor};
-      color: white;
-      border-radius: 6px;
-      font-weight: 600;
-      font-size: 18px;
-      margin: 15px 0;
-    }
-    .meta-line {
-      color: #6B7280;
-      font-size: 15px;
-      margin: 8px 0;
-    }
-    .price-highlight {
-      font-size: 20px;
-      font-weight: 600;
-      color: #111827;
-      margin: 12px 0;
-    }
-    .change-positive {
-      color: #10B981;
-      font-weight: 600;
-    }
-    .change-negative {
-      color: #EF4444;
-      font-weight: 600;
-    }
-    h2 {
-      color: #111827;
-      font-size: 22px;
-      font-weight: 600;
-      margin: 35px 0 15px 0;
-      padding-bottom: 8px;
-      border-bottom: 2px solid #E5E7EB;
-    }
-    h3 {
-      color: #374151;
-      font-size: 18px;
-      font-weight: 600;
-      margin: 25px 0 12px 0;
-    }
-    .section {
-      margin: 30px 0;
-    }
-    .investment-summary {
-      background: #EEF2FF;
-      padding: 24px;
-      border-radius: 8px;
-      border-left: 4px solid #4F46E5;
-      margin: 20px 0;
-      font-size: 16px;
-      line-height: 1.9;
-      white-space: pre-wrap;
-    }
-    .data-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 20px 0;
-      font-size: 15px;
-    }
-    .data-table th {
-      background: #F3F4F6;
-      padding: 12px;
-      text-align: left;
-      font-weight: 600;
-      color: #374151;
-      border-bottom: 2px solid #E5E7EB;
-    }
-    .data-table td {
-      padding: 12px;
-      border-bottom: 1px solid #E5E7EB;
-    }
-    .data-table tr:hover {
-      background: #F9FAFB;
-    }
-    .text-content {
-      margin: 15px 0;
-      line-height: 1.9;
-      white-space: pre-wrap;
-    }
-    .targets-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
-      margin: 20px 0;
-    }
-    .target-card {
-      padding: 20px;
-      border-radius: 8px;
-      text-align: center;
-    }
-    .target-card.base {
-      background: #EEF2FF;
-      border: 2px solid #4F46E5;
-    }
-    .target-card.bull {
-      background: #F0FDF4;
-      border: 2px solid #10B981;
-    }
-    .target-card.bear {
-      background: #FEF2F2;
-      border: 2px solid #EF4444;
-    }
-    .target-label {
-      font-size: 13px;
-      font-weight: 600;
-      text-transform: uppercase;
-      color: #6B7280;
-      margin-bottom: 8px;
-    }
-    .target-price {
-      font-size: 28px;
-      font-weight: 700;
-      color: #111827;
-      margin: 8px 0;
-    }
-    .target-upside {
-      font-size: 16px;
-      font-weight: 600;
-    }
-    .action-box {
-      background: #F0FDF4;
-      padding: 24px;
-      border-radius: 8px;
-      border-left: 4px solid #10B981;
-      margin: 20px 0;
-      white-space: pre-wrap;
-    }
-    .note {
-      color: #6B7280;
-      font-size: 13px;
-      font-style: italic;
-      margin: 10px 0;
-    }
-    .meta {
-      margin-top: 40px;
-      padding-top: 25px;
-      border-top: 2px solid #E5E7EB;
-      font-size: 14px;
-      color: #6B7280;
-    }
-    .meta-item {
-      margin: 6px 0;
-    }
-    .disclaimer {
-      background: #FEF3C7;
-      border: 1px solid #F59E0B;
-      border-radius: 8px;
-      padding: 20px;
-      margin-top: 30px;
-      font-size: 13px;
-      color: #92400E;
-      line-height: 1.7;
-    }
-    .disclaimer strong {
-      display: block;
-      margin-bottom: 10px;
-      font-size: 15px;
-    }
+    .page { page-break-after: always; padding: 20px; min-height: 1000px; }
+    .page-break { page-break-before: always; }
+    .cover { text-align: center; padding-top: 200px; }
+    .cover h1 { font-size: 48px; font-weight: 700; margin-bottom: 30px; color: #003366; }
+    .cover .symbol { font-size: 72px; font-weight: 700; color: #000; margin: 40px 0; }
+    .cover .company-name { font-size: 24px; color: #666; margin: 20px 0; }
+    .cover .rating-large { display: inline-block; padding: 20px 50px; background: ${ratingColor}; color: white; font-size: 32px; font-weight: 700; border-radius: 10px; margin: 40px 0; }
+    .cover .meta-cover { font-size: 14px; color: #666; margin-top: 60px; }
+    h1 { font-size: 24px; font-weight: 700; color: #003366; margin: 30px 0 20px 0; border-bottom: 3px solid #003366; padding-bottom: 10px; }
+    h2 { font-size: 18px; font-weight: 600; color: #003366; margin: 25px 0 15px 0; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
+    h3 { font-size: 14px; font-weight: 600; color: #333; margin: 20px 0 12px 0; }
+    .section { margin: 20px 0; }
+    .text-content { margin: 15px 0; line-height: 1.8; white-space: pre-wrap; }
+    .data-table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 10pt; }
+    .data-table thead th { background: #003366; color: white; padding: 10px; text-align: left; font-weight: 600; }
+    .data-table tbody td { padding: 10px; border-bottom: 1px solid #ddd; }
+    .data-table tr:nth-child(even) { background: #f9f9f9; }
+    .highlight-box { background: #e6f2ff; padding: 20px; border-left: 4px solid #003366; margin: 20px 0; }
+    .targets-grid { display: table; width: 100%; margin: 20px 0; border-collapse: collapse; }
+    .targets-grid .target-col { display: table-cell; width: 33%; padding: 20px; border: 2px solid #003366; text-align: center; }
+    .target-label { font-size: 11px; text-transform: uppercase; font-weight: 600; color: #666; margin-bottom: 10px; }
+    .target-price { font-size: 28px; font-weight: 700; color: #003366; margin: 10px 0; }
+    .target-upside { font-size: 14px; font-weight: 600; }
+    .positive { color: #10B981; }
+    .negative { color: #EF4444; }
+    .formula-box { background: #f5f5f5; padding: 15px; border: 1px solid #ccc; font-family: 'Courier New', monospace; margin: 15px 0; }
+    .chart-container { margin: 20px 0; text-align: center; page-break-inside: avoid; }
+    .chart-img { max-width: 100%; height: auto; border: 1px solid #ddd; }
+    .disclaimer { background: #fff8dc; border: 2px solid #f59e0b; padding: 20px; margin-top: 30px; font-size: 10pt; }
+    .text-muted { color: #666; font-style: italic; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>USIS 研究报告 / USIS Research Report</h1>
-      <div class="symbol-line">
-        ${report.symbol} - <span class="company-name">${report.name}</span>
-        <span class="asset-type">${report.asset_type.toUpperCase()}</span>
-      </div>
-      <div class="rating-badge">${report.rating}</div>
-      <div class="meta-line">投资期限 / Horizon：${report.horizon}</div>
-      <div class="price-highlight">
-        最新价格 / Last Price: ${fmtCurrency(report.price.last, report.price.currency)}
-        ${report.price.change_pct !== null ? `<span class="${report.price.change_pct >= 0 ? 'change-positive' : 'change-negative'}">${report.price.change_abs >= 0 ? '+' : ''}${fmt(report.price.change_abs)} (${report.price.change_pct >= 0 ? '+' : ''}${fmt(report.price.change_pct, 2, '%')})</span>` : ''}
-      </div>
-    </div>
 
-    <h2>一、投资结论 / Investment Summary</h2>
-    <div class="investment-summary">${report.summary_text}</div>
+<!-- PAGE 1: COVER -->
+<div class="page cover">
+  <h1>INSTITUTIONAL EQUITY RESEARCH</h1>
+  <div class="symbol">${report.symbol}</div>
+  <div class="company-name">${report.name}</div>
+  <div class="rating-large">${report.rating}</div>
+  <div class="meta-cover">
+    <p>Target Price: ${fmtCurrency(report.targets.base.price)} (${report.targets.base.horizon})</p>
+    <p>Current Price: ${fmtCurrency(report.price.last)} | Market Cap: ${fmtLarge(report.valuation.market_cap)}</p>
+    <p style="margin-top: 40px;">Generated: ${new Date(report.meta.generated_at).toLocaleDateString()}</p>
+    <p>USIS Research v2.0 | Powered by ${report.meta.model}</p>
+  </div>
+</div>
 
-    <h2>二、核心投资逻辑 / Key Investment Thesis</h2>
-    <div class="text-content">${report.thesis_text}</div>
+<!-- PAGE 2: EXECUTIVE SUMMARY -->
+<div class="page">
+  <h1>EXECUTIVE SUMMARY / 投资结论</h1>
+  <div class="highlight-box">${report.summary_text}</div>
+  
+  <h2>Key Metrics / 核心指标</h2>
+  <table class="data-table">
+    <thead><tr><th>Metric / 指标</th><th>Value / 数值</th></tr></thead>
+    <tbody>
+      <tr><td>Price / 当前价格</td><td>${fmtCurrency(report.price.last)}</td></tr>
+      <tr><td>Market Cap / 市值</td><td>${fmtLarge(report.valuation.market_cap)}</td></tr>
+      <tr><td>PE (TTM) / 市盈率</td><td>${fmt(report.valuation.pe_ttm, 2, 'x')}</td></tr>
+      <tr><td>Beta / β系数</td><td>${fmt(report.price.beta, 2)}</td></tr>
+      <tr><td>52W High-Low / 52周高低</td><td>${fmtCurrency(report.price.high_52w)} - ${fmtCurrency(report.price.low_52w)}</td></tr>
+    </tbody>
+  </table>
+  
+  <h2>Investment Rating / 投资评级</h2>
+  <p><strong>Rating:</strong> ${report.rating} | <strong>Horizon:</strong> ${report.horizon}</p>
+  <p><strong>Base Target:</strong> ${fmtCurrency(report.targets.base.price)} (+${fmt(report.targets.base.upside_pct, 1, '%')})</p>
+</div>
 
-    <h2>三、估值与财务分析 / Valuation & Financials</h2>
-    
-    <h3>价格数据 / Price Data</h3>
-    <table class="data-table">
-      <tr>
-        <th>指标 / Metric</th>
-        <th>数值 / Value</th>
-      </tr>
-      <tr>
-        <td>当前价格 / Current Price</td>
-        <td>${fmtCurrency(report.price.last, report.price.currency)}</td>
-      </tr>
-      <tr>
-        <td>日内涨跌 / Daily Change</td>
-        <td class="${report.price.change_pct >= 0 ? 'change-positive' : 'change-negative'}">${fmt(report.price.change_abs)} (${fmt(report.price.change_pct, 2, '%')})</td>
-      </tr>
-      <tr>
-        <td>日内高点 / Intraday High</td>
-        <td>${fmtCurrency(report.price.high_1d, report.price.currency)}</td>
-      </tr>
-      <tr>
-        <td>日内低点 / Intraday Low</td>
-        <td>${fmtCurrency(report.price.low_1d, report.price.currency)}</td>
-      </tr>
-      <tr>
-        <td>52周高点 / 52-Week High</td>
-        <td>${fmtCurrency(report.price.high_52w, report.price.currency)}</td>
-      </tr>
-      <tr>
-        <td>52周低点 / 52-Week Low</td>
-        <td>${fmtCurrency(report.price.low_52w, report.price.currency)}</td>
-      </tr>
-    </table>
+<!-- PAGE 3: INVESTMENT THESIS -->
+<div class="page">
+  <h1>INVESTMENT THESIS / 核心投资逻辑</h1>
+  <div class="text-content">${report.thesis_text}</div>
+</div>
 
-    <h3>估值指标 / Valuation Metrics</h3>
-    <table class="data-table">
+<!-- PAGE 4: SEGMENT ANALYSIS -->
+<div class="page">
+  <h1>SEGMENT ANALYSIS / 业务板块分析</h1>
+  ${report.segment_text ? `<div class="text-content">${report.segment_text}</div>` : '<p class="text-muted">Business segment data not available for this security.</p>'}
+  
+  ${report.segments && report.segments.length > 0 ? `
+  <h2>Segment Breakdown / 板块分解</h2>
+  <table class="data-table">
+    <thead><tr><th>Segment</th><th>Revenue</th><th>Growth YoY</th><th>Margin</th></tr></thead>
+    <tbody>
+      ${report.segments.map(s => `<tr><td>${s.name}</td><td>${fmtLarge(s.revenue)}</td><td>${fmt(s.growth_yoy, 1, '%')}</td><td>${fmt(s.margin, 1, '%')}</td></tr>`).join('')}
+    </tbody>
+  </table>` : ''}
+  
+  ${report.macro_text ? `
+  <h2>Industry & Macro Trends / 行业与宏观趋势</h2>
+  <div class="text-content">${report.macro_text}</div>` : ''}
+</div>
+
+<!-- PAGE 5: VALUATION & PEER COMPARISON -->
+<div class="page">
+  <h1>VALUATION & PEER COMPARISON / 估值与同业对比</h1>
+  
+  <h2>Valuation Analysis / 估值分析</h2>
+  <div class="text-content">${report.valuation_text}</div>
+  
+  <h2>Valuation Metrics / 估值指标</h2>
+  <table class="data-table">
+    <thead><tr><th>Metric</th><th>Current</th><th>5Y Median</th><th>5Y High</th><th>5Y Low</th></tr></thead>
+    <tbody>
       <tr>
-        <th>指标 / Metric</th>
-        <th>数值 / Value</th>
-      </tr>
-      <tr>
-        <td>市值 / Market Cap</td>
-        <td>${fmtLarge(report.valuation.market_cap)}</td>
-      </tr>
-      <tr>
-        <td>市盈率(TTM) / P/E Ratio (TTM)</td>
+        <td>PE Ratio</td>
         <td>${fmt(report.valuation.pe_ttm, 2, 'x')}</td>
+        <td>${fmt(report.valuation.historical_pe_5y?.median, 2, 'x')}</td>
+        <td>${fmt(report.valuation.historical_pe_5y?.high, 2, 'x')}</td>
+        <td>${fmt(report.valuation.historical_pe_5y?.low, 2, 'x')}</td>
       </tr>
       <tr>
-        <td>预期市盈率 / Forward P/E</td>
-        <td>${fmt(report.valuation.pe_forward, 2, 'x')}</td>
-      </tr>
-      <tr>
-        <td>市销率(TTM) / P/S Ratio (TTM)</td>
+        <td>PS Ratio</td>
         <td>${fmt(report.valuation.ps_ttm, 2, 'x')}</td>
+        <td>${fmt(report.valuation.historical_ps_5y?.median, 2, 'x')}</td>
+        <td>${fmt(report.valuation.historical_ps_5y?.high, 2, 'x')}</td>
+        <td>${fmt(report.valuation.historical_ps_5y?.low, 2, 'x')}</td>
       </tr>
-      <tr>
-        <td>市净率 / P/B Ratio</td>
-        <td>${fmt(report.valuation.pb, 2, 'x')}</td>
-      </tr>
-      <tr>
-        <td>股息率 / Dividend Yield</td>
-        <td>${fmt(report.valuation.dividend_yield, 2, '%')}</td>
-      </tr>
-    </table>
+    </tbody>
+  </table>
+  
+  <h2>Peer Comparison / 同业对比</h2>
+  ${buildPeerTable()}
+  ${embedCharts()}
+</div>
 
-    <h3>基本面指标 / Fundamentals</h3>
-    <table class="data-table">
-      <tr>
-        <th>指标 / Metric</th>
-        <th>数值 / Value</th>
-      </tr>
-      <tr>
-        <td>毛利率 / Gross Margin</td>
-        <td>${fmt(report.fundamentals.gross_margin, 1, '%')}</td>
-      </tr>
-      <tr>
-        <td>营业利润率 / Operating Margin</td>
-        <td>${fmt(report.fundamentals.operating_margin, 1, '%')}</td>
-      </tr>
-      <tr>
-        <td>净利率 / Net Margin</td>
-        <td>${fmt(report.fundamentals.net_margin, 1, '%')}</td>
-      </tr>
-      <tr>
-        <td>净资产收益率 / ROE</td>
-        <td>${fmt(report.fundamentals.roe, 1, '%')}</td>
-      </tr>
-      <tr>
-        <td>总资产收益率 / ROA</td>
-        <td>${fmt(report.fundamentals.roa, 1, '%')}</td>
-      </tr>
-    </table>
+<!-- PAGE 6: FINANCIALS -->
+<div class="page">
+  <h1>FINANCIALS / 财务数据</h1>
+  
+  <h2>5-Year History + 2-Year Forecast / 5年历史+2年预测</h2>
+  ${buildFinancialsTable()}
+  
+  <h2>Profitability Margins / 盈利能力指标</h2>
+  <table class="data-table">
+    <thead><tr><th>Metric / 指标</th><th>Value / 数值</th></tr></thead>
+    <tbody>
+      <tr><td>Gross Margin / 毛利率</td><td>${fmt(report.fundamentals.gross_margin * 100, 1, '%')}</td></tr>
+      <tr><td>Operating Margin / 营业利润率</td><td>${fmt(report.fundamentals.operating_margin * 100, 1, '%')}</td></tr>
+      <tr><td>Net Margin / 净利率</td><td>${fmt(report.fundamentals.net_margin * 100, 1, '%')}</td></tr>
+      <tr><td>ROE / 净资产收益率</td><td>${fmt(report.fundamentals.roe * 100, 1, '%')}</td></tr>
+      <tr><td>ROA / 总资产收益率</td><td>${fmt(report.fundamentals.roa * 100, 1, '%')}</td></tr>
+    </tbody>
+  </table>
+</div>
 
-    <div class="text-content">${report.valuation_text}</div>
-
-    <h2>四、目标价格 / Price Targets</h2>
-    <div class="targets-grid">
-      <div class="target-card base">
-        <div class="target-label">基准目标 / Base Case</div>
-        <div class="target-price">${fmtCurrency(report.targets.base.price, report.price.currency)}</div>
-        <div class="target-upside change-positive">${report.targets.base.upside_pct !== null ? `+${fmt(report.targets.base.upside_pct, 1, '%')}` : 'N/A'}</div>
-        <div class="note">${report.targets.base.horizon || ''}</div>
-      </div>
-      <div class="target-card bull">
-        <div class="target-label">乐观情形 / Bull Case</div>
-        <div class="target-price">${fmtCurrency(report.targets.bull.price, report.price.currency)}</div>
-        <div class="target-upside change-positive">${report.targets.bull.upside_pct !== null ? `+${fmt(report.targets.bull.upside_pct, 1, '%')}` : 'N/A'}</div>
-      </div>
-      <div class="target-card bear">
-        <div class="target-label">悲观情形 / Bear Case</div>
-        <div class="target-price">${fmtCurrency(report.targets.bear.price, report.price.currency)}</div>
-        <div class="target-upside change-negative">${report.targets.bear.downside_pct !== null ? `${fmt(report.targets.bear.downside_pct, 1, '%')}` : 'N/A'}</div>
-      </div>
+<!-- PAGE 7: PRICE TARGET MODEL -->
+<div class="page">
+  <h1>PRICE TARGET MODEL / 目标价格模型</h1>
+  
+  <h2>Methodology / 方法论</h2>
+  <p><strong>Model Used:</strong> ${report.targets.methodology}</p>
+  
+  <h2>Price Targets / 目标价格</h2>
+  <div class="targets-grid">
+    <div class="target-col">
+      <div class="target-label">BEAR CASE</div>
+      <div class="target-price">${fmtCurrency(report.targets.bear.price)}</div>
+      <div class="target-upside negative">${fmt(report.targets.bear.downside_pct, 1, '%')}</div>
     </div>
-
-    <h2>五、关键驱动因素 / Catalysts</h2>
-    <div class="text-content">${report.catalysts_text}</div>
-
-    <h2>六、核心风险 / Key Risks</h2>
-    <div class="text-content">${report.risks_text}</div>
-
-    <h2>七、技术面观点 / Technical View</h2>
-    <div class="text-content">${report.tech_view_text}</div>
-    ${report.techs.rsi_14 !== null || report.techs.ema_50 !== null ? `
-    <h3>技术指标 / Technical Indicators</h3>
-    <table class="data-table">
-      <tr>
-        <th>指标 / Indicator</th>
-        <th>数值 / Value</th>
-      </tr>
-      ${report.techs.rsi_14 !== null ? `<tr><td>RSI(14)</td><td>${fmt(report.techs.rsi_14, 1)}</td></tr>` : ''}
-      ${report.techs.ema_20 !== null ? `<tr><td>EMA(20)</td><td>${fmtCurrency(report.techs.ema_20, report.price.currency)}</td></tr>` : ''}
-      ${report.techs.ema_50 !== null ? `<tr><td>EMA(50)</td><td>${fmtCurrency(report.techs.ema_50, report.price.currency)}</td></tr>` : ''}
-      ${report.techs.ema_200 !== null ? `<tr><td>EMA(200)</td><td>${fmtCurrency(report.techs.ema_200, report.price.currency)}</td></tr>` : ''}
-    </table>
-    ` : ''}
-
-    <h2>八、操作建议 / Action</h2>
-    <div class="action-box">${report.action_text}</div>
-
-    <div class="meta">
-      <div class="meta-item">生成时间 / Generated：${new Date(report.meta.generated_at).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}</div>
-      <div class="meta-item">AI 模型 / Model：${report.meta.model}</div>
-      <div class="meta-item">处理时长 / Latency：${report.meta.latency_ms}ms</div>
-      <div class="meta-item">报告版本 / Version：${report.meta.version}</div>
+    <div class="target-col">
+      <div class="target-label">BASE CASE</div>
+      <div class="target-price">${fmtCurrency(report.targets.base.price)}</div>
+      <div class="target-upside positive">+${fmt(report.targets.base.upside_pct, 1, '%')}</div>
     </div>
-
-    <div class="disclaimer">
-      <strong>免责声明 / Disclaimer</strong>
-      本报告基于公开市场数据生成，仅供参考，不构成投资建议。投资者应独立判断并承担相应风险。This report is generated based on publicly available market data and is for reference only. It does not constitute investment advice. Investors should make independent judgments and bear corresponding risks.
+    <div class="target-col">
+      <div class="target-label">BULL CASE</div>
+      <div class="target-price">${fmtCurrency(report.targets.bull.price)}</div>
+      <div class="target-upside positive">+${fmt(report.targets.bull.upside_pct, 1, '%')}</div>
     </div>
+  </div>
+  
+  <h2>Valuation Formula / 估值公式</h2>
+  <div class="formula-box">
+    Base Target = Forward EPS × Target PE Multiple<br>
+    Bull Target = Forward EPS × Historical PE High<br>
+    Bear Target = Forward EPS × Historical PE Low<br><br>
+    Where:<br>
+    - Forward EPS = ${report.fundamentals.eps_forecast_2y?.[0]?.value ? `$${report.fundamentals.eps_forecast_2y[0].value.toFixed(2)}` : 'Estimated from current price / PE'}<br>
+    - Target PE = ${report.valuation.historical_pe_5y?.median ? `${report.valuation.historical_pe_5y.median.toFixed(2)}x` : 'N/A'} (5Y Median × 1.05)<br>
+    - Bull PE = ${report.valuation.historical_pe_5y?.high ? `${report.valuation.historical_pe_5y.high.toFixed(2)}x` : 'N/A'}<br>
+    - Bear PE = ${report.valuation.historical_pe_5y?.low ? `${report.valuation.historical_pe_5y.low.toFixed(2)}x` : 'N/A'}
+  </div>
+</div>
+
+<!-- PAGE 8: CATALYSTS -->
+<div class="page">
+  <h1>CATALYSTS / 关键驱动因素</h1>
+  <div class="text-content">${report.catalysts_text}</div>
+</div>
+
+<!-- PAGE 9: RISKS -->
+<div class="page">
+  <h1>KEY RISKS / 核心风险</h1>
+  <div class="text-content">${report.risks_text}</div>
+</div>
+
+<!-- PAGE 10: TECHNICAL ANALYSIS -->
+<div class="page">
+  <h1>TECHNICAL ANALYSIS / 技术面分析</h1>
+  
+  <h2>Technical View / 技术观点</h2>
+  <div class="text-content">${report.tech_view_text}</div>
+  
+  ${report.techs.rsi_14 !== null || report.techs.ema_50 !== null ? `
+  <h2>Technical Indicators / 技术指标</h2>
+  <table class="data-table">
+    <thead><tr><th>Indicator</th><th>Value</th></tr></thead>
+    <tbody>
+      ${report.techs.rsi_14 !== null ? `<tr><td>RSI (14)</td><td>${fmt(report.techs.rsi_14, 1)}</td></tr>` : ''}
+      ${report.techs.ema_20 !== null ? `<tr><td>EMA (20)</td><td>${fmtCurrency(report.techs.ema_20)}</td></tr>` : ''}
+      ${report.techs.ema_50 !== null ? `<tr><td>EMA (50)</td><td>${fmtCurrency(report.techs.ema_50)}</td></tr>` : ''}
+      ${report.techs.ema_200 !== null ? `<tr><td>EMA (200)</td><td>${fmtCurrency(report.techs.ema_200)}</td></tr>` : ''}
+    </tbody>
+  </table>` : ''}
+</div>
+
+<!-- PAGE 11: ACTION PLAN & DISCLAIMER -->
+<div class="page">
+  <h1>ACTION PLAN / 操作建议</h1>
+  <div class="highlight-box">${report.action_text}</div>
+  
+  <h2>Report Metadata / 报告元数据</h2>
+  <table class="data-table">
+    <tbody>
+      <tr><td>Generated / 生成时间</td><td>${new Date(report.meta.generated_at).toLocaleString('zh-CN')}</td></tr>
+      <tr><td>AI Model / AI模型</td><td>${report.meta.model}</td></tr>
+      <tr><td>Latency / 处理时长</td><td>${report.meta.latency_ms}ms</td></tr>
+      <tr><td>Version / 版本</td><td>${report.meta.version}</td></tr>
+    </tbody>
+  </table>
+  
+  <div class="disclaimer">
+    <h3>DISCLAIMER / 免责声明</h3>
+    <p>This research report is generated based on publicly available market data and artificial intelligence analysis. It is provided for informational purposes only and does not constitute investment advice, a recommendation, or an offer to buy or sell any securities.</p>
+    <p>本报告基于公开市场数据和人工智能分析生成，仅供参考，不构成投资建议、推荐或买卖任何证券的要约。投资者应进行独立判断并承担相应风险。</p>
+    <p><strong>© 2025 USIS Research. All rights reserved.</strong></p>
+  </div>
+</div>
   </div>
 </body>
 </html>`;
