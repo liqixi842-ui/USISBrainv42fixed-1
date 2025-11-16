@@ -1,0 +1,287 @@
+【发给 Replit】——请直接复制整段给 Replit，无需改动
+
+Goal:  
+Our goal for v3-dev is for USIS Brain to be able to produce **institutional-grade research reports** (PDF + HTML) for any symbol (equity / index / ETF), not just NVDA.
+
+The current NVDA PDF layout is a good starting point, but the data is still partly placeholder, there is no proper valuation framework, and the content is too generic.  
+
+Please evolve the system into a proper “research engine” as follows.
+
+────────────────────────
+0) High-level architecture (what we want)
+────────────────────────
+
+For any symbol, the pipeline should be:
+
+1. Data Layer  
+   - Fetch real quotes, fundamentals, forecasts and peers via the existing Data Broker (Finnhub / Twelve Data / etc.).
+   - Build a unified `ResearchReport` JSON object (the v1 schema we started, now upgraded).
+
+2. Reasoning Layer (AI)  
+   - Use the JSON data to generate **institutional-style text** for each section: summary, thesis, valuation commentary, catalysts, risks, technical view, action.
+   - Text must be symbol-aware and specific, not generic “AI stock” boilerplate.
+
+3. Presentation Layer  
+   - HTML template consumes the `ResearchReport` object and outputs a multi-section HTML report.
+   - DocRaptor converts HTML → PDF.
+   - Telegram `/report SYMBOL` delivers the PDF, fallback to full text only if PDF fails.
+
+Please implement the following concrete steps.
+
+────────────────────────
+1) Strengthen the ResearchReport data layer (no more placeholders)
+────────────────────────
+
+In `buildResearchReport(symbol, assetType)` (v3_dev/services/reportService.js), make sure the `report` object has **real data**, not hardcoded numbers:
+
+1.1 `price` section:  
+Populate from the same quote source the Data Broker uses:
+
+- last: real last price  
+- change_abs / change_pct  
+- high_1d / low_1d  
+- high_52w / low_52w  
+- ytd_return_pct (if available)  
+- currency  
+
+Remove any hardcoded values such as “212.19 / 86.62” etc. If a field is not available, set it to `null` and let the template render “N/A”.
+
+1.2 `valuation` section:  
+
+Populate from real fundamentals:
+
+- market_cap  
+- pe_ttm  
+- pe_forward  
+- ps_ttm  
+- pb  
+- dividend_yield  
+- ev_ebitda  
+
+All from Finnhub / Twelve Data / your broker object. No hardcoded numbers.
+
+1.3 `fundamentals` section:
+
+- gross_margin  
+- operating_margin  
+- net_margin  
+- roe  
+- roa  
+- fcf_margin  
+
+Again, use real values where possible; otherwise `null`.
+
+1.4 `growth` section:
+
+- revenue_cagr_3y  
+- eps_cagr_3y  
+- revenue_yoy_latest  
+- eps_yoy_latest  
+
+If your current API doesn’t provide something, mark as TODO in code comments and set to null, but DO NOT invent numbers.
+
+1.5 `techs` section:
+
+- rsi_14  
+- macd  
+- ema_20 / ema_50 / ema_200  
+- support_levels / resistance_levels (arrays of price levels, if you already have them from the technical engine)
+
+1.6 Logging for verification:
+
+After building the `ResearchReport` object for NVDA, log:
+
+```js
+console.log("[DEBUG] ResearchReport v1 for", symbol, JSON.stringify(report, null, 2));
+
+
+So we can verify real values via /v3/report/NVDA?format=json.
+
+────────────────────────
+2) Implement a simple, consistent valuation model for price targets
+────────────────────────
+
+Right now the price targets (Base/Bull/Bear) are obviously fixed percentages or placeholders.
+
+We want a simple but data-driven model:
+
+2.1 Use the last price:
+
+const P = report.price.last;
+if (!P) { /* gracefully skip targets or mark them null */ }
+
+
+2.2 Define default upside/downside percentages (configurable constants):
+
+base_upside_pct = +0.10 (10%)
+
+bull_upside_pct = +0.40 (40%)
+
+bear_downside_pct = -0.20 (-20%)
+
+2.3 Compute targets:
+
+report.targets = {
+  base: {
+    price: round2(P * (1 + base_upside_pct)),
+    upside_pct: base_upside_pct,
+    horizon: "12M"
+  },
+  bull: {
+    price: round2(P * (1 + bull_upside_pct)),
+    upside_pct: bull_upside_pct
+  },
+  bear: {
+    price: round2(P * (1 + bear_downside_pct)),
+    downside_pct: bear_downside_pct
+  }
+};
+
+
+Where round2 rounds to 2 decimals.
+
+2.4 Later we may plug in a proper PE/EPS model, but for now the important thing is that:
+
+Targets are internally consistent with last price.
+
+No more magic constants (150 / 180 / 120 etc).
+
+Make sure the HTML “Price Targets / 目标价格” section reads directly from report.targets, not hardcoded.
+
+────────────────────────
+3) Improve text generation quality using the new data
+────────────────────────
+
+In the AI text generation functions (where you call GPT-4o-mini etc.):
+
+3.1 Use the report JSON as the primary input:
+
+The prompt should include price, valuation, fundamentals, growth, techs, targets.
+
+Ask the model to write symbol-specific content (e.g. for NVDA: mention GPUs, data center, AI, etc.), not generic “AI demand is growing” sentences.
+
+3.2 For each section:
+
+summary_text:
+
+One short paragraph summarizing rating, horizon, and the main thesis.
+
+thesis_text:
+
+2–3 paragraphs explaining why this symbol is interesting (industry + company/instrument logic).
+
+valuation_text:
+
+1–2 paragraphs discussing PE/PS, margins, and why current valuation is rich/cheap vs history/peers.
+
+catalysts_text:
+
+3–5 bullet-style sentences on upcoming events, products, macro events.
+
+risks_text:
+
+3–5 bullet-style sentences on demand/competition/regulation/valuation risks.
+
+tech_view_text:
+
+1–2 paragraphs using RSI/EMA/support/resistance to describe trend & trade context.
+
+action_text:
+
+Clear recommendation: entry zone(s), add/reduce logic, stop-loss ideas in plain language.
+
+3.3 IMPORTANT:
+Avoid generic AI boilerplate. The model prompt should explicitly include:
+
+symbol
+
+name
+
+asset_type
+
+key numeric fields (e.g. PE, market_cap, margins, targets)
+
+so that generated text is grounded.
+
+────────────────────────
+4) Keep and refine the HTML/PDF template, but bind everything to the JSON
+────────────────────────
+
+Using buildHtmlFromReport(report):
+
+PAGE 1:
+
+Title, symbol, asset type, rating badge, horizon, last price & daily change, nice summary box using summary_text.
+
+PAGE 2:
+
+“Key Investment Thesis” using thesis_text.
+
+PAGE 3–4:
+
+“Valuation & Financials” tables using price, valuation, fundamentals, growth, with commentary from valuation_text.
+
+PAGE 5:
+
+“Price Targets” using report.targets.
+
+PAGE 6:
+
+“Catalysts” and “Key Risks” using catalysts_text and risks_text.
+
+PAGE 7:
+
+“Technical View” using tech_view_text.
+
+“Action” using action_text.
+
+Footer: generated_at, model, version, disclaimer.
+
+Key requirement:
+All numbers and texts must come from the ResearchReport JSON. No NVDA-specific hardcoding in the HTML.
+
+────────────────────────
+5) Make everything generic (not NVDA-only) and test with multiple symbols
+────────────────────────
+
+After refactoring:
+
+5.1 For NVDA, AAPL (equity) and SPX (index, if supported):
+
+/v3/report/NVDA?format=json
+
+/v3/report/NVDA?format=html
+
+/v3/report/NVDA?format=pdf
+
+/v3/report/AAPL?...
+
+/v3/report/SPX?... (if possible)
+
+Verify:
+
+JSON has real data (no nonsense placeholders).
+
+HTML shows correct numbers.
+
+PDF is successfully generated by DocRaptor.
+
+5.2 Dev Bot:
+
+/report NVDA
+
+/report AAPL
+
+It should send the PDF (DocRaptor) when successful, or full text fallback if PDF fails, but in all cases the content must come from the same ResearchReport object.
+
+5.3 Please send back:
+
+The JSON output for /v3/report/NVDA?format=json
+
+One NVDA PDF (updated)
+
+Brief logs confirming that quotes and fundamentals came from real APIs (Finnhub/Twelve Data etc.), not hardcoded.
+
+Once this is in place, the system will truly have an institutional-grade research engine capable of generating professional reports for any symbol.
+
+::contentReference[oaicite:0]{index=0}

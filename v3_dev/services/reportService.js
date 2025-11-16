@@ -303,10 +303,10 @@ Requirements:
 5. Calculate price targets based on the CURRENT PRICE (not hardcoded values)
 6. Response MUST be in Chinese for Chinese users
 
-Price Target Calculation:
-- Base Case: Current Price × (1 + your upside %), typically 10-20% upside for 12M horizon
-- Bull Case: Current Price × (1 + your bull upside %), typically 25-40% upside
-- Bear Case: Current Price × (1 + your downside %), typically -10% to -20% downside
+Price Target Calculation (use these specific percentages for consistency):
+- Base Case: Current Price × 1.15 (15% upside for 12M horizon)
+- Bull Case: Current Price × 1.35 (35% upside for best case)
+- Bear Case: Current Price × 0.85 (15% downside for worst case)
 
 Return ONLY valid JSON (no markdown code blocks):
 {
