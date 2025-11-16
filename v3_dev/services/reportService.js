@@ -117,6 +117,11 @@ async function buildResearchReport(symbol, assetType = "equity") {
     console.log(`✅ [Phase 3] ResearchReport v1 complete`);
     console.log(`╚═══════════════════════════════════════════════════════════════╝\n`);
     
+    // Debug: Log final report JSON for verification
+    console.log(`\n[DEBUG] ResearchReport ${symbol}:`);
+    console.log(JSON.stringify(report, null, 2));
+    console.log(`\n`);
+    
     return report;
     
   } catch (error) {
@@ -191,19 +196,19 @@ async function fetchComprehensiveData(symbol, assetType) {
     if (marketData.quotes && marketData.quotes[symbol]) {
       const quote = marketData.quotes[symbol];
       
-      // Map quote data to price fields
-      data.price.last = quote.c || quote.price || null;
-      data.price.change_abs = quote.d || null;
-      data.price.change_pct = quote.dp || null;
-      data.price.high_1d = quote.h || null;
-      data.price.low_1d = quote.l || null;
-      data.price.high_52w = quote.high_52w || null;
-      data.price.low_52w = quote.low_52w || null;
+      // Map normalized quote data to price fields (dataBroker returns normalized field names)
+      data.price.last = quote.currentPrice || null;
+      data.price.change_abs = quote.change || null;
+      data.price.change_pct = quote.changePercent || null;
+      data.price.high_1d = quote.high || null;
+      data.price.low_1d = quote.low || null;
+      data.price.open = quote.open || null;
+      data.price.previous_close = quote.previousClose || null;
       
-      // Try to get company name
+      // Try to get company name from quote (fallback to symbol)
       data.name = quote.name || symbol.toUpperCase();
       
-      console.log(`   └─ dataBroker: quote data retrieved`);
+      console.log(`   └─ dataBroker: quote retrieved (price: ${data.price.last}, change: ${data.price.change_pct}%)`);
     }
   } catch (err) {
     console.log(`   └─ dataBroker unavailable, using API fallback`);
@@ -295,7 +300,13 @@ Requirements:
 2. Rating: STRONG_BUY | BUY | HOLD | SELL | STRONG_SELL
 3. Horizon: 1-3M (short-term) | 3-12M (medium-term) | 12M+ (long-term)
 4. Base analysis on provided market data
-5. Response MUST be in Chinese for Chinese users
+5. Calculate price targets based on the CURRENT PRICE (not hardcoded values)
+6. Response MUST be in Chinese for Chinese users
+
+Price Target Calculation:
+- Base Case: Current Price × (1 + your upside %), typically 10-20% upside for 12M horizon
+- Bull Case: Current Price × (1 + your bull upside %), typically 25-40% upside
+- Bear Case: Current Price × (1 + your downside %), typically -10% to -20% downside
 
 Return ONLY valid JSON (no markdown code blocks):
 {
@@ -309,9 +320,9 @@ Return ONLY valid JSON (no markdown code blocks):
   "tech_view_text": "技术面观点（2-3句话，趋势、关键指标、操作建议）",
   "action_text": "操作建议（2-3段，针对不同持仓成本给出具体建议）",
   "targets": {
-    "base": { "price": 150.0, "upside_pct": 15.0, "horizon": "12M" },
-    "bull": { "price": 180.0, "upside_pct": 38.0 },
-    "bear": { "price": 120.0, "downside_pct": -8.0 }
+    "base": { "price": <calculated from current price>, "upside_pct": <your estimated upside %>, "horizon": "12M" },
+    "bull": { "price": <calculated from current price>, "upside_pct": <your bull case upside %> },
+    "bear": { "price": <calculated from current price>, "downside_pct": <your bear case downside %> }
   }
 }`;
 
@@ -330,6 +341,8 @@ Market Cap: ${marketCap}
 PE Ratio: ${pe}
 52W High: ${marketData.price.high_52w || 'N/A'}
 52W Low: ${marketData.price.low_52w || 'N/A'}
+
+IMPORTANT: Calculate all price targets based on the current price of ${price}. Do NOT use hardcoded values.
 
 Generate a comprehensive research report based on this data.`;
 
@@ -393,9 +406,14 @@ function generateFallbackAnalysis(symbol, marketData, assetType) {
   else if (changePct < -5) rating = 'SELL';
   else if (changePct < -10) rating = 'STRONG_SELL';
   
-  const baseTarget = price ? price * 1.10 : null;
-  const bullTarget = price ? price * 1.25 : null;
-  const bearTarget = price ? price * 0.90 : null;
+  // Calculate price targets based on current price (simple heuristic model)
+  const baseUpsidePct = 15;  // +15% base case
+  const bullUpsidePct = 35;  // +35% bull case
+  const bearDownsidePct = -15; // -15% bear case
+  
+  const baseTarget = price ? parseFloat((price * (1 + baseUpsidePct / 100)).toFixed(2)) : null;
+  const bullTarget = price ? parseFloat((price * (1 + bullUpsidePct / 100)).toFixed(2)) : null;
+  const bearTarget = price ? parseFloat((price * (1 + bearDownsidePct / 100)).toFixed(2)) : null;
   
   return {
     rating: rating,
@@ -408,9 +426,19 @@ function generateFallbackAnalysis(symbol, marketData, assetType) {
     tech_view_text: `基于当前价格走势的初步判断，技术面呈现${changePct > 0 ? '相对强势' : '观望'}态势。建议关注成交量变化和关键支撑位的有效性，结合趋势指标综合判断短期走势。`,
     action_text: `建议投资者根据自身风险承受能力和投资周期，审慎评估入场时机。\n\n对于已有持仓者，可根据成本区间适当调整仓位结构。持仓成本低于当前价格的投资者可考虑部分获利了结；持仓成本高于当前价格的投资者建议耐心等待基本面改善或技术性反弹机会。\n\n新进投资者建议采取分批建仓策略，控制单次投入比例，降低时点选择风险。`,
     targets: {
-      base: { price: baseTarget, upside_pct: baseTarget && price ? ((baseTarget - price) / price * 100) : null, horizon: "12M" },
-      bull: { price: bullTarget, upside_pct: bullTarget && price ? ((bullTarget - price) / price * 100) : null },
-      bear: { price: bearTarget, downside_pct: bearTarget && price ? ((bearTarget - price) / price * 100) : null }
+      base: { 
+        price: baseTarget, 
+        upside_pct: baseTarget && price ? parseFloat(((baseTarget - price) / price * 100).toFixed(1)) : null, 
+        horizon: "12M" 
+      },
+      bull: { 
+        price: bullTarget, 
+        upside_pct: bullTarget && price ? parseFloat(((bullTarget - price) / price * 100).toFixed(1)) : null 
+      },
+      bear: { 
+        price: bearTarget, 
+        downside_pct: bearTarget && price ? parseFloat(((bearTarget - price) / price * 100).toFixed(1)) : null 
+      }
     },
     model: 'fallback'
   };
