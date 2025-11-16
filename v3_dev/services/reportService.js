@@ -15,6 +15,7 @@
  */
 
 const fetch = require('node-fetch');
+const TasteTruthLayer = require('./tasteTruthLayer');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
@@ -507,7 +508,7 @@ async function buildResearchReport(symbol, assetType = "equity") {
     // ─────────────────────────────────────────────────────────────
     // Phase 4: v4.0 Taste + Truth Professional Correction Layer
     // ─────────────────────────────────────────────────────────────
-    const refinedTexts = await refineNarrativeText(report);
+    const refinedTexts = await TasteTruthLayer.process(report);
     
     // Update report with refined text sections
     report.summary_text = refinedTexts.summary_text;
