@@ -1,0 +1,112 @@
+我刚从 DocRaptor 控制台拿到最新的文档日志，内容如下（节选）：
+
+- Name: NVDA_USIS_Research.pdf
+- Status: Completed
+- Test Document: true
+- Time to Generate: 1.0s
+- Document Converted → Download Document (105 KB)
+- total_page_count: 4
+
+Request API Parameters：
+{
+  "document_content": "[FILTERED]",
+  "prince_options": { "media": "print" },
+  "document_type": "pdf",
+  "test": true,
+  "name": "NVDA_USIS_Research.pdf"
+}
+
+这证明几件事：
+
+1）DocRaptor API 已经被正确调用，并且完成了 PDF 生成；  
+2）返回的是一个 4 页、约 105KB 的 PDF 文件；  
+3）这是 test:true 的测试文档，不存在额度问题；  
+4）外部 PDF 服务本身已经完全正常工作。
+
+但是在 Telegram dev bot 里，/report NVDA 仍然显示：
+
+「⚠️ PDF 服务异常，以下是完整文本版研报：」
+
+这说明：
+
+- v3_dev/services/reportService.js 中 generatePdfWithDocRaptor() 实际成功返回了 PDF，
+- 但 devBotHandler.js 的 /report 逻辑仍然错误地认为 PDF 模块失败，直接走了 Markdown fallback。
+
+请你根据 DocRaptor 成功日志，逐步修正 /report 的逻辑，目标是：
+
+————————————————————————
+【1】在 Stage 2 明确判断 PDF 是否真正成功
+————————————————————————
+
+在 devBotHandler 的 /report 流程中：
+
+- 当调用 generatePdfWithDocRaptor(symbol, htmlContent) 成功返回 Buffer 时：
+
+  - 必须打印类似日志：
+    [DEV_BOT] /report: DocRaptor PDF OK for NVDA, size: XXX bytes
+
+  - 并设置一个标志位：
+    let pdfOk = true;
+
+- 只有在 generatePdfWithDocRaptor 抛出异常、或者返回值为空/长度为 0 时，才允许认为 PDF 失败，并打印：
+    [DEV_BOT] /report: DocRaptor PDF FAILED for NVDA, falling back to Markdown
+
+现在的逻辑显然是不论 DocRaptor 成功与否，都会走「PDF 服务异常」分支，请帮我把这块的 if/else 条件重新梳理。
+
+————————————————————————
+【2】在 Stage 3 优先发送 PDF，不要误判为异常
+————————————————————————
+
+在 Stage 3 “Delivering report to user...” 部分：
+
+- 如果 pdfOk === true 且 pdfBuffer 存在、长度 > 0：
+
+  - 必须走 sendDocument 分支：
+    - 发送 PDF 文件
+    - 文本提示可以是纯文本，例如：
+      「USIS 研究报告 - NVDA（DocRaptor PDF，测试模式）」
+
+- 只有当 pdfOk === false 或 pdfBuffer 无效时，才走文本版分支：
+  - 文案可以保留：
+    「⚠️ PDF 服务异常，以下是完整文本版研报：」
+  - 然后附上 Markdown/文本内容。
+
+————————————————————————
+【3】对照本次 DocRaptor 文档记录，打印关键日志
+————————————————————————
+
+请在 /report 的完整流程中，确保有以下日志：
+
+- Stage 1 完成：
+  [DEV_BOT] /report: Stage 1 COMPLETE - Content generated for NVDA
+
+- Stage 2 调用 DocRaptor：
+  [DEV_BOT] /report: Stage 2 - Attempting PDF generation for NVDA...
+  [v3-dev DocRaptor] 开始生成 PDF (测试模式)
+  [v3-dev DocRaptor] PDF生成成功 (...)   // 与 DocRaptor 控制台的文档记录对应
+
+- Stage 2 成功/失败判断：
+  [DEV_BOT] /report: DocRaptor PDF OK for NVDA, size: XXX
+  或：
+  [DEV_BOT] /report: DocRaptor PDF FAILED for NVDA, reason: ...
+
+- Stage 3 最终分支：
+  [DEV_BOT] /report: PDF sent for NVDA
+  或：
+  [DEV_BOT] /report: Markdown fallback sent for NVDA
+
+————————————————————————
+【4】修复后请再执行一次 /report NVDA 并返回 Console 日志
+————————————————————————
+
+修完条件判断后，请在开发环境中：
+
+1. 运行 node index.js；
+2. 在 dev bot 中发送：/report NVDA；
+3. 把这一次从「Stage 1 COMPLETE」到最终发送的完整日志返回给我。
+
+我会对照 DocRaptor 控制台的成功记录，确认：
+
+- generatePdfWithDocRaptor 确实拿到了 DocRaptor 返回的 105KB PDF；
+- /report 的流程真正走到了 “PDF sent for NVDA”；
+- 不再错误地告诉用户「PDF 服务异常」。
