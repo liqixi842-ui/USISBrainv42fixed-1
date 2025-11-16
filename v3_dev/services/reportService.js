@@ -108,10 +108,15 @@ async function refineNarrativeText(report) {
     
     let corrected = text;
     
-    // Forbidden events/topics (always delete)
+    // Forbidden events/topics (always delete entire sentence)
     const forbiddenPatterns = [
       /ARM acquisition/gi,
       /Arm acquisition/gi,
+      /\bARM\b.*acquisition/gi,
+      /acquisition.*\bARM\b/gi,
+      /such as ARM/gi,
+      /including ARM/gi,
+      /\bmetaverse\b/gi,  // Remove ANY metaverse mentions
       /Metaverse partnership/gi,
       /metaverse collaboration/gi,
       /Q[1-4] 202[34] (product launch|event|release)/gi,
@@ -119,8 +124,8 @@ async function refineNarrativeText(report) {
     ];
     
     for (const pattern of forbiddenPatterns) {
-      // Remove sentences containing forbidden patterns
-      corrected = corrected.split('.').filter(sentence => !pattern.test(sentence)).join('.');
+      // Remove sentences or clauses containing forbidden patterns
+      corrected = corrected.split(/[,.]/).filter(part => !pattern.test(part)).join('. ');
     }
     
     // Remove invented monetary impacts (e.g., "$1B revenue", "$500M growth")
@@ -172,10 +177,19 @@ async function refineNarrativeText(report) {
     corrected = corrected.replace(/Q[1-4] 202[2-5] (product launch|event|release|results)/gi, 'recent period');
     corrected = corrected.replace(/during Q[1-4] 202[2-5]/gi, 'in recent periods');
     
-    // Remove sentences that still contain Q[1-4] 202X patterns
+    // Remove specific month+year references (Jan-Dec 202X)
+    corrected = corrected.replace(/in (January|February|March|April|May|June|July|August|September|October|November|December) 202[2-5]/gi, 'over recent quarters');
+    corrected = corrected.replace(/(January|February|March|April|May|June|July|August|September|October|November|December) 202[2-5]/gi, 'recent periods');
+    
+    // Remove year-only references (2023, 2024, 2025, "by 2024", "in 2025", "mid-2024", etc.)
+    corrected = corrected.replace(/\b(in|by|for|during|mid-|early-|late-|H1-|H2-)?\s*202[2-5]\b/gi, '');
+    corrected = corrected.replace(/\bby (the )?(end of |mid-)?FY\s*202[2-5]/gi, 'in the near term');
+    corrected = corrected.replace(/\bFY\s*202[2-5]\b/gi, 'the fiscal year');
+    
+    // Remove sentences that still contain specific date patterns
     corrected = corrected.split('.').filter(sentence => {
-      const quarterYearPattern = /Q[1-4] 202[2-5]/i;
-      return !quarterYearPattern.test(sentence);
+      const specificDatePattern = /(Q[1-4]|January|February|March|April|May|June|July|August|September|October|November|December|FY)\s*202[2-5]|202[2-5]/i;
+      return !specificDatePattern.test(sentence);
     }).join('.');
     
     return corrected;
@@ -245,18 +259,53 @@ async function refineNarrativeText(report) {
   let refinedMacro = applyTasteCorrection(applyTruthCorrection(originalTexts.macro));
   refinedMacro = deduplicate(refinedMacro);
   
-  // Catalysts: Ensure 6-8 items, remove invented impacts
+  // Helper: Stricter truth correction for catalysts/risks (surgically removes dollar projections)
+  const applyStrictTruthCorrection = (text) => {
+    let corrected = applyTruthCorrection(text);
+    
+    // Surgically remove specific dollar amount phrases while keeping the rest
+    // Pattern 1: "add/generate/contribute $X B/M in revenue"
+    corrected = corrected.replace(/(add|generate|contribute|increase revenue by|boost sales to|drive revenue growth by|expected to add|projected to add)\s+\$\d+\.?\d*\s*(billion|million|B|M)(\s+in revenue|\s+in sales)?/gi, '');
+    
+    // Pattern 2: "impact of $X B/M" or "loss of $X B/M"
+    corrected = corrected.replace(/(impact|loss|decline|decrease|cost|expense|fine)(s)?\s+(of|up to|approximately|estimated at)\s+\$\d+\.?\d*\s*(billion|million|B|M)/gi, '');
+    
+    // Pattern 3: "revenue by $X B/M" or "sales by $X B/M"
+    corrected = corrected.replace(/(revenue|sales|earnings|profits?|income)\s+(of|by|to)\s+\$\d+\.?\d*\s*(billion|million|B|M)/gi, '$1');
+    
+    // Pattern 4: Standalone "$X billion" or "$X million" amounts
+    corrected = corrected.replace(/\$\d+\.?\d*\s*(billion|million)/gi, '');
+    
+    // Pattern 5: "potentially X" or "approximately X" dollar amounts
+    corrected = corrected.replace(/(potentially|approximately|estimated|projected)\s+\$\d+\.?\d*\s*[BM]/gi, '');
+    
+    // Clean up double spaces and orphaned commas/prepositions
+    corrected = corrected.replace(/\s+/g, ' ');
+    corrected = corrected.replace(/,\s*,/g, ',');
+    corrected = corrected.replace(/\s+(,|;)\s+/g, '$1 ');
+    corrected = corrected.replace(/\s+(in|by|to|of)\s+,/g, ',');
+    corrected = corrected.replace(/,\s+(in|by|to|of)\s+\./g, '.');
+    
+    // Remove sentences that are now too gutted (< 40 chars)
+    corrected = corrected.split(/\.\s+/).filter(sentence => sentence.trim().length > 40).join('. ');
+    
+    return corrected;
+  };
+  
+  // Catalysts: Ensure 6-8 items, remove ALL invented dollar projections
   let refinedCatalysts = Array.isArray(originalTexts.catalysts) ? originalTexts.catalysts : [];
-  refinedCatalysts = refinedCatalysts.map(c => applyTasteCorrection(applyTruthCorrection(c)));
+  refinedCatalysts = refinedCatalysts.map(c => applyTasteCorrection(applyStrictTruthCorrection(c)));
+  refinedCatalysts = refinedCatalysts.filter(c => c.trim().length > 30); // Remove gutted catalysts
   // Ensure between 6-8 catalysts
   while (refinedCatalysts.length < 6) {
     refinedCatalysts.push('Continued operational execution in core business segments.');
   }
   refinedCatalysts = refinedCatalysts.slice(0, 8);
   
-  // Risks: Ensure 6-8 items, remove invented impacts
+  // Risks: Ensure 6-8 items, remove ALL invented dollar projections
   let refinedRisks = Array.isArray(originalTexts.risks) ? originalTexts.risks : [];
-  refinedRisks = refinedRisks.map(r => applyTasteCorrection(applyTruthCorrection(r)));
+  refinedRisks = refinedRisks.map(r => applyTasteCorrection(applyStrictTruthCorrection(r)));
+  refinedRisks = refinedRisks.filter(r => r.trim().length > 30); // Remove gutted risks
   // Ensure between 6-8 risks
   while (refinedRisks.length < 6) {
     refinedRisks.push('General market volatility and macroeconomic uncertainty.');
@@ -3428,16 +3477,48 @@ function renderPage12(report, h) {
 }
 
 function renderPage13(report, h) {
+  // Generate technical text content
+  const techTextContent = report.tech_view_text || 
+    `Technical indicators are not a primary driver in our ${report.symbol} thesis at this time. ` +
+    `We note that the stock is trading in the upper half of its 52-week range ` +
+    `($${h.fmt(report.price.low_52w)}–$${h.fmt(report.price.high_52w)}), ` +
+    `and we would look for pullbacks towards support levels or confirmation of breakouts ` +
+    `above recent highs before adjusting our risk-reward view.`;
+  
+  // Check if we have real technical data
+  const hasTechnicalData = report.techs && (
+    report.techs.rsi_14 !== null || 
+    report.techs.support_level !== null || 
+    report.techs.resistance_level !== null
+  );
+  
+  // Build technical data display if available
+  let technicalDataHtml = '';
+  if (hasTechnicalData) {
+    technicalDataHtml = '<h3>Technical Indicators</h3><div style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 4px;">';
+    
+    if (report.techs.rsi_14 !== null) {
+      const rsiValue = report.techs.rsi_14;
+      const rsiStatus = rsiValue > 70 ? 'overbought' : rsiValue < 30 ? 'oversold' : 'neutral';
+      technicalDataHtml += `<p><strong>RSI(14):</strong> ${h.fmt(rsiValue)} (${rsiStatus} territory)</p>`;
+    }
+    
+    if (report.techs.support_level !== null) {
+      technicalDataHtml += `<p><strong>Support:</strong> ${h.fmtCurrency(report.techs.support_level)}</p>`;
+    }
+    
+    if (report.techs.resistance_level !== null) {
+      technicalDataHtml += `<p><strong>Resistance:</strong> ${h.fmtCurrency(report.techs.resistance_level)}</p>`;
+    }
+    
+    technicalDataHtml += '</div>';
+  }
+  
   return `
     <div class="page">
       <div class="section-title">Technical Analysis</div>
-      ${h.splitToParagraphs(report.tech_view_text || 'Technical analysis will be based on price action, momentum indicators, and key support/resistance levels.', 3).map(p => `<p>${p}</p>`).join('')}
-      <h3>Price & Volume (Last 12M)</h3>
-      <div class="chart-placeholder">
-        Technical Chart Placeholder<br/>
-        RSI: ${h.fmt(report.techs.rsi_14)}<br/>
-        MACD: ${report.techs.macd || 'N/A'}
-      </div>
+      ${h.splitToParagraphs(techTextContent, 3).map(p => `<p>${p}</p>`).join('')}
+      ${technicalDataHtml}
       <div class="footer">
         <span>USIS Research</span>
         <span>Page 13</span>

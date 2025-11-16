@@ -1,0 +1,147 @@
+🔧【发给 Replit 的补丁指令：接线 v4.0 + 修技术分析页】
+We can see from the latest NVDA v3.2 + Final Template (Version v3-dev-v4.0) PDF that:
+
+1) The v4.0 Taste + Truth layer is NOT being applied to the final HTML/PDF:
+   - Fabricated monetary impacts and dates are still present (e.g. "$2 billion revenue hit", "Q1/Q2 2024").
+   - Valuation paragraphs are duplicated identically across multiple sections.
+   - ARM acquisition / metaverse-like hallucinations are still visible in Catalysts/Risks.
+2) The Technical Analysis page still shows placeholders:
+   - "Technical Chart Placeholder" with "RSI: N/A, MACD: N/A"
+   - Very generic technical text with no real content.
+
+This proves that:
+- refineNarrativeText(report) is not being wired correctly into the final HTML.
+- The Technical section is not being rendered in an institutional-safe way when data is missing.
+
+Please fix BOTH issues as follows.
+
+────────────────────────────────
+1) WIRE refineNarrativeText INTO FINAL REPORT FIELDS
+────────────────────────────────
+
+In buildResearchReport(), AFTER the multi-model consolidation and AFTER the ResearchReport object is assembled:
+
+You already have something like:
+
+```js
+// Phase 3: assemble ResearchReport
+const report = { ... all fields ... };
+
+// Phase 4: v4.0 refineNarrativeText
+const refined = await refineNarrativeText(report);
+
+
+You MUST now write back the refined fields into the report object BEFORE returning it:
+
+if (refined) {
+  if (refined.summary_text) report.summary_text = refined.summary_text;
+  if (refined.thesis_text) report.thesis_text = refined.thesis_text;
+  if (refined.valuation_text) report.valuation_text = refined.valuation_text;
+  if (refined.segment_text) report.segment_text = refined.segment_text;
+  if (refined.macro_text) report.macro_text = refined.macro_text;
+  if (refined.catalysts_text) report.catalysts_text = refined.catalysts_text;
+  if (refined.risks_text) report.risks_text = refined.risks_text;
+  if (refined.tech_view_text) report.tech_view_text = refined.tech_view_text;
+  if (refined.action_text) report.action_text = refined.action_text;
+}
+
+
+Then return report;.
+
+This ensures buildFinalInstitutionalHtml() only sees cleaned text.
+
+Right now, it appears that:
+
+refineNarrativeText() runs, but its result is never written back into report.
+
+The final template still uses old, uncorrected fields.
+
+────────────────────────────────
+2) FIX TECHNICAL ANALYSIS PAGE (NO PLACEHOLDER / N/A)
+────────────────────────────────
+
+In buildFinalInstitutionalHtml(report), locate the Technical Analysis page.
+
+Currently it shows:
+
+"Technical Chart Placeholder (RSI: N/A, MACD: N/A)" when data is missing.
+
+Very generic sentences that do not add real value.
+
+Change this logic to:
+
+2.1 If technical data (RSI, support, resistance) is available:
+
+Use report.techs.rsi_14, support/resistance levels.
+
+Generate text like:
+
+"RSI(14) is currently in neutral/overbought/oversold territory."
+
+"Support is seen near $X, resistance around $Y."
+
+If a chart URL exists (e.g. a QuickChart URL), display it.
+Otherwise, do NOT show "Placeholder", simply omit the chart.
+
+2.2 If technical data is NOT available (all null):
+
+DO NOT show "Technical Chart Placeholder" or "RSI: N/A, MACD: N/A".
+
+Instead, render a conservative, institutional-safe paragraph such as:
+
+"Technical indicators are not a primary driver in our NVDA thesis at this time.
+We note that the stock is trading in the upper half of its 52-week range ($86.62–$212.19),
+and we would look for pullbacks towards support levels or confirmation of breakouts
+above recent highs before adjusting our risk-reward view."
+
+No numeric RSI, MACD, or invented technical levels should be shown if data is missing.
+
+Keep the Technical page text-only in this case, with a clean layout and no placeholder image.
+
+2.3 Remove or comment out any remaining literal strings like:
+
+"Technical Chart Placeholder"
+
+"RSI: N/A"
+
+"MACD: N/A"
+
+so they can NEVER appear in the PDF.
+
+────────────────────────────────
+3) VERIFICATION
+────────────────────────────────
+
+After applying the above fixes:
+
+Regenerate the NVDA report:
+
+buildResearchReport('NVDA'):
+
+Confirm that summary_text, thesis_text, valuation_text, catalysts_text, risks_text, tech_view_text, action_text
+are all coming from refineNarrativeText() (no ARM, no Q1/Q2 2024, no $1B/$2B fabricated numbers, no duplicate valuation paragraphs).
+
+Regenerate the NVDA PDF:
+
+/v3/report/NVDA?format=pdf
+
+Confirm:
+
+Page 2 has NO:
+
+Q1/Q2/Q3/Q4 202X
+
+"$2 billion", "$3 billion", "$1.2 billion", "$800 million" etc.
+
+Valuation commentary appears once per page, not duplicated across 4 sections.
+
+Technical page:
+
+EITHER shows real RSI/support/resistance if available,
+
+OR shows a clean institutional text-only paragraph with NO placeholders and NO "N/A" labels.
+
+Repeat for AAPL and SPX to ensure the logic is generic.
+
+Do not touch the overall HTML layout beyond removing placeholders and wiring the refined text.
+Focus on making sure the v4.0 Taste + Truth layer actually feeds into the Final Template v1.0.
