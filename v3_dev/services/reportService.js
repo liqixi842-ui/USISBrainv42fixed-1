@@ -147,9 +147,18 @@ async function refineNarrativeText(report) {
       return percentMatch && growthStr.includes(percentMatch[0]);
     }).join('.');
     
-    // Replace specific future dates with generic timeframes
-    corrected = corrected.replace(/in (Q[1-4]|[A-Z][a-z]+) 202[4-5]/gi, 'over the next several quarters');
-    corrected = corrected.replace(/by (Q[1-4]|[A-Z][a-z]+) 202[4-5]/gi, 'in the coming quarters');
+    // Remove ALL specific quarter+year references (2022-2025) - Replace with generic timeframes
+    // This catches both past and future specific dates
+    corrected = corrected.replace(/in Q[1-4] 202[2-5]/gi, 'over recent quarters');
+    corrected = corrected.replace(/by Q[1-4] 202[2-5]/gi, 'in the near term');
+    corrected = corrected.replace(/Q[1-4] 202[2-5] (product launch|event|release|results)/gi, 'recent period');
+    corrected = corrected.replace(/during Q[1-4] 202[2-5]/gi, 'in recent periods');
+    
+    // Remove sentences that still contain Q[1-4] 202X patterns
+    corrected = corrected.split('.').filter(sentence => {
+      const quarterYearPattern = /Q[1-4] 202[2-5]/i;
+      return !quarterYearPattern.test(sentence);
+    }).join('.');
     
     return corrected;
   };
