@@ -2,11 +2,62 @@
 // This handles all messages for the development bot (TELEGRAM_BOT_TOKEN_DEV)
 
 const fetch = require('node-fetch');
+const FormData = require('form-data');
+const https = require('https');
 const { buildSimpleReport, generateMarkdownReport, generateHTMLReport, generatePdfWithDocRaptor } = require('./reportService');
+
+/**
+ * 发送 PDF 文件到 Telegram（使用 multipart/form-data）
+ * @param {string} chatId - Chat ID
+ * @param {Buffer} pdfBuffer - PDF Buffer
+ * @param {string} filename - 文件名
+ * @param {string} caption - Caption 文字
+ * @param {string} botToken - Bot Token
+ * @returns {Promise<Object>} Telegram API 响应
+ */
+async function sendPDFDocument(chatId, pdfBuffer, filename, caption, botToken) {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append('chat_id', chatId);
+    formData.append('document', pdfBuffer, {
+      filename: filename,
+      contentType: 'application/pdf'
+    });
+    formData.append('caption', caption);
+    
+    const options = {
+      hostname: 'api.telegram.org',
+      port: 443,
+      path: `/bot${botToken}/sendDocument`,
+      method: 'POST',
+      headers: formData.getHeaders()
+    };
+    
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(body);
+          if (!result.ok) {
+            reject(new Error(result.description || 'sendDocument failed'));
+          } else {
+            resolve(result);
+          }
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    
+    req.on('error', reject);
+    formData.pipe(req);
+  });
+}
 
 const VALID_COMMANDS = ['/test', '/status', '/v3', '/help', '/report'];
 
-async function handleDevBotMessage(message, telegramAPI) {
+async function handleDevBotMessage(message, telegramAPI, botToken) {
   const chatId = message.chat.id;
   const text = (message.text || '').trim();
   const userId = message.from.id;
@@ -182,19 +233,16 @@ async function handleDevBotMessage(message, telegramAPI) {
             });
             
             // 生成安全的文件名和 caption（不含特殊字符）
-            const safeFilename = `${symbol}.pdf`;
-            const safeCaption = `USIS Research Report ${symbol} v3-dev\n\nRating: ${report.rating}\nModel: ${report.model_used}\nLatency: ${report.latency_ms}ms\n\nDocRaptor PDF Test Mode`;
+            const safeFilename = `${symbol}-USIS-Research.pdf`;  // 使用连字符，避免下划线
+            const safeCaption = `USIS Research Report ${symbol}\n\nRating: ${report.rating}\nModel: ${report.model_used}\nLatency: ${report.latency_ms}ms\n\nDocRaptor PDF Test Mode`;
             
-            console.log(`   └─ Calling Telegram sendDocument API...`);
+            console.log(`   └─ Calling Telegram sendDocument API (multipart/form-data)...`);
             console.log(`   └─ [DEV_BOT] Sending PDF with filename: ${safeFilename}`);
             console.log(`   └─ [DEV_BOT] Caption length: ${safeCaption.length} chars`);
+            console.log(`   └─ [DEV_BOT] Buffer size: ${pdfBuffer.length} bytes`);
             
-            await telegramAPI('sendDocument', {
-              chat_id: chatId,
-              document: pdfBuffer,
-              filename: safeFilename,
-              caption: safeCaption
-            });
+            // 使用 multipart/form-data 发送 PDF
+            await sendPDFDocument(chatId, pdfBuffer, safeFilename, safeCaption, botToken);
             
             await telegramAPI('deleteMessage', {
               chat_id: chatId,

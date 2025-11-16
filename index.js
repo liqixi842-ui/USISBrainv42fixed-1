@@ -7070,7 +7070,7 @@ if (DEV_TOKEN_IS_SAFE) {
           
           // 只处理消息，不处理callback_query等复杂功能
           if (update.message && update.message.text) {
-            await handleDevBotMessage(update.message, devBotAPI);
+            await handleDevBotMessage(update.message, devBotAPI, DEV_BOT_TOKEN);
           }
         }
       }
