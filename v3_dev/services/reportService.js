@@ -69,6 +69,15 @@ async function buildResearchReport(symbol, assetType = "equity") {
     console.log(`✅ [Phase 2] AI analysis complete (${Date.now() - startTime}ms)`);
     
     // ─────────────────────────────────────────────────────────────
+    // Phase 2.5: Chart Generation (QuickChart API)
+    // ─────────────────────────────────────────────────────────────
+    console.log(`📊 [Phase 2.5] Generating charts...`);
+    
+    const charts = generateCharts(marketData);
+    
+    console.log(`✅ [Phase 2.5] Charts generated: ${Object.keys(charts).filter(k => charts[k]).length} URLs`);
+    
+    // ─────────────────────────────────────────────────────────────
     // Phase 3: Assembly (ResearchReport v2.0 Schema)
     // ─────────────────────────────────────────────────────────────
     console.log(`🔧 [Phase 3] Assembling ResearchReport v2.0 schema...`);
@@ -107,6 +116,9 @@ async function buildResearchReport(symbol, assetType = "equity") {
       
       // ═══ Price Targets (v2.0: PE × EPS Institutional Model) ═══
       targets: calculatePriceTargets(marketData.price.last, marketData),
+      
+      // ═══ Charts (v2.0: QuickChart URLs for PDF embedding) ═══
+      charts: charts,
       
       // ═══ Long-form Analysis (AI-generated) ═══
       summary_text: aiTexts.summary_text,
@@ -346,6 +358,17 @@ async function fetchComprehensiveData(symbol, assetType) {
     }
   }
   
+  // Fetch peer comparison data (v2.0: institutional-grade comparables)
+  if (FINNHUB_API_KEY && assetType === 'equity') {
+    try {
+      data.peers = await fetchPeerData(symbol);
+      console.log(`   └─ Peer comparison: ${data.peers.length} peers retrieved`);
+    } catch (err) {
+      console.log(`   └─ Peer comparison fetch failed: ${err.message}`);
+      data.peers = []; // Fallback to empty array
+    }
+  }
+  
   // Ensure name is set
   if (!data.name) {
     data.name = symbol.toUpperCase();
@@ -443,6 +466,211 @@ async function fetch2YearForecasts(symbol) {
 }
 
 /**
+ * Fetch peer comparison data
+ * Returns array of peer objects with real-time metrics
+ * @param {string} symbol - Primary symbol
+ * @returns {Promise<Array>} Array of peer data
+ */
+async function fetchPeerData(symbol) {
+  // Define peer mapping (institutional-grade comparables)
+  const PEER_MAP = {
+    'NVDA': ['AMD', 'AVGO', 'AAPL', 'MSFT', 'META'],
+    'AAPL': ['MSFT', 'GOOGL', 'META', 'AMZN', 'TSLA'],
+    'MSFT': ['AAPL', 'GOOGL', 'META', 'AMZN', 'ORCL'],
+    'TSLA': ['GM', 'F', 'RIVN', 'LCID', 'NIO'],
+    'AMD': ['NVDA', 'INTC', 'AVGO', 'QCOM', 'TXN'],
+    'META': ['GOOGL', 'AAPL', 'MSFT', 'AMZN', 'NFLX'],
+    'GOOGL': ['AAPL', 'MSFT', 'META', 'AMZN', 'NFLX'],
+    'AMZN': ['AAPL', 'MSFT', 'GOOGL', 'META', 'WMT']
+  };
+  
+  const peerSymbols = PEER_MAP[symbol] || ['SPY'];
+  console.log(`   [Peer Comparison] Fetching ${peerSymbols.length} peers: ${peerSymbols.join(', ')}`);
+  
+  if (!FINNHUB_API_KEY) return [];
+  
+  // OPTIMIZED: Fetch all peers in parallel (with timeout protection)
+  const peerPromises = peerSymbols.map(async (peerSymbol) => {
+    try {
+      const peer = {
+        symbol: peerSymbol,
+        price: null,
+        pe_forward: null,
+        ps_ttm: null,
+        market_cap: null,
+        rating_consensus: null
+      };
+      
+      // TRUE PARALLELIZATION: Fetch all 3 endpoints simultaneously per peer
+      const [metricsRes, quoteRes, profileRes] = await Promise.all([
+        fetch(
+          `https://finnhub.io/api/v1/stock/metric?symbol=${peerSymbol}&metric=all&token=${FINNHUB_API_KEY}`,
+          { timeout: 3000 }
+        ),
+        fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${peerSymbol}&token=${FINNHUB_API_KEY}`,
+          { timeout: 3000 }
+        ),
+        fetch(
+          `https://finnhub.io/api/v1/stock/profile2?symbol=${peerSymbol}&token=${FINNHUB_API_KEY}`,
+          { timeout: 3000 }
+        )
+      ]);
+      
+      // Parse metrics (PE, PS)
+      if (metricsRes.ok) {
+        const metrics = await metricsRes.json();
+        const m = metrics.metric || {};
+        peer.pe_forward = m.peNormalizedAnnual || m.peTTM || null;
+        peer.ps_ttm = m.psTTM || null;
+      }
+      
+      // Parse quote (price)
+      if (quoteRes.ok) {
+        const quote = await quoteRes.json();
+        peer.price = quote.c || null;
+      }
+      
+      // Parse profile (market cap)
+      if (profileRes.ok) {
+        const profile = await profileRes.json();
+        peer.market_cap = profile.marketCapitalization ? profile.marketCapitalization * 1000000 : null;
+      }
+      
+      // SKIP analyst ratings for now (saves 1 API call per peer)
+      peer.rating_consensus = null;
+      
+      console.log(`      └─ ${peerSymbol}: price=${peer.price}, PE=${peer.pe_forward}, MCap=${peer.market_cap ? '$'+(peer.market_cap/1e9).toFixed(1)+'B' : 'N/A'}`);
+      return peer;
+      
+    } catch (err) {
+      console.log(`      └─ ${peerSymbol}: fetch failed (${err.message})`);
+      return {
+        symbol: peerSymbol,
+        price: null,
+        pe_forward: null,
+        ps_ttm: null,
+        market_cap: null,
+        rating_consensus: null
+      };
+    }
+  });
+  
+  // Execute all peer fetches in parallel with global timeout
+  const peerData = await Promise.all(peerPromises);
+  
+  // Rate limiting: Add small delay after batch to respect API limits
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  return peerData;
+}
+
+/**
+ * Generate charts using QuickChart API
+ * Returns object with chart URLs for embedding in PDF
+ * @param {object} marketData - Market data object
+ * @returns {object} Chart URLs
+ */
+function generateCharts(marketData) {
+  const QuickChart = require('quickchart-js');
+  const charts = {};
+  
+  try {
+    // CHART 1: 5-Year Revenue Line Chart
+    if (marketData.fundamentals.revenue_5y && marketData.fundamentals.revenue_5y.length > 0) {
+      const revenueChart = new QuickChart();
+      revenueChart.setConfig({
+        type: 'line',
+        data: {
+          labels: marketData.fundamentals.revenue_5y.map(d => d.year),
+          datasets: [{
+            label: 'Revenue ($M)',
+            data: marketData.fundamentals.revenue_5y.map(d => d.value / 1000000),
+            borderColor: 'rgb(75, 192, 192)',
+            tension: 0.1,
+            fill: false
+          }]
+        },
+        options: {
+          title: { display: true, text: '5-Year Revenue History' },
+          scales: {
+            y: { beginAtZero: false }
+          }
+        }
+      });
+      revenueChart.setWidth(800).setHeight(400).setBackgroundColor('white');
+      charts.revenue_chart = revenueChart.getUrl();
+    }
+    
+    // CHART 2: 5-Year EPS Line Chart
+    if (marketData.fundamentals.eps_5y && marketData.fundamentals.eps_5y.length > 0) {
+      const epsChart = new QuickChart();
+      epsChart.setConfig({
+        type: 'line',
+        data: {
+          labels: marketData.fundamentals.eps_5y.map(d => d.year),
+          datasets: [{
+            label: 'EPS ($)',
+            data: marketData.fundamentals.eps_5y.map(d => d.value),
+            borderColor: 'rgb(255, 99, 132)',
+            tension: 0.1,
+            fill: false
+          }]
+        },
+        options: {
+          title: { display: true, text: '5-Year EPS History' },
+          scales: {
+            y: { beginAtZero: false }
+          }
+        }
+      });
+      epsChart.setWidth(800).setHeight(400).setBackgroundColor('white');
+      charts.eps_chart = epsChart.getUrl();
+    }
+    
+    // CHART 3: Peer Comparison Bar Chart (PE Multiples)
+    if (marketData.peers && marketData.peers.length > 0) {
+      const validPeers = marketData.peers.filter(p => p.pe_forward !== null);
+      
+      if (validPeers.length > 0) {
+        const peerChart = new QuickChart();
+        peerChart.setConfig({
+          type: 'bar',
+          data: {
+            labels: validPeers.map(p => p.symbol),
+            datasets: [{
+              label: 'Forward PE',
+              data: validPeers.map(p => p.pe_forward),
+              backgroundColor: 'rgba(54, 162, 235, 0.5)',
+              borderColor: 'rgba(54, 162, 235, 1)',
+              borderWidth: 1
+            }]
+          },
+          options: {
+            title: { display: true, text: 'Peer Comparison: Forward PE' },
+            scales: {
+              y: { beginAtZero: true }
+            }
+          }
+        });
+        peerChart.setWidth(800).setHeight(400).setBackgroundColor('white');
+        charts.peer_chart = peerChart.getUrl();
+      }
+    }
+    
+    // CHART 4: Price Chart with Technical Indicators (placeholder - would need historical prices)
+    // Note: This requires historical price data which we don't fetch yet
+    // For now, we'll leave this as null and implement later if needed
+    charts.price_chart = null;
+    
+  } catch (err) {
+    console.log(`   [Chart Generation] Error: ${err.message}`);
+  }
+  
+  return charts;
+}
+
+/**
  * Calculate historical PE/PS ranges from 5-year data
  * Returns { high, median, low } for PE and PS
  */
@@ -487,58 +715,108 @@ async function generateAIAnalysis(symbol, marketData, assetType) {
   }
   
   try {
-    const systemPrompt = `You are a senior sell-side equity research analyst at a top-tier investment bank. Generate a professional institutional research report.
+    const systemPrompt = `You are a senior sell-side equity research analyst at Morgan Stanley/Goldman Sachs. Generate an INSTITUTIONAL-GRADE research report with REAL DATA CITATIONS.
 
-Requirements:
-1. Professional, formal, objective language (NO emojis, NO casual language)
-2. Rating: STRONG_BUY | BUY | HOLD | SELL | STRONG_SELL
-3. Horizon: 1-3M (short-term) | 3-12M (medium-term) | 12M+ (long-term)
-4. Base analysis on provided market data
-5. Calculate price targets based on the CURRENT PRICE (not hardcoded values)
-6. Response MUST be in Chinese for Chinese users
+CRITICAL REQUIREMENTS:
+1. Use ONLY the provided market data - NO fabricated numbers
+2. Cite SPECIFIC numbers (revenue, EPS, PE, margins) from the data
+3. Reference peer comparison (AMD, AVGO, AAPL, MSFT, META) with actual PE multiples
+4. Mention 5-year revenue/EPS trends if available
+5. Professional, objective language (NO generic phrases like "strong growth" without numbers)
+6. Rating: STRONG_BUY | BUY | HOLD | SELL | STRONG_SELL based on valuation vs. peers
+7. Horizon: 1-3M | 3-12M | 12M+
+8. Response in Chinese for Chinese names/symbols
 
-Price Target Calculation (use these specific percentages for consistency):
-- Base Case: Current Price × 1.15 (15% upside for 12M horizon)
-- Bull Case: Current Price × 1.35 (35% upside for best case)
-- Bear Case: Current Price × 0.85 (15% downside for worst case)
+AVOID GENERIC PHRASES:
+❌ "公司表现强劲" → ✅ "营收同比增长32%至$265亿，EPS增长47%至$12.3"
+❌ "估值合理" → ✅ "Forward PE 56x高于同业AMD (25x)和INTC (15x)，但与历史中位数持平"
+❌ "前景看好" → ✅ "2024年EPS预期$14.5，同比增长18%，2025年预期$16.2，再增长12%"
 
-Return ONLY valid JSON (no markdown code blocks):
+Return ONLY valid JSON (no markdown):
 {
   "rating": "BUY",
   "horizon": "3-12M",
-  "summary_text": "简明投资结论（2-3句话，专业措辞）",
-  "thesis_text": "核心投资逻辑（3-4段，每段2-3句话，涵盖：行业地位、竞争优势、财务表现、未来前景）",
-  "valuation_text": "估值分析（2-3段，结合PE、PS、PB等指标，给出估值合理性判断）",
-  "catalysts_text": "催化剂（3-5个要点，包括产品周期、市场拓展、政策利好等）",
-  "risks_text": "风险提示（3-5个要点，包括宏观风险、行业风险、公司特定风险）",
-  "tech_view_text": "技术面观点（2-3句话，趋势、关键指标、操作建议）",
-  "action_text": "操作建议（2-3段，针对不同持仓成本给出具体建议）",
-  "targets": {
-    "base": { "price": <calculated from current price>, "upside_pct": <your estimated upside %>, "horizon": "12M" },
-    "bull": { "price": <calculated from current price>, "upside_pct": <your bull case upside %> },
-    "bear": { "price": <calculated from current price>, "downside_pct": <your bear case downside %> }
-  }
-}`;
+  "summary_text": "基于具体数字的投资结论",
+  "thesis_text": "核心逻辑（含具体财务数据、同业对比、历史趋势）",
+  "valuation_text": "估值分析（含PE对比、历史PE范围、peer multiples）",
+  "segment_text": "业务板块分析（若有segment数据）",
+  "macro_text": "行业/宏观环境（若有industry data）",
+  "catalysts_text": "催化剂（基于财报时间、产品周期、行业趋势）",
+  "risks_text": "风险（宏观、行业、公司特定）",
+  "tech_view_text": "技术面（RSI、EMA、支撑/阻力位）",
+  "action_text": "操作建议（针对不同成本区间）"
+}
 
+NOTE: Price targets will be calculated separately using PE × EPS model, NOT by AI.`;
+
+    // Prepare comprehensive market data context
     const price = marketData.price.last || 'N/A';
     const changePct = marketData.price.change_pct || 0;
     const marketCap = marketData.valuation.market_cap ? `$${(marketData.valuation.market_cap / 1e9).toFixed(1)}B` : 'N/A';
-    const pe = marketData.valuation.pe_ttm || 'N/A';
+    const pe_ttm = marketData.valuation.pe_ttm || 'N/A';
+    const pe_forward = marketData.valuation.pe_forward || 'N/A';
+    const ps_ttm = marketData.valuation.ps_ttm || 'N/A';
     
-    const userPrompt = `Analyze the following ${assetType}:
+    // Format peer comparison summary
+    let peerSummary = '';
+    if (marketData.peers && marketData.peers.length > 0) {
+      peerSummary = '\n\nPeer Comparison:\n';
+      marketData.peers.slice(0, 5).forEach(peer => {
+        peerSummary += `- ${peer.symbol}: Price $${peer.price || 'N/A'}, Forward PE ${peer.pe_forward || 'N/A'}x, PS ${peer.ps_ttm || 'N/A'}x, MCap $${peer.market_cap ? (peer.market_cap/1e9).toFixed(1)+'B' : 'N/A'}\n`;
+      });
+    }
+    
+    // Format 5-year financial trends
+    let financialHistory = '';
+    if (marketData.fundamentals.revenue_5y && marketData.fundamentals.revenue_5y.length > 0) {
+      financialHistory += '\n\n5-Year Revenue History:\n';
+      marketData.fundamentals.revenue_5y.forEach(d => {
+        financialHistory += `- ${d.year}: $${(d.value/1e9).toFixed(1)}B\n`;
+      });
+    }
+    if (marketData.fundamentals.eps_5y && marketData.fundamentals.eps_5y.length > 0) {
+      financialHistory += '\n5-Year EPS History:\n';
+      marketData.fundamentals.eps_5y.forEach(d => {
+        financialHistory += `- ${d.year}: $${d.value.toFixed(2)}\n`;
+      });
+    }
+    
+    // Format forecasts
+    let forecasts = '';
+    if (marketData.fundamentals.eps_forecast_2y && marketData.fundamentals.eps_forecast_2y.length > 0) {
+      forecasts += '\n\n2-Year EPS Forecasts:\n';
+      marketData.fundamentals.eps_forecast_2y.forEach(d => {
+        forecasts += `- ${d.year}: $${d.value.toFixed(2)}\n`;
+      });
+    }
+    
+    const userPrompt = `Analyze ${symbol.toUpperCase()} using this REAL DATA:
 
+═══ CURRENT SNAPSHOT ═══
 Symbol: ${symbol.toUpperCase()}
 Name: ${marketData.name}
-Current Price: ${price}
-Daily Change: ${changePct}%
+Price: $${price}
+Change: ${changePct}%
 Market Cap: ${marketCap}
-PE Ratio: ${pe}
-52W High: ${marketData.price.high_52w || 'N/A'}
-52W Low: ${marketData.price.low_52w || 'N/A'}
 
-IMPORTANT: Calculate all price targets based on the current price of ${price}. Do NOT use hardcoded values.
+═══ VALUATION METRICS ═══
+PE TTM: ${pe_ttm}x
+PE Forward: ${pe_forward}x
+PS TTM: ${ps_ttm}x
+Historical PE (5Y): High ${marketData.valuation.historical_pe_5y?.high || 'N/A'}x, Median ${marketData.valuation.historical_pe_5y?.median || 'N/A'}x, Low ${marketData.valuation.historical_pe_5y?.low || 'N/A'}x
 
-Generate a comprehensive research report based on this data.`;
+═══ FUNDAMENTALS ═══
+Gross Margin: ${marketData.fundamentals.gross_margin ? (marketData.fundamentals.gross_margin*100).toFixed(1)+'%' : 'N/A'}
+Operating Margin: ${marketData.fundamentals.operating_margin ? (marketData.fundamentals.operating_margin*100).toFixed(1)+'%' : 'N/A'}
+Net Margin: ${marketData.fundamentals.net_margin ? (marketData.fundamentals.net_margin*100).toFixed(1)+'%' : 'N/A'}
+ROE: ${marketData.fundamentals.roe ? (marketData.fundamentals.roe*100).toFixed(1)+'%' : 'N/A'}
+${financialHistory}
+${forecasts}
+${peerSummary}
+
+Generate institutional-grade analysis using THESE SPECIFIC NUMBERS. Do NOT fabricate data.
+
+NOTE: Price targets are calculated separately using our proprietary PE × EPS valuation model. Focus on qualitative analysis and data interpretation.`;
 
     console.log(`   └─ Calling OpenAI GPT-4o-mini...`);
     
