@@ -20,6 +20,12 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
 const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY;
 
+// ========== v3.2 Multi-Model API Keys ==========
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY;
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
+const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
+
 // ========== PDFKit 已移除 ==========
 // v3-dev 现使用外部 PDF 生成服务
 // 本地不再使用 pdfkit、字体文件等
@@ -752,6 +758,481 @@ function calculateHistoricalRatios(data) {
   }
   
   return result;
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════
+ * v3.2 MULTI-MODEL RESEARCH PIPELINE
+ * ═══════════════════════════════════════════════════════════════
+ */
+
+/**
+ * Call Claude 3.5 Sonnet - Industry & Technology Deep Dive
+ */
+async function callClaude_IndustryAnalysis(reportBaseData) {
+  if (!ANTHROPIC_API_KEY) {
+    return { error: "No Claude API key", analysis: "Industry analysis unavailable" };
+  }
+  
+  try {
+    const prompt = `As a senior technology and industry analyst, provide institutional-grade industry analysis for ${reportBaseData.symbol}.
+
+DATA PROVIDED:
+- Symbol: ${reportBaseData.symbol}
+- Price: $${reportBaseData.price?.last}
+- PE TTM: ${reportBaseData.valuation?.pe_ttm}
+- Gross Margin: ${reportBaseData.fundamentals?.gross_margin}%
+- Operating Margin: ${reportBaseData.fundamentals?.operating_margin}%
+- ROE: ${reportBaseData.fundamentals?.roe}%
+- Peers: ${reportBaseData.peers?.map(p => p.symbol).join(', ')}
+
+REQUIRED SECTIONS (return as JSON):
+{
+  "industry_cycle": "2-3 sentences on where this company/sector is in the business cycle (early/mid/late), with specific evidence",
+  "competitive_position": "2-3 sentences on competitive positioning vs peers, cite specific margin or valuation differentials",
+  "structural_growth_drivers": "2-3 sentences on long-term structural tailwinds (NOT generic AI hype)",
+  "profitability_quality": "2 sentences on margin sustainability and quality of earnings",
+  "technology_moat": "2 sentences on technological barriers to entry or competitive advantages"
+}
+
+Use ONLY the data provided. No hallucinations. Cite specific numbers.`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-3-5-sonnet-latest',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: prompt }]
+      }),
+      timeout: 30000
+    });
+
+    if (!response.ok) {
+      throw new Error(`Claude API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.content[0].text;
+    
+    // Try to parse JSON, fallback to raw text
+    try {
+      return JSON.parse(content);
+    } catch {
+      return { raw_analysis: content };
+    }
+  } catch (err) {
+    console.error(`[Claude Industry Analysis] Error: ${err.message}`);
+    return { error: err.message, analysis: "Industry analysis failed" };
+  }
+}
+
+/**
+ * Call Gemini 2.0 Pro - Macro & Sector Strategy
+ */
+async function callGemini_MacroAnalysis(reportBaseData) {
+  if (!GOOGLE_AI_API_KEY) {
+    return { error: "No Gemini API key", analysis: "Macro analysis unavailable" };
+  }
+  
+  try {
+    const prompt = `As a senior macro strategist, provide institutional-grade macroeconomic and sector analysis for ${reportBaseData.symbol}.
+
+DATA PROVIDED:
+- Symbol: ${reportBaseData.symbol}
+- Asset Type: ${reportBaseData.asset_type}
+- Beta: ${reportBaseData.price?.beta}
+- Sector indicators available
+
+REQUIRED SECTIONS (return as JSON):
+{
+  "interest_rate_environment": "2 sentences on how current/expected rate environment impacts this stock/index",
+  "sector_rotation": "2 sentences on current sector rotation trends and positioning",
+  "macro_risks": "2 sentences on key macro risks (inflation, recession, geopolitics)",
+  "regulatory_trends": "2 sentences on regulatory tailwinds or headwinds",
+  "key_macro_drivers": "2 sentences on top 2-3 macro factors driving performance"
+}
+
+Use institutional tone. Cite specific data when available.`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GOOGLE_AI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.6, maxOutputTokens: 2000 }
+        }),
+        timeout: 30000
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.candidates[0].content.parts[0].text;
+    
+    try {
+      return JSON.parse(content);
+    } catch {
+      return { raw_analysis: content };
+    }
+  } catch (err) {
+    console.error(`[Gemini Macro Analysis] Error: ${err.message}`);
+    return { error: err.message, analysis: "Macro analysis failed" };
+  }
+}
+
+/**
+ * Call DeepSeek V3 - Financial Modeling & Valuation
+ */
+async function callDeepSeek_Valuation(reportBaseData) {
+  if (!DEEPSEEK_API_KEY) {
+    return { error: "No DeepSeek API key", analysis: "Valuation analysis unavailable" };
+  }
+  
+  try {
+    const prompt = `As a senior valuation analyst, provide institutional-grade valuation analysis for ${reportBaseData.symbol}.
+
+DATA PROVIDED:
+- Current Price: $${reportBaseData.price?.last}
+- PE TTM: ${reportBaseData.valuation?.pe_ttm}
+- PE Forward: ${reportBaseData.valuation?.pe_forward}
+- PS TTM: ${reportBaseData.valuation?.ps_ttm}
+- Historical PE 5Y High/Median/Low: ${reportBaseData.valuation?.historical_pe_5y?.high}/${reportBaseData.valuation?.historical_pe_5y?.median}/${reportBaseData.valuation?.historical_pe_5y?.low}
+- Target Price Base: $${reportBaseData.targets?.base?.price}
+
+REQUIRED SECTIONS (return as JSON):
+{
+  "detailed_valuation_model": "3-4 sentences explaining valuation methodology and key assumptions",
+  "earnings_sensitivity": "2 sentences on how EPS changes impact target (e.g., '+10% EPS = $X upside')",
+  "forward_eps_model": "2 sentences on FY25E/FY26E EPS assumptions and growth drivers",
+  "bull_base_bear_explanations": "3 sentences explaining Bull/Base/Bear case logic with specific multiples"
+}
+
+Use ONLY provided data. No hallucinations.`;
+
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000,
+        temperature: 0.5
+      }),
+      timeout: 30000
+    });
+
+    if (!response.ok) {
+      throw new Error(`DeepSeek API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0].message.content;
+    
+    try {
+      return JSON.parse(content);
+    } catch {
+      return { raw_analysis: content };
+    }
+  } catch (err) {
+    console.error(`[DeepSeek Valuation] Error: ${err.message}`);
+    return { error: err.message, analysis: "Valuation analysis failed" };
+  }
+}
+
+/**
+ * Call Mistral Large - Peer Comparison Intelligence
+ */
+async function callMistral_PeerComparison(reportBaseData) {
+  if (!MISTRAL_API_KEY) {
+    return { error: "No Mistral API key", analysis: "Peer comparison unavailable" };
+  }
+  
+  try {
+    const peersData = reportBaseData.peers?.map(p => `${p.symbol}: PE=${p.pe_forward}, PS=${p.ps_ttm}, MCap=$${(p.market_cap/1e9).toFixed(1)}B`).join('\n');
+    
+    const prompt = `As a senior equity analyst, provide institutional-grade peer comparison for ${reportBaseData.symbol}.
+
+TARGET COMPANY:
+- ${reportBaseData.symbol}: PE=${reportBaseData.valuation?.pe_forward}, PS=${reportBaseData.valuation?.ps_ttm}
+- Gross Margin: ${reportBaseData.fundamentals?.gross_margin}%
+
+PEER GROUP:
+${peersData}
+
+REQUIRED SECTIONS (return as JSON):
+{
+  "relative_valuation": "2-3 sentences on valuation premium/discount vs peers with specific multiples",
+  "margin_comparison": "2 sentences on margin profile vs peer average",
+  "competitive_risk": "2 sentences on competitive threats from specific peers",
+  "peer_strengths_weaknesses": "2-3 sentences on what peers do better/worse"
+}
+
+Cite specific peer names and numbers.`;
+
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${MISTRAL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'mistral-large-latest',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2000,
+        temperature: 0.6
+      }),
+      timeout: 30000
+    });
+
+    if (!response.ok) {
+      throw new Error(`Mistral API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0].message.content;
+    
+    try {
+      return JSON.parse(content);
+    } catch {
+      return { raw_analysis: content };
+    }
+  } catch (err) {
+    console.error(`[Mistral Peer Comparison] Error: ${err.message}`);
+    return { error: err.message, analysis: "Peer comparison failed" };
+  }
+}
+
+/**
+ * Call GPT-4o-mini - Risk & Catalyst Expansion
+ */
+async function callGPT_RiskCatalyst(reportBaseData) {
+  if (!OPENAI_API_KEY) {
+    return { catalysts: [], risks: [] };
+  }
+  
+  try {
+    const prompt = `Generate 8 INSTITUTIONAL catalysts and 8 INSTITUTIONAL risks for ${reportBaseData.symbol}.
+
+CONTEXT:
+- Symbol: ${reportBaseData.symbol}
+- Asset Type: ${reportBaseData.asset_type}
+- Price: $${reportBaseData.price?.last}
+- Industry/Sector available
+
+Return as JSON:
+{
+  "8_institutional_catalysts": [
+    "Catalyst 1 with specific timeline and impact",
+    "Catalyst 2...",
+    ... (8 total)
+  ],
+  "8_institutional_risks": [
+    "Risk 1 with severity rating and quantified impact",
+    "Risk 2...",
+    ... (8 total)
+  ]
+}
+
+Make each catalyst/risk specific and data-driven (NOT generic).`;
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 2500,
+        temperature: 0.7
+      }),
+      timeout: 30000
+    });
+
+    if (!response.ok) {
+      throw new Error(`GPT API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0].message.content;
+    
+    try {
+      return JSON.parse(content);
+    } catch {
+      return { catalysts: [], risks: [], raw: content };
+    }
+  } catch (err) {
+    console.error(`[GPT Risk/Catalyst] Error: ${err.message}`);
+    return { catalysts: [], risks: [] };
+  }
+}
+
+/**
+ * MASTER MULTI-MODEL RESEARCH PIPELINE (v3.2)
+ * Orchestrates parallel AI model calls and consolidates outputs
+ */
+async function multiModelResearchPipeline(reportBaseData) {
+  console.log(`\n🚀 [v3.2 Multi-Model Pipeline] Starting parallel AI analysis...`);
+  const pipelineStart = Date.now();
+  
+  // ────────────────────────────────────────────────────────────
+  // STEP 1: Parallel Model Calls (5 models simultaneously)
+  // ────────────────────────────────────────────────────────────
+  const [claude_thesis, gemini_macro, deepseek_valuation, peer_insights, risk_catalyst] = await Promise.all([
+    callClaude_IndustryAnalysis(reportBaseData),
+    callGemini_MacroAnalysis(reportBaseData),
+    callDeepSeek_Valuation(reportBaseData),
+    callMistral_PeerComparison(reportBaseData),
+    callGPT_RiskCatalyst(reportBaseData)
+  ]);
+  
+  console.log(`✅ [v3.2] Parallel analysis complete (${Date.now() - pipelineStart}ms)`);
+  console.log(`   ├─ Claude (Industry): ${claude_thesis.error ? 'FAILED' : 'OK'}`);
+  console.log(`   ├─ Gemini (Macro): ${gemini_macro.error ? 'FAILED' : 'OK'}`);
+  console.log(`   ├─ DeepSeek (Valuation): ${deepseek_valuation.error ? 'FAILED' : 'OK'}`);
+  console.log(`   ├─ Mistral (Peers): ${peer_insights.error ? 'FAILED' : 'OK'}`);
+  console.log(`   └─ GPT-4o-mini (Risks): ${risk_catalyst.catalysts?.length || 0} catalysts, ${risk_catalyst.risks?.length || 0} risks`);
+  
+  // ────────────────────────────────────────────────────────────
+  // STEP 2: Master Consolidation (GPT-4o)
+  // ────────────────────────────────────────────────────────────
+  console.log(`🤖 [v3.2] GPT-4o Master Consolidation...`);
+  
+  const consolidationPrompt = `You are the Chief Research Analyst consolidating multi-AI analysis into a Morgan Stanley/Goldman Sachs institutional report for ${reportBaseData.symbol}.
+
+═════════════════════════════════════════════════════════════
+INPUTS FROM 5 SPECIALIZED AI ANALYSTS
+═════════════════════════════════════════════════════════════
+
+CLAUDE (Industry Analyst):
+${JSON.stringify(claude_thesis, null, 2)}
+
+GEMINI (Macro Strategist):
+${JSON.stringify(gemini_macro, null, 2)}
+
+DEEPSEEK (Valuation Analyst):
+${JSON.stringify(deepseek_valuation, null, 2)}
+
+MISTRAL (Peer Comparison Analyst):
+${JSON.stringify(peer_insights, null, 2)}
+
+GPT-4o-mini (Risk/Catalyst Analyst):
+${JSON.stringify(risk_catalyst, null, 2)}
+
+RAW DATA (Ground Truth):
+- Symbol: ${reportBaseData.symbol}
+- Price: $${reportBaseData.price?.last}
+- PE TTM: ${reportBaseData.valuation?.pe_ttm}
+- PE Forward: ${reportBaseData.valuation?.pe_forward}
+- Target Base: $${reportBaseData.targets?.base?.price} (${reportBaseData.targets?.base?.upside_pct}% upside)
+
+═════════════════════════════════════════════════════════════
+YOUR TASK: CONSOLIDATE INTO INSTITUTIONAL NARRATIVE
+═════════════════════════════════════════════════════════════
+
+Return as JSON with these EXACT fields:
+{
+  "rating": "STRONG_BUY/BUY/HOLD/SELL/STRONG_SELL",
+  "horizon": "3-12M",
+  "summary_text": "3-4 sentence executive summary citing price, target, key thesis",
+  "thesis_text": "6-8 sentence investment thesis integrating Claude's industry view, competitive positioning, and structural drivers. CITE SPECIFIC DATA.",
+  "valuation_text": "5-6 sentences on valuation using DeepSeek's model + historical context. Reference PE/PS multiples.",
+  "segments_text": "3-4 sentences on business segments if equity (use fallback if data missing)",
+  "macro_text": "4-5 sentences using Gemini's macro analysis + sector rotation + rate environment",
+  "catalysts_text": [
+    "8 catalysts from GPT-4o-mini, each 30-50 words with specific timeline/impact"
+  ],
+  "risks_text": [
+    "8 risks from GPT-4o-mini, each 30-50 words with severity rating"
+  ],
+  "peer_comparison_text": "4-5 sentences using Mistral's peer insights + relative valuation",
+  "tech_view_text": "3-4 sentences on technical setup (use available price data)",
+  "action_text": "3-4 sentences on entry levels, position sizing, stop-loss recommendations"
+}
+
+HARD RULES:
+1. NO HALLUCINATIONS - Use ONLY provided data
+2. NO CONTRADICTIONS between analysts
+3. NO GENERIC AI WORDING - institutional tone only
+4. EMBED all key numbers (price, PE, margins, targets)
+5. Make it read like a SINGLE unified research report
+6. Ensure catalysts_text and risks_text each have exactly 8 items`;
+
+  try {
+    const consolidationRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: consolidationPrompt }],
+        max_tokens: 4000,
+        temperature: 0.6
+      }),
+      timeout: 60000
+    });
+
+    if (!consolidationRes.ok) {
+      throw new Error(`GPT-4o consolidation error: ${consolidationRes.status}`);
+    }
+
+    const consolidationData = await consolidationRes.json();
+    const finalNarrative = JSON.parse(consolidationData.choices[0].message.content);
+    
+    console.log(`✅ [v3.2] Master consolidation complete (${Date.now() - pipelineStart}ms total)`);
+    
+    return {
+      multi_model: {
+        claude_thesis,
+        gemini_macro,
+        deepseek_valuation,
+        peer_insights,
+        risk_catalyst
+      },
+      final_text: finalNarrative,
+      meta: {
+        models_used: 5,
+        total_latency_ms: Date.now() - pipelineStart,
+        version: 'v3.2'
+      }
+    };
+    
+  } catch (err) {
+    console.error(`❌ [v3.2] Consolidation failed: ${err.message}`);
+    // Fallback: Return basic structure
+    return {
+      multi_model: {
+        claude_thesis,
+        gemini_macro,
+        deepseek_valuation,
+        peer_insights,
+        risk_catalyst
+      },
+      final_text: null,
+      error: err.message,
+      meta: {
+        models_used: 5,
+        total_latency_ms: Date.now() - pipelineStart,
+        version: 'v3.2-fallback'
+      }
+    };
+  }
 }
 
 /**
