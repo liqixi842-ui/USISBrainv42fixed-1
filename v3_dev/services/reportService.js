@@ -32,6 +32,241 @@ const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
 
 /**
  * ═══════════════════════════════════════════════════════════════
+ * v4.0 TASTE + TRUTH PROFESSIONAL CORRECTION LAYER
+ * ═══════════════════════════════════════════════════════════════
+ * 
+ * Post-processing layer that transforms raw v3.2 multi-model text into
+ * professional sell-side research language with:
+ * - Accurate institutional tone
+ * - No hallucinations or invented events
+ * - No duplicate paragraphs
+ * - Consistent with real data in report object
+ */
+
+/**
+ * Refine narrative text to institutional professional standards
+ * @param {object} report - Full ResearchReport object with v3.2 text
+ * @returns {object} Corrected text sections
+ */
+async function refineNarrativeText(report) {
+  console.log(`\n🎯 [v4.0 Taste + Truth] Professional correction layer...`);
+  
+  // Extract original text sections
+  const originalTexts = {
+    summary: report.summary_text || '',
+    thesis: report.thesis_text || '',
+    valuation: report.valuation_text || '',
+    segments: report.segment_text || '',
+    macro: report.macro_text || '',
+    catalysts: report.catalysts_text || [],
+    risks: report.risks_text || [],
+    technical: report.tech_view_text || '',
+    action: report.action_text || ''
+  };
+  
+  // ══════════════════════════════════════════════════════════════
+  // TASTE CORRECTION: AI-generic → Institutional tone
+  // ══════════════════════════════════════════════════════════════
+  const applyTasteCorrection = (text) => {
+    if (!text || text.length === 0) return text;
+    
+    let corrected = text;
+    
+    // Replace AI-generic words with institutional equivalents
+    const wordReplacements = {
+      'strong growth': 'solid growth',
+      'rapidly growing': 'expanding',
+      'dominant position': 'leading position',
+      'huge opportunity': 'meaningful opportunity',
+      'massive potential': 'significant potential',
+      'strong': 'solid',
+      'rapidly': 'materially',
+      'dominant': 'leading',
+      'huge': 'meaningful',
+      'massive': 'significant'
+    };
+    
+    for (const [aiWord, professionalWord] of Object.entries(wordReplacements)) {
+      const regex = new RegExp(aiWord, 'gi');
+      corrected = corrected.replace(regex, professionalWord);
+    }
+    
+    // Replace absolute phrases with professional qualifiers
+    corrected = corrected.replace(/\bwill (grow|increase|expand|reach)\b/gi, 'we expect to $1');
+    corrected = corrected.replace(/\bis guaranteed to\b/gi, 'is expected to');
+    corrected = corrected.replace(/\bcertain to\b/gi, 'likely to');
+    corrected = corrected.replace(/\bwill definitely\b/gi, 'should');
+    
+    return corrected;
+  };
+  
+  // ══════════════════════════════════════════════════════════════
+  // TRUTH CORRECTION: Remove hallucinations and invented content
+  // ══════════════════════════════════════════════════════════════
+  const applyTruthCorrection = (text) => {
+    if (!text || text.length === 0) return text;
+    
+    let corrected = text;
+    
+    // Forbidden events/topics (always delete)
+    const forbiddenPatterns = [
+      /ARM acquisition/gi,
+      /Arm acquisition/gi,
+      /Metaverse partnership/gi,
+      /metaverse collaboration/gi,
+      /Q[1-4] 202[34] (product launch|event|release)/gi,
+      /upcoming (Q[1-4]|quarter)/gi
+    ];
+    
+    for (const pattern of forbiddenPatterns) {
+      // Remove sentences containing forbidden patterns
+      corrected = corrected.split('.').filter(sentence => !pattern.test(sentence)).join('.');
+    }
+    
+    // Remove invented monetary impacts (e.g., "$1B revenue", "$500M growth")
+    // Only keep if the number exists in report.price, report.valuation, report.fundamentals, report.targets
+    const inventedMoneyPattern = /\$\d+(\.\d+)?[BM] (revenue|growth|impact|addition)/gi;
+    corrected = corrected.split('.').filter(sentence => {
+      const match = sentence.match(inventedMoneyPattern);
+      if (!match) return true;
+      
+      // Check if this number appears in report data
+      const numberStr = JSON.stringify(report.price) + JSON.stringify(report.valuation) + 
+                        JSON.stringify(report.fundamentals) + JSON.stringify(report.targets);
+      return numberStr.includes(match[0].replace(/[^0-9.]/g, ''));
+    }).join('.');
+    
+    // Remove invented percentage claims (e.g., "grow 20%", "increase 30%")
+    const inventedPercentPattern = /(grow|increase|expand) \d+%/gi;
+    corrected = corrected.split('.').filter(sentence => {
+      if (!inventedPercentPattern.test(sentence)) return true;
+      
+      // Keep only if percentage appears in fundamentals or growth data
+      const growthStr = JSON.stringify(report.growth) + JSON.stringify(report.fundamentals);
+      const percentMatch = sentence.match(/\d+%/);
+      return percentMatch && growthStr.includes(percentMatch[0]);
+    }).join('.');
+    
+    // Replace specific future dates with generic timeframes
+    corrected = corrected.replace(/in (Q[1-4]|[A-Z][a-z]+) 202[4-5]/gi, 'over the next several quarters');
+    corrected = corrected.replace(/by (Q[1-4]|[A-Z][a-z]+) 202[4-5]/gi, 'in the coming quarters');
+    
+    return corrected;
+  };
+  
+  // ══════════════════════════════════════════════════════════════
+  // DEDUPLICATION: Remove duplicate paragraphs (>60% similarity)
+  // ══════════════════════════════════════════════════════════════
+  const calculateSimilarity = (str1, str2) => {
+    const words1 = new Set(str1.toLowerCase().split(/\s+/));
+    const words2 = new Set(str2.toLowerCase().split(/\s+/));
+    const intersection = new Set([...words1].filter(x => words2.has(x)));
+    const union = new Set([...words1, ...words2]);
+    return intersection.size / union.size;
+  };
+  
+  const deduplicate = (text) => {
+    if (!text || text.length === 0) return text;
+    
+    const paragraphs = text.split('\n').filter(p => p.trim());
+    const uniqueParagraphs = [];
+    
+    for (const para of paragraphs) {
+      const isDuplicate = uniqueParagraphs.some(existing => 
+        calculateSimilarity(para, existing) > 0.6
+      );
+      
+      if (!isDuplicate) {
+        uniqueParagraphs.push(para);
+      }
+    }
+    
+    return uniqueParagraphs.join('\n\n');
+  };
+  
+  // ══════════════════════════════════════════════════════════════
+  // STRUCTURAL CORRECTION: Section-specific rules
+  // ══════════════════════════════════════════════════════════════
+  
+  // Summary: Must be 3-5 bullet points with data references
+  let refinedSummary = applyTasteCorrection(applyTruthCorrection(originalTexts.summary));
+  refinedSummary = deduplicate(refinedSummary);
+  
+  // Thesis: Must be 3 structured paragraphs
+  let refinedThesis = applyTasteCorrection(applyTruthCorrection(originalTexts.thesis));
+  refinedThesis = deduplicate(refinedThesis);
+  
+  // Valuation: Must reference PE TTM, Forward PE, targets
+  let refinedValuation = applyTasteCorrection(applyTruthCorrection(originalTexts.valuation));
+  refinedValuation = deduplicate(refinedValuation);
+  // Ensure it mentions key metrics
+  if (refinedValuation && report.valuation) {
+    if (!refinedValuation.includes('PE') && report.valuation.pe_ttm) {
+      refinedValuation = `Current P/E (TTM): ${report.valuation.pe_ttm}x. ` + refinedValuation;
+    }
+  }
+  
+  // Segments: Handle missing data gracefully
+  let refinedSegments = applyTasteCorrection(applyTruthCorrection(originalTexts.segments));
+  if (!report.segments || report.segments.length === 0) {
+    refinedSegments = `${report.symbol} does not disclose detailed segment-level revenue. We base our analysis on publicly known business lines and industry positioning.`;
+  } else {
+    refinedSegments = deduplicate(refinedSegments);
+  }
+  
+  // Macro: Clean and deduplicate
+  let refinedMacro = applyTasteCorrection(applyTruthCorrection(originalTexts.macro));
+  refinedMacro = deduplicate(refinedMacro);
+  
+  // Catalysts: Ensure 6-8 items, remove invented impacts
+  let refinedCatalysts = Array.isArray(originalTexts.catalysts) ? originalTexts.catalysts : [];
+  refinedCatalysts = refinedCatalysts.map(c => applyTasteCorrection(applyTruthCorrection(c)));
+  // Ensure between 6-8 catalysts
+  while (refinedCatalysts.length < 6) {
+    refinedCatalysts.push('Continued operational execution in core business segments.');
+  }
+  refinedCatalysts = refinedCatalysts.slice(0, 8);
+  
+  // Risks: Ensure 6-8 items, remove invented impacts
+  let refinedRisks = Array.isArray(originalTexts.risks) ? originalTexts.risks : [];
+  refinedRisks = refinedRisks.map(r => applyTasteCorrection(applyTruthCorrection(r)));
+  // Ensure between 6-8 risks
+  while (refinedRisks.length < 6) {
+    refinedRisks.push('General market volatility and macroeconomic uncertainty.');
+  }
+  refinedRisks = refinedRisks.slice(0, 8);
+  
+  // Technical: Must reference RSI, support/resistance
+  let refinedTechnical = applyTasteCorrection(applyTruthCorrection(originalTexts.technical));
+  refinedTechnical = deduplicate(refinedTechnical);
+  if (refinedTechnical && report.techs) {
+    // Ensure it mentions real technical data
+    if (!refinedTechnical.includes('RSI') && report.techs.rsi) {
+      refinedTechnical = `Current RSI: ${report.techs.rsi}. ` + refinedTechnical;
+    }
+  }
+  
+  // Action: Clean and deduplicate
+  let refinedAction = applyTasteCorrection(applyTruthCorrection(originalTexts.action));
+  refinedAction = deduplicate(refinedAction);
+  
+  console.log(`✅ [v4.0 Taste + Truth] Professional correction complete`);
+  
+  return {
+    summary_text: refinedSummary,
+    thesis_text: refinedThesis,
+    valuation_text: refinedValuation,
+    segment_text: refinedSegments,
+    macro_text: refinedMacro,
+    catalysts_text: refinedCatalysts,
+    risks_text: refinedRisks,
+    tech_view_text: refinedTechnical,
+    action_text: refinedAction
+  };
+}
+
+/**
+ * ═══════════════════════════════════════════════════════════════
  * GENERIC RESEARCH REPORT ENGINE v1
  * ═══════════════════════════════════════════════════════════════
  * 
@@ -176,10 +411,30 @@ async function buildResearchReport(symbol, assetType = "equity") {
     };
     
     console.log(`✅ [Phase 3] ResearchReport v2.0 complete`);
+    
+    // ─────────────────────────────────────────────────────────────
+    // Phase 4: v4.0 Taste + Truth Professional Correction Layer
+    // ─────────────────────────────────────────────────────────────
+    const refinedTexts = await refineNarrativeText(report);
+    
+    // Update report with refined text sections
+    report.summary_text = refinedTexts.summary_text;
+    report.thesis_text = refinedTexts.thesis_text;
+    report.valuation_text = refinedTexts.valuation_text;
+    report.segment_text = refinedTexts.segment_text;
+    report.macro_text = refinedTexts.macro_text;
+    report.catalysts_text = refinedTexts.catalysts_text;
+    report.risks_text = refinedTexts.risks_text;
+    report.tech_view_text = refinedTexts.tech_view_text;
+    report.action_text = refinedTexts.action_text;
+    
+    // Update version metadata
+    report.meta.version = "v3-dev-v4.0";
+    
     console.log(`╚═══════════════════════════════════════════════════════════════╝\n`);
     
     // Debug: Log final report JSON for verification
-    console.log(`\n[DEBUG] ResearchReport v2.0 ${symbol}:`);
+    console.log(`\n[DEBUG] ResearchReport v4.0 ${symbol}:`);
     console.log(JSON.stringify(report, null, 2));
     console.log(`\n`);
     
