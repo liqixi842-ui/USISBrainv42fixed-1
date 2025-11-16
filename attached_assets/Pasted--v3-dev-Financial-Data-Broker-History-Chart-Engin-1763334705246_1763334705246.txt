@@ -1,0 +1,185 @@
+你现在执行一个核心升级任务：
+
+🎯 任务目标
+
+在 v3-dev 研报流水线中，新增并接入：
+
+Financial Data Broker（真实财务数据层）
+
+History Chart Engine（历史图表引擎）
+
+目标：
+把当前报告中所有 N/A 财务字段 和 Placeholder 图表 替换成 真实数据 + 真实图表，用于 NVDA 以及其他股票。
+
+一、Financial Data Broker（财务数据层）
+1）创建模块文件
+
+请在 v3_dev 中创建模块：
+
+v3_dev/services/financialDataBroker.js
+
+核心职责：
+对接现有的行情 / 财务数据源（例如：Finnhub / Twelve Data / Alpha Vantage），输出统一的 JSON 结构，给研报生成模块使用。
+
+2）数据源与 ENV
+
+优先级（按现有 ENV 自动选择）：
+
+若存在 FINNHUB_API_KEY → 优先用 Finnhub
+
+若不存在 Finnhub，但有 ALPHA_VANTAGE_API_KEY → 用 Alpha Vantage
+
+若都没有 → 返回 data_unavailable 标记，但要在 log 里说明
+
+请自动检测以下环境变量（如果本项目已有现成配置，也可直接复用现有 data broker）：
+
+FINNHUB_API_KEY
+
+ALPHA_VANTAGE_API_KEY
+
+TWELVE_DATA_API_KEY（如有）
+
+3）需要提供的函数接口
+
+请在 financialDataBroker.js 中至少导出：
+
+async function getQuote(symbol) { ... }              // 现价、52W 高低、Beta、市值
+async function getKeyMetrics(symbol) { ... }         // ROE、ROA、Margins、PE、PS、PB 等
+async function getFinancialStatements(symbol) { ... } // 收入、EPS、三年/五年趋势
+async function getHistorySeries(symbol) { ... }      // 5 年 Revenue & EPS 序列
+
+
+输出结构示例（可以按项目风格稍作调整，但字段含义保持一致）：
+
+{
+  quote: {
+    price: 190.17,
+    marketCap: 3.0e12,
+    beta: 2.34,
+    high52w: 212.19,
+    low52w: 86.62
+  },
+  keyMetrics: {
+    pe_ttm: 53.36,
+    pe_forward: 63.41,
+    ps_ttm: 27.97,
+    pb: 36.56,
+    div_yield: 0.0002,
+    gross_margin: 0.702,
+    op_margin: 0.5809,
+    net_margin: 0.5241,
+    roe: 1.0522,
+    roa: 0.653
+  },
+  financials: {
+    revenue_ttm: ...,
+    revenue_3y_cagr: ...,
+    eps_ttm: ...,
+    eps_3y_cagr: ...
+  },
+  history: {
+    revenue_5y: [ { year: 2020, value: ... }, ... ],
+    eps_5y:     [ { year: 2020, value: ... }, ... ]
+  }
+}
+
+
+如果某个字段确实拿不到，请用 null，并在 debug log 中说明缺失原因。
+
+二、History Chart Engine（历史图表引擎）
+1）创建模块文件
+
+在 v3_dev 中创建：
+
+v3_dev/services/historyChartEngine.js
+
+职责：
+接收 financialDataBroker.getHistorySeries(symbol) 返回的 revenue_5y 和 eps_5y，生成可嵌入报告的图表。
+
+2）实现方式（可参考你在 USIS 情绪图那套 QuickChart 逻辑）
+
+如项目中已经有统一的 Chart / QuickChart 封装，请尽量复用。
+
+基本接口：
+
+async function buildRevenueChart(symbol, revenueHistory) { ... } // 返回 image_url 或 base64
+async function buildEPSChart(symbol, epsHistory) { ... }
+
+
+输出可以是：
+
+image_url（推荐，走 QuickChart 或自建图表服务），或者
+
+dataUri（base64）
+
+根据当前 PDF 引擎（DocRaptor）最容易集成的方案来选择。
+
+三、在研报流水线中接入这两个模块
+1）报告 JSON 填充（修复 N/A）
+
+在 v3_dev 研报主服务文件中（根据你实际结构，例如 v3_dev/services/reportService.js）：
+
+在生成 report 主对象之前或中途，调用：
+
+const data = await FinancialDataBroker.getAll(symbol);
+// 或分别调用 getQuote / getKeyMetrics / getFinancialStatements / getHistorySeries
+
+
+然后用真实数据填充现在是 N/A 的字段，例如：
+
+Market Cap（封面）
+
+Revenue (TTM)
+
+Revenue 3Y CAGR
+
+EPS (TTM)
+
+EPS 3Y CAGR
+
+Margin 指标
+
+ROE / ROA
+
+确保生成的 JSON 里，这些字段 不再是 N/A，而是来自真实 data broker。
+
+2）替换 Financial Trends 部分的 Placeholder 图表
+
+当前报告中：
+
+“Revenue Last 5 Years” → Placeholder
+
+“EPS Last 5 Years” → Placeholder
+
+请改为：
+
+从 historyChartEngine.buildRevenueChart() 获取图表
+
+从 historyChartEngine.buildEPSChart() 获取图表
+
+把返回的图表（image_url 或 dataUri）写入 report JSON 中的 charts 字段
+
+确保 HTML/PDF 渲染层可以识别并嵌入这些图表
+
+四、Debug 要求（务必输出，方便我们检查）
+
+在本次集成完成后，对 NVDA 生成一份测试报告时，请在 server log 中打印类似信息：
+
+[FinancialDataBroker] provider=finnhub status=ok
+[FinancialDataBroker] symbol=NVDA revenue_ttm=XXX eps_ttm=YYY
+[FinancialDataBroker] revenue_3y_cagr=... eps_3y_cagr=...
+
+[HistoryChartEngine] revenue_5y points=5 chart_url=...
+[HistoryChartEngine] eps_5y points=5 chart_url=...
+
+[ReportService] financial section populated (no N/A)
+[ReportService] trends charts attached (revenue_5y, eps_5y)
+
+
+完成后，请回复一句明确的话：
+
+FinancialDataBroker + HistoryChartEngine integrated. Ready for new NVDA report test.
+
+
+不要在这一步调整模板内容和文案风格，
+只解决：真实数据填充 + 图表生成 + 去掉 N/A 和 Placeholder。

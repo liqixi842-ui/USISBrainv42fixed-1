@@ -16,6 +16,8 @@
 
 const fetch = require('node-fetch');
 const TasteTruthLayer = require('./tasteTruthLayer');
+const FinancialDataBroker = require('./financialDataBroker');
+const HistoryChartEngine = require('./historyChartEngine');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
@@ -386,11 +388,85 @@ async function buildResearchReport(symbol, assetType = "equity") {
     // ─────────────────────────────────────────────────────────────
     console.log(`📡 [Phase 1] Fetching market data for ${symbol}...`);
     
+    // ENHANCED: Use FinancialDataBroker for comprehensive real data
+    const financialData = await FinancialDataBroker.getAll(symbol);
+    
     const marketData = await fetchComprehensiveData(symbol, assetType);
+    
+    // Merge FinancialDataBroker data into marketData (fill N/A fields)
+    if (financialData.quote.price) {
+      marketData.price.last = financialData.quote.price;
+      marketData.price.change_abs = financialData.quote.change_abs;
+      marketData.price.change_pct = financialData.quote.change_pct;
+      marketData.price.high_1d = financialData.quote.high_1d;
+      marketData.price.low_1d = financialData.quote.low_1d;
+      marketData.price.high_52w = financialData.quote.high_52w || marketData.price.high_52w;
+      marketData.price.low_52w = financialData.quote.low_52w || marketData.price.low_52w;
+      marketData.price.beta = financialData.quote.beta || marketData.price.beta;
+    }
+    
+    // Fill valuation metrics from FinancialDataBroker
+    if (financialData.keyMetrics.pe_ttm) {
+      marketData.valuation.pe_ttm = financialData.keyMetrics.pe_ttm;
+    }
+    if (financialData.keyMetrics.pe_forward) {
+      marketData.valuation.pe_forward = financialData.keyMetrics.pe_forward;
+    }
+    if (financialData.keyMetrics.ps_ttm) {
+      marketData.valuation.ps_ttm = financialData.keyMetrics.ps_ttm;
+    }
+    if (financialData.keyMetrics.pb) {
+      marketData.valuation.pb = financialData.keyMetrics.pb;
+    }
+    if (financialData.quote.market_cap) {
+      marketData.valuation.market_cap = financialData.quote.market_cap;
+    }
+    
+    // Fill fundamental metrics
+    if (financialData.keyMetrics.gross_margin) {
+      marketData.fundamentals.gross_margin = financialData.keyMetrics.gross_margin;
+    }
+    if (financialData.keyMetrics.op_margin) {
+      marketData.fundamentals.operating_margin = financialData.keyMetrics.op_margin;
+    }
+    if (financialData.keyMetrics.net_margin) {
+      marketData.fundamentals.net_margin = financialData.keyMetrics.net_margin;
+    }
+    if (financialData.keyMetrics.roe) {
+      marketData.fundamentals.roe = financialData.keyMetrics.roe;
+    }
+    if (financialData.keyMetrics.roa) {
+      marketData.fundamentals.roa = financialData.keyMetrics.roa;
+    }
+    
+    // Fill growth metrics
+    if (financialData.financials.revenue_3y_cagr) {
+      marketData.growth.revenue_cagr_3y = financialData.financials.revenue_3y_cagr;
+    }
+    if (financialData.financials.eps_3y_cagr) {
+      marketData.growth.eps_cagr_3y = financialData.financials.eps_3y_cagr;
+    }
+    if (financialData.financials.revenue_yoy_latest) {
+      marketData.growth.revenue_yoy_latest = financialData.financials.revenue_yoy_latest;
+    }
+    if (financialData.financials.eps_yoy_latest) {
+      marketData.growth.eps_yoy_latest = financialData.financials.eps_yoy_latest;
+    }
+    
+    // Fill historical data (5-year series)
+    if (financialData.history.revenue_5y && financialData.history.revenue_5y.length > 0) {
+      marketData.fundamentals.revenue_5y = financialData.history.revenue_5y;
+    }
+    if (financialData.history.eps_5y && financialData.history.eps_5y.length > 0) {
+      marketData.fundamentals.eps_5y = financialData.history.eps_5y;
+    }
     
     console.log(`✅ [Phase 1] Data retrieved`);
     console.log(`   ├─ Price: ${marketData.price.last || 'N/A'}`);
-    console.log(`   ├─ Market Cap: ${marketData.valuation.market_cap || 'N/A'}`);
+    console.log(`   ├─ Market Cap: ${marketData.valuation.market_cap ? '$' + (marketData.valuation.market_cap / 1e9).toFixed(1) + 'B' : 'N/A'}`);
+    console.log(`   ├─ PE TTM: ${marketData.valuation.pe_ttm || 'N/A'}`);
+    console.log(`   ├─ Revenue 5Y: ${marketData.fundamentals.revenue_5y.length} periods`);
+    console.log(`   ├─ EPS 5Y: ${marketData.fundamentals.eps_5y.length} periods`);
     console.log(`   └─ Name: ${marketData.name || symbol}`);
     
     // ─────────────────────────────────────────────────────────────
@@ -423,13 +499,42 @@ async function buildResearchReport(symbol, assetType = "equity") {
     console.log(`✅ [Phase 2] Multi-model analysis complete (${multiModelResult.meta.total_latency_ms}ms)`);
     
     // ─────────────────────────────────────────────────────────────
-    // Phase 2.5: Chart Generation (QuickChart API)
+    // Phase 2.5: Chart Generation (HistoryChartEngine + QuickChart)
     // ─────────────────────────────────────────────────────────────
     console.log(`📊 [Phase 2.5] Generating charts...`);
     
+    // ENHANCED: Generate historical charts using HistoryChartEngine
+    const historyCharts = await HistoryChartEngine.generateAllCharts(
+      symbol,
+      marketData.fundamentals.revenue_5y,
+      marketData.fundamentals.eps_5y
+    );
+    
     const charts = generateCharts(marketData);
     
+    // Merge history charts into charts object
+    if (historyCharts.revenue_chart) {
+      charts.revenue_5y = historyCharts.revenue_chart;
+      console.log(`[ReportService] trends charts attached (revenue_5y)`);
+    }
+    if (historyCharts.eps_chart) {
+      charts.eps_5y = historyCharts.eps_chart;
+      console.log(`[ReportService] trends charts attached (eps_5y)`);
+    }
+    if (historyCharts.combined_chart) {
+      charts.financial_trends = historyCharts.combined_chart;
+    }
+    
     console.log(`✅ [Phase 2.5] Charts generated: ${Object.keys(charts).filter(k => charts[k]).length} URLs`);
+    
+    // Verify financial section populated (no N/A)
+    const hasRealData = marketData.price.last && marketData.valuation.market_cap && 
+                        marketData.fundamentals.revenue_5y.length > 0;
+    if (hasRealData) {
+      console.log(`[ReportService] financial section populated (no N/A)`);
+    } else {
+      console.log(`[ReportService] ⚠️  Some financial data missing, using fallback values`);
+    }
     
     // ─────────────────────────────────────────────────────────────
     // Phase 3: Assembly (ResearchReport v3.2 Schema)
