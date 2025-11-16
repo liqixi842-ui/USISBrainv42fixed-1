@@ -4,7 +4,12 @@
 const fetch = require('node-fetch');
 const FormData = require('form-data');
 const https = require('https');
-const { buildSimpleReport, generateMarkdownReport, generateHTMLReport, generatePdfWithDocRaptor } = require('./reportService');
+const { 
+  buildResearchReport,      // v1 generic API
+  buildHtmlFromReport,       // v1 generic API
+  generatePdfWithDocRaptor,  // PDF generator
+  generateMarkdownReport     // Legacy markdown (for fallback text)
+} = require('./reportService');
 
 /**
  * 发送 PDF 文件到 Telegram（使用 multipart/form-data）
@@ -149,30 +154,45 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
         // ═══════════════════════════════════════════════════════════════
         // 【阶段 1】生成研报内容（CRITICAL - 不可降级）
         // ═══════════════════════════════════════════════════════════════
-        console.log(`📡 [DEV_BOT] /report: Stage 1 - Fetching report content for ${symbol}...`);
+        console.log(`📡 [DEV_BOT] /report: Stage 1 - Generating ResearchReport v1 for ${symbol}...`);
         
-        const reportJsonUrl = `http://localhost:3000/v3/report/${symbol}?format=json`;
-        const jsonResponse = await fetch(reportJsonUrl, { timeout: 20000 });
+        // Use generic buildResearchReport (works for ANY symbol)
+        const report = await buildResearchReport(symbol, 'equity');
         
-        if (!jsonResponse.ok) {
-          throw new Error(`Report API error: HTTP ${jsonResponse.status}`);
-        }
-        
-        const reportData = await jsonResponse.json();
-        
-        if (!reportData.ok || !reportData.report) {
-          throw new Error('Invalid report structure from API');
-        }
-        
-        const report = reportData.report;
+        console.log(`✅ [DEV_BOT] /report: Stage 1 COMPLETE - ResearchReport v1 generated for ${symbol}`);
+        console.log(`   ├─ Name: ${report.name}`);
+        console.log(`   ├─ Rating: ${report.rating}`);
+        console.log(`   ├─ Model used: ${report.meta.model}`);
+        console.log(`   └─ Latency: ${report.meta.latency_ms}ms\n`);
         
         // 生成 Markdown 文本版（无论是否发 PDF，都先生成文本版作为保底）
-        const mdReport = generateMarkdownReport(symbol, report);
+        // Convert ResearchReport v1 to legacy format for generateMarkdownReport
+        const legacyReport = {
+          symbol: report.symbol,
+          company_name: report.name,
+          rating: report.rating,
+          horizon: report.horizon,
+          investment_summary: report.summary_text,
+          thesis: [report.thesis_text],
+          catalysts: [report.catalysts_text],
+          risks: [report.risks_text],
+          technical_view: report.tech_view_text,
+          action: report.action_text,
+          price_info: {
+            current: report.price.last,
+            change: report.price.change_abs,
+            change_percent: report.price.change_pct,
+            high: report.price.high_1d,
+            low: report.price.low_1d,
+            volume: 'N/A'
+          },
+          generated_at: report.meta.generated_at,
+          model_used: report.meta.model,
+          latency_ms: report.meta.latency_ms,
+          disclaimer: '本报告基于公开市场数据生成，仅供参考，不构成投资建议。'
+        };
         
-        console.log(`✅ [DEV_BOT] /report: Stage 1 COMPLETE - Content generated for ${symbol}`);
-        console.log(`   ├─ Report rating: ${report.rating}`);
-        console.log(`   ├─ Model used: ${report.model_used}`);
-        console.log(`   ├─ Latency: ${report.latency_ms}ms`);
+        const mdReport = generateMarkdownReport(symbol, legacyReport);
         console.log(`   └─ Markdown length: ${mdReport.length} chars\n`);
         
         // Update status
@@ -192,7 +212,8 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
         console.log(`   └─ Calling DocRaptor API...`);
         
         try {
-          const html = generateHTMLReport(symbol, report);
+          // Use generic buildHtmlFromReport (consumes ResearchReport v1)
+          const html = buildHtmlFromReport(report);
           pdfBuffer = await generatePdfWithDocRaptor(symbol, html);
           
           // 严格验证 PDF Buffer
@@ -234,7 +255,7 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
             
             // 生成安全的文件名和 caption（不含特殊字符）
             const safeFilename = `${symbol}-USIS-Research.pdf`;  // 使用连字符，避免下划线
-            const safeCaption = `USIS Research Report ${symbol}\n\nRating: ${report.rating}\nModel: ${report.model_used}\nLatency: ${report.latency_ms}ms\n\nDocRaptor PDF Test Mode`;
+            const safeCaption = `USIS Research Report ${symbol}\n\nRating: ${report.rating}\nModel: ${report.meta.model}\nLatency: ${report.meta.latency_ms}ms\n\nDocRaptor PDF Test Mode`;
             
             console.log(`   └─ Calling Telegram sendDocument API (multipart/form-data)...`);
             console.log(`   └─ [DEV_BOT] Sending PDF with filename: ${safeFilename}`);
