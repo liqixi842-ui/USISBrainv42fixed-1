@@ -1009,7 +1009,7 @@ NOTE: Price targets are calculated separately using our proprietary PE × EPS va
         max_completion_tokens: 3000,
         temperature: 0.6
       }),
-      timeout: 20000
+      timeout: 45000
     });
 
     if (!response.ok) {
