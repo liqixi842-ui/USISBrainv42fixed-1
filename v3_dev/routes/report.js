@@ -1,12 +1,21 @@
 /**
- * v3-dev Research Report Routes
- * HTTP endpoints for research report feature (v1 test version)
+ * v3-dev Research Report Routes v2 (Generic Multi-Asset Engine)
+ * HTTP endpoints for institutional-grade research reports
+ * Supports: JSON, HTML, PDF, Markdown formats for any symbol
  */
 
 const express = require('express');
 const router = express.Router();
 const fetch = require('node-fetch');
-const { buildSimpleReport, generateHTMLReport, generateMarkdownReport, generatePdfWithDocRaptor } = require('../services/reportService');
+const { 
+  buildResearchReport, 
+  buildHtmlFromReport, 
+  generatePdfWithDocRaptor,
+  // Legacy exports for backward compatibility
+  buildSimpleReport,
+  generateHTMLReport,
+  generateMarkdownReport
+} = require('../services/reportService');
 
 // 尝试导入 dataBroker（如果可用）
 let fetchMarketData;
@@ -49,17 +58,18 @@ router.get('/test', (req, res) => {
 
 /**
  * GET /v3/report/:symbol
- * 根据股票代码生成研报
- * 支持 ?format=json|html|md|pdf 参数
+ * Generate institutional-grade research report for ANY symbol
+ * Supports: ?format=json|html|pdf|md
+ * Supports: ?asset_type=equity|index|etf|crypto (default: equity)
  */
 router.get('/:symbol', async (req, res) => {
   const { symbol } = req.params;
-  const { format = 'json' } = req.query;
+  const { format = 'json', asset_type = 'equity' } = req.query;
   
-  console.log(`📊 [v3-dev] GET /v3/report/${symbol}?format=${format}`);
+  console.log(`\n📊 [v3/report] GET /${symbol}?format=${format}&asset_type=${asset_type}`);
   
   try {
-    // 标准化股票代码
+    // Validate and normalize symbol
     const normalizedSymbol = symbol.toUpperCase().trim();
     
     if (!normalizedSymbol) {
@@ -70,121 +80,126 @@ router.get('/:symbol', async (req, res) => {
       });
     }
 
-    // 获取市场数据（带超时保护）
-    let basicData = {};
-    
-    if (fetchMarketData) {
-      try {
-        console.log(`📡 [v3-dev Report] 获取市场数据: ${normalizedSymbol}`);
-        
-        // 5秒超时保护
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Market data timeout')), 5000)
-        );
-        
-        const dataPromise = fetchMarketData([normalizedSymbol], ['quote']);
-        const marketData = await Promise.race([dataPromise, timeoutPromise]);
-        
-        if (marketData.quotes && marketData.quotes[normalizedSymbol]) {
-          basicData = marketData.quotes[normalizedSymbol];
-          console.log(`✅ [v3-dev Report] 数据获取成功`);
-        } else {
-          console.warn(`⚠️  [v3-dev Report] 未找到 ${normalizedSymbol} 的行情数据`);
-        }
-      } catch (dataError) {
-        console.warn(`⚠️  [v3-dev Report] 数据获取失败:`, dataError.message);
-        // 使用 mock 数据继续
-        basicData = {
-          c: 175.50,
-          d: 2.30,
-          dp: 1.33,
-          h: 176.20,
-          l: 173.80,
-          v: 52000000
-        };
-      }
-    } else {
-      // 无 dataBroker，使用 mock 数据
-      console.log(`📋 [v3-dev Report] 使用 mock 数据`);
-      basicData = {
-        c: 175.50,
-        d: 2.30,
-        dp: 1.33,
-        h: 176.20,
-        l: 173.80,
-        v: 52000000
-      };
-    }
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 1: Generate ResearchReport v1 (Generic for ANY symbol)
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`🔬 [v3/report] Building ResearchReport v1...`);
+    const report = await buildResearchReport(normalizedSymbol, asset_type);
+    console.log(`✅ [v3/report] ResearchReport v1 complete (${report.meta.latency_ms}ms)`);
 
-    // 生成研报
-    const report = await buildSimpleReport(normalizedSymbol, basicData);
-
-    // ========== 根据格式返回不同内容 ==========
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 2: Format Output (JSON | HTML | PDF | Markdown)
+    // ═══════════════════════════════════════════════════════════════
     
-    if (format === 'html') {
-      // 返回 HTML 格式
-      console.log(`🌐 [v3-dev] 返回 HTML 格式: ${normalizedSymbol}`);
-      const html = generateHTMLReport(normalizedSymbol, report);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.send(html);
+    if (format === 'json') {
+      // ─────────────────────────────────────────────────────────────
+      // Format: JSON (ResearchReport v1 schema)
+      // ─────────────────────────────────────────────────────────────
+      console.log(`📦 [v3/report] Returning JSON format`);
+      return res.json({
+        ok: true,
+        env: 'v3-dev',
+        version: 'v1',
+        ...report
+      });
       
-    } else if (format === 'md' || format === 'markdown') {
-      // 返回 Markdown 格式
-      console.log(`📝 [v3-dev] 返回 Markdown 格式: ${normalizedSymbol}`);
-      const markdown = generateMarkdownReport(normalizedSymbol, report);
-      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-      res.setHeader('Content-Disposition', `inline; filename="${normalizedSymbol}_Report_v3dev.md"`);
-      res.send(markdown);
+    } else if (format === 'html') {
+      // ─────────────────────────────────────────────────────────────
+      // Format: HTML (using buildHtmlFromReport)
+      // ─────────────────────────────────────────────────────────────
+      console.log(`🌐 [v3/report] Generating HTML...`);
+      const html = buildHtmlFromReport(report);
+      
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
       
     } else if (format === 'pdf') {
-      // 使用 DocRaptor API 生成 PDF
-      console.log(`📄 [v3-dev] 请求 PDF 格式: ${normalizedSymbol}`);
+      // ─────────────────────────────────────────────────────────────
+      // Format: PDF (HTML → DocRaptor → PDF Buffer)
+      // ─────────────────────────────────────────────────────────────
+      console.log(`📄 [v3/report] Generating PDF...`);
       
       try {
-        // 先生成 HTML
-        const html = generateHTMLReport(normalizedSymbol, report);
+        // Step 1: Generate HTML from report
+        const html = buildHtmlFromReport(report);
         
-        // 使用 DocRaptor 转换为 PDF (自动降级到 PDFKit)
+        // Step 2: Convert HTML to PDF via DocRaptor
         const pdfBuffer = await generatePdfWithDocRaptor(normalizedSymbol, html);
         
-        console.log(`✅ [v3-dev PDF] PDF 生成成功: ${pdfBuffer.length} bytes`);
+        console.log(`✅ [v3/report] PDF generated: ${(pdfBuffer.length / 1024).toFixed(1)} KB`);
         
-        // 设置响应头
+        // Step 3: Send PDF
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="${normalizedSymbol}_USIS_Research.pdf"`);
+        res.setHeader('Content-Disposition', `inline; filename="${normalizedSymbol}-USIS-Research.pdf"`);
         res.setHeader('Content-Length', pdfBuffer.length);
         
-        // 发送 PDF
-        res.send(pdfBuffer);
+        return res.send(pdfBuffer);
         
       } catch (pdfError) {
-        console.error(`❌ [v3-dev PDF] PDF 生成失败:`, pdfError.message);
+        console.error(`❌ [v3/report] PDF generation failed: ${pdfError.message}`);
         return res.status(500).json({
           ok: false,
           env: 'v3-dev',
           error: 'PDF generation failed',
           message: pdfError.message,
           symbol: normalizedSymbol,
-          hint: 'Try ?format=html or ?format=md instead'
+          hint: 'Try ?format=html or ?format=json instead'
         });
       }
       
+    } else if (format === 'md' || format === 'markdown') {
+      // ─────────────────────────────────────────────────────────────
+      // Format: Markdown (fallback to legacy function for now)
+      // ─────────────────────────────────────────────────────────────
+      console.log(`📝 [v3/report] Generating Markdown (legacy)...`);
+      
+      // TODO: Create buildMarkdownFromReport(report) for v1 schema
+      // For now, use legacy function
+      const legacyReport = {
+        symbol: report.symbol,
+        company_name: report.name,
+        rating: report.rating,
+        horizon: report.horizon,
+        investment_summary: report.summary_text,
+        thesis: [report.thesis_text],
+        catalysts: [report.catalysts_text],
+        risks: [report.risks_text],
+        technical_view: report.tech_view_text,
+        action: report.action_text,
+        price_info: {
+          current: report.price.last,
+          change: report.price.change_abs,
+          change_percent: report.price.change_pct,
+          high: report.price.high_1d,
+          low: report.price.low_1d,
+          volume: 'N/A'
+        },
+        generated_at: report.meta.generated_at,
+        model_used: report.meta.model,
+        latency_ms: report.meta.latency_ms,
+        disclaimer: '本报告基于公开市场数据生成，仅供参考，不构成投资建议。'
+      };
+      
+      const markdown = generateMarkdownReport(normalizedSymbol, legacyReport);
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.setHeader('Content-Disposition', `inline; filename="${normalizedSymbol}_Report_v3dev.md"`);
+      return res.send(markdown);
+      
     } else {
-      // 默认：返回 JSON 格式
-      res.json({
-        ok: true,
-        env: 'v3-dev',
-        version: '1.0-test',
-        symbol: normalizedSymbol,
-        generated_at: new Date().toISOString(),
-        report: report
+      // Invalid format
+      return res.status(400).json({
+        ok: false,
+        error: 'Invalid format',
+        message: 'Supported formats: json, html, pdf, md',
+        symbol: normalizedSymbol
       });
     }
 
   } catch (error) {
-    console.error(`❌ [v3-dev Report] 生成研报失败:`, error.message);
+    console.error(`❌ [v3/report] Error: ${error.message}`);
+    console.error(error.stack);
     
-    res.status(500).json({
+    return res.status(500).json({
       ok: false,
       env: 'v3-dev',
       error: 'Report generation failed',
