@@ -66,13 +66,33 @@ async function buildResearchReport(symbol, assetType = "equity") {
     console.log(`   └─ Name: ${marketData.name || symbol}`);
     
     // ─────────────────────────────────────────────────────────────
-    // Phase 2: AI Analysis (Long-form texts)
+    // Phase 1.5: Calculate Price Targets (needed for multi-model input)
     // ─────────────────────────────────────────────────────────────
-    console.log(`🤖 [Phase 2] Generating AI analysis...`);
+    const priceTargets = calculatePriceTargets(marketData.price.last, marketData);
     
-    const aiTexts = await generateAIAnalysis(symbol, marketData, assetType);
+    // ─────────────────────────────────────────────────────────────
+    // Phase 2: v3.2 Multi-Model AI Analysis
+    // ─────────────────────────────────────────────────────────────
+    console.log(`🤖 [Phase 2] v3.2 Multi-Model AI Analysis...`);
     
-    console.log(`✅ [Phase 2] AI analysis complete (${Date.now() - startTime}ms)`);
+    // Prepare base data for multi-model pipeline
+    const reportBaseData = {
+      symbol: symbol.toUpperCase(),
+      name: marketData.name,
+      asset_type: assetType,
+      price: marketData.price,
+      valuation: marketData.valuation,
+      fundamentals: marketData.fundamentals,
+      growth: marketData.growth,
+      segments: marketData.segments || [],
+      peers: marketData.peers || [],
+      targets: priceTargets
+    };
+    
+    // Call multi-model pipeline
+    const multiModelResult = await multiModelResearchPipeline(reportBaseData);
+    
+    console.log(`✅ [Phase 2] Multi-model analysis complete (${multiModelResult.meta.total_latency_ms}ms)`);
     
     // ─────────────────────────────────────────────────────────────
     // Phase 2.5: Chart Generation (QuickChart API)
@@ -84,17 +104,20 @@ async function buildResearchReport(symbol, assetType = "equity") {
     console.log(`✅ [Phase 2.5] Charts generated: ${Object.keys(charts).filter(k => charts[k]).length} URLs`);
     
     // ─────────────────────────────────────────────────────────────
-    // Phase 3: Assembly (ResearchReport v2.0 Schema)
+    // Phase 3: Assembly (ResearchReport v3.2 Schema)
     // ─────────────────────────────────────────────────────────────
-    console.log(`🔧 [Phase 3] Assembling ResearchReport v2.0 schema...`);
+    console.log(`🔧 [Phase 3] Assembling ResearchReport v3.2 schema...`);
+    
+    // Use final_text from multi-model consolidation
+    const finalTexts = multiModelResult.final_text || {};
     
     const report = {
       // ═══ Header ═══
       symbol: symbol.toUpperCase(),
       name: marketData.name,
       asset_type: assetType,
-      rating: aiTexts.rating,
-      horizon: aiTexts.horizon,
+      rating: finalTexts.rating || 'HOLD',
+      horizon: finalTexts.horizon || '3-12M',
       
       // ═══ Price Data ═══
       price: marketData.price,
@@ -121,28 +144,34 @@ async function buildResearchReport(symbol, assetType = "equity") {
       techs: marketData.techs,
       
       // ═══ Price Targets (v2.0: PE × EPS Institutional Model) ═══
-      targets: calculatePriceTargets(marketData.price.last, marketData),
+      targets: priceTargets,
       
       // ═══ Charts (v2.0: QuickChart URLs for PDF embedding) ═══
       charts: charts,
       
-      // ═══ Long-form Analysis (AI-generated) ═══
-      summary_text: aiTexts.summary_text,
-      thesis_text: aiTexts.thesis_text,
-      valuation_text: aiTexts.valuation_text,
-      segment_text: aiTexts.segment_text || null,
-      macro_text: aiTexts.macro_text || null,
-      catalysts_text: aiTexts.catalysts_text,
-      risks_text: aiTexts.risks_text,
-      tech_view_text: aiTexts.tech_view_text,
-      action_text: aiTexts.action_text,
+      // ═══ Long-form Analysis (v3.2: Multi-Model AI-generated) ═══
+      summary_text: finalTexts.summary_text || 'Analysis in progress',
+      thesis_text: finalTexts.thesis_text || 'Thesis analysis unavailable',
+      valuation_text: finalTexts.valuation_text || 'Valuation analysis unavailable',
+      segment_text: finalTexts.segments_text || null,
+      macro_text: finalTexts.macro_text || null,
+      catalysts_text: finalTexts.catalysts_text || [],
+      risks_text: finalTexts.risks_text || [],
+      peer_comparison_text: finalTexts.peer_comparison_text || null,
+      tech_view_text: finalTexts.tech_view_text || null,
+      action_text: finalTexts.action_text || null,
+      
+      // ═══ v3.2 Multi-Model Data ═══
+      multi_model: multiModelResult.multi_model,
       
       // ═══ Metadata ═══
       meta: {
         generated_at: new Date().toISOString(),
-        model: aiTexts.model,
-        version: "v3-dev-v2.0",
-        latency_ms: Date.now() - startTime
+        model: 'v3.2-multi-model',
+        models_used: multiModelResult.meta.models_used,
+        version: "v3-dev-v3.2",
+        latency_ms: Date.now() - startTime,
+        ai_latency_ms: multiModelResult.meta.total_latency_ms
       }
     };
     
