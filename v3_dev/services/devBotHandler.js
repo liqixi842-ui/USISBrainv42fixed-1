@@ -181,23 +181,19 @@ async function handleDevBotMessage(message, telegramAPI) {
               text: `🔬 正在生成 ${symbol} 研报（v3-dev）\n\n✅ 阶段 1/3：研报内容生成完成\n✅ 阶段 2/3：PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB - DocRaptor 测试模式)\n⏳ 阶段 3/3：正在发送 PDF...`
             });
             
-            const ratingSymbol = {
-              'STRONG_BUY': '++',
-              'BUY': '+',
-              'HOLD': '=',
-              'SELL': '-',
-              'STRONG_SELL': '--'
-            }[report.rating] || '=';
-            
-            const caption = `📊 USIS 研究报告 - ${symbol}\n\n评级: ${report.rating} (${ratingSymbol})\n生成时间: ${report.latency_ms}ms\nAI模型: ${report.model_used}\n\nDocRaptor PDF (测试模式)\n详细内容请查看附件`;
+            // 生成安全的文件名和 caption（不含特殊字符）
+            const safeFilename = `${symbol}.pdf`;
+            const safeCaption = `USIS Research Report ${symbol} v3-dev\n\nRating: ${report.rating}\nModel: ${report.model_used}\nLatency: ${report.latency_ms}ms\n\nDocRaptor PDF Test Mode`;
             
             console.log(`   └─ Calling Telegram sendDocument API...`);
+            console.log(`   └─ [DEV_BOT] Sending PDF with filename: ${safeFilename}`);
+            console.log(`   └─ [DEV_BOT] Caption length: ${safeCaption.length} chars`);
             
             await telegramAPI('sendDocument', {
               chat_id: chatId,
               document: pdfBuffer,
-              filename: `${symbol}_USIS_Research.pdf`,
-              caption: caption
+              filename: safeFilename,
+              caption: safeCaption
             });
             
             await telegramAPI('deleteMessage', {
