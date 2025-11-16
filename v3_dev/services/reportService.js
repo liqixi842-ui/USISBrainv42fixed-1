@@ -859,10 +859,10 @@ PS TTM: ${ps_ttm}x
 Historical PE (5Y): High ${marketData.valuation.historical_pe_5y?.high || 'N/A'}x, Median ${marketData.valuation.historical_pe_5y?.median || 'N/A'}x, Low ${marketData.valuation.historical_pe_5y?.low || 'N/A'}x
 
 ═══ FUNDAMENTALS ═══
-Gross Margin: ${marketData.fundamentals.gross_margin ? (marketData.fundamentals.gross_margin*100).toFixed(1)+'%' : 'N/A'}
-Operating Margin: ${marketData.fundamentals.operating_margin ? (marketData.fundamentals.operating_margin*100).toFixed(1)+'%' : 'N/A'}
-Net Margin: ${marketData.fundamentals.net_margin ? (marketData.fundamentals.net_margin*100).toFixed(1)+'%' : 'N/A'}
-ROE: ${marketData.fundamentals.roe ? (marketData.fundamentals.roe*100).toFixed(1)+'%' : 'N/A'}
+Gross Margin: ${marketData.fundamentals.gross_margin ? marketData.fundamentals.gross_margin.toFixed(1)+'%' : 'N/A'}
+Operating Margin: ${marketData.fundamentals.operating_margin ? marketData.fundamentals.operating_margin.toFixed(1)+'%' : 'N/A'}
+Net Margin: ${marketData.fundamentals.net_margin ? marketData.fundamentals.net_margin.toFixed(1)+'%' : 'N/A'}
+ROE: ${marketData.fundamentals.roe ? marketData.fundamentals.roe.toFixed(1)+'%' : 'N/A'}
 ${financialHistory}
 ${forecasts}
 ${peerSummary}
