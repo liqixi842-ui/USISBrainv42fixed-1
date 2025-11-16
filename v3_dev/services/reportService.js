@@ -658,10 +658,63 @@ function generateCharts(marketData) {
       }
     }
     
-    // CHART 4: Price Chart with Technical Indicators (placeholder - would need historical prices)
-    // Note: This requires historical price data which we don't fetch yet
-    // For now, we'll leave this as null and implement later if needed
-    charts.price_chart = null;
+    // CHART 4: Technical Chart (Price Levels + 52W Range)
+    // Shows current price vs 52W high/low as horizontal bar chart
+    if (marketData.price && marketData.price.last) {
+      const techChart = new QuickChart();
+      const currentPrice = marketData.price.last;
+      const high52w = marketData.price.high_52w || currentPrice * 1.2;
+      const low52w = marketData.price.low_52w || currentPrice * 0.8;
+      
+      techChart.setConfig({
+        type: 'horizontalBar',
+        data: {
+          labels: ['52W Range'],
+          datasets: [
+            {
+              label: '52W Low',
+              data: [low52w],
+              backgroundColor: 'rgba(239, 68, 68, 0.3)',
+              borderColor: 'rgba(239, 68, 68, 1)',
+              borderWidth: 1
+            },
+            {
+              label: 'Current Price',
+              data: [currentPrice],
+              backgroundColor: 'rgba(59, 130, 246, 0.7)',
+              borderColor: 'rgba(59, 130, 246, 1)',
+              borderWidth: 2
+            },
+            {
+              label: '52W High',
+              data: [high52w],
+              backgroundColor: 'rgba(16, 185, 129, 0.3)',
+              borderColor: 'rgba(16, 185, 129, 1)',
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          title: { display: true, text: `Technical View: ${marketData.symbol} Price Levels` },
+          scales: {
+            x: { 
+              beginAtZero: false,
+              ticks: {
+                callback: function(value) {
+                  return '$' + value.toFixed(2);
+                }
+              }
+            }
+          },
+          legend: {
+            display: true,
+            position: 'bottom'
+          }
+        }
+      });
+      techChart.setWidth(800).setHeight(300).setBackgroundColor('white');
+      charts.price_chart = techChart.getUrl();
+    }
     
   } catch (err) {
     console.log(`   [Chart Generation] Error: ${err.message}`);
@@ -1867,27 +1920,99 @@ function buildHtmlFromReport(report) {
     return html;
   };
   
-  // Helper: embed charts
+  // Helper: embed charts (ALL 4 CHARTS MANDATORY)
   const embedCharts = () => {
-    if (!report.charts) return '';
+    if (!report.charts) return '<p class="text-muted">Charts unavailable</p>';
     
     let html = '';
-    if (report.charts.revenue_chart) {
-      html += `<div class="chart-container">
-        <img src="${report.charts.revenue_chart}" alt="Revenue Chart" class="chart-img" />
-      </div>`;
-    }
-    if (report.charts.eps_chart) {
-      html += `<div class="chart-container">
-        <img src="${report.charts.eps_chart}" alt="EPS Chart" class="chart-img" />
-      </div>`;
-    }
+    
+    // Chart 1: Peer Comparison (always first)
     if (report.charts.peer_chart) {
       html += `<div class="chart-container">
+        <h3>Peer Comparison Chart</h3>
         <img src="${report.charts.peer_chart}" alt="Peer Comparison Chart" class="chart-img" />
       </div>`;
+    } else {
+      html += '<p class="text-muted">Peer comparison chart: Data unavailable</p>';
     }
     
+    // Chart 2: 5-Year Revenue
+    if (report.charts.revenue_chart) {
+      html += `<div class="chart-container">
+        <h3>5-Year Revenue History</h3>
+        <img src="${report.charts.revenue_chart}" alt="Revenue Chart" class="chart-img" />
+      </div>`;
+    } else {
+      html += '<p class="text-muted">5-year revenue chart: Requires premium data access (Finnhub free tier limitation)</p>';
+    }
+    
+    // Chart 3: 5-Year EPS
+    if (report.charts.eps_chart) {
+      html += `<div class="chart-container">
+        <h3>5-Year EPS History</h3>
+        <img src="${report.charts.eps_chart}" alt="EPS Chart" class="chart-img" />
+      </div>`;
+    } else {
+      html += '<p class="text-muted">5-year EPS chart: Requires premium data access (Finnhub free tier limitation)</p>';
+    }
+    
+    // Chart 4: Technical Chart (Price Levels)
+    if (report.charts.price_chart) {
+      html += `<div class="chart-container">
+        <h3>Technical Price Levels (52W Range)</h3>
+        <img src="${report.charts.price_chart}" alt="Technical Chart" class="chart-img" />
+      </div>`;
+    } else {
+      html += '<p class="text-muted">Technical chart: Price data unavailable</p>';
+    }
+    
+    return html;
+  };
+  
+  // Helper: build segment revenue table
+  const buildSegmentTable = () => {
+    if (!report.segments || report.segments.length === 0) {
+      return `<table class="data-table">
+        <thead>
+          <tr>
+            <th>Segment Name</th>
+            <th>Revenue ($M)</th>
+            <th>Growth YoY (%)</th>
+            <th>Margin (%)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td colspan="4" class="text-muted" style="text-align: center; padding: 20px;">
+              Segment-level financial data not available for this security.<br>
+              Premium data subscription required for detailed business unit breakdown.
+            </td>
+          </tr>
+        </tbody>
+      </table>`;
+    }
+    
+    let html = `<table class="data-table">
+      <thead>
+        <tr>
+          <th>Segment Name</th>
+          <th>Revenue ($M)</th>
+          <th>Growth YoY (%)</th>
+          <th>Margin (%)</th>
+        </tr>
+      </thead>
+      <tbody>`;
+    
+    report.segments.forEach(seg => {
+      html += `<tr>
+        <td><strong>${seg.name}</strong></td>
+        <td>${fmtLarge(seg.revenue)}</td>
+        <td>${fmt(seg.growth_yoy, 1, '%')}</td>
+        <td>${fmt(seg.margin, 1, '%')}</td>
+      </tr>`;
+    });
+    
+    html += '</tbody></table>';
     return html;
   };
   
@@ -1986,16 +2111,10 @@ function buildHtmlFromReport(report) {
 <!-- PAGE 4: SEGMENT ANALYSIS -->
 <div class="page">
   <h1>SEGMENT ANALYSIS / 业务板块分析</h1>
-  ${report.segment_text ? `<div class="text-content">${report.segment_text}</div>` : '<p class="text-muted">Business segment data not available for this security.</p>'}
+  ${report.segment_text ? `<div class="text-content">${report.segment_text}</div>` : '<p class="text-muted">AI analysis of business segments not available.</p>'}
   
-  ${report.segments && report.segments.length > 0 ? `
-  <h2>Segment Breakdown / 板块分解</h2>
-  <table class="data-table">
-    <thead><tr><th>Segment</th><th>Revenue</th><th>Growth YoY</th><th>Margin</th></tr></thead>
-    <tbody>
-      ${report.segments.map(s => `<tr><td>${s.name}</td><td>${fmtLarge(s.revenue)}</td><td>${fmt(s.growth_yoy, 1, '%')}</td><td>${fmt(s.margin, 1, '%')}</td></tr>`).join('')}
-    </tbody>
-  </table>` : ''}
+  <h2>Segment Revenue Table / 板块收入表</h2>
+  ${buildSegmentTable()}
   
   ${report.macro_text ? `
   <h2>Industry & Macro Trends / 行业与宏观趋势</h2>
@@ -2046,11 +2165,11 @@ function buildHtmlFromReport(report) {
   <table class="data-table">
     <thead><tr><th>Metric / 指标</th><th>Value / 数值</th></tr></thead>
     <tbody>
-      <tr><td>Gross Margin / 毛利率</td><td>${fmt(report.fundamentals.gross_margin * 100, 1, '%')}</td></tr>
-      <tr><td>Operating Margin / 营业利润率</td><td>${fmt(report.fundamentals.operating_margin * 100, 1, '%')}</td></tr>
-      <tr><td>Net Margin / 净利率</td><td>${fmt(report.fundamentals.net_margin * 100, 1, '%')}</td></tr>
-      <tr><td>ROE / 净资产收益率</td><td>${fmt(report.fundamentals.roe * 100, 1, '%')}</td></tr>
-      <tr><td>ROA / 总资产收益率</td><td>${fmt(report.fundamentals.roa * 100, 1, '%')}</td></tr>
+      <tr><td>Gross Margin / 毛利率</td><td>${fmt(report.fundamentals.gross_margin, 1, '%')}</td></tr>
+      <tr><td>Operating Margin / 营业利润率</td><td>${fmt(report.fundamentals.operating_margin, 1, '%')}</td></tr>
+      <tr><td>Net Margin / 净利率</td><td>${fmt(report.fundamentals.net_margin, 1, '%')}</td></tr>
+      <tr><td>ROE / 净资产收益率</td><td>${fmt(report.fundamentals.roe, 1, '%')}</td></tr>
+      <tr><td>ROA / 总资产收益率</td><td>${fmt(report.fundamentals.roa, 1, '%')}</td></tr>
     </tbody>
   </table>
 </div>
