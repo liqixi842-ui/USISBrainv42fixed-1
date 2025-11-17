@@ -127,14 +127,35 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
       if (parts.length < 2 || !parts[1].trim()) {
         await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: '📊 请提供股票代码\n\n格式：/report AAPL\n\n示例：\n/report AAPL\n/report TSLA\n/report NVDA\n\n将通过 Replit v3_dev API 生成完整 PDF 研报。'
+          text: '📊 请提供股票代码\n\n格式：/report AAPL [brand=...] [firm=...] [analyst=...]\n\n示例：\n/report AAPL\n/report TSLA brand=VADA\n/report NVDA brand=MyFirm firm=MyDivision analyst=JohnDoe\n\n将通过 Replit v3_dev API 生成完整 PDF 研报。'
         });
         return;
       }
       
       const symbol = parts[1].trim().toUpperCase();
+      
+      // Parse brand/firm/analyst parameters with defaults
+      let brand = 'USIS Research';
+      let firm = 'USIS Research Division';
+      let analyst = 'System (USIS Brain)';
+      
+      // Parse remaining parts for brand/firm/analyst parameters
+      for (let i = 2; i < parts.length; i++) {
+        const param = parts[i].trim();
+        if (param.startsWith('brand=')) {
+          brand = param.substring(6) || brand;
+        } else if (param.startsWith('firm=')) {
+          firm = param.substring(5) || firm;
+        } else if (param.startsWith('analyst=')) {
+          analyst = param.substring(8) || analyst;
+        }
+      }
+      
       console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
       console.log(`📊 [DEV_BOT] /report ${symbol} - Calling Replit v3_dev PDF API`);
+      console.log(`   ├─ Brand: ${brand}`);
+      console.log(`   ├─ Firm: ${firm}`);
+      console.log(`   └─ Analyst: ${analyst}`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
       
       let statusMsg = null;
@@ -148,7 +169,15 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
           text: `🔬 正在生成 ${symbol} 研报\n\n⏳ 正在调用 Replit v3_dev PDF API...\n\n(这可能需要 60-120 秒)`
         });
         
-        const url = `${REPLIT_API_URL}/v3/report/${symbol}?format=pdf&asset_type=equity`;
+        // Build URL with brand/firm/analyst parameters
+        const params = new URLSearchParams({
+          format: 'pdf',
+          asset_type: 'equity',
+          brand: brand,
+          firm: firm,
+          analyst: analyst
+        });
+        const url = `${REPLIT_API_URL}/v3/report/${symbol}?${params.toString()}`;
         
         // Start timer for latency tracking
         t0 = Date.now();
