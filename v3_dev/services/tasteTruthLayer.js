@@ -41,7 +41,20 @@ class TasteTruthLayer {
    * @returns {object} Corrected text sections
    */
   async process(report) {
-    console.log(`\n🎯 [TasteTruthLayer] enabled`);
+    console.log(`\n🎯 [TasteTruthLayer] enabled (Phase 3 fields protected)`);
+    
+    // ═══════════════════════════════════════════════════════════════
+    // PHASE 3 PROTECTED FIELDS
+    // These fields will be overwritten by SellSideWriter v2 in Phase 3.4
+    // Skip processing to save API calls and processing time
+    // ═══════════════════════════════════════════════════════════════
+    const PHASE3_PROTECTED_FIELDS = [
+      'thesis_text',      // Will be overwritten by thesis_enhanced → thesis_text
+      'valuation_text',   // Will be overwritten by valuation_enhanced → valuation_text
+      'macro_text'        // Will be overwritten by macro_enhanced → macro_text
+    ];
+    
+    console.log(`   ⚠️  Protected fields (skip processing): ${PHASE3_PROTECTED_FIELDS.join(', ')}`);
     
     // Reset stats
     this.stats.duplicateSentencesRemoved = 0;
@@ -74,16 +87,13 @@ class TasteTruthLayer {
     // Summary: 3-5 bullet points with data references
     let refinedSummary = this._processTextSection(originalTexts.summary, report);
     
-    // Thesis: 3 structured paragraphs
-    let refinedThesis = this._processTextSection(originalTexts.thesis, report);
+    // Thesis: PROTECTED - Will be overwritten by SellSideWriter v2
+    console.log(`   ⏭️  Skipping thesis_text (protected field)`);
+    let refinedThesis = originalTexts.thesis; // Pass through unchanged
     
-    // Valuation: Must reference PE TTM, Forward PE, targets
-    let refinedValuation = this._processTextSection(originalTexts.valuation, report);
-    if (refinedValuation && report.valuation) {
-      if (!refinedValuation.includes('PE') && report.valuation.pe_ttm) {
-        refinedValuation = `Current P/E (TTM): ${report.valuation.pe_ttm}x. ` + refinedValuation;
-      }
-    }
+    // Valuation: PROTECTED - Will be overwritten by SellSideWriter v2
+    console.log(`   ⏭️  Skipping valuation_text (protected field)`);
+    let refinedValuation = originalTexts.valuation; // Pass through unchanged
     
     // Segments: Handle missing data gracefully
     let refinedSegments = this._processTextSection(originalTexts.segments, report);
@@ -91,8 +101,9 @@ class TasteTruthLayer {
       refinedSegments = `${report.symbol} does not disclose detailed segment-level revenue. We base our analysis on publicly known business lines and industry positioning.`;
     }
     
-    // Macro: Clean and deduplicate
-    let refinedMacro = this._processTextSection(originalTexts.macro, report);
+    // Macro: PROTECTED - Will be overwritten by SellSideWriter v2
+    console.log(`   ⏭️  Skipping macro_text (protected field)`);
+    let refinedMacro = originalTexts.macro; // Pass through unchanged
     
     // Catalysts: Ensure 6-8 items, remove ALL invented dollar projections
     let refinedCatalysts = Array.isArray(originalTexts.catalysts) ? originalTexts.catalysts : [];
