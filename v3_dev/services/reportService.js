@@ -2867,14 +2867,14 @@ async function generatePdfWithDocRaptor(symbol, htmlContent) {
   try {
     console.log(`📄 [v3-dev DocRaptor] 开始生成 PDF (${DOC_RAPTOR_TEST_MODE ? '测试模式' : '生产模式'})...`);
     
-    // Debug: Verify chart URLs are in HTML
-    console.log(`[PDF DEBUG] HTML length=${htmlContent.length}`);
-    console.log(`[PDF DEBUG] HTML preview=${htmlContent.slice(0, 500)}`);
-    console.log(`[PDF DEBUG] Charts included? ${htmlContent.includes('quickchart.io') ? 'YES ✓' : 'NO ✗'}`);
-    if (htmlContent.includes('quickchart.io')) {
-      const chartCount = (htmlContent.match(/quickchart\.io/g) || []).length;
-      console.log(`[PDF DEBUG] Chart count: ${chartCount} QuickChart URLs found`);
-    }
+    // ======== PDF DEBUG START ========
+    console.log("======== PDF DEBUG START ========");
+    console.log("[PDF] HTML length:", htmlContent.length);
+    console.log("[PDF] Contains <img>? ->", htmlContent.includes("<img") ? "YES" : "NO");
+    console.log("[PDF] Contains QuickChart URLs? ->", (htmlContent.match(/quickchart\.io/g) || []).length);
+    console.log("[PDF] Contains TECHNICAL SECTION? ->", htmlContent.includes("Technical Indicators") || htmlContent.includes("Technical Analysis"));
+    console.log("[PDF] Contains Support/Resistance? ->", htmlContent.includes("Support:") && htmlContent.includes("Resistance:"));
+    console.log("======== PDF DEBUG END ==========");
     
     const fetch = require('node-fetch');
     

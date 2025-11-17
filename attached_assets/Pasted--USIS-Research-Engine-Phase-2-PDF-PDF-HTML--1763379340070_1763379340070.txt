@@ -1,0 +1,151 @@
+你现在执行 USIS Research Engine – Phase 2 修复（PDF 渲染链路修复）。
+本阶段重点：
+让最终 PDF 使用新版 HTML 模板（含图表、技术指标等）。
+
+禁止修改其它模块的逻辑，只修 PDF 渲染链路。
+
+🟦【Phase 2 – 任务目标】
+
+让 PDF 生成使用 renderFullReportHtml()（或最新 HTML 构建逻辑）
+
+确保 <img src="quickchart.io/..."> 出现在传给 DocRaptor 的 HTML
+
+确保 techs.support_level 和 techs.resistance_level 进入 PDF
+
+禁止继续使用旧模板（report.html、pdf_template.html 等）
+
+🟦【步骤 1：定位 PDF 渲染入口】
+
+请搜索：
+
+rg -n "DocRaptor" -g '*.js'
+rg -n "pdf" -g '*.js'
+rg -n "createPDF" -g '*.js'
+rg -n "generatePDF" -g '*.js'
+
+
+找到 1~2 个文件，例如：
+
+v3_dev/services/pdfService.js
+
+v3_dev/services/reportService.js
+
+v3_dev/utils/pdf.js
+
+这些文件中隐藏着旧模板调用点。
+
+输出路径用于确认。
+
+🟦【步骤 2：打印当前 DocRaptor 接收到的 HTML（必须）】
+
+在调用 DocRaptor API 的地方 加入以下 debug：
+
+console.log("======== PDF DEBUG START ========");
+console.log("[PDF] HTML length:", htmlContent.length);
+console.log("[PDF] Contains <img>? ->", htmlContent.includes("<img") ? "YES" : "NO");
+console.log("[PDF] Contains QuickChart URLs? ->", (htmlContent.match(/quickchart\.io/g) || []).length);
+console.log("[PDF] Contains TECHNICAL SECTION? ->", htmlContent.includes("Technical Indicators"));
+console.log("======== PDF DEBUG END ==========");
+
+
+确保你打印的是 传给 DocRaptor 的最终 HTML 字符串，
+不是中间产物。
+
+🟦【步骤 3：检查 HTML 构建函数】
+
+请搜索以下函数：
+
+renderFullReportHtml
+renderPage10
+renderReportHTML
+buildReportHtml
+
+
+输出所有匹配处，确定最终 HTML 是由哪个函数生成的。
+
+🟦【步骤 4：强制 PDF 使用新版 HTML 👇（最关键一刀）】
+
+在 PDF 渲染函数中，将：
+
+const html = oldTemplate(...);
+
+
+或：
+
+const html = fs.readFileSync("report_template.html");
+
+
+或：
+
+const html = this.buildLegacyReport();
+
+
+一律改为：
+
+const html = await renderFullReportHtml(report);
+
+
+如果实际函数名是：
+
+renderReportHtml
+
+buildFullHtml
+
+renderPageAll
+
+也请替换成最新的、包含 <img> 的 HTML 构建函数。
+
+禁止继续使用旧 HTML 模板文件。
+
+🟦【步骤 5：确认 techs.* 在 HTML 中出现】
+
+在 HTML 渲染函数（例如 renderPage13）里加入：
+
+<p>Support: ${report.techs?.support_level ?? 'N/A'}</p>
+<p>Resistance: ${report.techs?.resistance_level ?? 'N/A'}</p>
+
+
+然后在最后的 HTML debug 打印里确认：
+
+Support: 180.58
+Resistance: 212.19
+
+
+如果没有，说明渲染逻辑漏掉了 techs 部分。
+
+🟦【步骤 6：执行 PDF 测试】
+
+修改完成后，请执行一次内部测试：
+
+node v3_dev/test_financial_integration.js
+
+
+并输出：
+
+[PDF DEBUG] 段落
+
+QuickChart URL 数量
+
+techs 显示情况
+
+测试通过标准：
+
+[PDF] Contains <img>? -> YES
+
+[PDF] Contains QuickChart URLs? -> >= 3
+
+PDF 不再显示 “Placeholder”
+
+Technical Analysis 不再显示 “Support: N/A”
+
+🟦【最终输出要求】
+
+修复完成后，请输出：
+
+Phase 2 PDF renderer fixed.
+New HTML template confirmed in DocRaptor payload.
+Charts embedded + technical levels integrated.
+Ready for next NVDA PDF generation.
+
+
+禁止做任何其他更改。
