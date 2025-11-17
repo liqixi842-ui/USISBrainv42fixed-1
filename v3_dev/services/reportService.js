@@ -392,11 +392,18 @@ async function refineNarrativeText(report) {
  * Build Generic Research Report (ResearchReport v1 Schema)
  * @param {string} symbol - Stock symbol (e.g., AAPL, NVDA, SPX, QQQ)
  * @param {string} assetType - Asset type: "equity" | "index" | "etf" | "crypto"
+ * @param {object} brandOptions - Optional brand customization: { brand, firm, analyst }
  * @returns {Promise<object>} ResearchReport v1 object
  */
-async function buildResearchReport(symbol, assetType = "equity") {
+async function buildResearchReport(symbol, assetType = "equity", brandOptions = {}) {
+  // Set default brand values
+  const brand = brandOptions.brand || 'USIS Research';
+  const firm = brandOptions.firm || 'USIS Research Division';
+  const analyst = brandOptions.analyst || 'System (USIS Brain)';
+  
   console.log(`\n╔════════════════════════════════════════════════════════════════╗`);
   console.log(`║  USIS Research Report Engine v2.0 - ${symbol} (${assetType})      `);
+  console.log(`║  Brand: ${brand.padEnd(55)}║`);
   console.log(`╚════════════════════════════════════════════════════════════════╝`);
   
   const startTime = Date.now();
@@ -640,7 +647,10 @@ async function buildResearchReport(symbol, assetType = "equity") {
         models_used: multiModelResult.meta.models_used,
         version: "v3-dev-v3.2",
         latency_ms: Date.now() - startTime,
-        ai_latency_ms: multiModelResult.meta.total_latency_ms
+        ai_latency_ms: multiModelResult.meta.total_latency_ms,
+        brand: brand,
+        firm: firm,
+        analyst: analyst
       }
     };
     

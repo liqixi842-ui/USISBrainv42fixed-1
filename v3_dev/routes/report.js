@@ -64,9 +64,18 @@ router.get('/test', (req, res) => {
  */
 router.get('/:symbol', async (req, res) => {
   const { symbol } = req.params;
-  const { format = 'json', asset_type = 'equity' } = req.query;
+  const { 
+    format = 'json', 
+    asset_type = 'equity',
+    brand = 'USIS Research',
+    firm = 'USIS Research Division',
+    analyst = 'System (USIS Brain)'
+  } = req.query;
   
   console.log(`\n📊 [v3/report] GET /${symbol}?format=${format}&asset_type=${asset_type}`);
+  console.log(`   ├─ Brand: ${brand}`);
+  console.log(`   ├─ Firm: ${firm}`);
+  console.log(`   └─ Analyst: ${analyst}`);
   
   try {
     // Validate and normalize symbol
@@ -84,7 +93,8 @@ router.get('/:symbol', async (req, res) => {
     // Phase 1: Generate ResearchReport v1 (Generic for ANY symbol)
     // ═══════════════════════════════════════════════════════════════
     console.log(`🔬 [v3/report] Building ResearchReport v1...`);
-    const report = await buildResearchReport(normalizedSymbol, asset_type);
+    const brandOptions = { brand, firm, analyst };
+    const report = await buildResearchReport(normalizedSymbol, asset_type, brandOptions);
     console.log(`✅ [v3/report] ResearchReport v1 complete (${report.meta.latency_ms}ms)`);
 
     // ═══════════════════════════════════════════════════════════════
