@@ -18,9 +18,11 @@ const fetch = require('node-fetch');
 const TasteTruthLayer = require('./tasteTruthLayer');
 const FinancialDataBroker = require('./financialDataBroker');
 const HistoryChartEngine = require('./historyChartEngine');
-const SellSideWriter = require('./sellSideWriter');
 const TechnicalEngine = require('./technicalEngine');
 const RiskCatalystCleaner = require('./riskCatalystCleaner');
+
+// ========== v5.0 ALL-IN Engine ==========
+const reportBuilderV5 = require('./v5/reportBuilderV5');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
@@ -613,104 +615,21 @@ async function buildResearchReport(symbol, assetType = "equity") {
     
     console.log(`✅ [Phase 3] ResearchReport v2.0 complete`);
     
-    // ─────────────────────────────────────────────────────────────
-    // Phase 3.5: Sell-Side Writer (Professional Narrative Layer)
-    // ─────────────────────────────────────────────────────────────
-    await SellSideWriter.enhanceReportWithSellSideTone(report);
+    // ═════════════════════════════════════════════════════════════
+    // v5.0 ALL-IN PIPELINE — Morgan Stanley / Goldman Sachs Grade
+    // ═════════════════════════════════════════════════════════════
+    console.log(`\n╔════════════════════════════════════════════════════════════════╗`);
+    console.log(`║  ACTIVATING v5.0 ALL-IN ENGINE                                 ║`);
+    console.log(`╚════════════════════════════════════════════════════════════════╝`);
     
-    // ─────────────────────────────────────────────────────────────
-    // Phase 4: v4.0 Taste + Truth Professional Correction Layer
-    // ─────────────────────────────────────────────────────────────
-    const refinedTexts = await TasteTruthLayer.process(report);
+    // Call v5 Report Builder (replaces old SellSideWriter v1/v2)
+    report = await reportBuilderV5.buildStockReport(report);
     
-    console.log(`\n[DEBUG] TasteTruthLayer.process() output keys: ${Object.keys(refinedTexts).join(', ')}`);
-    console.log(`[DEBUG] TasteTruthLayer thesis_text (first 200 chars): ${(refinedTexts.thesis_text || '').substring(0, 200)}`);
-    
-    // Update report with refined text sections
-    report.summary_text = refinedTexts.summary_text;
-    report.thesis_text = refinedTexts.thesis_text;
-    report.valuation_text = refinedTexts.valuation_text;
-    report.segment_text = refinedTexts.segment_text;
-    report.macro_text = refinedTexts.macro_text;
-    report.catalysts_text = refinedTexts.catalysts_text;
-    report.risks_text = refinedTexts.risks_text;
-    report.tech_view_text = refinedTexts.tech_view_text;
-    report.action_text = refinedTexts.action_text;
-    
-    // ─────────────────────────────────────────────────────────────
-    // Phase 3.2: Risk & Catalyst Cleaner (Morgan Stanley/GS Quality)
-    // ─────────────────────────────────────────────────────────────
-    console.log(`\n[Phase 3.2] Risk & Catalyst Cleaning...`);
-    report.catalysts_text = await RiskCatalystCleaner.cleanRiskCatalystList(
-      report.catalysts_text,
-      'catalyst',
-      report
-    );
-    report.risks_text = await RiskCatalystCleaner.cleanRiskCatalystList(
-      report.risks_text,
-      'risk',
-      report
-    );
-    
-    // ─────────────────────────────────────────────────────────────
-    // Phase 3.3: Sell-Side Writer v2 (Extended Institutional Narratives)
-    // ─────────────────────────────────────────────────────────────
-    console.log(`\n[Phase 3.3] SellSideWriter v2.0 Enhanced Narratives...`);
-    const enhancedSections = await SellSideWriter.enhance(report);
-    
-    console.log(`\n[DEBUG] SellSideWriter.enhance() output keys: ${Object.keys(enhancedSections || {}).join(', ')}`);
-    console.log(`[DEBUG] SellSideWriter thesis_enhanced (first 200 chars): ${(enhancedSections.thesis_enhanced || '').substring(0, 200)}`);
-    
-    // Merge enhanced sections into report
-    Object.assign(report, enhancedSections);
-    
-    // ─────────────────────────────────────────────────────────────
-    // Phase 3.4: Apply SellSideWriterV2 outputs as final rendering fields
-    // ─────────────────────────────────────────────────────────────
-    console.log(`\n[Phase 3.4] Applying SellSideWriter v2 outputs to final rendering fields...`);
-    
-    // Apply thesis enhancements
-    if (enhancedSections.thesis_enhanced) {
-      report.investment_thesis = enhancedSections.thesis_enhanced;
-      report.thesis_text = enhancedSections.thesis_enhanced;
-      console.log(`   ✓ Applied thesis_enhanced (${enhancedSections.thesis_enhanced.length} chars)`);
-    }
-    
-    // Apply overview enhancements
-    if (enhancedSections.overview_enhanced) {
-      report.company_overview = enhancedSections.overview_enhanced;
-      console.log(`   ✓ Applied overview_enhanced (${enhancedSections.overview_enhanced.length} chars)`);
-    }
-    
-    // Apply valuation enhancements
-    if (enhancedSections.valuation_enhanced) {
-      report.valuation_text = enhancedSections.valuation_enhanced;
-      report.valuation_summary = enhancedSections.valuation_enhanced; // Keep both for compatibility
-      console.log(`   ✓ Applied valuation_enhanced (${enhancedSections.valuation_enhanced.length} chars)`);
-    }
-    
-    // Apply industry enhancements
-    if (enhancedSections.industry_enhanced) {
-      report.industry_text = enhancedSections.industry_enhanced;
-      console.log(`   ✓ Applied industry_enhanced (${enhancedSections.industry_enhanced.length} chars)`);
-    }
-    
-    // Apply macro enhancements
-    if (enhancedSections.macro_enhanced) {
-      report.macro_text = enhancedSections.macro_enhanced;
-      console.log(`   ✓ Applied macro_enhanced (${enhancedSections.macro_enhanced.length} chars)`);
-    }
-    
-    // Replace catalyst/risk arrays (already cleaned by Phase 3.2)
-    // Note: catalysts_text and risks_text are already cleaned by RiskCatalystCleaner
-    // SellSideWriter v2 doesn't modify these, so they remain from Phase 3.2
-    console.log(`   ✓ Using catalysts_text from RiskCatalystCleaner (${report.catalysts_text.length} items)`);
-    console.log(`   ✓ Using risks_text from RiskCatalystCleaner (${report.risks_text.length} items)`);
-    
-    console.log(`✅ [Phase 3.4] Final rendering fields updated with institutional narratives`);
+    // v5 sets v5_protected = true, so TasteTruthLayer will skip these fields
+    console.log(`\n✅ v5.0 Pipeline Complete - All institutional enhancements applied`);
     
     // Update version metadata
-    report.meta.version = "v3-dev-v4.1-phase3";
+    report.meta.version = "v3-dev-v5.0-ALL-IN";
     
     // ═════════════════════════════════════════════════════════════
     // DEBUG: Phase 3 Output Diagnostics
@@ -740,39 +659,6 @@ async function buildResearchReport(symbol, assetType = "equity") {
     console.log(`[/DEBUG_PHASE3_OUTPUT]\n`);
     
     console.log(`╚═══════════════════════════════════════════════════════════════╝\n`);
-    
-    // ═════════════════════════════════════════════════════════════
-    // FINAL OVERRIDE — absolutely final write before HTML rendering
-    // ═════════════════════════════════════════════════════════════
-    console.log(`\n[FINAL_OVERRIDE] Ensuring SellSideWriter v2 outputs are not overwritten...`);
-    
-    if (report.thesis_enhanced) {
-      report.investment_thesis = report.thesis_enhanced;
-      report.thesis_text = report.thesis_enhanced;
-      console.log(`   ✓ FINAL: thesis_enhanced → investment_thesis/thesis_text (${report.thesis_enhanced.length} chars)`);
-    }
-    
-    if (report.overview_enhanced) {
-      report.company_overview = report.overview_enhanced;
-      console.log(`   ✓ FINAL: overview_enhanced → company_overview (${report.overview_enhanced.length} chars)`);
-    }
-    
-    if (report.valuation_enhanced) {
-      report.valuation_text = report.valuation_enhanced;
-      console.log(`   ✓ FINAL: valuation_enhanced → valuation_text (${report.valuation_enhanced.length} chars)`);
-    }
-    
-    if (report.industry_enhanced) {
-      report.industry_text = report.industry_enhanced;
-      console.log(`   ✓ FINAL: industry_enhanced → industry_text (${report.industry_enhanced.length} chars)`);
-    }
-    
-    if (report.macro_enhanced) {
-      report.macro_text = report.macro_enhanced;
-      console.log(`   ✓ FINAL: macro_enhanced → macro_text (${report.macro_enhanced.length} chars)`);
-    }
-    
-    console.log(`✅ [FINAL_OVERRIDE] All rendering fields locked — ready for HTML generation\n`);
     
     // Debug: Log final report JSON for verification
     console.log(`\n[DEBUG] ResearchReport v4.0 ${symbol}:`);

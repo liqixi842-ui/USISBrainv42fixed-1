@@ -41,6 +41,26 @@ class TasteTruthLayer {
    * @returns {object} Corrected text sections
    */
   async process(report) {
+    // ═════════════════════════════════════════════════════════════
+    // v5.0 PROTECTION: Skip if report is v5-enhanced
+    // ═════════════════════════════════════════════════════════════
+    if (report.v5_protected === true) {
+      console.log(`\n⚡ [TasteTruthLayer] SKIPPING - Report protected by v5.0 engine`);
+      console.log(`   v5.0 handles all institutional tone, coherence, and style\n`);
+      return {
+        summary_text: report.summary_text || '',
+        thesis_text: report.thesis_text || report.investment_thesis || '',
+        valuation_text: report.valuation_text || '',
+        segment_text: report.segment_text || report.company_overview || '',
+        macro_text: report.macro_text || '',
+        catalysts_text: report.catalysts_text || [],
+        risks_text: report.risks_text || [],
+        tech_view_text: report.tech_view_text || '',
+        action_text: report.action_text || '',
+        industry_text: report.industry_text || ''
+      };
+    }
+    
     console.log(`\n🎯 [TasteTruthLayer] enabled (Phase 3 fields protected)`);
     
     // ═══════════════════════════════════════════════════════════════
