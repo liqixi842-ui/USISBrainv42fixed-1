@@ -205,6 +205,9 @@ class TasteTruthLayer {
     // Step 7: Final sentence integrity check
     corrected = this._checkSentenceIntegrity(corrected);
     
+    // Step 8: Fix sentence fragmentation (Phase 3.1)
+    corrected = this.fixSentenceFragments(corrected);
+    
     return corrected;
   }
   
@@ -604,6 +607,88 @@ class TasteTruthLayer {
     const intersection = new Set([...words1].filter(x => words2.has(x)));
     const union = new Set([...words1, ...words2]);
     return intersection.size / union.size;
+  }
+
+  /**
+   * Fix sentence fragmentation caused by incorrect period placement
+   * Phase 3.1 - Morgan Stanley/Goldman Sachs Sentence Correction Engine
+   * 
+   * Repairs sentences broken by:
+   * - ". supported by" → ", supported by"
+   * - ". driven by" → ", driven by"
+   * - ". coupled with" → ", coupled with"
+   * - ". fueled by" → ", fueled by"
+   * - ". expected to" → ", expected to"
+   * - ". anticipated to" → ", anticipated to"
+   * 
+   * @param {string} text - Input text with potential fragments
+   * @returns {string} Text with corrected sentence structure
+   */
+  fixSentenceFragments(text) {
+    if (!text || text.length === 0) return text;
+    
+    let corrected = text;
+    
+    // Rule 1: Fix genuine fragments - only when the word after period starts with lowercase
+    // This indicates it was incorrectly split (". supported by" → ", supported by")
+    // But preserves proper sentences ("Management. Supported by" stays unchanged)
+    const fragmentPatterns = [
+      /\.\s+(supported|driven|coupled|fueled|expected|anticipated|bolstered|underpinned|reinforced|complemented)\s+by/g,
+      /\.\s+(expected|anticipated|projected|forecast)\s+to/g,
+      /\.\s+(which|that|who|where|when)\s+/g
+    ];
+    
+    for (const pattern of fragmentPatterns) {
+      corrected = corrected.replace(pattern, (match, word) => {
+        // Only fix if word is lowercase (genuine fragment)
+        // If uppercase, it's a proper sentence start
+        if (word[0] === word[0].toLowerCase()) {
+          return `, ${word}`;
+        }
+        return match; // Keep as is if capitalized
+      });
+    }
+    
+    // Rule 2: Capitalize sentences that start with lowercase after fixing
+    corrected = corrected.split(/\.\s+/).map(sentence => {
+      const trimmed = sentence.trim();
+      if (trimmed.length === 0) return trimmed;
+      
+      // Capitalize first letter if lowercase
+      if (trimmed[0] === trimmed[0].toLowerCase()) {
+        return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+      }
+      
+      return trimmed;
+    }).join('. ');
+    
+    // Rule 3: Remove incomplete fragments that are too short
+    corrected = corrected.split(/\.\s+/).filter(sentence => {
+      const trimmed = sentence.trim();
+      
+      // Keep if length >= 15
+      if (trimmed.length >= 15) return true;
+      
+      // Discard if contains only industry buzzwords without substance
+      const industryBuzzwords = /^(AI|Cloud|Data|SaaS|Platform|Digital|Innovation|Technology|Software|Hardware|Semiconductor|Chip|GPU|CPU|Edge|IoT|5G|Quantum)(\s+(industry|sector|market|space|ecosystem|landscape|vertical))?\.?$/i;
+      if (industryBuzzwords.test(trimmed)) return false;
+      
+      return true;
+    }).join('. ');
+    
+    // Rule 4: Final cleanup - ensure proper sentence endings
+    if (corrected.length > 0 && !corrected.endsWith('.')) {
+      corrected += '.';
+    }
+    
+    // Remove double periods
+    corrected = corrected.replace(/\.\.+/g, '.');
+    
+    // Remove orphaned spaces before punctuation
+    corrected = corrected.replace(/\s+\./g, '.');
+    corrected = corrected.replace(/\s+,/g, ',');
+    
+    return corrected;
   }
 
   /**

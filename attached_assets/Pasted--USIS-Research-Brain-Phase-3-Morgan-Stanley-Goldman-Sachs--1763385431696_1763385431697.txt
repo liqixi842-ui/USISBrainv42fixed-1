@@ -1,0 +1,137 @@
+你现在执行 USIS Research Brain — Phase 3 专业内容升级任务。
+目标：提升研报质量，使其达到卖方机构级（Morgan Stanley / Goldman Sachs 水平）。
+本任务分 3 个部分：断句修复、风险催化剂清理、卖方级文案升级。
+
+禁止修改 PDF 引擎或图表引擎，其它模块可自由修改。
+
+【Phase 3.1 — Sentence Fragmentation Fix（断句修复引擎）】
+
+请在 v3_dev/services/tasteTruthLayer.js 中新增一个函数：
+
+fixSentenceFragments(text)
+
+功能：
+
+修复被错误拆断的句子（如 . supported by → , supported by）
+
+修复 . driven by / . coupled with / . fueled by
+
+合并被 TasteTruthLayer 截成两半的句子
+
+修复段首小写（如 supported by → Supported by）
+
+规则：
+
+1) 句点后若出现空格 + (supported|driven|coupled|fueled|expected|anticipated)
+   → 替换为 ", <word>"
+
+2) 若句子开头为小写字母 → 自动大写
+
+3) 若句子长度 < 15 且包含 industry 词根（AI/Cloud/Data） → 丢弃
+
+4) 最终重新拼接句子（'. '）
+
+
+在 TasteTruthLayer 的最后一步加入：
+
+corrected = fixSentenceFragments(corrected);
+
+【Phase 3.2 — RiskCatalystCleaner（风险/催化剂清理器）】
+
+新建文件：
+
+v3_dev/services/riskCatalystCleaner.js
+
+
+导出函数：
+
+function cleanRiskCatalystList(list) { ... }
+
+
+规则：
+
+删除任何包含
+
+“Additional factor 1”
+
+“factor 1”
+
+“placeholder”
+
+“N/A”
+
+长度 < 20 的句子
+
+删除任何没有主语或没有动词的句子（regex 检查）
+
+删除任何重复项（相似度 > 0.7）
+
+如果 Result < 5 项，则自动补齐 5 项（使用 GPT mini，结构化补齐）
+
+返回干净、完整的列表（数组格式）
+
+接入点：
+
+在 reportService.js assemble 阶段：
+
+const RiskCatalystCleaner = require('./riskCatalystCleaner');
+report.catalysts_text = RiskCatalystCleaner.cleanRiskCatalystList(report.catalysts_text);
+report.risks_text = RiskCatalystCleaner.cleanRiskCatalystList(report.risks_text);
+
+【Phase 3.3 — SellSideWriter v2（卖方级文案增强）】
+
+在文件：
+
+v3_dev/services/sellSideWriter.js
+
+
+新增模块：
+
+sellSideWriterV2.enhance(report)
+
+增强内容：
+
+Thesis、Overview、Valuation、Industry 段落差异化逻辑
+
+Thesis：3 条核心驱动（growth drivers）
+
+Overview：公司业务结构拆分 + 财务摘要
+
+Valuation：PE/PS/Growth justified band
+
+Industry：2–3 个行业趋势 + TAM + 竞争格局
+
+使用 structured prompting 方式调用 GPT-4o-mini，
+输入必须包含结构化数据：
+
+{
+  "metrics": report.metrics,
+  "financials": report.financials,
+  "history": report.history,
+  "valuation": report.valuation,
+  "industry": report.industry_text_raw,
+  "macro": report.macro_text_raw
+}
+
+
+输出 5 个段落，每段长度 > 600 字
+
+文案风格：Morgan Stanley / GS 机构风格
+
+避免 “supported by / driven by” 过度使用（用 variation）
+
+避免重复（摘要与正文不能重复 >30%）
+
+修改 assemble 部分：
+
+将原来的 SellSideWriter 替换为：
+
+const enhanced = await SellSideWriterV2.enhance(report);
+Object.assign(report, enhanced);
+
+📌 完成后请打印：
+Phase 3 complete:
+- SentenceFragmentFixer OK
+- RiskCatalystCleaner OK
+- SellSideWriterV2 OK
+Ready for institutional-grade report test.

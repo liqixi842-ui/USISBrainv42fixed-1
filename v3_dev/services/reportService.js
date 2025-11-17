@@ -20,6 +20,7 @@ const FinancialDataBroker = require('./financialDataBroker');
 const HistoryChartEngine = require('./historyChartEngine');
 const SellSideWriter = require('./sellSideWriter');
 const TechnicalEngine = require('./technicalEngine');
+const RiskCatalystCleaner = require('./riskCatalystCleaner');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
@@ -633,8 +634,32 @@ async function buildResearchReport(symbol, assetType = "equity") {
     report.tech_view_text = refinedTexts.tech_view_text;
     report.action_text = refinedTexts.action_text;
     
+    // ─────────────────────────────────────────────────────────────
+    // Phase 3.2: Risk & Catalyst Cleaner (Morgan Stanley/GS Quality)
+    // ─────────────────────────────────────────────────────────────
+    console.log(`\n[Phase 3.2] Risk & Catalyst Cleaning...`);
+    report.catalysts_text = await RiskCatalystCleaner.cleanRiskCatalystList(
+      report.catalysts_text,
+      'catalyst',
+      report
+    );
+    report.risks_text = await RiskCatalystCleaner.cleanRiskCatalystList(
+      report.risks_text,
+      'risk',
+      report
+    );
+    
+    // ─────────────────────────────────────────────────────────────
+    // Phase 3.3: Sell-Side Writer v2 (Extended Institutional Narratives)
+    // ─────────────────────────────────────────────────────────────
+    console.log(`\n[Phase 3.3] SellSideWriter v2.0 Enhanced Narratives...`);
+    const enhancedSections = await SellSideWriter.enhance(report);
+    
+    // Merge enhanced sections into report
+    Object.assign(report, enhancedSections);
+    
     // Update version metadata
-    report.meta.version = "v3-dev-v4.0";
+    report.meta.version = "v3-dev-v4.1-phase3";
     
     console.log(`╚═══════════════════════════════════════════════════════════════╝\n`);
     
