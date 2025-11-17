@@ -1,0 +1,110 @@
+👉 第一步：修掉 Assignment to constant variable
+
+发给 Replit：
+
+请修复 "Assignment to constant variable" 错误。
+
+1）在 v3_dev/services/reportService.js（或 reportBuilderV5.js）中搜索：
+
+   "Error: Assignment to constant variable" 相关位置，可用 rg 搜索 "Assignment to constant variable" 或查找 `buildResearchReportV5` 中涉及 const 的赋值。
+
+2）具体检查：
+   - buildResearchReport、buildResearchReportV5 函数体内，是否有 `const report = ...` 之后，又给 `report = ...` 重新赋值。
+   - 或是否有 `const { ... } = report;` 之后再尝试修改该常量。
+
+3）修复方式：
+   - 把需要被重新赋值的变量从 `const` 改成 `let`，例如：
+
+     ```js
+     // 原来：
+     const report = await buildBaseReport(...);
+     // 后面又：
+     report = await applyV5Enhancements(report);
+
+     // 修改为：
+     let report = await buildBaseReport(...);
+     report = await applyV5Enhancements(report);
+     ```
+
+   - 或者，如果只是要修改字段，不要重新给对象赋值，保持：
+
+     ```js
+     const report = await buildBaseReport(...);
+     // 然后对 report.xxx = ... 修改字段，避免对 report 本身重新赋值。
+     ```
+
+4）修完后重新跑：
+
+   ```bash
+   node -e "const { buildResearchReportV5 } = require('./v3_dev/services/reportService'); (async () => { const t0 = Date.now(); const r = await buildResearchReportV5('NVDA', 'equity'); console.log('DONE in', Date.now()-t0, 'ms'); })();"
+
+
+确保不再出现 "Assignment to constant variable" 驱动的异常。
+
+
+---
+
+### 👉 第二步：修掉 `risks_text` 类型错误
+
+继续发给 Replit：
+
+```text
+请修复 PDF 模板中 "(report.risks_text || []).slice(...).map is not a function" 的类型错误。
+
+1）确认字段类型：
+
+   在 v3_dev/services/reportService.js 中打印：
+
+   ```js
+   console.log('[DEBUG] typeof report.risks_text =', typeof report.risks_text);
+   console.log('[DEBUG] risks_text value =', report.risks_text);
+
+
+运行一次 buildResearchReportV5('NVDA')，确认现在 report.risks_text 是 "string" 还是 "array"。
+
+2）统一规范：
+
+类型约定：
+
+risks_text 必须始终是 数组（Array<string>）
+
+catalysts_text 也是数组
+
+如果 writerStockV3 或 RiskCatalystEngine v2 输出的是字符串，请在 assemble 阶段做标准化：
+
+if (typeof report.risks_text === 'string') {
+  report.risks_text = [report.risks_text];
+}
+if (!Array.isArray(report.risks_text)) {
+  report.risks_text = [];
+}
+
+
+3）修改 HTML 渲染模板：
+
+在 renderPage12（或渲染风险的页面）中，保证使用的是数组：
+
+const risks = Array.isArray(report.risks_text)
+    ? report.risks_text
+    : (report.risks_text ? [report.risks_text] : []);
+
+risks.slice(0, 8).map(risk => ...);
+
+
+这样即便 report.risks_text 是单条字符串，也会被包进数组，不再触发 .map is not a function。
+
+4）相同处理也应用到 catalysts_text（如果有类似问题）。
+
+5）修完后重新测试：
+
+curl -s "http://localhost:3000/v3/report/NVDA?format=json" | head -c 400
+
+
+确保调用成功，且 JSON 中的 risks_text / catalysts_text 为数组类型。
+
+再调用：
+
+curl -I "http://localhost:3000/v3/report/NVDA?format=pdf"
+
+
+确认返回 HTTP 200，不再是 500。
