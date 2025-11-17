@@ -3417,7 +3417,8 @@ function renderPage2(report, h) {
 }
 
 function renderPage3(report, h) {
-  const thesisParas = h.splitToParagraphs(report.thesis_text, 4).map(p => `<p>${p}</p>`).join('');
+  // PHASE 3 FIX: Use investment_thesis (Phase 3 enhanced field), NOT thesis_text
+  const thesisParas = h.splitToParagraphs(report.investment_thesis, 4).map(p => `<p>${p}</p>`).join('');
   
   return `
     <div class="page">
@@ -3482,7 +3483,7 @@ function renderPage4(report, h) {
   return `
     <div class="page">
       <div class="section-title">Company & Segment Overview</div>
-      ${h.splitToParagraphs(report.company_overview || report.thesis_text || report.segment_text, 3).map(p => `<p>${p}</p>`).join('')}
+      ${h.splitToParagraphs(report.company_overview, 3).map(p => `<p>${p}</p>`).join('')}
       <h3>Business Segment Breakdown</h3>
       <table>
         <thead>
