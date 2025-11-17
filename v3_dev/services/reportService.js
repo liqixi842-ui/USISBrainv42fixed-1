@@ -741,6 +741,39 @@ async function buildResearchReport(symbol, assetType = "equity") {
     
     console.log(`╚═══════════════════════════════════════════════════════════════╝\n`);
     
+    // ═════════════════════════════════════════════════════════════
+    // FINAL OVERRIDE — absolutely final write before HTML rendering
+    // ═════════════════════════════════════════════════════════════
+    console.log(`\n[FINAL_OVERRIDE] Ensuring SellSideWriter v2 outputs are not overwritten...`);
+    
+    if (report.thesis_enhanced) {
+      report.investment_thesis = report.thesis_enhanced;
+      report.thesis_text = report.thesis_enhanced;
+      console.log(`   ✓ FINAL: thesis_enhanced → investment_thesis/thesis_text (${report.thesis_enhanced.length} chars)`);
+    }
+    
+    if (report.overview_enhanced) {
+      report.company_overview = report.overview_enhanced;
+      console.log(`   ✓ FINAL: overview_enhanced → company_overview (${report.overview_enhanced.length} chars)`);
+    }
+    
+    if (report.valuation_enhanced) {
+      report.valuation_text = report.valuation_enhanced;
+      console.log(`   ✓ FINAL: valuation_enhanced → valuation_text (${report.valuation_enhanced.length} chars)`);
+    }
+    
+    if (report.industry_enhanced) {
+      report.industry_text = report.industry_enhanced;
+      console.log(`   ✓ FINAL: industry_enhanced → industry_text (${report.industry_enhanced.length} chars)`);
+    }
+    
+    if (report.macro_enhanced) {
+      report.macro_text = report.macro_enhanced;
+      console.log(`   ✓ FINAL: macro_enhanced → macro_text (${report.macro_enhanced.length} chars)`);
+    }
+    
+    console.log(`✅ [FINAL_OVERRIDE] All rendering fields locked — ready for HTML generation\n`);
+    
     // Debug: Log final report JSON for verification
     console.log(`\n[DEBUG] ResearchReport v4.0 ${symbol}:`);
     console.log(JSON.stringify(report, null, 2));
@@ -3472,7 +3505,8 @@ function renderPage4(report, h) {
 }
 
 function renderPage5(report, h) {
-  const industryCatalysts = (report.catalysts_text || []).slice(0, 4).map(c => `<li>${c.substring(0, 200)}${c.length > 200 ? '...' : ''}</li>`).join('');
+  // CORRECTED: Use industry_text instead of catalysts_text for Industry Trends
+  const industryParas = h.splitToParagraphs(report.industry_text, 4).map(p => `<li>${p.substring(0, 200)}${p.length > 200 ? '...' : ''}</li>`).join('');
   const macroParas = h.splitToParagraphs(report.macro_text, 4).map(p => `<li>${p.substring(0, 180)}${p.length > 180 ? '...' : ''}</li>`).join('');
 
   return `
@@ -3481,7 +3515,7 @@ function renderPage5(report, h) {
       <div class="two-col">
         <div class="col">
           <h3>Industry Trends</h3>
-          <ul>${industryCatalysts || '<li>Industry analysis in progress.</li>'}</ul>
+          <ul>${industryParas || '<li>Industry analysis in progress.</li>'}</ul>
         </div>
         <div class="col">
           <h3>Macro Factors</h3>
