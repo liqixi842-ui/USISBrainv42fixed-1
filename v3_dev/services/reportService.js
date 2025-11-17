@@ -664,6 +664,51 @@ async function buildResearchReport(symbol, assetType = "equity") {
     // Merge enhanced sections into report
     Object.assign(report, enhancedSections);
     
+    // ─────────────────────────────────────────────────────────────
+    // Phase 3.4: Apply SellSideWriterV2 outputs as final rendering fields
+    // ─────────────────────────────────────────────────────────────
+    console.log(`\n[Phase 3.4] Applying SellSideWriter v2 outputs to final rendering fields...`);
+    
+    // Apply thesis enhancements
+    if (enhancedSections.thesis_enhanced) {
+      report.investment_thesis = enhancedSections.thesis_enhanced;
+      report.thesis_text = enhancedSections.thesis_enhanced;
+      console.log(`   ✓ Applied thesis_enhanced (${enhancedSections.thesis_enhanced.length} chars)`);
+    }
+    
+    // Apply overview enhancements
+    if (enhancedSections.overview_enhanced) {
+      report.company_overview = enhancedSections.overview_enhanced;
+      console.log(`   ✓ Applied overview_enhanced (${enhancedSections.overview_enhanced.length} chars)`);
+    }
+    
+    // Apply valuation enhancements
+    if (enhancedSections.valuation_enhanced) {
+      report.valuation_text = enhancedSections.valuation_enhanced;
+      report.valuation_summary = enhancedSections.valuation_enhanced; // Keep both for compatibility
+      console.log(`   ✓ Applied valuation_enhanced (${enhancedSections.valuation_enhanced.length} chars)`);
+    }
+    
+    // Apply industry enhancements
+    if (enhancedSections.industry_enhanced) {
+      report.industry_text = enhancedSections.industry_enhanced;
+      console.log(`   ✓ Applied industry_enhanced (${enhancedSections.industry_enhanced.length} chars)`);
+    }
+    
+    // Apply macro enhancements
+    if (enhancedSections.macro_enhanced) {
+      report.macro_text = enhancedSections.macro_enhanced;
+      console.log(`   ✓ Applied macro_enhanced (${enhancedSections.macro_enhanced.length} chars)`);
+    }
+    
+    // Replace catalyst/risk arrays (already cleaned by Phase 3.2)
+    // Note: catalysts_text and risks_text are already cleaned by RiskCatalystCleaner
+    // SellSideWriter v2 doesn't modify these, so they remain from Phase 3.2
+    console.log(`   ✓ Using catalysts_text from RiskCatalystCleaner (${report.catalysts_text.length} items)`);
+    console.log(`   ✓ Using risks_text from RiskCatalystCleaner (${report.risks_text.length} items)`);
+    
+    console.log(`✅ [Phase 3.4] Final rendering fields updated with institutional narratives`);
+    
     // Update version metadata
     report.meta.version = "v3-dev-v4.1-phase3";
     
