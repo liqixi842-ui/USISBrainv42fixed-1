@@ -4,12 +4,7 @@
 const fetch = require('node-fetch');
 const FormData = require('form-data');
 const https = require('https');
-const { 
-  buildResearchReport,      // v1 generic API
-  buildHtmlFromReport,       // v1 generic API
-  generatePdfWithDocRaptor,  // PDF generator
-  generateMarkdownReport     // Legacy markdown (for fallback text)
-} = require('./reportService');
+const axios = require('axios');
 
 /**
  * 发送 PDF 文件到 Telegram（使用 multipart/form-data）
@@ -124,7 +119,7 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
       return;
     }
     
-    // /report command - 生成并发送研报（优先 PDF，降级文本）
+    // /report command - 调用 Replit v3_dev PDF API
     if (text.startsWith('/report')) {
       const parts = text.split(' ');
       
@@ -132,221 +127,77 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
       if (parts.length < 2 || !parts[1].trim()) {
         await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: '📊 请提供股票代码\n\n格式：/report AAPL\n\n示例：\n/report AAPL\n/report TSLA\n/report NVDA\n\n将生成完整研报发送给您（优先 PDF 格式）。'
+          text: '📊 请提供股票代码\n\n格式：/report AAPL\n\n示例：\n/report AAPL\n/report TSLA\n/report NVDA\n\n将通过 Replit v3_dev API 生成完整 PDF 研报。'
         });
         return;
       }
       
       const symbol = parts[1].trim().toUpperCase();
       console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      console.log(`📊 [DEV_BOT] /report ${symbol} - Starting 3-stage pipeline`);
+      console.log(`📊 [DEV_BOT] /report ${symbol} - Calling Replit v3_dev PDF API`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
       
       let statusMsg = null;
+      const REPLIT_API_URL = 'https://e6d61ff9-a9b9-4be6-8fc3-d739698a5bae-00-3wsh3l1cosvt.pike.replit.dev';
       
       try {
         // Send initial status message
         statusMsg = await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: `🔬 正在生成 ${symbol} 研报（v3-dev）\n\n⏳ 阶段 1/3：生成研报内容...`
+          text: `🔬 正在生成 ${symbol} 研报\n\n⏳ 正在调用 Replit v3_dev PDF API...\n\n(这可能需要 60-120 秒)`
         });
         
-        // ═══════════════════════════════════════════════════════════════
-        // 【阶段 1】生成研报内容（CRITICAL - 不可降级）
-        // ═══════════════════════════════════════════════════════════════
-        console.log(`📡 [DEV_BOT] /report: Stage 1 - Generating ResearchReport v1 for ${symbol}...`);
+        console.log(`📡 [DEV_BOT] Calling Replit API: ${REPLIT_API_URL}/v3/report/${symbol}?format=pdf`);
         
-        // Use generic buildResearchReport (works for ANY symbol)
-        const report = await buildResearchReport(symbol, 'equity');
+        // Call Replit v3_dev PDF API
+        const response = await axios.get(
+          `${REPLIT_API_URL}/v3/report/${symbol}?format=pdf&asset_type=equity`,
+          { 
+            responseType: 'arraybuffer',
+            timeout: 120000  // 120 seconds timeout
+          }
+        );
         
-        console.log(`✅ [DEV_BOT] /report: Stage 1 COMPLETE - ResearchReport v1 generated for ${symbol}`);
-        console.log(`   ├─ Name: ${report.name}`);
-        console.log(`   ├─ Rating: ${report.rating}`);
-        console.log(`   ├─ Model used: ${report.meta.model}`);
-        console.log(`   └─ Latency: ${report.meta.latency_ms}ms\n`);
+        const pdfBuffer = Buffer.from(response.data);
         
-        // 生成 Markdown 文本版（无论是否发 PDF，都先生成文本版作为保底）
-        // Convert ResearchReport v1 to legacy format for generateMarkdownReport
-        const legacyReport = {
-          symbol: report.symbol,
-          company_name: report.name,
-          rating: report.rating,
-          horizon: report.horizon,
-          investment_summary: report.summary_text,
-          thesis: [report.thesis_text],
-          catalysts: [report.catalysts_text],
-          risks: [report.risks_text],
-          technical_view: report.tech_view_text,
-          action: report.action_text,
-          price_info: {
-            current: report.price.last,
-            change: report.price.change_abs,
-            change_percent: report.price.change_pct,
-            high: report.price.high_1d,
-            low: report.price.low_1d,
-            volume: 'N/A'
-          },
-          generated_at: report.meta.generated_at,
-          model_used: report.meta.model,
-          latency_ms: report.meta.latency_ms,
-          disclaimer: '本报告基于公开市场数据生成，仅供参考，不构成投资建议。'
-        };
-        
-        const mdReport = generateMarkdownReport(symbol, legacyReport);
-        console.log(`   └─ Markdown length: ${mdReport.length} chars\n`);
+        console.log(`✅ [DEV_BOT] PDF received from Replit API`);
+        console.log(`   ├─ Size: ${(pdfBuffer.length / 1024).toFixed(1)} KB`);
+        console.log(`   ├─ Status: ${response.status}`);
+        console.log(`   └─ Content-Type: ${response.headers['content-type']}\n`);
         
         // Update status
         await telegramAPI('editMessageText', {
           chat_id: chatId,
           message_id: statusMsg.result.message_id,
-          text: `🔬 正在生成 ${symbol} 研报（v3-dev）\n\n✅ 阶段 1/3：研报内容生成完成\n⏳ 阶段 2/3：尝试生成 PDF...`
+          text: `🔬 正在生成 ${symbol} 研报\n\n✅ PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 正在发送 PDF...`
         });
         
-        // ═══════════════════════════════════════════════════════════════
-        // 【阶段 2】尝试生成 PDF（OPTIONAL - 尽力而为）
-        // ═══════════════════════════════════════════════════════════════
-        let pdfBuffer = null;
-        let pdfOk = false;
+        // Send PDF to user
+        const safeFilename = `${symbol}-USIS-Research.pdf`;
+        const safeCaption = `📊 USIS Research Report - ${symbol}\n\nGenerated via Replit v3_dev API\nSource: ${REPLIT_API_URL}`;
         
-        console.log(`📄 [DEV_BOT] /report: Stage 2 - Attempting PDF generation for ${symbol}...`);
-        console.log(`   └─ Calling DocRaptor API...`);
+        console.log(`📤 [DEV_BOT] Sending PDF to Telegram...`);
+        console.log(`   └─ Filename: ${safeFilename}`);
         
-        try {
-          // Use generic buildHtmlFromReport (consumes ResearchReport v1)
-          const html = buildHtmlFromReport(report);
-          pdfBuffer = await generatePdfWithDocRaptor(symbol, html);
-          
-          // 严格验证 PDF Buffer
-          if (pdfBuffer && Buffer.isBuffer(pdfBuffer) && pdfBuffer.length > 0) {
-            pdfOk = true;
-            console.log(`✅ [DEV_BOT] /report: DocRaptor PDF OK for ${symbol}, size: ${pdfBuffer.length} bytes (${(pdfBuffer.length / 1024).toFixed(1)} KB)`);
-            console.log(`   └─ PDF validation: Buffer=${Buffer.isBuffer(pdfBuffer)}, Length=${pdfBuffer.length}\n`);
-          } else {
-            throw new Error(`PDF buffer invalid: isBuffer=${Buffer.isBuffer(pdfBuffer)}, length=${pdfBuffer?.length || 0}`);
-          }
-          
-        } catch (pdfError) {
-          pdfOk = false;
-          console.error(`⚠️ [DEV_BOT] /report: DocRaptor PDF FAILED for ${symbol}, reason: ${pdfError.message}`);
-          console.error(`   └─ Will fallback to Markdown delivery\n`);
-          pdfBuffer = null; // Ensure fallback
-        }
+        // Use multipart/form-data to send PDF
+        await sendPDFDocument(chatId, pdfBuffer, safeFilename, safeCaption, botToken);
         
-        // ═══════════════════════════════════════════════════════════════
-        // 【阶段 3】发送给用户（优先 PDF，降级 Markdown）
-        // ═══════════════════════════════════════════════════════════════
-        console.log(`📤 [DEV_BOT] /report: Stage 3 - Delivering report to user...`);
-        console.log(`   └─ pdfOk=${pdfOk}, pdfBuffer exists=${!!pdfBuffer}, length=${pdfBuffer?.length || 0}`);
+        // Delete status message
+        await telegramAPI('deleteMessage', {
+          chat_id: chatId,
+          message_id: statusMsg.result.message_id
+        });
         
-        let pdfSent = false;
-        
-        if (pdfOk && pdfBuffer && pdfBuffer.length > 0) {
-          // ─────────────────────────────────────────────────────────────
-          // Path A: 尝试发送 PDF 文件（DocRaptor 成功生成）
-          // ─────────────────────────────────────────────────────────────
-          console.log(`   └─ Path: PDF delivery (DocRaptor generated ${(pdfBuffer.length / 1024).toFixed(1)} KB)`);
-          
-          try {
-            await telegramAPI('editMessageText', {
-              chat_id: chatId,
-              message_id: statusMsg.result.message_id,
-              text: `🔬 正在生成 ${symbol} 研报（v3-dev）\n\n✅ 阶段 1/3：研报内容生成完成\n✅ 阶段 2/3：PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB - DocRaptor 测试模式)\n⏳ 阶段 3/3：正在发送 PDF...`
-            });
-            
-            // 生成安全的文件名和 caption（不含特殊字符）
-            const safeFilename = `${symbol}-USIS-Research.pdf`;  // 使用连字符，避免下划线
-            const safeCaption = `USIS Research Report ${symbol}\n\nRating: ${report.rating}\nModel: ${report.meta.model}\nLatency: ${report.meta.latency_ms}ms\n\nDocRaptor PDF Test Mode`;
-            
-            console.log(`   └─ Calling Telegram sendDocument API (multipart/form-data)...`);
-            console.log(`   └─ [DEV_BOT] Sending PDF with filename: ${safeFilename}`);
-            console.log(`   └─ [DEV_BOT] Caption length: ${safeCaption.length} chars`);
-            console.log(`   └─ [DEV_BOT] Buffer size: ${pdfBuffer.length} bytes`);
-            
-            // 使用 multipart/form-data 发送 PDF
-            await sendPDFDocument(chatId, pdfBuffer, safeFilename, safeCaption, botToken);
-            
-            await telegramAPI('deleteMessage', {
-              chat_id: chatId,
-              message_id: statusMsg.result.message_id
-            });
-            
-            pdfSent = true;
-            console.log(`✅ [DEV_BOT] /report: PDF sent for ${symbol}`);
-            console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
-            
-          } catch (sendPdfError) {
-            // PDF 发送失败，降级到 Markdown（不影响整体流程）
-            console.error(`⚠️ [DEV_BOT] /report: Stage 3 PDF delivery FAILED for ${symbol}`);
-            console.error(`   ├─ Error: ${sendPdfError.message}`);
-            console.error(`   └─ Falling back to Markdown delivery\n`);
-            pdfOk = false; // 标记 PDF 发送失败
-          }
-        } else {
-          console.log(`   └─ Skipping PDF delivery: pdfOk=${pdfOk}`);
-        }
-        
-        // ─────────────────────────────────────────────────────────────
-        // Path B: 发送 Markdown 文本版（PDF 不可用或发送失败时的保底方案）
-        // ─────────────────────────────────────────────────────────────
-        if (!pdfSent) {
-          const reason = pdfOk ? 'Telegram delivery failed' : 'DocRaptor generation failed';
-          console.log(`   └─ Path: Markdown fallback (${reason})`);
-          
-          await telegramAPI('editMessageText', {
-            chat_id: chatId,
-            message_id: statusMsg.result.message_id,
-            text: `⚠️ PDF ${pdfOk ? '发送失败（Telegram限制）' : '生成失败'}\n\n正在为您发送完整文本版研报...`
-          });
-          
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          
-          await telegramAPI('deleteMessage', {
-            chat_id: chatId,
-            message_id: statusMsg.result.message_id
-          });
-          
-          // 添加降级说明前缀
-          const fallbackPrefix = `⚠️ PDF ${pdfOk ? '发送异常（Telegram限制）' : '服务异常'}，以下是完整文本版研报：\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-          const fullReport = fallbackPrefix + mdReport;
-          
-          // Split into chunks (Telegram max: 4096 chars)
-          const chunks = [];
-          const maxLen = 4000;
-          let remaining = fullReport;
-          
-          while (remaining.length > maxLen) {
-            let splitPos = remaining.lastIndexOf('\n', maxLen);
-            if (splitPos === -1) splitPos = maxLen;
-            chunks.push(remaining.substring(0, splitPos));
-            remaining = remaining.substring(splitPos).trim();
-          }
-          if (remaining.length > 0) chunks.push(remaining);
-          
-          // Send all chunks
-          for (let i = 0; i < chunks.length; i++) {
-            await telegramAPI('sendMessage', {
-              chat_id: chatId,
-              text: chunks[i]
-            });
-            if (i < chunks.length - 1) {
-              await new Promise(r => setTimeout(r, 500));
-            }
-          }
-          
-          console.log(`✅ [DEV_BOT] /report: Markdown fallback sent for ${symbol} (${chunks.length} parts, reason: ${reason})`);
-          console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
-        }
+        console.log(`✅ [DEV_BOT] /report: PDF sent successfully for ${symbol}`);
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
         
       } catch (error) {
-        // ═══════════════════════════════════════════════════════════════
-        // 【致命错误】只有在阶段 1（内容生成）失败时才会到这里
-        // ═══════════════════════════════════════════════════════════════
-        console.error(`❌ [DEV_BOT] /report: FATAL ERROR - Content generation failed for ${symbol}`);
+        console.error(`❌ [DEV_BOT] /report: Failed for ${symbol}`);
         console.error(`   ├─ Error: ${error.message}`);
         console.error(`   └─ Stack: ${error.stack}\n`);
         console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
         
-        // 删除状态消息（如果存在）
+        // Delete status message if exists
         if (statusMsg?.result?.message_id) {
           try {
             await telegramAPI('deleteMessage', {
@@ -358,10 +209,24 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
           }
         }
         
-        // 只在内容生成阶段失败时，才发送"研报生成失败"
+        // Send error message
+        let errorMsg = `❌ 研报生成失败\n\n标的: ${symbol}\n\n`;
+        
+        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+          errorMsg += `原因: API 请求超时（可能是股票代码不存在或 AI 服务繁忙）\n\n建议：\n• 检查股票代码是否正确\n• 稍后重试`;
+        } else if (error.response) {
+          errorMsg += `原因: Replit API 返回错误 (${error.response.status})\n\n错误信息: ${error.response.statusText}`;
+        } else if (error.request) {
+          errorMsg += `原因: 无法连接到 Replit API\n\n建议：\n• 检查 Replit 服务是否在运行\n• 检查网络连接`;
+        } else {
+          errorMsg += `原因: ${error.message}`;
+        }
+        
+        errorMsg += `\n\n(v3-dev 测试版本 - Replit API)`;
+        
         await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: `❌ 研报生成失败\n\n标的: ${symbol}\n\n原因: 无法从数据源获取研报内容。这可能是由于：\n• 股票代码不存在\n• AI 服务暂时不可用\n• 网络连接问题\n\n请稍后重试，或尝试其他股票代码。\n\n(v3-dev 测试版本)`
+          text: errorMsg
         });
       }
       return;
