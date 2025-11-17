@@ -720,6 +720,19 @@ async function buildResearchReport(symbol, assetType = "equity") {
     console.log(`overview_after_swv2=${(report.overview_enhanced || '').substring(0, 300)}`);
     console.log(`catalysts_after_swv2=${JSON.stringify((report.catalysts_text || []).slice(0, 3))}`);
     console.log(`risks_after_swv2=${JSON.stringify((report.risks_text || []).slice(0, 3))}`);
+    
+    // ═════════════════════════════════════════════════════════════
+    // FINAL RENDERING FIELDS VERIFICATION (用于确认 HTML 渲染字段)
+    // ═════════════════════════════════════════════════════════════
+    console.log(`\n[FINAL_RENDERING_FIELDS]`);
+    console.log(`report.investment_thesis (前300字):\n${(report.investment_thesis || 'NOT SET').substring(0, 300)}\n`);
+    console.log(`report.company_overview (前300字):\n${(report.company_overview || 'NOT SET').substring(0, 300)}\n`);
+    console.log(`report.industry_text (前300字):\n${(report.industry_text || 'NOT SET').substring(0, 300)}\n`);
+    console.log(`report.valuation_text (前300字):\n${(report.valuation_text || 'NOT SET').substring(0, 300)}\n`);
+    console.log(`report.macro_text (前300字):\n${(report.macro_text || 'NOT SET').substring(0, 300)}\n`);
+    console.log(`report.thesis_text (前300字，HTML fallback):\n${(report.thesis_text || 'NOT SET').substring(0, 300)}\n`);
+    console.log(`[/FINAL_RENDERING_FIELDS]\n`);
+    
     console.log(`thesis_final=${(report.investment_thesis || report.thesis_text || '').substring(0, 300)}`);
     console.log(`overview_final=${(report.company_overview || '').substring(0, 300)}`);
     console.log(`catalysts_final=${JSON.stringify((report.catalysts_text || []).slice(0, 3))}`);
@@ -3436,7 +3449,7 @@ function renderPage4(report, h) {
   return `
     <div class="page">
       <div class="section-title">Company & Segment Overview</div>
-      ${h.splitToParagraphs(report.thesis_text || report.segment_text, 3).map(p => `<p>${p}</p>`).join('')}
+      ${h.splitToParagraphs(report.company_overview || report.thesis_text || report.segment_text, 3).map(p => `<p>${p}</p>`).join('')}
       <h3>Business Segment Breakdown</h3>
       <table>
         <thead>
