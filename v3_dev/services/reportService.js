@@ -623,6 +623,9 @@ async function buildResearchReport(symbol, assetType = "equity") {
     // ─────────────────────────────────────────────────────────────
     const refinedTexts = await TasteTruthLayer.process(report);
     
+    console.log(`\n[DEBUG] TasteTruthLayer.process() output keys: ${Object.keys(refinedTexts).join(', ')}`);
+    console.log(`[DEBUG] TasteTruthLayer thesis_text (first 200 chars): ${(refinedTexts.thesis_text || '').substring(0, 200)}`);
+    
     // Update report with refined text sections
     report.summary_text = refinedTexts.summary_text;
     report.thesis_text = refinedTexts.thesis_text;
@@ -655,11 +658,28 @@ async function buildResearchReport(symbol, assetType = "equity") {
     console.log(`\n[Phase 3.3] SellSideWriter v2.0 Enhanced Narratives...`);
     const enhancedSections = await SellSideWriter.enhance(report);
     
+    console.log(`\n[DEBUG] SellSideWriter.enhance() output keys: ${Object.keys(enhancedSections || {}).join(', ')}`);
+    console.log(`[DEBUG] SellSideWriter thesis_enhanced (first 200 chars): ${(enhancedSections.thesis_enhanced || '').substring(0, 200)}`);
+    
     // Merge enhanced sections into report
     Object.assign(report, enhancedSections);
     
     // Update version metadata
     report.meta.version = "v3-dev-v4.1-phase3";
+    
+    // ═════════════════════════════════════════════════════════════
+    // DEBUG: Phase 3 Output Diagnostics
+    // ═════════════════════════════════════════════════════════════
+    console.log(`\n[DEBUG_PHASE3_OUTPUT]`);
+    console.log(`thesis_after_swv2=${(report.thesis_enhanced || '').substring(0, 300)}`);
+    console.log(`overview_after_swv2=${(report.overview_enhanced || '').substring(0, 300)}`);
+    console.log(`catalysts_after_swv2=${JSON.stringify((report.catalysts_text || []).slice(0, 3))}`);
+    console.log(`risks_after_swv2=${JSON.stringify((report.risks_text || []).slice(0, 3))}`);
+    console.log(`thesis_final=${(report.investment_thesis || report.thesis_text || '').substring(0, 300)}`);
+    console.log(`overview_final=${(report.company_overview || '').substring(0, 300)}`);
+    console.log(`catalysts_final=${JSON.stringify((report.catalysts_text || []).slice(0, 3))}`);
+    console.log(`risks_final=${JSON.stringify((report.risks_text || []).slice(0, 3))}`);
+    console.log(`[/DEBUG_PHASE3_OUTPUT]\n`);
     
     console.log(`╚═══════════════════════════════════════════════════════════════╝\n`);
     
