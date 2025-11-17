@@ -1,0 +1,164 @@
+你现在执行 USIS Research Brain 的下一阶段升级任务：
+
+🎯 目标
+
+在 v3-dev 研报流水线中新增：
+
+SellSideWriter（卖方写作层）
+
+把 HistoryChartEngine 生成的图表真正嵌入 HTML/PDF 模板，去掉 Placeholder。
+
+一、创建 SellSideWriter 模块
+1）新建模块文件
+
+请在 v3_dev 中创建：
+
+v3_dev/services/sellSideWriter.js
+
+职责：
+基于 已经准备好的结构化数据（FinancialDataBroker + multi-model output），生成“机构级、卖方风格”的段落文本，而不是模板瞎写。
+
+2）输入 / 输出约定
+
+输入建议采用当前 report 主对象的一个简化视图，例如：
+
+async function enhanceReportWithSellSideTone(report) {
+  // report 包含：
+  // - symbol, price, target, upside
+  // - keyMetrics (PE, PS, margins, ROE, ROA)
+  // - financials (revenue_ttm, eps_ttm, CAGR)
+  // - history (revenue_5y, eps_5y)
+  // - peerComparison
+  // - scenarios (bull/base/bear)
+  // - aiDraftTexts (各模型原始草稿，可选)
+}
+
+
+输出：
+
+返回一个 新的 report 文本对象，至少覆盖以下段落字段：
+
+investmentThesis
+
+companyOverview
+
+industryAndMacro
+
+valuationCommentary
+
+peerComparisonCommentary
+
+financialHealthSummary
+
+keyCatalystsText
+
+keyRisksText
+
+technicalAnalysisText
+
+investmentStrategyText
+
+analystViewText
+
+要求：
+
+每一段都要“拿数据说话”：
+
+明确引用 PE、PS、margin、CAGR、目标价、上行空间等
+
+禁止使用“huge / massive / very strong / extremely good”这类水词
+
+使用“卖方语气”，例如：
+
+“we see”, “we believe”, “we think”, “our base case assumes…”
+
+避免“纯 chatGPT 口水句”
+
+删除或改写所有内部字眼：
+
+不再出现 “DeepSeek’s model…”, “our AI engine says…”
+
+可以内部调用你现有的多模型 pipeline，但最终由一个统一的 SellSideWriter.enhance() 输出一版干净文本。
+
+3）多模型协作建议（可复用）
+
+如有需要，可在模块内实现类似：
+
+// pseudo
+draftFromGPT = callLLM('gpt', structuredDataPrompt)
+draftFromClaude = callLLM('claude', structuredDataPrompt)
+merged = mergeAndRefine(draftFromGPT, draftFromClaude, metrics)
+return merged
+
+
+但请确保：
+
+最终输出的段落一定是基于 report.metrics / report.financials / report.history，而不是模型随便编数字。
+
+二、在 reportService 中接入 SellSideWriter
+
+在 v3_dev/services/reportService.js 中：
+
+在完成数据填充（FinancialDataBroker）和场景构建之后、TasteTruthLayer 之前，插入一层：
+
+const sellSideReport = await SellSideWriter.enhanceReportWithSellSideTone(report);
+const refinedTexts = await TasteTruthLayer.process(sellSideReport);
+
+
+确保 TasteTruthLayer 处理的是 SellSideWriter 输出的文本（进一步去重/清洗）。
+
+在 debug 输出中增加：
+
+[SellSideWriter] enabled
+[SellSideWriter] sections rewritten: InvestmentThesis, CompanyOverview, ...
+
+三、将图表嵌入 HTML/PDF 模板
+
+目前 HistoryChartEngine 已成功生成：
+
+revenue_5y_chart_url
+
+eps_5y_chart_url
+
+combined_trend_chart_url
+
+但在报告里仍显示为“Placeholder”。
+
+请在 HTML 模板 / PDF 渲染层做以下修改（路径按当前项目真实位置来，例如 v3_dev/templates/report.html or v3_dev/views/report.ejs）：
+
+找到 “Financial Trends / Revenue Last 5 Years / EPS Last 5 Years” 区域，把：
+
+Revenue Chart Placeholder (Historical data: 5 years)
+EPS Chart Placeholder (Historical data: 5 years)
+
+
+替换为：
+
+<img src="{{revenue_5y_chart_url}}" alt="Revenue last 5 years" />
+<img src="{{eps_5y_chart_url}}" alt="EPS last 5 years" />
+
+
+如有 combined chart，也可在附录或 Financial Trends 部分加一张：
+
+<img src="{{combined_trend_chart_url}}" alt="Revenue & EPS trend (5Y)" />
+
+
+确保 DocRaptor 能正确下载这些图表 URL（如需，将 QuickChart URL 设为 HTTPS 并可公网访问）。
+
+如果某个图表 URL 为 null，则显示一个简短文字：
+“Historical chart currently unavailable”
+不要再用 Placeholder。
+
+四、完成后请输出确认
+
+集成完成后，请在日志和对话中输出一句话：
+
+SellSideWriter integrated + charts embedded. Ready for new NVDA institutional-style report test.
+
+
+不要在这一阶段调整 PDF 封面结构，也不要改动现有路由。
+本任务只关注：
+
+卖方写作层
+
+图表真正嵌入

@@ -18,6 +18,7 @@ const fetch = require('node-fetch');
 const TasteTruthLayer = require('./tasteTruthLayer');
 const FinancialDataBroker = require('./financialDataBroker');
 const HistoryChartEngine = require('./historyChartEngine');
+const SellSideWriter = require('./sellSideWriter');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
@@ -609,6 +610,11 @@ async function buildResearchReport(symbol, assetType = "equity") {
     };
     
     console.log(`✅ [Phase 3] ResearchReport v2.0 complete`);
+    
+    // ─────────────────────────────────────────────────────────────
+    // Phase 3.5: Sell-Side Writer (Professional Narrative Layer)
+    // ─────────────────────────────────────────────────────────────
+    await SellSideWriter.enhanceReportWithSellSideTone(report);
     
     // ─────────────────────────────────────────────────────────────
     // Phase 4: v4.0 Taste + Truth Professional Correction Layer
@@ -3525,17 +3531,30 @@ function renderPage9(report, h) {
 }
 
 function renderPage10(report, h) {
+  // Render revenue chart
+  const revenueChartHtml = report.charts?.revenue_5y 
+    ? `<img src="${report.charts.revenue_5y}" alt="Revenue Last 5 Years" style="width: 100%; max-width: 800px; height: auto; border: 1px solid #ddd; border-radius: 4px;" />`
+    : `<div class="chart-placeholder">Historical revenue chart currently unavailable (${report.fundamentals.revenue_5y?.length || 0} data points available)</div>`;
+  
+  // Render EPS chart
+  const epsChartHtml = report.charts?.eps_5y
+    ? `<img src="${report.charts.eps_5y}" alt="EPS Last 5 Years" style="width: 100%; max-width: 800px; height: auto; border: 1px solid #ddd; border-radius: 4px;" />`
+    : `<div class="chart-placeholder">Historical EPS chart currently unavailable (${report.fundamentals.eps_5y?.length || 0} data points available)</div>`;
+  
+  // Optionally render combined chart if available
+  const combinedChartHtml = report.charts?.financial_trends
+    ? `<h3>Combined Financial Performance</h3>
+       <img src="${report.charts.financial_trends}" alt="Financial Trends (Revenue & EPS)" style="width: 100%; max-width: 800px; height: auto; border: 1px solid #ddd; border-radius: 4px; margin-top: 15px;" />`
+    : '';
+  
   return `
     <div class="page">
       <div class="section-title">Financial Trends</div>
       <h3>Revenue Last 5 Years</h3>
-      <div class="chart-placeholder">
-        Revenue Chart Placeholder<br/>(Historical data: ${report.fundamentals.revenue_5y?.length || 0} years)
-      </div>
+      ${revenueChartHtml}
       <h3>EPS Last 5 Years</h3>
-      <div class="chart-placeholder">
-        EPS Chart Placeholder<br/>(Historical data: ${report.fundamentals.eps_5y?.length || 0} years)
-      </div>
+      ${epsChartHtml}
+      ${combinedChartHtml}
       <div class="footer">
         <span>USIS Research</span>
         <span>Page 10</span>
