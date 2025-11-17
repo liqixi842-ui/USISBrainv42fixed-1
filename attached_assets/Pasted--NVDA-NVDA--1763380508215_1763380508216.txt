@@ -1,0 +1,156 @@
+你现在执行一个任务：
+
+不要再改代码，只给我一份“最新 NVDA 研报从头到尾是怎么生成的”内部报告。
+我只要诊断，不要修复。
+
+请你基于当前代码（最新版本）对 NVDA 报告 做一次完整追踪，并输出一个结构化诊断，包括：
+
+【1】最终 HTML & PDF 渲染链路报告
+
+调用你现在的主流程，生成 NVDA 报告对象、HTML 和（如果有）PDF：
+
+const report = await buildResearchReport('NVDA', 'equity');
+
+const html = buildHtmlFromReport(report);
+
+输出一个精简版的 HTML 诊断（不要全量打印，只要结构关键信息）：
+
+HTML 长度
+
+是否包含 <img 标签
+
+quickchart.io 出现次数
+
+是否出现 Technical Analysis、Support:、Resistance: 字样
+
+是否还能看到 Revenue Chart Placeholder 这类老文案
+
+例如打印：
+
+=== HTML_DIAG ===
+length=xxxxx
+has_img=true/false
+quickchart_count=N
+has_technical_section=true/false
+has_support_label=true/false
+has_placeholder_text=...
+=== END_HTML_DIAG ===
+
+
+对 真正传给 DocRaptor 的 HTML 再做一份同样的检查，并明确告诉我：
+
+DocRaptor 用的 HTML 是 buildHtmlFromReport(report) 的结果
+
+还是某个旧模板（请写出函数名和文件路径）
+
+请把这部分诊断写成一段清晰文本，例如：
+
+[PDF_CHAIN_REPORT]
+html_builder_used = buildHtmlFromReport (or 其它)
+docraptor_input_uses_same_html = true/false
+reason_if_false = ...
+quickchart_in_payload = N
+support_resistance_in_payload = ...
+placeholder_in_payload = true/false
+[/PDF_CHAIN_REPORT]
+
+【2】关键文本字段的“源头对比”报告
+
+请分别打印以下字段在 三个阶段 的内容（各取前 300 字就行）：
+
+investment_thesis
+
+company_overview
+
+catalysts_text
+
+risks_text
+
+technical_text（技术分析那一段）
+
+三个阶段分别是：
+
+SellSideWriter 生成之后、TasteTruthLayer 之前
+
+TasteTruthLayer 处理之后（最终 report 对象里的文本）
+
+HTML 里真正渲染的文本片段
+
+输出格式示例：
+
+[TEXT_FLOW_REPORT]
+
+--- investment_thesis ---
+[1] after_SellSideWriter:
+"...."
+
+[2] after_TasteTruthLayer:
+"...."
+
+[3] in_HTML:
+"...."
+
+--- company_overview ---
+...
+
+--- catalysts_text ---
+...
+
+--- risks_text ---
+...
+
+--- technical_text ---
+...
+
+[/TEXT_FLOW_REPORT]
+
+
+要求：
+
+尤其标出哪里还有 .. 双点号、in legal expenses..、$1.. 这种句子。
+
+如果是 TasteTruthLayer 把数字/年份删掉，导致句子断掉，请在报告里写明：
+broken_by = TasteTruthLayer 或其它模块。
+
+【3】TechnicalEngine 实际使用情况报告
+
+请输出：
+
+report.techs 对象的真实内容（support_level / resistance_level）
+
+HTML 中 Technical Analysis 区块的真实文本片段（去掉 HTML 标签）
+
+如果 HTML 里还是 Support: N/A / Resistance: N/A，请写明：
+
+是模板里写死了 N/A？
+
+还是没用 report.techs，而用的旧字段？
+
+相关模板函数/文件路径/行号。
+
+用类似格式：
+
+[TECH_ENGINE_REPORT]
+report.techs = { ... }
+html_tech_section_text = "..."
+uses_report_techs = true/false
+reason_if_false = ...
+[/TECH_ENGINE_REPORT]
+
+【4】最后给我一个总总结
+
+请只做总结，不要改代码：
+
+[USIS_INTERNAL_SUMMARY]
+1) PDF uses html_builder = ...
+2) Charts in final HTML: yes/no, count=N
+3) Technical levels in final HTML: yes/no, values=...
+4) Placeholder texts still present: ...
+5) Double dots ("..") still present in fields: [thesis/overview/risks/catalysts/technical/...]
+6) Main root causes that FINAL PDF 仍然不“像机构”的内部原因是：
+   - ...
+   - ...
+[/USIS_INTERNAL_SUMMARY]
+
+
+重要：这次任务只做“诊断输出”，不要修代码。
