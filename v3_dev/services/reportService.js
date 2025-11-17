@@ -3329,7 +3329,7 @@ function renderPage1(report, h) {
   return `
     <div class="page">
       <div style="text-align: center; margin-top: 100px;">
-        <h1 style="font-size: 32pt; margin-bottom: 16px;">USIS Research Report</h1>
+        <h1 style="font-size: 32pt; margin-bottom: 16px;">${report.meta.brand} Research Report</h1>
         <h2 style="font-size: 22pt; color: #555; margin-bottom: 24px;">${report.symbol} – ${report.name || report.symbol}</h2>
         <div style="margin: 24px 0;">
           <span class="tag ${h.ratingClass[report.rating] || 'tag-hold'}">${report.rating || 'HOLD'}</span>
@@ -3342,10 +3342,14 @@ function renderPage1(report, h) {
           <p><strong>Horizon:</strong> ${report.horizon || '12M'}</p>
           <p><strong>Market Cap:</strong> ${h.fmtLarge(report.valuation.market_cap)}</p>
         </div>
+        <div style="margin-top: 60px; font-size: 10pt; color: #666;">
+          <p><strong>Firm:</strong> ${report.meta.firm}</p>
+          <p><strong>Analyst:</strong> ${report.meta.analyst}</p>
+        </div>
       </div>
       <div class="footer">
         <span>Generated: ${new Date(report.meta.generated_at).toLocaleDateString()}</span>
-        <span>Model: ${report.meta.model} | Version: ${report.meta.version}</span>
+        <span>${report.meta.brand}</span>
       </div>
     </div>
   `;
@@ -3384,7 +3388,7 @@ function renderPage2(report, h) {
         </div>
       </div>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 2</span>
       </div>
     </div>
@@ -3428,7 +3432,7 @@ function renderPage3(report, h) {
         </tr>
       </table>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 3</span>
       </div>
     </div>
@@ -3473,7 +3477,7 @@ function renderPage4(report, h) {
         <tbody>${segmentsTable}</tbody>
       </table>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 4</span>
       </div>
     </div>
@@ -3499,7 +3503,7 @@ function renderPage5(report, h) {
         </div>
       </div>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 5</span>
       </div>
     </div>
@@ -3535,7 +3539,7 @@ function renderPage6(report, h) {
       <h3>Valuation Commentary</h3>
       ${h.splitToParagraphs(report.valuation_text, 3).map(p => `<p>${p}</p>`).join('')}
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 6</span>
       </div>
     </div>
@@ -3570,7 +3574,7 @@ function renderPage7(report, h) {
       </table>
       ${h.splitToParagraphs(report.valuation_text, 2).map(p => `<p>${p}</p>`).join('')}
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 7</span>
       </div>
     </div>
@@ -3621,7 +3625,7 @@ function renderPage8(report, h) {
       <h3>Comparative Analysis</h3>
       ${h.splitToParagraphs(report.valuation_text || report.thesis_text, 2).map(p => `<p>${p}</p>`).join('')}
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 8</span>
       </div>
     </div>
@@ -3651,7 +3655,7 @@ function renderPage9(report, h) {
       <h3>Financial Health Summary</h3>
       ${h.splitToParagraphs(report.valuation_text || report.thesis_text, 3).map(p => `<p>${p}</p>`).join('')}
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 9</span>
       </div>
     </div>
@@ -3684,7 +3688,7 @@ function renderPage10(report, h) {
       ${epsChartHtml}
       ${combinedChartHtml}
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 10</span>
       </div>
     </div>
@@ -3703,7 +3707,7 @@ function renderPage11(report, h) {
       <div class="section-title">Key Catalysts</div>
       <ul style="line-height: 1.6;">${catalystItems}</ul>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 11</span>
       </div>
     </div>
@@ -3722,7 +3726,7 @@ function renderPage12(report, h) {
       <div class="section-title">Key Risks</div>
       <ul style="line-height: 1.6;">${riskItems}</ul>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 12</span>
       </div>
     </div>
@@ -3773,7 +3777,7 @@ function renderPage13(report, h) {
       ${h.splitToParagraphs(techTextContent, 3).map(p => `<p>${p}</p>`).join('')}
       ${technicalDataHtml}
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 13</span>
       </div>
     </div>
@@ -3825,7 +3829,7 @@ function renderPage14(report, h) {
       <h3>Action Recommendations</h3>
       ${h.splitToParagraphs(report.action_text || 'Position sizing should reflect individual risk tolerance and portfolio construction goals.', 2).map(p => `<p>${p}</p>`).join('')}
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 14</span>
       </div>
     </div>
@@ -3860,7 +3864,7 @@ function renderPage15(report, h) {
         <tr><td>ROA</td><td>${h.fmt(report.fundamentals.roa, 2, '%')}</td></tr>
       </table>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 15</span>
       </div>
     </div>
@@ -3882,7 +3886,7 @@ function renderPage16(report, h) {
       <strong>Model:</strong> ${report.meta.model}<br/>
       <strong>Generated:</strong> ${new Date(report.meta.generated_at).toLocaleString()}</p>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 16</span>
       </div>
     </div>
@@ -3918,7 +3922,7 @@ function renderPage17(report, h) {
       <strong>Copyright Notice:</strong> This report is proprietary and confidential. Reproduction or distribution without express written consent from USIS is prohibited. © ${new Date().getFullYear()} USIS Research. All rights reserved.
       </p>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 17</span>
       </div>
     </div>
@@ -3948,7 +3952,7 @@ function renderPage18(report, h) {
         <tr><td><strong>MACD</strong></td><td>Moving Average Convergence Divergence, trend-following indicator.</td></tr>
       </table>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 18</span>
       </div>
     </div>
@@ -3989,7 +3993,7 @@ function renderPage19(report, h) {
       <h3>Time Horizon</h3>
       <p>Unless otherwise specified, price targets and ratings reflect a 12-month investment horizon. Short-term volatility may differ from our medium-term view.</p>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 19</span>
       </div>
     </div>
@@ -4010,12 +4014,16 @@ function renderPage20(report, h) {
       ${h.splitToParagraphs(report.summary_text, 4).map(p => `<p>${p}</p>`).join('')}
       <h3>Conclusion</h3>
       <p>${report.thesis_text?.substring(0, 500) || 'This report provides a comprehensive analysis of the investment opportunity based on fundamental, technical, and valuation factors. Investors should carefully consider their individual risk tolerance and investment objectives.'}${(report.thesis_text?.length || 0) > 500 ? '...' : ''}</p>
-      <div style="margin-top: 40px; text-align: center; font-size: 9pt; color: #666;">
+      <div style="margin-top: 40px; font-size: 9pt; color: #555;">
+        <p><strong>Firm:</strong> ${report.meta.firm}</p>
+        <p><strong>Lead Analyst:</strong> ${report.meta.analyst}</p>
+      </div>
+      <div style="margin-top: 20px; text-align: center; font-size: 9pt; color: #666;">
         <p>— End of Report —</p>
-        <p>For questions or additional information, please contact USIS Research.</p>
+        <p>For questions or additional information, please contact ${report.meta.brand}.</p>
       </div>
       <div class="footer">
-        <span>USIS Research</span>
+        <span>${report.meta.brand}</span>
         <span>Page 20</span>
       </div>
     </div>
