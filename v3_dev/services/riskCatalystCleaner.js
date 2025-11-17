@@ -26,7 +26,7 @@ class RiskCatalystCleaner {
   constructor() {
     this.minItems = 5;
     this.maxItems = 8;
-    this.minLength = 20;
+    this.minLength = 30; // Increased from 20 to 30 to filter out short placeholders
     this.similarityThreshold = 0.7;
   }
 
@@ -51,12 +51,21 @@ class RiskCatalystCleaner {
     items = items.filter(item => {
       if (!item || typeof item !== 'string') return false;
       
-      const text = item.trim().toLowerCase();
+      const text = item.trim();
       
-      // Remove placeholder patterns
+      // STRICT FILTER: Remove ANY item containing "Additional factor" or "factor 1/2/3"
+      if (/additional factor/i.test(text)) {
+        console.log(`   │  Rejected (Additional factor): "${text.substring(0, 60)}..."`);
+        return false;
+      }
+      
+      if (/\bfactor\s*[123]\b/i.test(text)) {
+        console.log(`   │  Rejected (factor 1/2/3): "${text.substring(0, 60)}..."`);
+        return false;
+      }
+      
+      // Remove other placeholder patterns
       const placeholderPatterns = [
-        /additional factor \d+/i,
-        /factor \d+/i,
         /placeholder/i,
         /\bn\/a\b/i,
         /\btbd\b/i,
@@ -68,7 +77,10 @@ class RiskCatalystCleaner {
       ];
       
       for (const pattern of placeholderPatterns) {
-        if (pattern.test(text)) return false;
+        if (pattern.test(text)) {
+          console.log(`   │  Rejected (placeholder): "${text.substring(0, 60)}..."`);
+          return false;
+        }
       }
       
       return true;
