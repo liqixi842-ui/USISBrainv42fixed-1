@@ -563,7 +563,24 @@ async function buildResearchReport(symbol, assetType = "equity") {
     // Use final_text from multi-model consolidation
     const finalTexts = multiModelResult.final_text || {};
     
-    const report = {
+    // Ensure catalysts_text and risks_text are always arrays
+    let catalysts = finalTexts.catalysts_text || [];
+    if (typeof catalysts === 'string') {
+      catalysts = [catalysts];
+    }
+    if (!Array.isArray(catalysts)) {
+      catalysts = [];
+    }
+    
+    let risks = finalTexts.risks_text || [];
+    if (typeof risks === 'string') {
+      risks = [risks];
+    }
+    if (!Array.isArray(risks)) {
+      risks = [];
+    }
+    
+    let report = {
       // ═══ Header ═══
       symbol: symbol.toUpperCase(),
       name: marketData.name,
@@ -607,8 +624,8 @@ async function buildResearchReport(symbol, assetType = "equity") {
       valuation_text: finalTexts.valuation_text || 'Valuation analysis unavailable',
       segment_text: finalTexts.segments_text || null,
       macro_text: finalTexts.macro_text || null,
-      catalysts_text: finalTexts.catalysts_text || [],
-      risks_text: finalTexts.risks_text || [],
+      catalysts_text: catalysts,
+      risks_text: risks,
       peer_comparison_text: finalTexts.peer_comparison_text || null,
       tech_view_text: finalTexts.tech_view_text || null,
       action_text: finalTexts.action_text || null,
