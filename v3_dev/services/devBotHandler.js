@@ -57,6 +57,63 @@ async function sendPDFDocument(chatId, pdfBuffer, filename, caption, botToken) {
 
 const VALID_COMMANDS = ['/test', '/status', '/v3', '/help', '/report'];
 
+/**
+ * D Mode Parameter Parser - Robust parsing for brand/firm/analyst parameters
+ * Supports 3 writing styles:
+ * 1. brand=VADA firm=Aberdeen_Investments analyst=Anthony_Venn_Dutton
+ * 2. brand="VADA" firm="Aberdeen Investments" analyst="Anthony Venn Dutton"
+ * 3. brand=VADA firm=Aberdeen Investments analyst=Anthony Venn Dutton
+ * 
+ * @param {string} paramString - Raw parameter string after symbol
+ * @returns {object} Parsed parameters { brand, firm, analyst }
+ */
+function parseParams(paramString) {
+  const params = {};
+  let currentKey = null;
+  let currentValue = [];
+  
+  // Split by whitespace
+  const tokens = paramString.trim().split(/\s+/);
+  
+  for (const token of tokens) {
+    if (token.includes('=')) {
+      // New key=value pair found
+      // First, save previous key if exists
+      if (currentKey) {
+        params[currentKey] = currentValue.join(' ').trim();
+      }
+      
+      const [rawKey, rawValue] = token.split('=');
+      currentKey = rawKey.trim().toLowerCase();
+      currentValue = rawValue ? [rawValue] : [];
+      
+    } else if (currentKey) {
+      // No '=', so it's a continuation of the previous key's value
+      currentValue.push(token);
+    }
+  }
+  
+  // Save the last key
+  if (currentKey) {
+    params[currentKey] = currentValue.join(' ').trim();
+  }
+  
+  // Post-processing: Remove quotes and convert underscores to spaces
+  for (const key of Object.keys(params)) {
+    let v = params[key];
+    
+    // Remove surrounding quotes (both double and single)
+    v = v.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+    
+    // Convert underscores to spaces
+    v = v.replace(/_/g, ' ');
+    
+    params[key] = v.trim();
+  }
+  
+  return params;
+}
+
 async function handleDevBotMessage(message, telegramAPI, botToken) {
   const chatId = message.chat.id;
   const text = (message.text || '').trim();
@@ -121,38 +178,40 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
     
     // /report command - 调用 Replit v3_dev PDF API
     if (text.startsWith('/report')) {
-      const parts = text.split(' ');
+      // Extract symbol and parameters using regex
+      const match = text.match(/^\/report\s+(\S+)\s*(.*)$/);
       
       // Check if symbol is provided
-      if (parts.length < 2 || !parts[1].trim()) {
+      if (!match || !match[1].trim()) {
         await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: '📊 请提供股票代码\n\n格式：/report AAPL [brand=...] [firm=...] [analyst=...]\n\n示例：\n/report AAPL\n/report TSLA brand=VADA\n/report NVDA brand=MyFirm firm=MyDivision analyst=JohnDoe\n\n将通过 Replit v3_dev API 生成完整 PDF 研报。'
+          text: '📊 请提供股票代码\n\n格式：/report SYMBOL [brand=...] [firm=...] [analyst=...]\n\n示例（3种写法均支持）：\n1) /report NVDA brand=VADA firm=Aberdeen_Investments analyst=Anthony_Venn_Dutton\n2) /report NVDA brand="VADA" firm="Aberdeen Investments" analyst="Anthony Venn Dutton"\n3) /report NVDA brand=VADA firm=Aberdeen Investments analyst=Anthony Venn Dutton\n\n将通过 Replit v3_dev API 生成完整 PDF 研报（D Mode）。'
         });
         return;
       }
       
-      const symbol = parts[1].trim().toUpperCase();
+      const symbol = match[1].trim().toUpperCase();
+      const paramString = match[2].trim();
       
-      // Parse brand/firm/analyst parameters with defaults
-      let brand = 'USIS Research';
-      let firm = 'USIS Research Division';
-      let analyst = 'System (USIS Brain)';
+      // D Mode: Use robust parameter parser
+      const parsedParams = parseParams(paramString);
       
-      // Parse remaining parts for brand/firm/analyst parameters
-      for (let i = 2; i < parts.length; i++) {
-        const param = parts[i].trim();
-        if (param.startsWith('brand=')) {
-          brand = param.substring(6) || brand;
-        } else if (param.startsWith('firm=')) {
-          firm = param.substring(5) || firm;
-        } else if (param.startsWith('analyst=')) {
-          analyst = param.substring(8) || analyst;
-        }
-      }
+      // Apply defaults
+      const brand = parsedParams.brand || 'USIS Research';
+      const firm = parsedParams.firm || 'USIS Research Division';
+      const analyst = parsedParams.analyst || 'System (USIS Brain)';
+      
+      // Debug logging for D Mode parsing
+      console.log(`\n[BRAND_DEBUG] D Mode Parameter Parsing Results:`);
+      console.log(`[BRAND_DEBUG]   Raw input: "${paramString}"`);
+      console.log(`[BRAND_DEBUG]   Parsed params:`, parsedParams);
+      console.log(`[BRAND_DEBUG]   Final values after defaults:`);
+      console.log(`[BRAND_DEBUG]     brand="${brand}"`);
+      console.log(`[BRAND_DEBUG]     firm="${firm}"`);
+      console.log(`[BRAND_DEBUG]     analyst="${analyst}"`);
       
       console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      console.log(`📊 [DEV_BOT] /report ${symbol} - Calling Replit v3_dev PDF API`);
+      console.log(`📊 [DEV_BOT] /report ${symbol} - Calling Replit v3_dev PDF API (D Mode)`);
       console.log(`   ├─ Brand: ${brand}`);
       console.log(`   ├─ Firm: ${firm}`);
       console.log(`   └─ Analyst: ${analyst}`);
