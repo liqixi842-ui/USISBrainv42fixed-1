@@ -1,0 +1,155 @@
+你现在执行 USIS Research Engine 的全面诊断任务。
+禁止进行任何修复，必须 逐项检查 + 输出原因。
+你的目标是告诉我：
+
+为什么最新 NVDA 研报仍然出现以下 7 个问题：
+
+图表没有真正嵌入 PDF（仍然显示 Placeholder）
+
+段落句尾出现 “..”（双点号残留）
+
+部分句子结构不完整（缺主语/缺数字/缺谓语）
+
+Investment Thesis / Company Overview 有重复内容
+
+Key Risks / Catalysts 出现未填完整的句子
+
+Technical Analysis 仍然是“Support: N/A / Resistance: N/A”
+
+卖方“事件驱动逻辑”（earnings / guidance / catalyst calendar）未执行
+
+🟦【第一步：诊断每一个模块是否实际被调用】
+
+请依次打印这些模块在 NVDA 流水线 中的实际执行状态：
+
+[Check] FinancialDataBroker
+[Check] HistoryChartEngine
+[Check] SellSideWriter
+[Check] TasteTruthLayer
+[Check] TechnicalEngine
+[Check] RiskCatalystBuilder
+[Check] ParagraphDeduper
+[Check] SentenceIntegrityChecker
+[Check] ChartEmbedder
+
+
+每个模块必须输出：
+
+是否被调用？true/false
+
+调用顺序
+
+输入记录（前 200 字）
+
+输出记录（前 200 字）
+
+是否报错但被吞掉？
+
+是否输出为空？
+
+是否跳过（skip）？原因是什么？
+
+🟦【第二步：图表诊断】
+
+请输出：
+
+report.charts.revenue_5y_chart_url 是否存在？
+
+模板里对应的 HTML 是否已经替换？
+
+渲染阶段是否打印 <img>？
+
+DocRaptor 是否收到图表 URL？（打印 payload）
+
+DocRaptor 返回的 PDF 是否忽略 <img>？
+
+🟦【第三步：句尾 “..” 残留的来源】
+
+请打印：
+
+[SentenceTailCheck] raw_before_TTS
+[SentenceTailCheck] after_SellSideWriter
+[SentenceTailCheck] after_TasteTruthLayer
+
+
+必须指出：
+
+哪个模块产生“..”
+
+哪个模块没有清理它
+
+为什么没有清理
+
+🟦【第四步：句子缺主语 / 缺数字的来源】
+
+请输出：
+
+[IntegrityCheck] broken_sentences_found: N
+[IntegrityCheck] list_of_broken_sentences
+
+
+并说明：
+
+是 SellSideWriter 生成的？
+
+还是 TasteTruthLayer 删除了成分导致的？
+
+还是模板插值漏字段导致的？
+
+🟦【第五步：段落重复来源】
+
+请输出：
+
+[ParagraphDeduper] input_sections
+[ParagraphDeduper] duplicates_detected
+[ParagraphDeduper] after_cleanup_excerpt
+
+
+并告诉我：
+
+为什么 Investment Thesis 和 Company Overview 内容几乎一样？
+
+是 SellSideWriter 重复？还是 deduper 不够强？
+
+🟦【第六步：风险 & 催化剂不完整诊断】
+
+请打印：
+
+[RiskCatalystBuilder] raw_ai_output
+[RiskCatalystBuilder] cleaned_output
+[RiskCatalystBuilder] incomplete_items
+
+
+必须解释：
+
+哪些项没有填数字？
+
+哪些项缺条件？
+
+哪些项被 TasteTruthLayer 删除导致“空洞句”？
+
+🟦【第七步：技术分析模块诊断】
+
+请打印：
+
+[TechnicalEngine] input_prices
+[TechnicalEngine] rsi/macd/ma results
+[TechnicalEngine] why support=N/A
+[TechnicalEngine] why resistance=N/A
+
+🟦【最后输出一句完整总结】
+
+输出：
+
+=== USIS Research Diagnostic Summary ===
+1. Chart embedding: root cause = ...
+2. Sentence tails (“..”): root cause = ...
+3. Sentence integrity: root cause = ...
+4. Paragraph repetition: root cause = ...
+5. Risk/Catalyst incomplete: root cause = ...
+6. Technical analysis missing: root cause = ...
+7. Missing sell-side event logic: root cause = ...
+=========================================
+
+
+不要修复任何代码，只诊断，把所有根因写出来。
