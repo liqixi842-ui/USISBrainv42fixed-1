@@ -138,6 +138,7 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
       
       let statusMsg = null;
+      let t0 = null; // Timer for latency tracking
       const REPLIT_API_URL = 'https://e6d61ff9-a9b9-4be6-8fc3-d739698a5bae-00-3wsh3l1cosvt.pike.replit.dev';
       
       try {
@@ -147,20 +148,22 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
           text: `🔬 正在生成 ${symbol} 研报\n\n⏳ 正在调用 Replit v3_dev PDF API...\n\n(这可能需要 60-120 秒)`
         });
         
-        console.log(`📡 [DEV_BOT] Calling Replit API: ${REPLIT_API_URL}/v3/report/${symbol}?format=pdf`);
+        const url = `${REPLIT_API_URL}/v3/report/${symbol}?format=pdf&asset_type=equity`;
         
-        // Call Replit v3_dev PDF API
-        const response = await axios.get(
-          `${REPLIT_API_URL}/v3/report/${symbol}?format=pdf&asset_type=equity`,
-          { 
-            responseType: 'arraybuffer',
-            timeout: 120000  // 120 seconds timeout
-          }
-        );
+        // Start timer for latency tracking
+        t0 = Date.now();
+        console.log(`📡 [DEV_BOT] /report ${symbol} → calling PDF API: ${url}`);
         
+        // Call Replit v3_dev PDF API with 240s timeout
+        const response = await axios.get(url, { 
+          responseType: 'arraybuffer',
+          timeout: 240000  // 240 seconds (4 minutes) timeout
+        });
+        
+        const dt = Date.now() - t0;
         const pdfBuffer = Buffer.from(response.data);
         
-        console.log(`✅ [DEV_BOT] PDF received from Replit API`);
+        console.log(`✅ [DEV_BOT] /report ${symbol} → PDF API done in ${dt} ms`);
         console.log(`   ├─ Size: ${(pdfBuffer.length / 1024).toFixed(1)} KB`);
         console.log(`   ├─ Status: ${response.status}`);
         console.log(`   └─ Content-Type: ${response.headers['content-type']}\n`);
@@ -192,8 +195,10 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
         console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
         
       } catch (error) {
-        console.error(`❌ [DEV_BOT] /report: Failed for ${symbol}`);
-        console.error(`   ├─ Error: ${error.message}`);
+        const dt = Date.now() - t0;
+        console.error(`❌ [DEV_BOT] /report ${symbol} ERROR after ${dt} ms`);
+        console.error(`   ├─ Error code: ${error.code || 'N/A'}`);
+        console.error(`   ├─ Error message: ${error.message}`);
         console.error(`   └─ Stack: ${error.stack}\n`);
         console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
         
