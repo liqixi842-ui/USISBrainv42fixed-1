@@ -181,21 +181,75 @@ class FinancialDataBroker {
       };
     }
 
-    try {
-      if (this.provider === 'finnhub') {
-        return await this._getHistoryFinnhub(symbol);
-      } else if (this.provider === 'twelve_data') {
-        return await this._getHistoryTwelveData(symbol);
-      } else if (this.provider === 'alpha_vantage') {
-        return await this._getHistoryAlphaVantage(symbol);
+    // ═══════════════════════════════════════════════════════════════
+    // THREE-TIER FALLBACK: Finnhub → Twelve Data → Alpha Vantage
+    // ═══════════════════════════════════════════════════════════════
+    
+    let result = { revenue_5y: [], eps_5y: [] };
+    let usedProvider = 'none';
+
+    // TIER 1: Try Finnhub first
+    if (this.FINNHUB_API_KEY) {
+      try {
+        console.log(`[FinancialDataBroker] history provider=finnhub (tier 1)`);
+        result = await this._getHistoryFinnhub(symbol);
+        
+        if (result.revenue_5y.length > 0 || result.eps_5y.length > 0) {
+          usedProvider = 'finnhub';
+          console.log(`[FinancialDataBroker] ✅ Finnhub success: revenue_5y count=${result.revenue_5y.length}, eps_5y count=${result.eps_5y.length}`);
+          return result;
+        }
+        
+        console.log(`[FinancialDataBroker] ⚠️  Finnhub returned empty data, trying fallback...`);
+      } catch (error) {
+        console.log(`[FinancialDataBroker] ⚠️  Finnhub failed: ${error.message}, trying fallback...`);
       }
-    } catch (error) {
-      console.log(`[FinancialDataBroker] History fetch error: ${error.message}`);
-      return {
-        revenue_5y: [],
-        eps_5y: []
-      };
     }
+
+    // TIER 2: Fallback to Twelve Data
+    if (this.TWELVE_DATA_API_KEY) {
+      try {
+        console.log(`[FinancialDataBroker] history provider=twelve_data (tier 2 fallback)`);
+        result = await this._getHistoryTwelveData(symbol);
+        
+        if (result.revenue_5y.length > 0 || result.eps_5y.length > 0) {
+          usedProvider = 'twelve_data';
+          console.log(`[FinancialDataBroker] ✅ Twelve Data success: revenue_5y count=${result.revenue_5y.length}, eps_5y count=${result.eps_5y.length}`);
+          return result;
+        }
+        
+        console.log(`[FinancialDataBroker] ⚠️  Twelve Data returned empty data, trying final fallback...`);
+      } catch (error) {
+        console.log(`[FinancialDataBroker] ⚠️  Twelve Data failed: ${error.message}, trying final fallback...`);
+      }
+    }
+
+    // TIER 3: Final fallback to Alpha Vantage
+    if (this.ALPHA_VANTAGE_API_KEY) {
+      try {
+        console.log(`[FinancialDataBroker] history provider=alpha_vantage (tier 3 fallback)`);
+        result = await this._getHistoryAlphaVantage(symbol);
+        
+        if (result.revenue_5y.length > 0 || result.eps_5y.length > 0) {
+          usedProvider = 'alpha_vantage';
+          console.log(`[FinancialDataBroker] ✅ Alpha Vantage success: revenue_5y count=${result.revenue_5y.length}, eps_5y count=${result.eps_5y.length}`);
+          return result;
+        }
+        
+        console.log(`[FinancialDataBroker] ⚠️  Alpha Vantage returned empty data`);
+      } catch (error) {
+        console.log(`[FinancialDataBroker] ⚠️  Alpha Vantage failed: ${error.message}`);
+      }
+    }
+
+    // All providers failed or returned empty data
+    console.log(`[FinancialDataBroker] ❌ All providers exhausted, returning empty history`);
+    console.log(`[FinancialDataBroker] revenue_5y count=0, eps_5y count=0`);
+    
+    return {
+      revenue_5y: [],
+      eps_5y: []
+    };
   }
 
   /**
@@ -393,7 +447,53 @@ class FinancialDataBroker {
   }
 
   async _getHistoryTwelveData(symbol) {
-    return { revenue_5y: [], eps_5y: [] };
+    console.log(`[FinancialDataBroker] Attempting Twelve Data fallback for ${symbol}...`);
+    
+    try {
+      const res = await fetch(
+        `https://api.twelvedata.com/income_statement?symbol=${symbol}&apikey=${this.TWELVE_DATA_API_KEY}`,
+        { timeout: 10000 }
+      );
+
+      if (!res.ok) {
+        console.log(`[FinancialDataBroker] Twelve Data API error: ${res.status}`);
+        return { revenue_5y: [], eps_5y: [] };
+      }
+
+      const data = await res.json();
+      
+      if (data.status === 'error' || !data.income_statement) {
+        console.log(`[FinancialDataBroker] Twelve Data: ${data.message || 'No income statement data'}`);
+        return { revenue_5y: [], eps_5y: [] };
+      }
+
+      const revenue_5y = [];
+      const eps_5y = [];
+
+      // Get last 5 years from annual income statements (already sorted newest to oldest)
+      const annualReports = data.income_statement.slice(0, 5).reverse(); // Reverse to oldest → newest
+
+      for (const report of annualReports) {
+        const year = report.fiscal_date ? parseInt(report.fiscal_date.split('-')[0]) : report.year;
+        const revenue = parseFloat(report.sales) || null; // Twelve Data uses "sales" not "revenue"
+        const eps = parseFloat(report.eps_diluted) || parseFloat(report.eps_basic) || null;
+
+        if (year && revenue) {
+          revenue_5y.push({ year, value: revenue });
+        }
+
+        if (year && eps) {
+          eps_5y.push({ year, value: eps });
+        }
+      }
+
+      console.log(`[FinancialDataBroker] Twelve Data: retrieved ${revenue_5y.length} revenue points, ${eps_5y.length} EPS points`);
+      return { revenue_5y, eps_5y };
+
+    } catch (error) {
+      console.log(`[FinancialDataBroker] Twelve Data error: ${error.message}`);
+      return { revenue_5y: [], eps_5y: [] };
+    }
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -435,7 +535,67 @@ class FinancialDataBroker {
   }
 
   async _getHistoryAlphaVantage(symbol) {
-    return { revenue_5y: [], eps_5y: [] };
+    console.log(`[FinancialDataBroker] Attempting Alpha Vantage fallback for ${symbol}...`);
+    
+    if (!this.ALPHA_VANTAGE_API_KEY) {
+      console.log(`[FinancialDataBroker] Alpha Vantage API key not configured`);
+      return { revenue_5y: [], eps_5y: [] };
+    }
+
+    try {
+      const res = await fetch(
+        `https://www.alphavantage.co/query?function=INCOME_STATEMENT&symbol=${symbol}&apikey=${this.ALPHA_VANTAGE_API_KEY}`,
+        { timeout: 10000 }
+      );
+
+      if (!res.ok) {
+        console.log(`[FinancialDataBroker] Alpha Vantage API error: ${res.status}`);
+        return { revenue_5y: [], eps_5y: [] };
+      }
+
+      const data = await res.json();
+      
+      if (data.Note || data['Error Message'] || !data.annualReports) {
+        console.log(`[FinancialDataBroker] Alpha Vantage: ${data.Note || data['Error Message'] || 'No annual reports'}`);
+        return { revenue_5y: [], eps_5y: [] };
+      }
+
+      const revenue_5y = [];
+      const eps_5y = [];
+
+      // Get last 5 years from annual reports
+      const annualReports = data.annualReports.slice(0, 5).reverse();
+
+      for (const report of annualReports) {
+        const year = report.fiscalDateEnding ? parseInt(report.fiscalDateEnding.split('-')[0]) : null;
+        const revenue = parseFloat(report.totalRevenue) || null;
+        const netIncome = parseFloat(report.netIncome) || null;
+        
+        // Alpha Vantage doesn't provide shares outstanding directly
+        // We need to fetch it from OVERVIEW endpoint or calculate from EPS
+        const reportedEPS = parseFloat(report.reportedEPS) || null;
+
+        if (year && revenue) {
+          revenue_5y.push({ year, value: revenue });
+        }
+
+        if (year && reportedEPS) {
+          eps_5y.push({ year, value: reportedEPS });
+        } else if (year && netIncome) {
+          // Fallback: Try to estimate EPS if we have net income
+          // This requires shares outstanding which we don't have here
+          // Skip EPS in this case
+          console.log(`[FinancialDataBroker] Alpha Vantage: No EPS for ${year}, net income available but no shares data`);
+        }
+      }
+
+      console.log(`[FinancialDataBroker] Alpha Vantage: retrieved ${revenue_5y.length} revenue points, ${eps_5y.length} EPS points`);
+      return { revenue_5y, eps_5y };
+
+    } catch (error) {
+      console.log(`[FinancialDataBroker] Alpha Vantage error: ${error.message}`);
+      return { revenue_5y: [], eps_5y: [] };
+    }
   }
 
   // ══════════════════════════════════════════════════════════════
