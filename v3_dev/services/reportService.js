@@ -19,6 +19,7 @@ const TasteTruthLayer = require('./tasteTruthLayer');
 const FinancialDataBroker = require('./financialDataBroker');
 const HistoryChartEngine = require('./historyChartEngine');
 const SellSideWriter = require('./sellSideWriter');
+const TechnicalEngine = require('./technicalEngine');
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY;
@@ -867,6 +868,10 @@ async function fetchComprehensiveData(symbol, assetType) {
   if (!data.name) {
     data.name = symbol.toUpperCase();
   }
+  
+  // ═══ Technical Indicators (Phase 1.8) ═══
+  data.techs = TechnicalEngine.calculateBasicTechs(data.price);
+  console.log(`   └─ Technical indicators: Support $${data.techs.support_level?.toFixed(2) || 'N/A'}, Resistance $${data.techs.resistance_level?.toFixed(2) || 'N/A'}`);
   
   return data;
 }
@@ -2861,6 +2866,16 @@ async function generatePdfWithDocRaptor(symbol, htmlContent) {
   
   try {
     console.log(`📄 [v3-dev DocRaptor] 开始生成 PDF (${DOC_RAPTOR_TEST_MODE ? '测试模式' : '生产模式'})...`);
+    
+    // Debug: Verify chart URLs are in HTML
+    console.log(`[PDF DEBUG] HTML length=${htmlContent.length}`);
+    console.log(`[PDF DEBUG] HTML preview=${htmlContent.slice(0, 500)}`);
+    console.log(`[PDF DEBUG] Charts included? ${htmlContent.includes('quickchart.io') ? 'YES ✓' : 'NO ✗'}`);
+    if (htmlContent.includes('quickchart.io')) {
+      const chartCount = (htmlContent.match(/quickchart\.io/g) || []).length;
+      console.log(`[PDF DEBUG] Chart count: ${chartCount} QuickChart URLs found`);
+    }
+    
     const fetch = require('node-fetch');
     
     const response = await fetch('https://docraptor.com/docs', {

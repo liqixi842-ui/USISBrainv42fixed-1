@@ -202,7 +202,37 @@ class TasteTruthLayer {
     // Step 6: Deduplicate paragraphs
     corrected = this.deduplicateParagraphs(corrected);
     
+    // Step 7: Final sentence integrity check
+    corrected = this._checkSentenceIntegrity(corrected);
+    
     return corrected;
+  }
+  
+  /**
+   * Check sentence integrity and remove incomplete fragments
+   * @param {string} text - Input text
+   * @returns {string} Text with incomplete sentences removed
+   */
+  _checkSentenceIntegrity(text) {
+    if (!text || text.length === 0) return text;
+    
+    const sentences = text
+      .split('.')
+      .map(s => s.trim())
+      .filter(s => s.length > 0)
+      .map(s => {
+        // Remove incomplete sentence patterns
+        if (/\bby the end of\s*$/i.test(s)) return null;
+        if (/\bover recent quarters could\s*$/i.test(s)) return null;
+        if (/\bin the near term\s*$/i.test(s)) return null;
+        if (/\bin recent periods\s*$/i.test(s)) return null;
+        if (/\brecent periods\s*$/i.test(s)) return null;
+        
+        return s;
+      })
+      .filter(Boolean);
+    
+    return sentences.join('. ') + (sentences.length > 0 ? '.' : '');
   }
 
   /**
@@ -227,7 +257,18 @@ class TasteTruthLayer {
       }
     }
     
-    return uniqueSentences.join('. ') + (uniqueSentences.length > 0 ? '.' : '');
+    let result = uniqueSentences.join('. ');
+    
+    // Fix double dots and spacing issues
+    result = result.replace(/\.\.+/g, '.');  // Replace ".." or "..." with single "."
+    result = result.replace(/ \./g, '.');    // Remove " ." dirty spaces
+    
+    // Add final period only if not already present
+    if (result.length > 0 && !result.endsWith('.')) {
+      result += '.';
+    }
+    
+    return result;
   }
 
   /**
@@ -325,26 +366,24 @@ class TasteTruthLayer {
       return percentMatch && growthStr.includes(percentMatch[0]);
     }).join('.');
     
-    // Remove ALL specific quarter+year references (2022-2025)
-    corrected = corrected.replace(/in Q[1-4] 202[2-5]/gi, 'over recent quarters');
-    corrected = corrected.replace(/by Q[1-4] 202[2-5]/gi, 'in the near term');
-    corrected = corrected.replace(/Q[1-4] 202[2-5] (product launch|event|release|results)/gi, 'recent period');
-    corrected = corrected.replace(/during Q[1-4] 202[2-5]/gi, 'in recent periods');
+    // Replace specific dates with generic terms (preserve sentence structure)
+    corrected = corrected.replace(/\bin Q[1-4] 202[2-5]\b/gi, 'in recent quarters');
+    corrected = corrected.replace(/\bby Q[1-4] 202[2-5]\b/gi, 'in the near term');
+    corrected = corrected.replace(/\bQ[1-4] 202[2-5]\b/g, 'recent quarters');
+    corrected = corrected.replace(/\bduring Q[1-4] 202[2-5]\b/gi, 'in recent periods');
     
-    // Remove specific month+year references
-    corrected = corrected.replace(/in (January|February|March|April|May|June|July|August|September|October|November|December) 202[2-5]/gi, 'over recent quarters');
-    corrected = corrected.replace(/(January|February|March|April|May|June|July|August|September|October|November|December) 202[2-5]/gi, 'recent periods');
+    // Replace month+year with generic terms
+    corrected = corrected.replace(/\bin (January|February|March|April|May|June|July|August|September|October|November|December) 202[2-5]\b/gi, 'in recent periods');
+    corrected = corrected.replace(/\b(January|February|March|April|May|June|July|August|September|October|November|December) 202[2-5]\b/g, 'recent periods');
     
-    // Remove year-only references
-    corrected = corrected.replace(/\b(in|by|for|during|mid-|early-|late-|H1-|H2-)?\s*202[2-5]\b/gi, '');
-    corrected = corrected.replace(/\bby (the )?(end of |mid-)?FY\s*202[2-5]/gi, 'in the near term');
-    corrected = corrected.replace(/\bFY\s*202[2-5]\b/gi, 'the fiscal year');
+    // Replace year-only references (but keep sentence structure)
+    corrected = corrected.replace(/\bby the end of 202[2-5]\b/gi, 'in the near term');
+    corrected = corrected.replace(/\b(in|by|for|during) 202[2-5]\b/gi, '$1 recent periods');
+    corrected = corrected.replace(/\bmid-202[2-5]\b/gi, 'the near term');
+    corrected = corrected.replace(/\bFY 202[2-5]\b/gi, 'the fiscal year');
     
-    // Remove sentences that still contain specific date patterns
-    corrected = corrected.split('.').filter(sentence => {
-      const specificDatePattern = /(Q[1-4]|January|February|March|April|May|June|July|August|September|October|November|December|FY)\s*202[2-5]|202[2-5]/i;
-      return !specificDatePattern.test(sentence);
-    }).join('.');
+    // Clean up any remaining standalone years
+    corrected = corrected.replace(/\b202[2-5]\b/g, 'recent periods');
     
     // STRICT MODE: Surgical removal of dollar amounts (for catalysts/risks)
     if (strict) {
