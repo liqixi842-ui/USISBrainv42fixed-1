@@ -30,4 +30,6 @@ router.get('/health', (req, res) => {
 // Mount report routes at /v3/report/*
 router.use('/report', reportRouter);
 
+console.log('✅ V5 router mounted: GET /v3/report/:symbol → v5 report builder');
+
 module.exports = router;
