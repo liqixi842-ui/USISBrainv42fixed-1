@@ -18,8 +18,8 @@ function fixSentence(text) {
   
   let fixed = text.trim();
   
-  // Fix broken sentences
-  fixed = fixed.replace(/\.\s*([a-z])/g, '. $1'.toUpperCase());
+  // Fix broken sentences: ". supported" → ". Supported"
+  fixed = fixed.replace(/\.\s*([a-z])/g, (match, letter) => '. ' + letter.toUpperCase());
   
   // Ensure starts with capital
   if (fixed.length > 0) {

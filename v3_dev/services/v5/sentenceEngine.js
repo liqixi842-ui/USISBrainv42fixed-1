@@ -4,7 +4,7 @@ function normalize(text) {
   let normalized = text;
   
   // Fix broken sentences: ". supported" → ". Supported" etc.
-  normalized = normalized.replace(/\.\s+([a-z])/g, '. $1'.toUpperCase());
+  normalized = normalized.replace(/\.\s+([a-z])/g, (match, letter) => '. ' + letter.toUpperCase());
   
   // Fix specific AI patterns
   const brokenPatterns = [
@@ -15,7 +15,7 @@ function normalize(text) {
   
   brokenPatterns.forEach(pattern => {
     normalized = normalized.replace(pattern, (match, word) => {
-      return '. ' + word.charAt(0).toUpperCase() + word.slice(1);
+      return '. ' + word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
     });
   });
   
