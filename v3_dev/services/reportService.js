@@ -553,6 +553,15 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
     
     console.log(`✅ [Phase 2.5] Charts generated: ${Object.keys(charts).filter(k => charts[k]).length} URLs`);
     
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 2.6: Generate Technical Indicators Table & Commentary
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`📊 [Phase 2.6] Generating technical indicators table and commentary...`);
+    
+    const techData = generateTechnicalIndicatorsData(marketData);
+    
+    console.log(`✅ [Phase 2.6] Technical indicators data generated`);
+    
     // Verify financial section populated (no N/A)
     const hasRealData = marketData.price.last && marketData.valuation.market_cap && 
                         marketData.fundamentals.revenue_5y.length > 0;
@@ -618,6 +627,10 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
       
       // ═══ Technical Indicators ═══
       techs: marketData.techs,
+      
+      // ═══ v5 Technical Analysis Data ═══
+      tech_indicators_table: techData.indicators_table,
+      tech_commentary: techData.tech_commentary,
       
       // ═══ Price Targets (v2.0: PE × EPS Institutional Model) ═══
       targets: priceTargets,
@@ -1236,6 +1249,180 @@ async function fetchPeerData(symbol) {
   await new Promise(resolve => setTimeout(resolve, 500));
   
   return peerData;
+}
+
+/**
+ * Generate Technical Indicators Table and Commentary
+ * Returns structured technical data for v5 Technical Analysis page
+ * @param {object} marketData - Market data object with techs and techHistory
+ * @returns {object} { indicators_table, tech_commentary }
+ */
+function generateTechnicalIndicatorsData(marketData) {
+  const techs = marketData.techs || {};
+  const price = marketData.price?.last;
+  const techHistory = marketData.techHistory || {};
+  
+  // ═══ PART 1: Technical Indicators Table ═══
+  const indicators_table = [];
+  
+  // Get latest EMA values from techHistory if available
+  const ema20_latest = techHistory.ema20 && techHistory.ema20.length > 0 
+    ? techHistory.ema20[techHistory.ema20.length - 1] 
+    : techs.ema_20;
+    
+  const ema50_latest = techHistory.ema50 && techHistory.ema50.length > 0 
+    ? techHistory.ema50[techHistory.ema50.length - 1] 
+    : techs.ema_50;
+  
+  // Row 1: RSI(14)
+  if (techs.rsi_14 !== null && techs.rsi_14 !== undefined) {
+    let rsiSignal = 'Neutral';
+    if (techs.rsi_14 > 70) rsiSignal = 'Overbought';
+    else if (techs.rsi_14 < 30) rsiSignal = 'Oversold';
+    
+    indicators_table.push({
+      indicator: 'RSI(14)',
+      value: techs.rsi_14.toFixed(2),
+      signal: rsiSignal
+    });
+  }
+  
+  // Row 2: MACD
+  if (techs.macd !== null && techs.macd !== undefined) {
+    const macdSignal = techs.macd > 0 ? 'Bullish Signal' : 'Bearish Signal';
+    indicators_table.push({
+      indicator: 'MACD',
+      value: techs.macd.toFixed(2),
+      signal: macdSignal
+    });
+  }
+  
+  // Row 3: EMA(20)
+  if (ema20_latest !== null && ema20_latest !== undefined && price) {
+    const emaSignal = price > ema20_latest ? 'Above EMA20 (Bullish)' : 'Below EMA20 (Bearish)';
+    indicators_table.push({
+      indicator: 'EMA(20)',
+      value: `$${ema20_latest.toFixed(2)}`,
+      signal: emaSignal
+    });
+  }
+  
+  // Row 4: EMA(50)
+  if (ema50_latest !== null && ema50_latest !== undefined && price) {
+    const emaSignal = price > ema50_latest ? 'Above EMA50 (Bullish)' : 'Below EMA50 (Bearish)';
+    indicators_table.push({
+      indicator: 'EMA(50)',
+      value: `$${ema50_latest.toFixed(2)}`,
+      signal: emaSignal
+    });
+  }
+  
+  // Row 5: Bollinger Bands
+  if (techs.bb_upper !== null && techs.bb_lower !== null && price) {
+    let bbSignal = 'Normal Range';
+    if (price > techs.bb_upper) bbSignal = 'High Volatility (Above Upper Band)';
+    else if (price < techs.bb_lower) bbSignal = 'Low Volatility (Below Lower Band)';
+    
+    indicators_table.push({
+      indicator: 'Bollinger Upper',
+      value: `$${techs.bb_upper.toFixed(2)}`,
+      signal: bbSignal
+    });
+    indicators_table.push({
+      indicator: 'Bollinger Lower',
+      value: `$${techs.bb_lower.toFixed(2)}`,
+      signal: bbSignal
+    });
+  }
+  
+  // Row 6: Support / Resistance
+  if (techs.support_level !== null && techs.support_level !== undefined) {
+    indicators_table.push({
+      indicator: 'Support Level',
+      value: `$${techs.support_level.toFixed(2)}`,
+      signal: price && price > techs.support_level ? 'Above Support' : 'At/Below Support'
+    });
+  }
+  
+  if (techs.resistance_level !== null && techs.resistance_level !== undefined) {
+    indicators_table.push({
+      indicator: 'Resistance Level',
+      value: `$${techs.resistance_level.toFixed(2)}`,
+      signal: price && price < techs.resistance_level ? 'Below Resistance' : 'At/Above Resistance'
+    });
+  }
+  
+  // ═══ PART 2: English Technical Commentary ═══
+  let tech_commentary = '';
+  
+  // Paragraph 1: Major Trend
+  const trendParts = [];
+  
+  if (techs.rsi_14 !== null) {
+    if (techs.rsi_14 > 70) {
+      trendParts.push(`The RSI(14) reading of ${techs.rsi_14.toFixed(1)} indicates overbought conditions, suggesting potential for near-term consolidation or pullback.`);
+    } else if (techs.rsi_14 < 30) {
+      trendParts.push(`The RSI(14) reading of ${techs.rsi_14.toFixed(1)} signals oversold territory, presenting potential entry opportunities on mean reversion.`);
+    } else {
+      trendParts.push(`The RSI(14) reading of ${techs.rsi_14.toFixed(1)} reflects neutral momentum with no extreme overbought or oversold conditions.`);
+    }
+  }
+  
+  if (ema20_latest && price) {
+    const emaPosition = price > ema20_latest ? 'above' : 'below';
+    const emaTrend = price > ema20_latest ? 'bullish' : 'bearish';
+    trendParts.push(`The stock is trading ${emaPosition} its 20-day EMA ($${ema20_latest.toFixed(2)}), indicating ${emaTrend} short-term momentum.`);
+  }
+  
+  if (ema50_latest && price) {
+    const ema50Position = price > ema50_latest ? 'above' : 'below';
+    trendParts.push(`The price ${ema50Position} the 50-day EMA ($${ema50_latest.toFixed(2)}) confirms the intermediate-term trend direction.`);
+  }
+  
+  // Paragraph 2: Support & Resistance
+  const supportResistParts = [];
+  
+  if (techs.support_level && techs.resistance_level && price) {
+    const range = techs.resistance_level - techs.support_level;
+    const position = ((price - techs.support_level) / range * 100).toFixed(0);
+    
+    supportResistParts.push(`Key support is identified at $${techs.support_level.toFixed(2)}, with resistance at $${techs.resistance_level.toFixed(2)}. The stock is currently trading at ${position}% of this range.`);
+    
+    if (price > techs.resistance_level) {
+      supportResistParts.push(`A breakout above resistance could signal further upside momentum.`);
+    } else if (price < techs.support_level) {
+      supportResistParts.push(`A breach below support may indicate further downside risk.`);
+    }
+  }
+  
+  // Paragraph 3: Indicator Interpretation
+  const interpretationParts = [];
+  
+  if (techs.macd !== null) {
+    const macdSignal = techs.macd > 0 ? 'bullish' : 'bearish';
+    interpretationParts.push(`The MACD signal (${techs.macd.toFixed(2)}) provides a ${macdSignal} crossover indication.`);
+  }
+  
+  if (techs.bb_upper && techs.bb_lower && price) {
+    if (price > techs.bb_upper) {
+      interpretationParts.push(`Price is trading above the upper Bollinger Band, suggesting elevated volatility and potential overextension.`);
+    } else if (price < techs.bb_lower) {
+      interpretationParts.push(`Price is below the lower Bollinger Band, indicating potential oversold conditions.`);
+    } else {
+      interpretationParts.push(`Price remains within the Bollinger Band range, suggesting normal volatility conditions.`);
+    }
+  }
+  
+  // Combine all commentary parts
+  const allParts = [...trendParts, ...supportResistParts, ...interpretationParts];
+  tech_commentary = allParts.length > 0 
+    ? allParts.join(' ') 
+    : 'Technical indicators are currently unavailable for this security. Please refer to price action and volume analysis.';
+  
+  return {
+    indicators_table,
+    tech_commentary
+  };
 }
 
 /**
@@ -4018,48 +4205,74 @@ function renderPage12(report, h) {
 }
 
 function renderPage13(report, h) {
-  // Generate technical text content
-  const techTextContent = report.tech_view_text || 
+  // ═══════════════════════════════════════════════════════════════
+  // v5 TECHNICAL ANALYSIS PAGE - 4 Modules (Full English)
+  // ═══════════════════════════════════════════════════════════════
+  
+  // MODULE 1: Price Trend + EMA20/50 Chart (90 Days)
+  const priceTrendChart = report.charts?.tech_price_trend 
+    ? `<img src="${report.charts.tech_price_trend}" alt="Price Trend & Technical Indicators (90 Days)" style="width: 100%; max-width: 800px; height: auto; border: 1px solid #ddd; border-radius: 4px; margin: 15px 0;" />`
+    : `<div class="chart-placeholder">90-day price trend chart currently unavailable</div>`;
+  
+  // MODULE 2: Volume Trend Chart (90 Days)
+  const volumeTrendChart = report.charts?.tech_volume_trend
+    ? `<img src="${report.charts.tech_volume_trend}" alt="Volume Trend (90 Days)" style="width: 100%; max-width: 800px; height: auto; border: 1px solid #ddd; border-radius: 4px; margin: 15px 0;" />`
+    : `<div class="chart-placeholder">90-day volume trend chart currently unavailable</div>`;
+  
+  // MODULE 3: Technical Indicators Table
+  let indicatorsTableHtml = '';
+  if (report.tech_indicators_table && report.tech_indicators_table.length > 0) {
+    const tableRows = report.tech_indicators_table.map(row => 
+      `<tr>
+        <td>${row.indicator}</td>
+        <td>${row.value}</td>
+        <td>${row.signal}</td>
+      </tr>`
+    ).join('');
+    
+    indicatorsTableHtml = `
+      <h3>Technical Indicators</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Indicator</th>
+            <th>Value</th>
+            <th>Signal</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>`;
+  } else {
+    indicatorsTableHtml = `
+      <h3>Technical Indicators</h3>
+      <p style="color: #666; font-style: italic;">Technical indicator data currently unavailable</p>`;
+  }
+  
+  // MODULE 4: Technical Commentary (English)
+  const techCommentary = report.tech_commentary || 
     `Technical indicators are not a primary driver in our ${report.symbol} thesis at this time. ` +
-    `We note that the stock is trading in the upper half of its 52-week range ` +
-    `($${h.fmt(report.price.low_52w)}–$${h.fmt(report.price.high_52w)}), ` +
+    `We note that the stock is trading in the range of its 52-week high and low ` +
+    `($${h.fmtCurrency(report.price.low_52w)}–$${h.fmtCurrency(report.price.high_52w)}), ` +
     `and we would look for pullbacks towards support levels or confirmation of breakouts ` +
     `above recent highs before adjusting our risk-reward view.`;
-  
-  // Check if we have real technical data
-  const hasTechnicalData = report.techs && (
-    report.techs.rsi_14 !== null || 
-    report.techs.support_level !== null || 
-    report.techs.resistance_level !== null
-  );
-  
-  // Build technical data display if available
-  let technicalDataHtml = '';
-  if (hasTechnicalData) {
-    technicalDataHtml = '<h3>Technical Indicators</h3><div style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 4px;">';
-    
-    if (report.techs.rsi_14 !== null) {
-      const rsiValue = report.techs.rsi_14;
-      const rsiStatus = rsiValue > 70 ? 'overbought' : rsiValue < 30 ? 'oversold' : 'neutral';
-      technicalDataHtml += `<p><strong>RSI(14):</strong> ${h.fmt(rsiValue)} (${rsiStatus} territory)</p>`;
-    }
-    
-    if (report.techs.support_level !== null) {
-      technicalDataHtml += `<p><strong>Support:</strong> ${h.fmtCurrency(report.techs.support_level)}</p>`;
-    }
-    
-    if (report.techs.resistance_level !== null) {
-      technicalDataHtml += `<p><strong>Resistance:</strong> ${h.fmtCurrency(report.techs.resistance_level)}</p>`;
-    }
-    
-    technicalDataHtml += '</div>';
-  }
   
   return `
     <div class="page">
       <div class="section-title">Technical Analysis</div>
-      ${h.splitToParagraphs(techTextContent, 3).map(p => `<p>${p}</p>`).join('')}
-      ${technicalDataHtml}
+      
+      <h3>Price Trend & Technical Indicators (90 Days)</h3>
+      ${priceTrendChart}
+      
+      <h3>Volume Trend (90 Days)</h3>
+      ${volumeTrendChart}
+      
+      ${indicatorsTableHtml}
+      
+      <h3>Technical Commentary</h3>
+      ${h.splitToParagraphs(techCommentary, 3).map(p => `<p>${p}</p>`).join('')}
+      
       <div class="footer">
         <span>${report.meta.brand}</span>
         <span>Page 13</span>
