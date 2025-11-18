@@ -5,24 +5,18 @@
 
 /**
  * 去除连续重复的单词
- * 例如: "organic organic growth" → "organic growth"
+ * 例如: "organic organic organic growth" → "organic growth"
+ * 修复版：一次性处理所有连续重复
  */
 function removeDuplicateWords(text) {
   if (!text) return text;
   
-  // 正则：匹配连续重复的单词（忽略大小写）
-  // \b(\w+)\s+\1\b 会匹配 "word word" 这样的模式
-  const pattern = /\b(\w+)\s+\1\b/gi;
+  // 改进的正则：匹配一个单词后跟一个或多个相同单词
+  // \b(\w+)(\s+\1\b)+ 会匹配 "word word word" 并替换为 "word"
+  const pattern = /\b(\w+)(\s+\1\b)+/gi;
   
-  let cleaned = text;
-  let iterations = 0;
-  const maxIterations = 5; // 防止无限循环
-  
-  // 多次清理直到没有重复为止（处理 "word word word" 的情况）
-  while (pattern.test(cleaned) && iterations < maxIterations) {
-    cleaned = cleaned.replace(pattern, '$1');
-    iterations++;
-  }
+  // 一次性替换所有连续重复
+  const cleaned = text.replace(pattern, '$1');
   
   return cleaned;
 }
