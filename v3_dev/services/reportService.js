@@ -3511,7 +3511,10 @@ async function generatePdfWithDocRaptor(symbol, htmlContent) {
   // 如果没有API Key，使用备用方案
   if (!DOC_RAPTOR_API_KEY) {
     console.warn('⚠️  [v3-dev PDF] DocRaptor API Key 未配置，使用 PDFKit 备用方案');
-    return generateFallbackPDF(htmlContent);
+    // Extract firm name from HTML content (best effort)
+    const firmMatch = htmlContent.match(/<strong>Firm:<\/strong>\s*([^<]+)/);
+    const firmName = firmMatch ? firmMatch[1].trim() : 'Research';
+    return generateFallbackPDF(htmlContent, firmName);
   }
   
   try {
@@ -3559,7 +3562,10 @@ async function generatePdfWithDocRaptor(symbol, htmlContent) {
   } catch (error) {
     console.error('❌ [v3-dev DocRaptor] API调用失败:', error.message);
     console.warn('⚠️  [v3-dev PDF] 降级到 PDFKit 备用方案');
-    return generateFallbackPDF(htmlContent);
+    // Extract firm name from HTML content (best effort)
+    const firmMatch = htmlContent.match(/<strong>Firm:<\/strong>\s*([^<]+)/);
+    const firmName = firmMatch ? firmMatch[1].trim() : 'Research';
+    return generateFallbackPDF(htmlContent, firmName);
   }
 }
 
@@ -3575,9 +3581,10 @@ async function convertHTMLtoPDF(htmlContent, symbol = 'UNKNOWN') {
 /**
  * 备用方案：使用 PDFKit 生成纯文本 PDF
  * @param {string} htmlContent - HTML内容
+ * @param {string} firmName - 机构名称（从 report.meta.firm 提取）
  * @returns {Promise<Buffer>} PDF Buffer
  */
-function generateFallbackPDF(htmlContent) {
+function generateFallbackPDF(htmlContent, firmName = 'Research') {
   console.log('📝 [v3-dev PDFKit] 使用备用方案生成PDF...');
   
   // 提取文本内容
@@ -3597,8 +3604,9 @@ function generateFallbackPDF(htmlContent) {
   
   doc.on('data', chunk => chunks.push(chunk));
   
-  // 标题
-  doc.fontSize(16).font('Helvetica-Bold').text('USIS Research Report', { align: 'center' });
+  // 标题 - 🆕 v5.1: Use brand parameter
+  const reportTitle = `${firmName} Report`;
+  doc.fontSize(16).font('Helvetica-Bold').text(reportTitle, { align: 'center' });
   doc.moveDown();
   
   // 内容
@@ -3884,7 +3892,7 @@ function renderPage1(report, h) {
         </div>
         <div style="margin-top: 60px; font-size: 10pt; color: #666;">
           <p><strong>Firm:</strong> ${report.meta.firm}</p>
-          <p><strong>Analyst:</strong> ${report.meta.analyst}</p>
+          <p><strong>Lead Analyst:</strong> ${report.meta.analyst}</p>
         </div>
       </div>
       <div class="footer">
@@ -4633,7 +4641,7 @@ function buildFinalInstitutionalHtml(report) {
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>USIS Research Report - ${report.symbol}</title>
+      <title>${report.meta.firm || 'Research'} Report - ${report.symbol}</title>
       ${TEMPLATE_CSS}
     </head>
     <body>
@@ -4967,8 +4975,8 @@ function buildHtmlFromReport_LEGACY(report) {
   
   <div style="margin-top: 60px; font-size: 12px; opacity: 0.9;">
     <p>Generated: ${new Date(report.meta.generated_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-    <p>USIS Research v3.1 | Processing Time: ${report.meta.latency_ms}ms</p>
-    <p style="margin-top: 20px; font-size: 10px;">© 2025 USIS Financial Intelligence. All rights reserved.</p>
+    <p>${report.meta.firm || 'Research'} v3.1 | Processing Time: ${report.meta.latency_ms}ms</p>
+    <p style="margin-top: 20px; font-size: 10px;">© 2025 ${report.meta.firm || 'Financial Intelligence'}. All rights reserved.</p>
   </div>
 </div>
 
@@ -5614,15 +5622,15 @@ report.rating === 'HOLD' ? `We adopt a neutral stance on ${report.symbol} at cur
       <tr><td>Generated</td><td>${new Date(report.meta.generated_at).toLocaleString('en-US', {year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC'})} UTC</td></tr>
       <tr><td>AI Model</td><td>${report.meta.model}</td></tr>
       <tr><td>Processing Time</td><td>${report.meta.latency_ms}ms</td></tr>
-      <tr><td>Version</td><td>USIS Research ${report.meta.version}</td></tr>
+      <tr><td>Version</td><td>${report.meta.firm || 'Research'} ${report.meta.version}</td></tr>
       <tr><td>Data Sources</td><td>Finnhub, Twelve Data, Alpha Vantage</td></tr>
     </tbody>
   </table>
   
   <div class="disclaimer">
     <h3>DISCLAIMER</h3>
-    <p>This research report is generated using artificial intelligence and publicly available market data. It is provided for informational and educational purposes only and does not constitute investment advice, a recommendation, or an offer to buy or sell any securities. Past performance does not guarantee future results. Investors should conduct their own due diligence and consult with a licensed financial advisor before making any investment decisions. The author(s) and USIS Research disclaim all liability for any losses or damages arising from the use of this report.</p>
-    <p style="margin-top: 12px;"><strong>© 2025 USIS Financial Intelligence. All rights reserved.</strong> | Institutional-Grade AI Research | v3.1</p>
+    <p>This research report is generated using artificial intelligence and publicly available market data. It is provided for informational and educational purposes only and does not constitute investment advice, a recommendation, or an offer to buy or sell any securities. Past performance does not guarantee future results. Investors should conduct their own due diligence and consult with a licensed financial advisor before making any investment decisions. The author(s) and ${report.meta.firm || 'the research provider'} disclaim all liability for any losses or damages arising from the use of this report.</p>
+    <p style="margin-top: 12px;"><strong>© 2025 ${report.meta.firm || 'Financial Intelligence'}. All rights reserved.</strong> | Institutional-Grade AI Research | v3.1</p>
   </div>
 </div>
 
