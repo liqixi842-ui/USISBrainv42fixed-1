@@ -34,6 +34,55 @@ function fixSentence(text) {
   return fixed;
 }
 
+/**
+ * 🛡️ Critical Fix: 确保 Risk 段落不包含利好词汇
+ * 保守策略：只替换最明显的短语，避免破坏复杂语法
+ */
+function removeUpsideLanguageFromRisks(text) {
+  if (!text || typeof text !== 'string') return text;
+  
+  let cleaned = text;
+  
+  // 阶段 1: 移除"如果缓解会有利好"这类明显不属于 Risk 的表述
+  // 使用更精确的匹配，避免删除整句导致空字符串
+  if (/if.*(?:resolved|mitigated|addressed)/i.test(text) && /upside|benefit|opportunity/i.test(text)) {
+    // 匹配并删除upside子句，保留其他内容
+    cleaned = cleaned.replace(/,?\s*(?:but\s+|and\s+)?if.*(?:resolved|mitigated|addressed).*?(?:upside|benefit|opportunity)[^.,;]*[.,;]?\s*/gi, ' ');
+  }
+  
+  // 阶段 2: 只替换最安全的短语（不涉及复杂语法）
+  const safeReplacements = [
+    { pattern: /\bupside potential\b/gi, replacement: 'potential impact' },
+    { pattern: /\bpotential upside\b/gi, replacement: 'potential effect' },
+    { pattern: /\bpositive impact\b/gi, replacement: 'material impact' },
+    { pattern: /\bfavorable outcome\b/gi, replacement: 'alternative outcome' },
+    { pattern: /\bstrong upside\b/gi, replacement: 'strong potential' },
+    { pattern: /\bsignificant upside\b/gi, replacement: 'significant potential' },
+  ];
+  
+  safeReplacements.forEach(({ pattern, replacement }) => {
+    cleaned = cleaned.replace(pattern, replacement);
+  });
+  
+  // 阶段 3: 强化清理 - 标点/空格规范化
+  cleaned = cleaned.replace(/\s{2,}/g, ' ');                    // 多个空格 → 单个空格
+  cleaned = cleaned.replace(/\s+([.,;:!?])/g, '$1');            // 空格+标点 → 标点
+  cleaned = cleaned.replace(/([.,;])\s*\1+/g, '$1');            // 连续标点 → 单个标点
+  cleaned = cleaned.replace(/,\s*\./g, '.');                    // 逗号+句号 → 句号
+  cleaned = cleaned.replace(/([.,;:!?])([A-Z])/g, '$1 $2');     // 标点后加空格
+  
+  // 阶段 4: 清理句首的悬挂标点
+  cleaned = cleaned.replace(/^[,;:\s]+/, '');                   // 删除句首逗号、分号、冒号
+  cleaned = cleaned.replace(/\s+$/, '');                        // 删除句尾空格
+  
+  // 阶段 5: 如果清理后太短，返回空字符串（会在上层被过滤掉）
+  if (cleaned.length < 20) {
+    return '';
+  }
+  
+  return cleaned.trim();
+}
+
 async function enhanceWithQuantification(item, symbol, isRisk = true) {
   if (!item || item.length < 20) return item;
   
@@ -102,6 +151,12 @@ async function processItems(items, symbol, isRisk = true, minItems = 6, maxItems
   // Step 2: Fix sentences
   filtered = filtered.map(item => fixSentence(item));
   
+  // Step 2.5: 🛡️ Critical Fix - 如果是 Risk，移除利好词汇
+  if (isRisk) {
+    filtered = filtered.map(item => removeUpsideLanguageFromRisks(item));
+    console.log(`  ├─ Removed upside language from risks`);
+  }
+  
   // Step 3: Enhance with quantification (for top items)
   const enhanced = [];
   for (let i = 0; i < Math.min(filtered.length, maxItems); i++) {
@@ -152,5 +207,6 @@ module.exports = {
   processRisksAndCatalysts,
   enhanceWithQuantification,
   isPlaceholder,
-  fixSentence
+  fixSentence,
+  removeUpsideLanguageFromRisks
 };

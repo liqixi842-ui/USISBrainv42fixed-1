@@ -4435,7 +4435,7 @@ function renderPage17(report, h) {
     <div class="page">
       <div class="section-title">Disclaimers</div>
       <p style="font-size: 8pt; line-height: 1.3;">
-      <strong>Important Information:</strong> This research report is provided for informational purposes only and does not constitute an offer or solicitation to buy or sell any securities. The information contained herein is believed to be reliable but USIS makes no representation or warranty as to its accuracy or completeness.
+      <strong>Important Information:</strong> This research report is provided for informational purposes only and does not constitute an offer or solicitation to buy or sell any securities. The information contained herein is believed to be reliable but ${report.meta.firm || 'USIS'} makes no representation or warranty as to its accuracy or completeness.
       </p>
       <p style="font-size: 8pt; line-height: 1.3;">
       <strong>Not Investment Advice:</strong> This report is not intended to provide investment advice and should not be relied upon as such. Investors should conduct their own due diligence and consult with qualified financial advisors before making investment decisions. Past performance is not indicative of future results.
@@ -4447,16 +4447,16 @@ function renderPage17(report, h) {
       <strong>Forward-Looking Statements:</strong> This report may contain forward-looking statements and projections that are inherently uncertain. Actual results may differ materially from forecasts due to unforeseen events, changes in competitive dynamics, regulatory developments, or other factors outside our control.
       </p>
       <p style="font-size: 8pt; line-height: 1.3;">
-      <strong>Data Sources:</strong> Financial data and metrics are sourced from third-party providers including but not limited to Finnhub, Twelve Data, and Alpha Vantage. While we endeavor to ensure data accuracy, USIS is not responsible for errors or omissions in third-party data.
+      <strong>Data Sources:</strong> Financial data and metrics are sourced from third-party providers including but not limited to Finnhub, Twelve Data, and Alpha Vantage. While we endeavor to ensure data accuracy, ${report.meta.firm || 'USIS'} is not responsible for errors or omissions in third-party data.
       </p>
       <p style="font-size: 8pt; line-height: 1.3;">
-      <strong>No Guarantees:</strong> USIS does not guarantee the accuracy, completeness, or timeliness of information in this report. Ratings and price targets represent analytical opinions at a point in time and are not guarantees of future performance.
+      <strong>No Guarantees:</strong> ${report.meta.firm || 'USIS'} does not guarantee the accuracy, completeness, or timeliness of information in this report. Ratings and price targets represent analytical opinions at a point in time and are not guarantees of future performance.
       </p>
       <p style="font-size: 8pt; line-height: 1.3;">
-      <strong>Conflicts of Interest:</strong> USIS may have business relationships with companies covered in this report. Analysts may hold positions in securities mentioned herein. Such holdings and relationships are disclosed where material.
+      <strong>Conflicts of Interest:</strong> ${report.meta.firm || 'USIS'} may have business relationships with companies covered in this report. Analysts may hold positions in securities mentioned herein. Such holdings and relationships are disclosed where material.
       </p>
       <p style="font-size: 8pt; line-height: 1.3;">
-      <strong>Copyright Notice:</strong> This report is proprietary and confidential. Reproduction or distribution without express written consent from USIS is prohibited. © ${new Date().getFullYear()} USIS Research. All rights reserved.
+      <strong>Copyright Notice:</strong> This report is proprietary and confidential. Reproduction or distribution without express written consent is prohibited. © ${new Date().getFullYear()} ${report.meta.firm || 'USIS Research'}. All rights reserved.
       </p>
       <div class="footer">
         <span>${report.meta.brand}</span>

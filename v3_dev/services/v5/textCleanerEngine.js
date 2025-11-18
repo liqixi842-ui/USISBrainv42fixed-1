@@ -29,11 +29,15 @@ function removeDuplicateWords(text) {
 
 /**
  * 去除常见 AI 口癖短语
+ * 修复版：保留完整短语，只替换形容词
  */
 function removeAICliches(text) {
   if (!text) return text;
   
-  const cliches = [
+  let cleaned = text;
+  
+  // 阶段 1: 删除引导性口癖（直接删除，不影响后续内容）
+  const leadInCliches = [
     /It'?s worth noting that /gi,
     /It'?s important to note that /gi,
     /It should be noted that /gi,
@@ -41,20 +45,27 @@ function removeAICliches(text) {
     /Importantly, /gi,
     /Interestingly, /gi,
     /Remarkably, /gi,
-    /Exciting opportunity/gi,  // 替换为 opportunity
-    /Amazing growth/gi,         // 替换为 strong growth
-    /Incredible performance/gi, // 替换为 exceptional performance
   ];
   
-  let cleaned = text;
+  leadInCliches.forEach(cliche => {
+    cleaned = cleaned.replace(cliche, '');
+  });
   
-  cliches.forEach(cliche => {
-    cleaned = cleaned.replace(cliche, (match) => {
-      // 特殊处理：保留实质内容
-      if (match.toLowerCase().includes('exciting')) return '';
-      if (match.toLowerCase().includes('amazing')) return 'Strong';
-      if (match.toLowerCase().includes('incredible')) return 'Exceptional';
-      return ''; // 其他口癖直接删除
+  // 阶段 2: 替换形容词短语（保留完整上下文）
+  const adjectiveReplacements = [
+    { pattern: /\b(E|e)xciting\b/g, replacement: 'compelling' },
+    { pattern: /\b(A|a)mazing\b/g, replacement: 'strong' },
+    { pattern: /\b(I|i)ncredible\b/g, replacement: 'exceptional' },
+    { pattern: /\b(F|f)antastic\b/g, replacement: 'solid' },
+    { pattern: /\b(T|t)remendous\b/g, replacement: 'significant' },
+  ];
+  
+  adjectiveReplacements.forEach(({ pattern, replacement }) => {
+    cleaned = cleaned.replace(pattern, (match) => {
+      // 保留原始大小写：如果第一个字母大写，替换词也大写
+      return match[0] === match[0].toUpperCase() 
+        ? replacement.charAt(0).toUpperCase() + replacement.slice(1)
+        : replacement;
     });
   });
   
