@@ -723,6 +723,7 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
     
   } catch (error) {
     console.error(`❌ [buildResearchReport] Error: ${error.message}`);
+    console.error(error.stack);
     
     // Return minimal fallback report
     return buildFallbackReport(symbol, assetType, startTime);
@@ -1258,6 +1259,13 @@ async function fetchPeerData(symbol) {
  * @returns {object} { indicators_table, tech_commentary }
  */
 function generateTechnicalIndicatorsData(marketData) {
+  // ═══ DEFENSIVE HELPER: Safe Number Formatting ═══
+  function safeToFixed(value, digits = 2) {
+    return (typeof value === 'number' && isFinite(value))
+      ? value.toFixed(digits)
+      : 'N/A';
+  }
+  
   const techs = marketData.techs || {};
   const price = marketData.price?.last;
   const techHistory = marketData.techHistory || {};
@@ -1275,79 +1283,87 @@ function generateTechnicalIndicatorsData(marketData) {
     : techs.ema_50;
   
   // Row 1: RSI(14)
-  if (techs.rsi_14 !== null && techs.rsi_14 !== undefined) {
+  const rsiValue = safeToFixed(techs.rsi_14, 2);
+  if (rsiValue !== 'N/A') {
     let rsiSignal = 'Neutral';
     if (techs.rsi_14 > 70) rsiSignal = 'Overbought';
     else if (techs.rsi_14 < 30) rsiSignal = 'Oversold';
     
     indicators_table.push({
       indicator: 'RSI(14)',
-      value: techs.rsi_14.toFixed(2),
+      value: rsiValue,
       signal: rsiSignal
     });
   }
   
   // Row 2: MACD
-  if (techs.macd !== null && techs.macd !== undefined) {
+  const macdValue = safeToFixed(techs.macd, 2);
+  if (macdValue !== 'N/A') {
     const macdSignal = techs.macd > 0 ? 'Bullish Signal' : 'Bearish Signal';
     indicators_table.push({
       indicator: 'MACD',
-      value: techs.macd.toFixed(2),
+      value: macdValue,
       signal: macdSignal
     });
   }
   
   // Row 3: EMA(20)
-  if (ema20_latest !== null && ema20_latest !== undefined && price) {
+  const ema20Value = safeToFixed(ema20_latest, 2);
+  if (ema20Value !== 'N/A' && price) {
     const emaSignal = price > ema20_latest ? 'Above EMA20 (Bullish)' : 'Below EMA20 (Bearish)';
     indicators_table.push({
       indicator: 'EMA(20)',
-      value: `$${ema20_latest.toFixed(2)}`,
+      value: `$${ema20Value}`,
       signal: emaSignal
     });
   }
   
   // Row 4: EMA(50)
-  if (ema50_latest !== null && ema50_latest !== undefined && price) {
+  const ema50Value = safeToFixed(ema50_latest, 2);
+  if (ema50Value !== 'N/A' && price) {
     const emaSignal = price > ema50_latest ? 'Above EMA50 (Bullish)' : 'Below EMA50 (Bearish)';
     indicators_table.push({
       indicator: 'EMA(50)',
-      value: `$${ema50_latest.toFixed(2)}`,
+      value: `$${ema50Value}`,
       signal: emaSignal
     });
   }
   
   // Row 5: Bollinger Bands
-  if (techs.bb_upper !== null && techs.bb_lower !== null && price) {
+  const bbUpperValue = safeToFixed(techs.bb_upper, 2);
+  const bbLowerValue = safeToFixed(techs.bb_lower, 2);
+  if (bbUpperValue !== 'N/A' && bbLowerValue !== 'N/A' && price) {
     let bbSignal = 'Normal Range';
     if (price > techs.bb_upper) bbSignal = 'High Volatility (Above Upper Band)';
     else if (price < techs.bb_lower) bbSignal = 'Low Volatility (Below Lower Band)';
     
     indicators_table.push({
       indicator: 'Bollinger Upper',
-      value: `$${techs.bb_upper.toFixed(2)}`,
+      value: `$${bbUpperValue}`,
       signal: bbSignal
     });
     indicators_table.push({
       indicator: 'Bollinger Lower',
-      value: `$${techs.bb_lower.toFixed(2)}`,
+      value: `$${bbLowerValue}`,
       signal: bbSignal
     });
   }
   
   // Row 6: Support / Resistance
-  if (techs.support_level !== null && techs.support_level !== undefined) {
+  const supportValue = safeToFixed(techs.support_level, 2);
+  if (supportValue !== 'N/A') {
     indicators_table.push({
       indicator: 'Support Level',
-      value: `$${techs.support_level.toFixed(2)}`,
+      value: `$${supportValue}`,
       signal: price && price > techs.support_level ? 'Above Support' : 'At/Below Support'
     });
   }
   
-  if (techs.resistance_level !== null && techs.resistance_level !== undefined) {
+  const resistanceValue = safeToFixed(techs.resistance_level, 2);
+  if (resistanceValue !== 'N/A') {
     indicators_table.push({
       indicator: 'Resistance Level',
-      value: `$${techs.resistance_level.toFixed(2)}`,
+      value: `$${resistanceValue}`,
       signal: price && price < techs.resistance_level ? 'Below Resistance' : 'At/Above Resistance'
     });
   }
@@ -1358,35 +1374,41 @@ function generateTechnicalIndicatorsData(marketData) {
   // Paragraph 1: Major Trend
   const trendParts = [];
   
-  if (techs.rsi_14 !== null) {
+  const rsiCommentary = safeToFixed(techs.rsi_14, 1);
+  if (rsiCommentary !== 'N/A') {
     if (techs.rsi_14 > 70) {
-      trendParts.push(`The RSI(14) reading of ${techs.rsi_14.toFixed(1)} indicates overbought conditions, suggesting potential for near-term consolidation or pullback.`);
+      trendParts.push(`The RSI(14) reading of ${rsiCommentary} indicates overbought conditions, suggesting potential for near-term consolidation or pullback.`);
     } else if (techs.rsi_14 < 30) {
-      trendParts.push(`The RSI(14) reading of ${techs.rsi_14.toFixed(1)} signals oversold territory, presenting potential entry opportunities on mean reversion.`);
+      trendParts.push(`The RSI(14) reading of ${rsiCommentary} signals oversold territory, presenting potential entry opportunities on mean reversion.`);
     } else {
-      trendParts.push(`The RSI(14) reading of ${techs.rsi_14.toFixed(1)} reflects neutral momentum with no extreme overbought or oversold conditions.`);
+      trendParts.push(`The RSI(14) reading of ${rsiCommentary} reflects neutral momentum with no extreme overbought or oversold conditions.`);
     }
   }
   
-  if (ema20_latest && price) {
+  const ema20Commentary = safeToFixed(ema20_latest, 2);
+  if (ema20Commentary !== 'N/A' && price) {
     const emaPosition = price > ema20_latest ? 'above' : 'below';
     const emaTrend = price > ema20_latest ? 'bullish' : 'bearish';
-    trendParts.push(`The stock is trading ${emaPosition} its 20-day EMA ($${ema20_latest.toFixed(2)}), indicating ${emaTrend} short-term momentum.`);
+    trendParts.push(`The stock is trading ${emaPosition} its 20-day EMA ($${ema20Commentary}), indicating ${emaTrend} short-term momentum.`);
   }
   
-  if (ema50_latest && price) {
+  const ema50Commentary = safeToFixed(ema50_latest, 2);
+  if (ema50Commentary !== 'N/A' && price) {
     const ema50Position = price > ema50_latest ? 'above' : 'below';
-    trendParts.push(`The price ${ema50Position} the 50-day EMA ($${ema50_latest.toFixed(2)}) confirms the intermediate-term trend direction.`);
+    trendParts.push(`The price ${ema50Position} the 50-day EMA ($${ema50Commentary}) confirms the intermediate-term trend direction.`);
   }
   
   // Paragraph 2: Support & Resistance
   const supportResistParts = [];
   
-  if (techs.support_level && techs.resistance_level && price) {
+  const supportCommentary = safeToFixed(techs.support_level, 2);
+  const resistanceCommentary = safeToFixed(techs.resistance_level, 2);
+  
+  if (supportCommentary !== 'N/A' && resistanceCommentary !== 'N/A' && price) {
     const range = techs.resistance_level - techs.support_level;
-    const position = ((price - techs.support_level) / range * 100).toFixed(0);
+    const position = safeToFixed((price - techs.support_level) / range * 100, 0);
     
-    supportResistParts.push(`Key support is identified at $${techs.support_level.toFixed(2)}, with resistance at $${techs.resistance_level.toFixed(2)}. The stock is currently trading at ${position}% of this range.`);
+    supportResistParts.push(`Key support is identified at $${supportCommentary}, with resistance at $${resistanceCommentary}. The stock is currently trading at ${position}% of this range.`);
     
     if (price > techs.resistance_level) {
       supportResistParts.push(`A breakout above resistance could signal further upside momentum.`);
@@ -1398,9 +1420,10 @@ function generateTechnicalIndicatorsData(marketData) {
   // Paragraph 3: Indicator Interpretation
   const interpretationParts = [];
   
-  if (techs.macd !== null) {
+  const macdCommentary = safeToFixed(techs.macd, 2);
+  if (macdCommentary !== 'N/A') {
     const macdSignal = techs.macd > 0 ? 'bullish' : 'bearish';
-    interpretationParts.push(`The MACD signal (${techs.macd.toFixed(2)}) provides a ${macdSignal} crossover indication.`);
+    interpretationParts.push(`The MACD signal (${macdCommentary}) provides a ${macdSignal} crossover indication.`);
   }
   
   if (techs.bb_upper && techs.bb_lower && price) {
@@ -1418,6 +1441,8 @@ function generateTechnicalIndicatorsData(marketData) {
   tech_commentary = allParts.length > 0 
     ? allParts.join(' ') 
     : 'Technical indicators are currently unavailable for this security. Please refer to price action and volume analysis.';
+  
+  console.log('[TECH_TO_FIXED_PATCH_OK] Technical indicators safe formatting enabled');
   
   return {
     indicators_table,
