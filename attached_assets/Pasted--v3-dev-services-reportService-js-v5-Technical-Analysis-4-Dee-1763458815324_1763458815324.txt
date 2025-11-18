@@ -1,0 +1,129 @@
+请在 v3_dev/services/reportService.js 中，为 v5 英文研报新增完整的 Technical Analysis 页面结构（包含 4 个部分）。
+
+目标：基于 DeepReport 的排版结构，但所有内容必须为纯英文，不混入任何中文。
+
+生成逻辑如下：
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【 Technical Analysis - New Full Page 】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Technical Analysis 页面包含 4 个模块：
+
+------------------------------------------------------------
+① Price Trend + EMA20/50 Chart (90 days)
+------------------------------------------------------------
+• 图形风格请参考旧版 DeepReport（折线 + EMA20/50 + 支撑/压力线）
+• 使用 QuickChart 渲染
+• 英文标题: “Price Trend & Technical Indicators (90 Days)”
+• 图例请使用英文：Price / EMA20 / EMA50 / Support / Resistance
+
+从 data.priceHistory_90d 生成：
+- price array
+- ema20 array
+- ema50 array
+- support_level (report.techs.support_level)
+- resistance_level (report.techs.resistance_level)
+
+将 URL 注入为：
+report.charts.tech_price_trend
+
+------------------------------------------------------------
+② Volume Trend Chart (90 Days)
+------------------------------------------------------------
+• 使用 QuickChart 渲染柱状图
+• 英文标题: “Volume Trend (90 Days)”
+• 使用 90 日成交量数据 volumeHistory_90d
+
+URL 注入：
+report.charts.tech_volume_trend
+
+------------------------------------------------------------
+③ Technical Indicator Table（指标表格）
+------------------------------------------------------------
+表格结构参考旧 DeepReport，但语言需为英文：
+
+Columns:
+- Indicator
+- Value
+- Signal
+
+Rows:
+- RSI(14)
+- MACD
+- EMA(20)
+- Bollinger Bands (Upper / Lower)
+- Support / Resistance
+
+所有指标从现有技术指标模块 / TwelveData API 获取：
+report.techs.rsi_14
+report.techs.macd
+report.techs.ema_20
+report.techs.bb_upper
+report.techs.bb_lower
+
+Signal 字段规则：
+RSI:
+  >70 = Overbought
+  <30 = Oversold
+  else = Neutral
+MACD:
+  macd > signal = Bullish Signal
+  else = Bearish Signal
+EMA:
+  price > ema20 = Above EMA20
+  else = Below EMA20
+Bollinger:
+  按 upper/lower 的价格区间判断，高于 upper 为 High Volatility，低于 lower 为 Low Volatility，否则 Normal Range
+
+------------------------------------------------------------
+④ Technical Commentary（英文自然语言解读）
+------------------------------------------------------------
+采用 v5 Writer 或 gpt-4o-mini 英文生成，不使用任何中文模板。
+
+段落结构：
+
+Major Trend:
+  Describe RSI / EMA / Price position vs moving averages.
+
+Support & Resistance:
+  Use report.techs.support_level / report.techs.resistance_level.
+
+Indicator Interpretation:
+  Explain RSI status, MACD signal, EMA trend, Bollinger status.
+
+请生成英文自然段落，并加入到：
+report.tech_commentary
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【 页面渲染：renderPageX (建议放 Page 13) 】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+在 v5 PDF 模板内新增页面：
+
+renderPage13() 替换当前技术分析页内容：
+
+1) Section Title:
+   <div class="section-title">Technical Analysis</div>
+
+2) 插入 Price Trend 图：
+   <img src="${report.charts.tech_price_trend}" />
+
+3) 插入 Volume Trend 图：
+   <img src="${report.charts.tech_volume_trend}" />
+
+4) 插入指标表格（英文）：
+   按照 DeepReport 样式创建英文表格
+
+5) 插入 Technical Commentary 英文段落：
+   ${h.toParagraphs(report.tech_commentary)}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【 验证 】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+部署后请输出：
+
+console.log('[TECH_PAGE_PATCH_OK]')
+
+以确认新页面加载成功。
+

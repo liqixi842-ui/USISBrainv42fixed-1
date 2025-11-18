@@ -936,6 +936,16 @@ async function fetchComprehensiveData(symbol, assetType) {
   data.techs = TechnicalEngine.calculateBasicTechs(data.price);
   console.log(`   └─ Technical indicators: Support $${data.techs.support_level?.toFixed(2) || 'N/A'}, Resistance $${data.techs.resistance_level?.toFixed(2) || 'N/A'}`);
   
+  // ═══ 90-Day Technical History (Phase 1.9 - v5 Enhancement) ═══
+  try {
+    const techHistory = await fetch90DayHistory(symbol);
+    data.techHistory = techHistory;
+    console.log(`   └─ 90-day history: ${techHistory.priceHistory_90d.length} days, EMA20/50 calculated`);
+  } catch (err) {
+    console.log(`   └─ 90-day history fetch failed: ${err.message}`);
+    data.techHistory = { priceHistory_90d: [], volumeHistory_90d: [], ema20: [], ema50: [] };
+  }
+  
   return data;
 }
 
@@ -1025,6 +1035,107 @@ async function fetch2YearForecasts(symbol) {
   }
   
   return result;
+}
+
+/**
+ * Fetch 90-day price and volume history for technical charts
+ * Uses Twelve Data API (TWELVE_DATA_API_KEY required)
+ * @param {string} symbol - Stock symbol
+ * @returns {Promise<object>} { priceHistory_90d, volumeHistory_90d, ema20, ema50 }
+ */
+async function fetch90DayHistory(symbol) {
+  const result = {
+    priceHistory_90d: [],
+    volumeHistory_90d: [],
+    ema20: [],
+    ema50: []
+  };
+  
+  if (!TWELVE_DATA_API_KEY) {
+    console.log(`   [fetch90DayHistory] TWELVE_DATA_API_KEY not available, skipping...`);
+    return result;
+  }
+  
+  try {
+    console.log(`   [fetch90DayHistory] Fetching 90-day data for ${symbol}...`);
+    
+    // Fetch daily time series (90 days)
+    const res = await fetch(
+      `https://api.twelvedata.com/time_series?symbol=${symbol}&interval=1day&outputsize=90&apikey=${TWELVE_DATA_API_KEY}`,
+      { timeout: 10000 }
+    );
+    
+    if (!res.ok) throw new Error(`Twelve Data API error: ${res.status}`);
+    
+    const data = await res.json();
+    
+    if (data.status === 'error') {
+      throw new Error(data.message || 'API returned error status');
+    }
+    
+    const values = data.values || [];
+    
+    if (values.length === 0) {
+      console.log(`   [fetch90DayHistory] No data returned for ${symbol}`);
+      return result;
+    }
+    
+    // Reverse to get chronological order (oldest to newest)
+    const chronological = values.reverse();
+    
+    // Extract price and volume arrays
+    result.priceHistory_90d = chronological.map(d => ({
+      date: d.datetime,
+      price: parseFloat(d.close)
+    }));
+    
+    result.volumeHistory_90d = chronological.map(d => ({
+      date: d.datetime,
+      volume: parseInt(d.volume) || 0
+    }));
+    
+    // Calculate EMA20 and EMA50
+    result.ema20 = calculateEMA(result.priceHistory_90d.map(d => d.price), 20);
+    result.ema50 = calculateEMA(result.priceHistory_90d.map(d => d.price), 50);
+    
+    console.log(`   [fetch90DayHistory] ✅ Fetched ${result.priceHistory_90d.length} days of data`);
+    
+  } catch (err) {
+    console.log(`   [fetch90DayHistory] Error: ${err.message}`);
+  }
+  
+  return result;
+}
+
+/**
+ * Calculate Exponential Moving Average (EMA)
+ * @param {Array<number>} prices - Array of prices
+ * @param {number} period - EMA period (e.g., 20, 50)
+ * @returns {Array<number>} EMA values (same length as prices, nulls at start)
+ */
+function calculateEMA(prices, period) {
+  if (!prices || prices.length < period) {
+    return Array(prices?.length || 0).fill(null);
+  }
+  
+  const k = 2 / (period + 1); // Smoothing factor
+  const ema = [];
+  
+  // Initial SMA for first EMA value
+  let sum = 0;
+  for (let i = 0; i < period; i++) {
+    sum += prices[i];
+    ema.push(null); // Nulls before first valid EMA
+  }
+  
+  ema[period - 1] = sum / period; // First EMA is SMA
+  
+  // Calculate remaining EMAs
+  for (let i = period; i < prices.length; i++) {
+    ema[i] = prices[i] * k + ema[i - 1] * (1 - k);
+  }
+  
+  return ema;
 }
 
 /**
@@ -1278,9 +1389,182 @@ function generateCharts(marketData) {
       charts.price_chart = techChart.getUrl();
     }
     
+    // ═══════════════════════════════════════════════════════════════
+    // v5 ENHANCEMENT: Technical Analysis Charts (90-day)
+    // ═══════════════════════════════════════════════════════════════
+    
+    // CHART 5: Price Trend + EMA20/50 + Support/Resistance (90 Days)
+    if (marketData.techHistory && marketData.techHistory.priceHistory_90d.length > 0) {
+      const priceChart = new QuickChart();
+      const priceData = marketData.techHistory.priceHistory_90d;
+      const ema20 = marketData.techHistory.ema20;
+      const ema50 = marketData.techHistory.ema50;
+      
+      const datasets = [
+        {
+          label: 'Price',
+          data: priceData.map(d => d.price),
+          borderColor: 'rgb(59, 130, 246)',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          tension: 0.1,
+          fill: false,
+          borderWidth: 2
+        }
+      ];
+      
+      // Add EMA20 if available
+      if (ema20.length > 0 && ema20.some(v => v !== null)) {
+        datasets.push({
+          label: 'EMA20',
+          data: ema20,
+          borderColor: 'rgb(249, 115, 22)',
+          backgroundColor: 'transparent',
+          tension: 0.1,
+          fill: false,
+          borderWidth: 1.5,
+          borderDash: [5, 5]
+        });
+      }
+      
+      // Add EMA50 if available
+      if (ema50.length > 0 && ema50.some(v => v !== null)) {
+        datasets.push({
+          label: 'EMA50',
+          data: ema50,
+          borderColor: 'rgb(139, 92, 246)',
+          backgroundColor: 'transparent',
+          tension: 0.1,
+          fill: false,
+          borderWidth: 1.5,
+          borderDash: [10, 5]
+        });
+      }
+      
+      // Add support level line
+      if (marketData.techs.support_level) {
+        datasets.push({
+          label: 'Support',
+          data: Array(priceData.length).fill(marketData.techs.support_level),
+          borderColor: 'rgb(239, 68, 68)',
+          backgroundColor: 'transparent',
+          tension: 0,
+          fill: false,
+          borderWidth: 1,
+          borderDash: [3, 3],
+          pointRadius: 0
+        });
+      }
+      
+      // Add resistance level line
+      if (marketData.techs.resistance_level) {
+        datasets.push({
+          label: 'Resistance',
+          data: Array(priceData.length).fill(marketData.techs.resistance_level),
+          borderColor: 'rgb(16, 185, 129)',
+          backgroundColor: 'transparent',
+          tension: 0,
+          fill: false,
+          borderWidth: 1,
+          borderDash: [3, 3],
+          pointRadius: 0
+        });
+      }
+      
+      priceChart.setConfig({
+        type: 'line',
+        data: {
+          labels: priceData.map(d => d.date),
+          datasets: datasets
+        },
+        options: {
+          title: { 
+            display: true, 
+            text: 'Price Trend & Technical Indicators (90 Days)',
+            fontSize: 16
+          },
+          scales: {
+            x: {
+              display: true,
+              ticks: {
+                maxTicksLimit: 12,
+                autoSkip: true
+              }
+            },
+            y: { 
+              beginAtZero: false,
+              ticks: {
+                callback: function(value) {
+                  return '$' + value.toFixed(2);
+                }
+              }
+            }
+          },
+          legend: {
+            display: true,
+            position: 'bottom'
+          }
+        }
+      });
+      priceChart.setWidth(800).setHeight(400).setBackgroundColor('white');
+      charts.tech_price_trend = priceChart.getUrl();
+      console.log(`   [Chart] Generated tech_price_trend chart`);
+    }
+    
+    // CHART 6: Volume Trend (90 Days)
+    if (marketData.techHistory && marketData.techHistory.volumeHistory_90d.length > 0) {
+      const volumeChart = new QuickChart();
+      const volumeData = marketData.techHistory.volumeHistory_90d;
+      
+      volumeChart.setConfig({
+        type: 'bar',
+        data: {
+          labels: volumeData.map(d => d.date),
+          datasets: [{
+            label: 'Volume',
+            data: volumeData.map(d => d.volume / 1000000), // Convert to millions
+            backgroundColor: 'rgba(99, 102, 241, 0.6)',
+            borderColor: 'rgb(99, 102, 241)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          title: { 
+            display: true, 
+            text: 'Volume Trend (90 Days)',
+            fontSize: 16
+          },
+          scales: {
+            x: {
+              display: true,
+              ticks: {
+                maxTicksLimit: 12,
+                autoSkip: true
+              }
+            },
+            y: { 
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return value.toFixed(1) + 'M';
+                }
+              }
+            }
+          },
+          legend: {
+            display: false
+          }
+        }
+      });
+      volumeChart.setWidth(800).setHeight(300).setBackgroundColor('white');
+      charts.tech_volume_trend = volumeChart.getUrl();
+      console.log(`   [Chart] Generated tech_volume_trend chart`);
+    }
+    
   } catch (err) {
     console.log(`   [Chart Generation] Error: ${err.message}`);
   }
+  
+  console.log(`[TECH_PAGE_PATCH_OK] Technical charts generation complete`);
   
   return charts;
 }
