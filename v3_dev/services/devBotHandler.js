@@ -224,7 +224,7 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
       // v6.0: Updated default to myusis.net (new production server)
       const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 
                              process.env.REPLIT_DEV_DOMAIN || 
-                             'https://myusis.net';
+                             'http://myusis.net:3000';
       
       console.log(`[URL_FIX_v5.1] Using API URL: ${REPLIT_API_URL}`);
       
