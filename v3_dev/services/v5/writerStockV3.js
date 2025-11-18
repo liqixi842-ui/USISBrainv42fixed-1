@@ -1,6 +1,7 @@
 const { callOpenAI } = require('../aiService');
 const styleEngine = require('./styleEngine');
 const sentenceEngine = require('./sentenceEngine');
+const { cleanText } = require('./textCleanerEngine');
 
 async function generateThesis(report) {
   const prompt = `You are a Morgan Stanley equity analyst writing an investment thesis for ${report.symbol}.
@@ -61,6 +62,9 @@ Thesis:`;
     thesis = styleEngine.applyStyle(thesis);
     thesis = sentenceEngine.normalize(thesis);
     
+    // Apply text cleaning (remove duplicate words, AI clichés)
+    thesis = cleanText(thesis);
+    
     console.log(`[WriterStockV3] Thesis generated: ${thesis.length} chars`);
     return thesis;
     
@@ -71,6 +75,7 @@ Thesis:`;
 }
 
 async function generateOverview(report) {
+  // 🔧 Critical Fix: 使用统一的 segment 数据源（避免文本和表格矛盾）
   const segments = report.segments && report.segments.length > 0
     ? report.segments.map(s => `${s.name}: ${s.revenue_pct}% revenue`).join(', ')
     : 'Segment data pending';
@@ -89,6 +94,8 @@ Financial Profile:
 
 Write a 900 word company overview with segment breakdown:
 
+**CRITICAL**: When discussing business segments, you MUST use the EXACT percentages provided in the "Segments" data above. Do NOT make up different percentages. This ensures consistency with the data table.
+
 **Structure:**
 1. Business Overview (250 words)
    - Core operations
@@ -96,9 +103,9 @@ Write a 900 word company overview with segment breakdown:
    - Geographic footprint
 
 2. Segment Analysis (400 words)
-   - Segment 1: Revenue share, margin, growth drivers
-   - Segment 2: Revenue share, margin, growth drivers
-   - Segment 3+: Brief mention
+   - For each segment, state the EXACT percentage from the data above
+   - Margin and growth drivers
+   - DO NOT use phrases like "approximately" or "roughly" - use the exact numbers provided
 
 3. Operational Excellence (250 words)
    - Execution track record
@@ -126,6 +133,7 @@ Overview:`;
     let overview = response.trim();
     overview = styleEngine.applyStyle(overview);
     overview = sentenceEngine.normalize(overview);
+    overview = cleanText(overview);
     
     console.log(`[WriterStockV3] Overview generated: ${overview.length} chars`);
     return overview;
@@ -189,6 +197,7 @@ Valuation:`;
     let valuation = response.trim();
     valuation = styleEngine.applyStyle(valuation);
     valuation = sentenceEngine.normalize(valuation);
+    valuation = cleanText(valuation);
     
     console.log(`[WriterStockV3] Valuation generated: ${valuation.length} chars`);
     return valuation;
@@ -246,6 +255,7 @@ Industry Analysis:`;
     let industry = response.trim();
     industry = styleEngine.applyStyle(industry);
     industry = sentenceEngine.normalize(industry);
+    industry = cleanText(industry);
     
     console.log(`[WriterStockV3] Industry generated: ${industry.length} chars`);
     return industry;
@@ -304,6 +314,7 @@ Macro Analysis:`;
     let macro = response.trim();
     macro = styleEngine.applyStyle(macro);
     macro = sentenceEngine.normalize(macro);
+    macro = cleanText(macro);
     
     console.log(`[WriterStockV3] Macro generated: ${macro.length} chars`);
     return macro;
