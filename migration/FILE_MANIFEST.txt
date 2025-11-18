@@ -1,0 +1,164 @@
+═══════════════════════════════════════════════════════════
+USIS Brain 迁移包文件清单
+═══════════════════════════════════════════════════════════
+
+生成时间: 2025-11-18
+版本: v6.0
+目标: 迁移至 myusis.net (150.242.90.36)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【迁移脚本】(6个)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ migration/1_export_database.sh           [2.4K] ⚙️ 可执行
+  用途: 从 Replit/Neon 导出数据库
+  运行: ./migration/1_export_database.sh
+  位置: Replit Shell
+  
+✓ migration/2_restore_database.sh          [2.8K] ⚙️ 可执行
+  用途: 在新服务器恢复数据库
+  运行: sudo -u usis ./migration/2_restore_database.sh
+  位置: 服务器 SSH
+  
+✓ migration/3_deploy_to_server.sh          [9.2K] ⚙️ 可执行
+  用途: 一键部署（核心脚本）
+  运行: sudo ./migration/3_deploy_to_server.sh
+  位置: 服务器 SSH
+  功能: 
+    - 安装 Node.js 20
+    - 安装 PostgreSQL 15
+    - 安装 Nginx
+    - 创建应用用户
+    - 配置 PM2
+    - 安装 npm 依赖
+  
+✓ migration/4_configure_nginx.sh           [3.2K] ⚙️ 可执行
+  用途: 配置 Nginx 反向代理
+  运行: sudo ./migration/4_configure_nginx.sh
+  位置: 服务器 SSH
+  
+✓ migration/5_setup_https.sh               [2.6K] ⚙️ 可执行
+  用途: 配置 Let's Encrypt SSL 证书
+  运行: sudo ./migration/5_setup_https.sh
+  位置: 服务器 SSH
+  前提: DNS 已配置
+  
+✓ migration/6_verify_deployment.sh         [8.6K] ⚙️ 可执行
+  用途: 验证所有服务正常运行
+  运行: ./migration/6_verify_deployment.sh
+  位置: 服务器 SSH
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【文档】(5个)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ migration/README.md                      [9.9K] 📖 Markdown
+  用途: 详细迁移指南
+  内容:
+    - 完整步骤说明
+    - 故障排查
+    - 管理命令
+    - 安全清单
+    - 性能优化
+  
+✓ migration/QUICK_START.txt               [6.8K] 📄 文本
+  用途: 5分钟快速入门
+  内容:
+    - 7步迁移流程
+    - 快速命令参考
+    - 测试验证
+  
+✓ migration/MIGRATION_CHECKLIST.md        [7.1K] ✅ 检查清单
+  用途: 迁移进度跟踪
+  内容:
+    - 准备阶段检查
+    - 每步验证项
+    - 性能测试
+    - 安全检查
+  
+✓ migration/.env.production.template       [4.2K] 🔧 配置模板
+  用途: 生产环境配置
+  内容:
+    - 所有环境变量清单
+    - 必需/可选标注
+    - 获取API Key指南
+  
+✓ DEPLOYMENT_PACKAGE_READY.md             [12K] 📦 总结文档
+  用途: 迁移包总览
+  内容:
+    - 文件清单
+    - 架构对比
+    - 快速开始
+    - 验证标准
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【配置文件】(已存在)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ .env.example                             [2.2K] 环境变量示例
+✓ pm2.ecosystem.config.js                  [1.2K] PM2配置（迁移用）
+✓ nginx.conf.example                       [1.8K] Nginx配置示例
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【代码修复】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ v3_dev/services/devBotHandler.js         [修改1处]
+  行号: 230
+  修改: https://liqixi888.replit.app → https://myusis.net
+  影响: Telegram Bot研报生成默认URL
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【数据库】(9个表)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+将通过 1_export_database.sh 导出:
+
+1. cost_tracking          - 成本跟踪
+2. news_items            - 新闻条目
+3. news_scores           - 新闻评分（ImpactRank）
+4. news_dedupe_cache     - 去重缓存
+5. news_push_history     - 推送历史
+6. news_routing_state    - 路由状态
+7. news_sources          - 新闻源配置
+8. news_analyst_notes    - 分析师笔记
+9. user_memory           - 用户对话记忆
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【使用流程】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+方案A：快速入门（推荐新手）
+  → cat migration/QUICK_START.txt
+  → 按步骤执行
+
+方案B：详细文档（推荐运维）
+  → less migration/README.md
+  → 完整操作指南
+
+方案C：检查清单（推荐团队）
+  → cat migration/MIGRATION_CHECKLIST.md
+  → 打印后填写
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【总计】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+脚本:     6个 (全部可执行)
+文档:     5个
+配置:     3个 (已存在)
+代码修复: 1处
+数据库表: 9个
+
+总大小:   ~60KB
+
+═══════════════════════════════════════════════════════════
+准备就绪！立即开始迁移 🚀
+═══════════════════════════════════════════════════════════

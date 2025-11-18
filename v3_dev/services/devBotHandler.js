@@ -221,9 +221,10 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
       let t0 = null; // Timer for latency tracking
       
       // 🔧 v5.1 FIX: Use dynamic URL based on environment instead of hardcoded dev URL
+      // v6.0: Updated default to myusis.net (new production server)
       const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 
                              process.env.REPLIT_DEV_DOMAIN || 
-                             'https://liqixi888.replit.app';
+                             'https://myusis.net';
       
       console.log(`[URL_FIX_v5.1] Using API URL: ${REPLIT_API_URL}`);
       
