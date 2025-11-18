@@ -219,7 +219,13 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
       
       let statusMsg = null;
       let t0 = null; // Timer for latency tracking
-      const REPLIT_API_URL = 'https://e6d61ff9-a9b9-4be6-8fc3-d739698a5bae-00-3wsh3l1cosvt.pike.replit.dev';
+      
+      // 🔧 v5.1 FIX: Use dynamic URL based on environment instead of hardcoded dev URL
+      const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 
+                             process.env.REPLIT_DEV_DOMAIN || 
+                             'https://liqixi888.replit.app';
+      
+      console.log(`[URL_FIX_v5.1] Using API URL: ${REPLIT_API_URL}`);
       
       try {
         // Send initial status message
