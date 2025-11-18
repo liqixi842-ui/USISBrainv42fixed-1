@@ -1,6 +1,6 @@
 # v5 研报质量修复 - 部署总结
 
-## ✅ 已完成的所有修复（4/4）
+## ✅ 已完成修复（3/3） - 生产就绪
 
 ### 1️⃣ AI 口癖 & 重复单词清理引擎
 
@@ -94,57 +94,30 @@ This information contained herein is believed to be reliable but ${report.meta.f
 
 ---
 
+## ⏸️ 延期修复（1/4） - 留待未来改进
+
 ### 4️⃣ Risk/Catalyst 边界清晰化
 
 **问题**：Risk 段落中混入利好语句（"upside potential", "benefit", "opportunity"）
 
-**解决方案**：
+**为何延期**：
+- 正则替换会导致语法错误（如："provides benefits" → "provides affects"）
+- 删除子句后留下悬挂标点（如："If resolved, upside would be X, but..." → ", but..."）
+- 需要更复杂的解决方案（AI 重写或生成时 prompt 禁止）
 
-**修改文件**：`v3_dev/services/v5/riskCatalystEngine.js`
-
-**新增函数**：`removeUpsideLanguageFromRisks()` （第 44-84 行）
-
-**过滤逻辑**：
-```javascript
-// 检测并移除利好词汇
-const upsidePatterns = [
-  /upside\s+potential/gi,
-  /potential\s+upside/gi,
-  /\bupside\b/gi,
-  /benefit/gi,
-  /opportunity/gi,
-  /positive\s+impact/gi,
-  /favorable/gi
-];
-
-// 特殊处理："如果缓解会有利好"这类句子
-if (/if.*resolved|if.*mitigated|if.*addressed/i.test(text)) {
-  // 删除 "if XX resolved, upside YY" 这类表述
-}
-
-// 保留合理用法："downside vs upside"
-```
-
-**应用位置**：`processItems()` 函数（第 154-158 行）
-```javascript
-// Step 2.5: 如果是 Risk，移除利好词汇
-if (isRisk) {
-  filtered = filtered.map(item => removeUpsideLanguageFromRisks(item));
-}
-```
-
-**效果**：Risk 段落不再包含 "upside"、"benefit"、"opportunity" 等词汇
+**未来改进方向**：
+1. 在生成 Risk 的 prompt 中明确禁止使用利好词汇
+2. 或者使用 AI 重写 Risk 句子（而不是正则替换）
 
 ---
 
-## 📊 修改文件汇总
+## 📊 修改文件汇总（仅生产就绪部分）
 
 | 文件 | 修改类型 | 修改内容 |
 |------|---------|---------|
 | `v3_dev/services/v5/textCleanerEngine.js` | ✅ 新建 | AI 口癖清理引擎 |
 | `v3_dev/services/v5/writerStockV3.js` | ✅ 修改 | 5 个生成函数应用 cleanText() + segment prompt 加强 |
 | `v3_dev/services/reportService.js` | ✅ 修改 | 品牌一致性（版权 + Disclaimers） |
-| `v3_dev/services/v5/riskCatalystEngine.js` | ✅ 修改 | Risk 边界检查，移除利好词汇 |
 
 ---
 
@@ -160,7 +133,6 @@ if (isRisk) {
 - ✅ 无 AI 口癖（"It's worth noting" 被删除）
 - ✅ Segment 数据一致（文本使用精确百分比）
 - ✅ 版权显示 "© 2025 USIS Research"
-- ✅ Risk 段落无 "upside"、"benefit" 词汇
 
 ### 测试 2：Aberdeen 白标版 NVDA 报告
 ```bash
@@ -182,10 +154,9 @@ if (isRisk) {
 ```bash
 git add v3_dev/services/v5/textCleanerEngine.js \
         v3_dev/services/v5/writerStockV3.js \
-        v3_dev/services/reportService.js \
-        v3_dev/services/v5/riskCatalystEngine.js
+        v3_dev/services/reportService.js
 
-git commit -m "feat: v5 质量修复 - AI口癖清理 + Segment统一 + 品牌一致性 + Risk边界"
+git commit -m "feat: v5 质量修复 - AI口癖清理 + Segment统一 + 品牌一致性"
 git push origin main
 ```
 
@@ -304,12 +275,14 @@ const report = await buildResearchReport(symbol, {
 
 ## ✅ 结论
 
-本次修复解决了 4 个高优先级质量问题：
-1. ✅ AI 重复单词和口癖
+本次修复完成了 **3 个高优先级质量问题**：
+1. ✅ AI 重复单词和口癖清理
 2. ✅ Segment 数据统一（文本侧）
-3. ✅ 品牌一致性
-4. ✅ Risk/Catalyst 边界
+3. ✅ 品牌一致性（白标支持）
 
-所有修改已完成并准备部署到生产服务器 https://myusis.net。
+**延期修复**：
+4. ⏸️ Risk/Catalyst 边界（技术复杂度高，留待未来改进）
+
+所有修改已通过 Architect 最终审核，准备部署到生产服务器 https://myusis.net。
 
 **预期效果**：研报质量显著提升，专业度更高，品牌一致性更强。
