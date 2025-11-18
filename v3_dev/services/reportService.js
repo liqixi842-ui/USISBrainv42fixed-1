@@ -413,9 +413,23 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
     // Phase 1: Data Aggregation (Multi-Source)
     // ─────────────────────────────────────────────────────────────
     console.log(`📡 [Phase 1] Fetching market data for ${symbol}...`);
+    console.log('[TIMEOUT_FIX_v5.1] FinancialDataBroker with 15s timeout protection enabled');
     
-    // ENHANCED: Use FinancialDataBroker for comprehensive real data
-    const financialData = await FinancialDataBroker.getAll(symbol);
+    // ENHANCED: Use FinancialDataBroker for comprehensive real data (with 15s timeout protection)
+    const financialData = await withTimeout(
+      FinancialDataBroker.getAll(symbol),
+      'FinancialDataBroker.getAll',
+      15000
+    ).catch(error => {
+      console.error(`⚠️  FinancialDataBroker timeout/error: ${error.message}`);
+      // Return empty data structure on timeout/error
+      return {
+        quote: { price: null, change_abs: null, change_pct: null, high_1d: null, low_1d: null, high_52w: null, low_52w: null, beta: null, market_cap: null },
+        keyMetrics: { pe_ttm: null, pe_forward: null, ps_ttm: null, pb: null, gross_margin: null, op_margin: null, net_margin: null, roe: null, roa: null },
+        financials: { revenue_ttm: null, eps_ttm: null, revenue_3y_cagr: null, eps_3y_cagr: null },
+        history: { revenue_5y: [], eps_5y: [] }
+      };
+    });
     
     const marketData = await fetchComprehensiveData(symbol, assetType);
     
