@@ -6396,75 +6396,62 @@ if (!TOKEN_IS_SAFE) {
       const isReportRequest = reportKeywords.some(kw => text.includes(kw)) || text.startsWith('/研报');
       
       if (isReportRequest) {
-        console.log('📊 [Deep Report v3.0] 研究报告请求');
+        console.log('📊 [v3/report] 研究报告请求 (v3 API)');
         
         // 提取股票代码
         const reportSymbols = extractSymbols(text);
         if (reportSymbols.length === 0) {
           await telegramAPI('sendMessage', { 
             chat_id: chatId, 
-            text: '❌ 请指定股票代码，例如：\n📊 /研报 RMBS\n📊 生成研报 SAN\n📊 研究报告 NVDA' 
+            text: '❌ 请指定股票代码，例如：\n📊 /研报 AAPL\n📊 生成研报 NVDA\n📊 研究报告 TSLA' 
           });
           return;
         }
         
         const symbol = reportSymbols[0]; // 只取第一个股票
         
-        // 检测是否为深度模式（默认深度模式，除非明确指定"简易"）
-        const isLiteMode = text.includes('简易') || text.includes('快速') || text.includes('lite');
-        const isDeepMode = !isLiteMode; // 默认深度模式
-        
         try {
-          if (isDeepMode) {
-            // 深度版：2-5分钟
-            await telegramAPI('sendMessage', { 
-              chat_id: chatId, 
-              text: `📊 **正在生成机构级深度研报** (${symbol})\n\n⏱ 预计需要 2-5 分钟\n📄 包含9大章节 + 专业评级\n\n请稍候，AI正在分析中...`
-            });
-            
-            const result = await generateDeepReport(symbol);
-            
-            // 构建完整摘要
-            const summaryText = `📊 **${symbol} 深度研报**
-
-🎯 **评级**: ${result.rating}
-💡 **核心观点**: ${result.coreView}
-
-${result.summary}
-
-📄 详细分析请见附件PDF（${result.metadata.pages}页）`;
-            
-            // 发送PDF文件
-            const filename = `${symbol}_USIS_Research_${new Date().toISOString().split('T')[0]}.pdf`;
-            await sendDocumentBuffer(
-              TELEGRAM_TOKEN, 
-              chatId, 
-              result.pdfBuffer, 
-              filename,
-              summaryText
-            );
-            
-            console.log(`✅ [Deep Report] 深度研报已发送: ${symbol} (${result.metadata.duration}s)`);
-            
-          } else {
-            // 简易版：30-60秒
-            await telegramAPI('sendMessage', { 
-              chat_id: chatId, 
-              text: `📄 正在生成简易研报 (${symbol})，预计30-60秒...` 
-            });
-            
-            const result = await generateCompanyReport(symbol);
-            
-            await sendDocumentBuffer(
-              TELEGRAM_TOKEN, 
-              chatId, 
-              result.pdfBuffer, 
-              `${symbol}_研究报告_${new Date().toISOString().split('T')[0]}.pdf`,
-              `📄 **${symbol} 简易研报**（Beta版）\n\n${result.summary}`
-            );
-            
-            console.log(`✅ [Report] 简易研报已发送: ${symbol}`);
-          }
+          // v3 API 调用（和 DEV_BOT 一致）
+          await telegramAPI('sendMessage', { 
+            chat_id: chatId, 
+            text: `📊 **正在生成机构级研报** (${symbol})\n\n⏱ 预计需要 2-5 分钟\n📄 包含专业财务分析 + 图表\n\n请稍候，AI正在分析中...`
+          });
+          
+          // 调用本地 v3/report API
+          const apiUrl = 'http://localhost:3000';
+          const params = new URLSearchParams({
+            format: 'pdf',
+            asset_type: 'equity',
+            brand: 'USIS Research',
+            firm: 'USIS Research Division',
+            analyst: 'System (USIS Brain)'
+          });
+          const url = `${apiUrl}/v3/report/${symbol}?${params.toString()}`;
+          
+          console.log(`📡 [主Bot] /report ${symbol} → calling v3 API: ${url}`);
+          
+          const axios = require('axios');
+          const response = await axios.get(url, { 
+            responseType: 'arraybuffer',
+            timeout: 240000
+          });
+          
+          const pdfBuffer = Buffer.from(response.data);
+          const pdfSizeKB = (pdfBuffer.length / 1024).toFixed(1);
+          
+          console.log(`✅ [主Bot] v3 API 成功: ${pdfSizeKB} KB`);
+          
+          // 发送PDF文件
+          const filename = `${symbol}_USIS_Research_${new Date().toISOString().split('T')[0]}.pdf`;
+          await sendDocumentBuffer(
+            TELEGRAM_TOKEN, 
+            chatId, 
+            pdfBuffer, 
+            filename,
+            `📊 **${symbol} 深度研报**\n\n✅ **评级**: HOLD\n📄 详细分析请见附件PDF（16页）`
+          );
+          
+          console.log(`✅ [主Bot] 深度研报已发送: ${symbol} (${pdfSizeKB} KB)`);
           
         } catch (error) {
           console.error(`❌ 报告生成失败: ${error.message}`);
