@@ -25,8 +25,8 @@ packages = [
 
 [deployment]
 deploymentTarget = "gce"
-run = ["sh", "-c", "npm start"]
-build = ["sh", "-c", "npm install"]
+run = ["sh", "-c", "node index.js"]
+build = ["sh", "-c", "npm ci --only=production --no-audit || npm install --production"]
 
 [[ports]]
 localPort = 3000
