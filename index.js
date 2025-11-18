@@ -1,5 +1,16 @@
 // ====== USIS Brain · v6.0（多AI模型 + 多语言分析 + 数据驱动投研） ======
 
+// 🔧 Load environment variables (MUST be first, before any other requires)
+// Production server: /opt/usis-brain/.env
+// Replit: .env in project root
+if (process.env.NODE_ENV === 'production' && !process.env.REPLIT_DEPLOYMENT) {
+  require("dotenv").config({ path: "/opt/usis-brain/.env" });
+  console.log('✅ Loaded production .env from /opt/usis-brain/.env');
+} else {
+  require("dotenv").config();
+  console.log('✅ Loaded .env from project root');
+}
+
 // 🔍 BUILD VERSION TRACKING
 const BUILD_VERSION = 'v4.0.2-UNIFIED-DATA-SOURCES';
 const BUILD_TIMESTAMP = new Date('2025-11-13T20:06:00Z');

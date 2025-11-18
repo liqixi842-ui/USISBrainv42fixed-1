@@ -3511,7 +3511,8 @@ async function generatePdfWithDocRaptor(symbol, htmlContent) {
         name: `${symbol}_USIS_Research.pdf`,
         document_content: htmlContent,
         prince_options: {
-          media: 'print'
+          media: 'print',
+          input_encoding: 'utf-8'
         }
       }),
       timeout: 30000
