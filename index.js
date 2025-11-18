@@ -6391,44 +6391,53 @@ if (!TOKEN_IS_SAFE) {
         return; // 不继续执行分析流程
       }
       
-      // 🆕 v3.0: 深度研究报告请求
-      const reportKeywords = ['研报', '研究报告', '生成报告', 'report'];
-      const isReportRequest = reportKeywords.some(kw => text.includes(kw)) || text.startsWith('/研报');
+      // 🆕 v5.0: 研报命令（简化协议: 研报, 股票代码, 机构名字, 老师名字, 语言）
+      const isReportCommandV5 = text.trim().startsWith('研报') || text.trim().startsWith('/研报');
       
-      if (isReportRequest) {
-        console.log('📊 [v3/report] 研究报告请求 (v3 API)');
+      if (isReportCommandV5) {
+        console.log('📊 [v5/report] 检测到研报命令（v5简化协议）');
         
-        // 提取股票代码
-        const reportSymbols = extractSymbols(text);
-        if (reportSymbols.length === 0) {
+        const { parseResearchReportCommand } = require('./semanticIntentAgent');
+        const reportParams = parseResearchReportCommand(text);
+        
+        if (!reportParams) {
           await telegramAPI('sendMessage', { 
             chat_id: chatId, 
-            text: '❌ 请指定股票代码，例如：\n📊 /研报 AAPL\n📊 生成研报 NVDA\n📊 研究报告 TSLA' 
+            text: `❌ **研报命令格式错误**\n\n**正确格式**：\n研报, 股票代码, 机构名字, 老师名字, 语言\n\n**示例**：\n✅ 研报, NVDA, USIS Research, Inma Ramírez Torres, 英文\n✅ 研报, TSLA, Vanguard España, Pablo Bernal, 西班牙语\n✅ 研报, BABA (使用默认值)\n\n**支持语言**: 中文/英文/西班牙语/法语/德语/日语/韩语` 
           });
           return;
         }
         
-        const symbol = reportSymbols[0]; // 只取第一个股票
+        const { symbol, firm, analyst, lang } = reportParams;
         
         try {
-          // v3 API 调用（和 DEV_BOT 一致）
+          // 发送开始消息
+          const langName = {
+            'zh': '中文', 'en': '英文', 'es': '西班牙语', 
+            'fr': '法语', 'de': '德语', 'ja': '日语', 'ko': '韩语'
+          }[lang] || '英文';
+          
           await telegramAPI('sendMessage', { 
             chat_id: chatId, 
-            text: `📊 **正在生成机构级研报** (${symbol})\n\n⏱ 预计需要 2-5 分钟\n📄 包含专业财务分析 + 图表\n\n请稍候，AI正在分析中...`
+            text: `📊 **正在生成机构级研报** (${symbol})\n\n🏢 **机构**: ${firm}\n👤 **分析师**: ${analyst}\n🌐 **语言**: ${langName}\n\n⏱ 预计需要 2-5 分钟\n📄 包含专业财务分析 + 图表\n\n请稍候，AI正在分析中...`
           });
           
-          // 调用本地 v3/report API
+          // 调用本地 v3/report API（v5参数）
           const apiUrl = 'http://localhost:3000';
           const params = new URLSearchParams({
             format: 'pdf',
             asset_type: 'equity',
-            brand: 'USIS Research',
-            firm: 'USIS Research Division',
-            analyst: 'System (USIS Brain)'
+            brand: firm,
+            firm: firm,
+            analyst: analyst,
+            lang: lang
           });
           const url = `${apiUrl}/v3/report/${symbol}?${params.toString()}`;
           
-          console.log(`📡 [主Bot] /report ${symbol} → calling v3 API: ${url}`);
+          console.log(`📡 [主Bot v5] /report ${symbol} → calling v3 API with v5 params`);
+          console.log(`   机构: ${firm}`);
+          console.log(`   分析师: ${analyst}`);
+          console.log(`   语言: ${lang}`);
           
           const axios = require('axios');
           const response = await axios.get(url, { 
@@ -6439,19 +6448,19 @@ if (!TOKEN_IS_SAFE) {
           const pdfBuffer = Buffer.from(response.data);
           const pdfSizeKB = (pdfBuffer.length / 1024).toFixed(1);
           
-          console.log(`✅ [主Bot] v3 API 成功: ${pdfSizeKB} KB`);
+          console.log(`✅ [主Bot v5] v3 API 成功: ${pdfSizeKB} KB`);
           
           // 发送PDF文件
-          const filename = `${symbol}_USIS_Research_${new Date().toISOString().split('T')[0]}.pdf`;
+          const filename = `${symbol}_${firm.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
           await sendDocumentBuffer(
             TELEGRAM_TOKEN, 
             chatId, 
             pdfBuffer, 
             filename,
-            `📊 **${symbol} 深度研报**\n\n✅ **评级**: HOLD\n📄 详细分析请见附件PDF（16页）`
+            `📊 **${symbol} 深度研报**\n\n🏢 **${firm}**\n👤 **分析师**: ${analyst}\n🌐 **语言**: ${langName}\n\n📄 详细分析请见附件PDF（${pdfSizeKB} KB）`
           );
           
-          console.log(`✅ [主Bot] 深度研报已发送: ${symbol} (${pdfSizeKB} KB)`);
+          console.log(`✅ [主Bot v5] 深度研报已发送: ${symbol} (${pdfSizeKB} KB)`);
           
         } catch (error) {
           console.error(`❌ 报告生成失败: ${error.message}`);

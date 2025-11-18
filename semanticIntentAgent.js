@@ -16,8 +16,34 @@ const OPENAI_KEY = process.env.OPENAI_API_KEY;
 async function parseUserIntent(userText, userHistory = []) {
   console.log(`\n🧠 [Semantic Intent Agent] 开始解析用户意图: "${userText}"`);
   
-  // 🆕 快速检测：纯新闻命令（不调用AI，直接返回）
+  // 🆕 快速检测：研报命令（v5格式：研报, 股票代码, 机构名字, 老师名字, 语言）
   const trimmedText = userText.trim();
+  if (trimmedText.startsWith('研报') || trimmedText.startsWith('/研报')) {
+    console.log(`📊 [Quick Detection] 检测到研报命令，解析参数...`);
+    const reportParams = parseResearchReportCommand(userText);
+    if (reportParams) {
+      return createIntent({
+        intentType: 'RESEARCH_REPORT_V5',
+        entities: [createEntity({ type: 'symbol', value: reportParams.symbol })],
+        mode: 'research_report_v5',
+        actions: [{ 
+          type: 'generate_research_report_v5', 
+          symbol: reportParams.symbol,
+          firm: reportParams.firm,
+          analyst: reportParams.analyst,
+          lang: reportParams.lang,
+          reason: '用户请求生成v5研报'
+        }],
+        confidence: 1.0,
+        reasoning: `用户使用简化协议请求生成研报: ${reportParams.symbol}`,
+        language: reportParams.lang,
+        responseMode: 'research_report_v5',
+        reportParams
+      });
+    }
+  }
+  
+  // 🆕 快速检测：纯新闻命令（不调用AI，直接返回）
   if (/^(新闻|资讯|news|市场动态|头条)[\s!！?？。.]*$/i.test(trimmedText)) {
     console.log(`📰 [Quick Detection] 检测到纯新闻命令，直接返回news intent`);
     return createIntent({
@@ -339,6 +365,80 @@ function createFallbackIntent(userText) {
   });
 }
 
+/**
+ * 解析研报命令（v5简化协议）
+ * 格式: 研报, 股票代码, 机构名字, 老师名字, 语言
+ * @param {string} userText - 用户输入
+ * @returns {Object|null} - 解析结果 { symbol, firm, analyst, lang } 或 null
+ */
+function parseResearchReportCommand(userText) {
+  console.log(`📊 [Parse Report Command] 输入: "${userText}"`);
+  
+  // 语言映射表
+  const languageMap = {
+    '中文': 'zh', '中': 'zh', 'chinese': 'zh', 'zh': 'zh',
+    '英文': 'en', '英': 'en', 'english': 'en', 'en': 'en',
+    '西班牙语': 'es', '西班牙': 'es', '西': 'es', 'spanish': 'es', 'es': 'es',
+    '法语': 'fr', '法': 'fr', 'french': 'fr', 'fr': 'fr',
+    '德语': 'de', '德': 'de', 'german': 'de', 'de': 'de',
+    '日语': 'ja', '日': 'ja', 'japanese': 'ja', 'ja': 'ja',
+    '韩语': 'ko', '韩': 'ko', 'korean': 'ko', 'ko': 'ko'
+  };
+  
+  // 去除命令前缀 /研报 或 研报
+  let text = userText.trim();
+  if (text.startsWith('/研报')) {
+    text = text.substring(3).trim();
+  } else if (text.startsWith('研报')) {
+    text = text.substring(2).trim();
+  }
+  
+  // 去除开头的逗号或空格
+  text = text.replace(/^[,，\s]+/, '');
+  
+  // 按逗号分割（支持中英文逗号）
+  const parts = text.split(/[,，]/).map(p => p.trim()).filter(p => p.length > 0);
+  
+  console.log(`   解析字段数: ${parts.length}`, parts);
+  
+  // 至少需要股票代码
+  if (parts.length === 0) {
+    console.log(`   ❌ 缺少股票代码`);
+    return null;
+  }
+  
+  // 提取参数（带默认值）
+  const symbol = (parts[0] || '').toUpperCase().trim();
+  const firm = (parts[1] || 'USIS Research Division').trim();
+  const analyst = (parts[2] || 'System (USIS Brain)').trim();
+  const langRaw = (parts[3] || '英文').toLowerCase().trim();
+  
+  // 验证股票代码
+  if (!symbol || symbol.length === 0 || !/^[A-Z0-9.]+$/.test(symbol)) {
+    console.log(`   ❌ 股票代码无效: "${symbol}"`);
+    return null;
+  }
+  
+  // 映射语言
+  const lang = languageMap[langRaw] || 'en';
+  
+  const result = {
+    symbol,
+    firm,
+    analyst,
+    lang
+  };
+  
+  console.log(`✅ [Parse Report Command] 解析成功:`);
+  console.log(`   股票: ${symbol}`);
+  console.log(`   机构: ${firm}`);
+  console.log(`   分析师: ${analyst}`);
+  console.log(`   语言: ${lang} (原始: ${langRaw})`);
+  
+  return result;
+}
+
 module.exports = {
-  parseUserIntent
+  parseUserIntent,
+  parseResearchReportCommand
 };
