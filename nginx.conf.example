@@ -1,0 +1,58 @@
+# ═══════════════════════════════════════════════════════
+# Nginx 配置示例 - USIS Brain v5.1
+# 文件路径: /etc/nginx/sites-available/usis-brain
+# ═══════════════════════════════════════════════════════
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name your-domain.com www.your-domain.com;
+
+    # 日志
+    access_log /var/log/nginx/usis-brain-access.log;
+    error_log /var/log/nginx/usis-brain-error.log;
+
+    # 增加上传大小限制
+    client_max_body_size 10M;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        
+        # Headers
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # 缓存控制
+        proxy_cache_bypass $http_upgrade;
+        
+        # 超时设置（PDF生成需要较长时间）
+        proxy_connect_timeout 180s;
+        proxy_send_timeout 180s;
+        proxy_read_timeout 180s;
+        
+        # 缓冲区设置
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+    
+    # Health check endpoint (不缓存)
+    location /health {
+        proxy_pass http://localhost:3000/health;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+    }
+}
+
+# ═══════════════════════════════════════════════════════
+# 使用步骤：
+# 1. 复制到 Nginx: sudo cp nginx.conf.example /etc/nginx/sites-available/usis-brain
+# 2. 修改域名: sudo nano /etc/nginx/sites-available/usis-brain
+# 3. 启用站点: sudo ln -s /etc/nginx/sites-available/usis-brain /etc/nginx/sites-enabled/
+# 4. 测试配置: sudo nginx -t
+# 5. 重载 Nginx: sudo systemctl reload nginx
+# 6. 配置 HTTPS: sudo certbot --nginx -d your-domain.com
+# ═══════════════════════════════════════════════════════
