@@ -46,7 +46,8 @@ Write a 800-900 word institutional investment thesis with:
 **Requirements:**
 - Use sell-side language: "We believe", "Our analysis suggests", "We project"
 - Include specific numbers and timeframes
-- No AI phrases like "exciting" or "amazing"
+- **PROHIBITED WORDS**: exciting, amazing, poised to, well-positioned, compelling, attractive, robust
+- **REQUIRED**: Every claim must cite a specific metric, percentage, or dollar figure
 - 3 subheaders minimum
 - Tone: ${industryContext.tone} (Morgan Stanley style)${industryContext.focus.length > 0 ? `\n- MUST address these industry-specific factors: ${industryContext.focus.join(', ')}` : ''}${industryContext.metrics.length > 0 ? `\n- Prioritize these metrics: ${industryContext.metrics.slice(0,4).join(', ')}` : ''}
 
@@ -125,10 +126,11 @@ Write a 900 word company overview with segment breakdown:
    - Capital allocation discipline
 
 **Requirements:**
-- Sell-side institutional tone
-- Quantify each segment's contribution
-- Use "We note", "Our analysis shows"
-- No marketing language
+- Sell-side institutional tone: "We note", "Our analysis shows", "Management reports"
+- Quantify each segment's contribution with exact percentages
+- **PROHIBITED**: exciting, innovative, leading, cutting-edge, state-of-the-art
+- **REQUIRED**: Cite revenue mix, margin data, growth rates for each segment
+- No marketing language or superlatives
 
 Overview:`;
 
@@ -195,10 +197,16 @@ Write 700 word valuation analysis:
    - Probability weighting
 
 **Requirements:**
-- Institutional sell-side language
-- Specific numbers and multiples
-- "We value the stock at", "Our target implies"
-- Compare to peer median
+- Institutional sell-side language: "We value the stock at", "Our target implies", "We derive"
+- Cite specific numbers, multiples, and percentile ranks
+- Compare to peer median/quartiles with exact figures
+- **PROHIBITED PHRASES** (use alternatives):
+  * ❌ "constructive" → ✅ "fair value $X represents Y% upside"
+  * ❌ "supportive" → ✅ "trades at Z% discount to peers"
+  * ❌ "attractive" → ✅ "valuation at Xth percentile"
+  * ❌ "compelling" → ✅ "implies X% IRR vs. Y% WACC"
+  * ❌ "well-positioned" → ✅ "commands premium given [specific reason]"
+- Every valuation claim must cite a specific multiple or calculation
 
 Valuation:`;
 

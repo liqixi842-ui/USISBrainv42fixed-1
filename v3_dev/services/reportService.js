@@ -3653,6 +3653,23 @@ const TEMPLATE_CSS = `
       line-height: 1.4;
     }
     
+    /* 🆕 v5.1: Page Header Bar */
+    .page-header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 28px;
+      background: linear-gradient(135deg, #003366 0%, #00509E 100%);
+      color: white;
+      font-size: 9pt;
+      font-weight: 600;
+      padding: 6px 20px;
+      display: flex;
+      align-items: center;
+      border-bottom: 2px solid #002244;
+    }
+    
     .page {
       width: 8.5in;
       height: 11in;
@@ -3818,7 +3835,7 @@ const TEMPLATE_CSS = `
 `;
 
 // Shared Helper Functions
-function createHelpers() {
+function createHelpers(report) {
   const fmt = (val, decimals = 2, suffix = '') => {
     if (val === null || val === undefined || isNaN(val)) return 'N/A';
     return Number(val).toFixed(decimals) + suffix;
@@ -3869,13 +3886,21 @@ function createHelpers() {
     return bullets.slice(0, count);
   };
   
-  return { fmt, fmtCurrency, fmtLarge, ratingClass, splitToParagraphs, splitToBullets };
+  // 🆕 v5.1: Page header generator
+  const pageHeader = (pageNum) => {
+    // Skip header on cover page (page 1)
+    if (pageNum === 1) return '';
+    return `<div class="page-header">${report.meta.firm || 'Research'} — Equity Research</div>`;
+  };
+  
+  return { fmt, fmtCurrency, fmtLarge, ratingClass, splitToParagraphs, splitToBullets, pageHeader };
 }
 
 // Page Render Functions (Fixed Order)
 function renderPage1(report, h) {
   return `
     <div class="page">
+      ${h.pageHeader(1)}
       <div style="text-align: center; margin-top: 100px;">
         <h1 style="font-size: 32pt; margin-bottom: 16px;">${report.meta.brand} Research Report</h1>
         <h2 style="font-size: 22pt; color: #555; margin-bottom: 24px;">${report.symbol} – ${report.name || report.symbol}</h2>
@@ -3909,6 +3934,7 @@ function renderPage2(report, h) {
   
   return `
     <div class="page">
+      ${h.pageHeader(2)}
       <div class="section-title">Key Takeaways</div>
       <div class="two-col">
         <div class="col">
@@ -3949,6 +3975,7 @@ function renderPage3(report, h) {
   
   return `
     <div class="page">
+      ${h.pageHeader(3)}
       <div class="section-title">Investment Thesis</div>
       ${thesisParas}
       <h3>Our View vs Consensus</h3>
@@ -4009,6 +4036,7 @@ function renderPage4(report, h) {
 
   return `
     <div class="page">
+      ${h.pageHeader(4)}
       <div class="section-title">Company & Segment Overview</div>
       ${h.splitToParagraphs(report.company_overview, 3).map(p => `<p>${p}</p>`).join('')}
       <h3>Business Segment Breakdown</h3>
@@ -4039,6 +4067,7 @@ function renderPage5(report, h) {
 
   return `
     <div class="page">
+      ${h.pageHeader(5)}
       <div class="section-title">Industry & Macro Environment</div>
       <div class="two-col">
         <div class="col">
@@ -4065,6 +4094,7 @@ function renderPage5(report, h) {
 function renderPage6(report, h) {
   return `
     <div class="page">
+      ${h.pageHeader(6)}
       <div class="section-title">Valuation Snapshot</div>
       <table>
         <thead>
@@ -4097,6 +4127,7 @@ function renderPage6(report, h) {
 function renderPage7(report, h) {
   return `
     <div class="page">
+      ${h.pageHeader(7)}
       <div class="section-title">Valuation Framework</div>
       <h3>Historical Valuation</h3>
       <table>
@@ -4155,6 +4186,7 @@ function renderPage8(report, h) {
 
   return `
     <div class="page">
+      ${h.pageHeader(8)}
       <div class="section-title">Peer Comparison</div>
       <table>
         <thead>
@@ -4183,6 +4215,7 @@ function renderPage8(report, h) {
 function renderPage9(report, h) {
   return `
     <div class="page">
+      ${h.pageHeader(9)}
       <div class="section-title">Financial Overview</div>
       <table>
         <thead>
@@ -4229,6 +4262,7 @@ function renderPage10(report, h) {
   
   return `
     <div class="page">
+      ${h.pageHeader(10)}
       <div class="section-title">Financial Trends</div>
       <h3>Revenue Last 5 Years</h3>
       ${revenueChartHtml}
@@ -4252,6 +4286,7 @@ function renderPage11(report, h) {
 
   return `
     <div class="page">
+      ${h.pageHeader(11)}
       <div class="section-title">Key Catalysts</div>
       <ul style="line-height: 1.6;">${catalystItems}</ul>
       <div class="footer">
@@ -4271,6 +4306,7 @@ function renderPage12(report, h) {
 
   return `
     <div class="page">
+      ${h.pageHeader(12)}
       <div class="section-title">Key Risks</div>
       <ul style="line-height: 1.6;">${riskItems}</ul>
       <div class="footer">
@@ -4337,6 +4373,7 @@ function renderPage13(report, h) {
   
   return `
     <div class="page">
+      ${h.pageHeader(13)}
       <div class="section-title">Technical Analysis</div>
       
       <h3>Price Trend & Technical Indicators (90 Days)</h3>
@@ -4361,6 +4398,7 @@ function renderPage13(report, h) {
 function renderPage14(report, h) {
   return `
     <div class="page">
+      ${h.pageHeader(14)}
       <div class="section-title">Investment Strategy</div>
       <table>
         <thead>
@@ -4413,6 +4451,7 @@ function renderPage14(report, h) {
 function renderPage15(report, h) {
   return `
     <div class="page">
+      ${h.pageHeader(15)}
       <div class="section-title">Appendix – Detailed Metrics</div>
       <h3>Price & Valuation</h3>
       <table style="font-size: 8pt;">
@@ -4448,6 +4487,7 @@ function renderPage15(report, h) {
 function renderPage16(report, h) {
   return `
     <div class="page">
+      ${h.pageHeader(16)}
       <div class="section-title">Appendix – Methodology & Model Notes</div>
       <h3>Data Sources</h3>
       <p>This report integrates real-time financial data from multiple authoritative sources including Finnhub, Twelve Data, and Alpha Vantage. Market quotes, fundamental metrics, and historical financials are verified across providers to ensure accuracy.</p>
@@ -4470,6 +4510,7 @@ function renderPage16(report, h) {
 function renderPage17(report, h) {
   return `
     <div class="page">
+      ${h.pageHeader(17)}
       <div class="section-title">Disclaimers</div>
       <p style="font-size: 8pt; line-height: 1.3;">
       <strong>Important Information:</strong> This research report is provided for informational purposes only and does not constitute an offer or solicitation to buy or sell any securities. The information contained herein is believed to be reliable but ${report.meta.firm || 'USIS'} makes no representation or warranty as to its accuracy or completeness.
@@ -4506,6 +4547,7 @@ function renderPage17(report, h) {
 function renderPage18(report, h) {
   return `
     <div class="page">
+      ${h.pageHeader(18)}
       <div class="section-title">Appendix – Glossary</div>
       <table style="font-size: 8.5pt;">
         <tr><td><strong>PE (Price-to-Earnings)</strong></td><td>Ratio of share price to earnings per share, measuring valuation.</td></tr>
@@ -4536,6 +4578,7 @@ function renderPage18(report, h) {
 function renderPage19(report, h) {
   return `
     <div class="page">
+      ${h.pageHeader(19)}
       <div class="section-title">Appendix – Rating Definitions</div>
       <h3>Stock Ratings</h3>
       <table>
@@ -4577,6 +4620,7 @@ function renderPage19(report, h) {
 function renderPage20(report, h) {
   return `
     <div class="page">
+      ${h.pageHeader(20)}
       <div class="section-title">Analyst View</div>
       <div style="background: #f8f9fa; border-left: 4px solid #007b5e; padding: 16px; margin: 20px 0;">
         <h3 style="margin-top: 0;">Final Recommendation</h3>
@@ -4608,7 +4652,7 @@ function renderPage20(report, h) {
 function buildFinalInstitutionalHtml(report) {
   console.log(`📄 [Final Template v1.0] Building fixed 20-page institutional PDF for ${report.symbol}...`);
   
-  const h = createHelpers();
+  const h = createHelpers(report);
   
   // Fixed array of page renderers (guarantees consistent ordering)
   const pages = [
