@@ -4,13 +4,19 @@ const sentenceEngine = require('./sentenceEngine');
 const { cleanText } = require('./textCleanerEngine');
 
 async function generateThesis(report) {
+  // 🆕 v5.1: Use industry-specific guidance
+  const industryContext = report._industryContext || { industry: 'unknown', focus: [], metrics: [], tone: 'balanced' };
+  const industryNote = industryContext.industry !== 'unknown'
+    ? `\n**Industry Context:** ${industryContext.industry}\n**Focus Areas:** ${industryContext.focus.join(', ')}\n**Key Metrics:** ${industryContext.metrics.join(', ')}\n`
+    : '';
+  
   const prompt = `You are a Morgan Stanley equity analyst writing an investment thesis for ${report.symbol}.
 
 Company: ${report.company_name || report.symbol}
 Sector: ${report.sector || 'N/A'}
 Price: $${report.price?.last || 'N/A'}
 Target: $${report.targets?.base?.price || 'N/A'} (${report.targets?.base?.upside_pct || 'N/A'}% upside)
-Rating: ${report.rating || 'N/A'}
+Rating: ${report.rating || 'N/A'}${industryNote}
 
 Financial Data:
 - Revenue: ${report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A'}
@@ -42,7 +48,7 @@ Write a 800-900 word institutional investment thesis with:
 - Include specific numbers and timeframes
 - No AI phrases like "exciting" or "amazing"
 - 3 subheaders minimum
-- Morgan Stanley tone
+- Tone: ${industryContext.tone} (Morgan Stanley style)${industryContext.focus.length > 0 ? `\n- MUST address these industry-specific factors: ${industryContext.focus.join(', ')}` : ''}${industryContext.metrics.length > 0 ? `\n- Prioritize these metrics: ${industryContext.metrics.slice(0,4).join(', ')}` : ''}
 
 Thesis:`;
 
@@ -79,12 +85,18 @@ async function generateOverview(report) {
   const segments = report.segments && report.segments.length > 0
     ? report.segments.map(s => `${s.name}: ${s.revenue_pct}% revenue`).join(', ')
     : 'Segment data pending';
+  
+  // 🆕 v5.1: Use industry-specific guidance
+  const industryContext = report._industryContext || { industry: 'unknown', focus: [], metrics: [], tone: 'balanced' };
+  const industryNote = industryContext.industry !== 'unknown'
+    ? `\nIndustry: ${industryContext.industry} (Focus: ${industryContext.focus.slice(0,3).join(', ')})`
+    : '';
 
   const prompt = `You are a Goldman Sachs equity analyst writing a company overview for ${report.symbol}.
 
 Company: ${report.company_name || report.symbol}
 Business Model: ${report.business_model || 'Multi-segment technology company'}
-Segments: ${segments}
+Segments: ${segments}${industryNote}
 
 Financial Profile:
 - Market Cap: $${report.valuation?.market_cap ? (report.valuation.market_cap / 1e9).toFixed(1) + 'B' : 'N/A'}
@@ -145,6 +157,12 @@ Overview:`;
 }
 
 async function generateValuation(report) {
+  // 🆕 v5.1: Use industry-specific metrics
+  const industryContext = report._industryContext || { industry: 'unknown', focus: [], metrics: [], tone: 'balanced' };
+  const metricsNote = industryContext.metrics.length > 0
+    ? `\n**Industry-Specific Metrics:** ${industryContext.metrics.join(', ')}`
+    : '';
+  
   const prompt = `You are a J.P. Morgan equity analyst writing valuation analysis for ${report.symbol}.
 
 Current Valuation:
@@ -153,7 +171,7 @@ Current Valuation:
 - PE (TTM): ${report.valuation?.pe_ttm || 'N/A'}x
 - PE (Fwd): ${report.valuation?.pe_forward || 'N/A'}x
 - EV/EBITDA: ${report.valuation?.ev_ebitda || 'N/A'}x
-- P/S: ${report.valuation?.ps_ttm || 'N/A'}x
+- P/S: ${report.valuation?.ps_ttm || 'N/A'}x${metricsNote}
 
 Peers:
 ${report.peers && report.peers.length > 0 ? report.peers.slice(0, 3).map(p => `${p.symbol}: PE ${p.pe_forward}x, P/S ${p.ps_ttm}x`).join(', ') : 'Peer data pending'}
@@ -325,15 +343,35 @@ Macro Analysis:`;
   }
 }
 
-async function enhanceReport(report) {
+/**
+ * Enhance report with v5.1 industry-aware prompts
+ * @param {Object} report - Base report
+ * @param {Object} v5Options - { industry, language, symbolMetadata }
+ */
+async function enhanceReport(report, v5Options = {}) {
+  const { industry = 'unknown', language = 'en', symbolMetadata = {} } = v5Options;
+  
+  // 🆕 v5.1: Get industry-specific prompt guidance
+  const { getIndustryPromptGuidance } = require('../industryClassifier');
+  const industryGuidance = getIndustryPromptGuidance(industry);
+  
   console.log(`\n════════════════════════════════════════════════════════════════`);
   console.log(`[WriterStockV3] Enhancing ${report.symbol} with 5-Engine Framework`);
+  console.log(`  Industry: ${industry} | Language: ${language}`);
   console.log(`════════════════════════════════════════════════════════════════\n`);
   
   const startTime = Date.now();
   
+  // 🆕 v5.1: Augment report with industry context
+  report._industryContext = {
+    industry,
+    focus: industryGuidance.focus,
+    metrics: industryGuidance.metrics,
+    tone: industryGuidance.tone
+  };
+  
   // Generate all 5 sections in parallel
-  const [thesis, overview, valuation, industry, macro] = await Promise.all([
+  const [thesis, overview, valuation, industry_text, macro] = await Promise.all([
     generateThesis(report),
     generateOverview(report),
     generateValuation(report),
@@ -347,7 +385,7 @@ async function enhanceReport(report) {
   report.thesis_enhanced = thesis;
   report.overview_enhanced = overview;
   report.valuation_enhanced = valuation;
-  report.industry_enhanced = industry;
+  report.industry_enhanced = industry_text;
   report.macro_enhanced = macro;
   
   console.log(`\n[WriterStockV3] Enhancement complete in ${(elapsed / 1000).toFixed(1)}s`);

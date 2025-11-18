@@ -69,13 +69,21 @@ router.get('/:symbol', async (req, res) => {
     asset_type = 'equity',
     brand = 'USIS Research',
     firm = 'USIS Research Division',
-    analyst = 'System (USIS Brain)'
+    analyst = 'System (USIS Brain)',
+    lang = 'en',
+    exchange = null,
+    country = null,
+    display_name = null
   } = req.query;
   
   console.log(`\n📊 [v3/report] GET /${symbol}?format=${format}&asset_type=${asset_type}`);
   console.log(`   ├─ Brand: ${brand}`);
   console.log(`   ├─ Firm: ${firm}`);
-  console.log(`   └─ Analyst: ${analyst}`);
+  console.log(`   ├─ Analyst: ${analyst}`);
+  console.log(`   ├─ Language: ${lang}`);
+  if (exchange) console.log(`   ├─ Exchange: ${exchange}`);
+  if (country) console.log(`   ├─ Country: ${country}`);
+  if (display_name) console.log(`   └─ Display Name: ${display_name}`);
   
   try {
     // Validate and normalize symbol
@@ -93,7 +101,18 @@ router.get('/:symbol', async (req, res) => {
     // Phase 1: Generate ResearchReport v1 (Generic for ANY symbol)
     // ═══════════════════════════════════════════════════════════════
     console.log(`🔬 [v3/report] Building ResearchReport v1...`);
-    const brandOptions = { brand, firm, analyst };
+    const brandOptions = { 
+      brand, 
+      firm, 
+      analyst, 
+      language: lang,
+      // 🆕 v5.1: Symbol metadata for industry routing
+      symbolMetadata: {
+        exchange,
+        country,
+        displayName: display_name
+      }
+    };
     const report = await buildResearchReport(normalizedSymbol, asset_type, brandOptions);
     console.log(`✅ [v3/report] ResearchReport v1 complete (${report.meta.latency_ms}ms)`);
 

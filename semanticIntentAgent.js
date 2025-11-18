@@ -366,10 +366,60 @@ function createFallbackIntent(userText) {
 }
 
 /**
- * 解析研报命令（v5简化协议）
+ * 🆕 v5.1: 解析符号描述（支持完整格式）
+ * 格式: "Inmobiliaria Colonial (BME:COL, Spain)"
+ * @param {string} symbolInput - 符号描述字符串
+ * @returns {Object} - { displayName, symbol, exchange, country, industry }
+ */
+function parseSymbolDescription(symbolInput) {
+  const input = symbolInput.trim();
+  
+  // 检测是否为完整描述格式：Name (EXCHANGE:SYMBOL, Country)
+  const fullFormatMatch = input.match(/^(.+?)\s*\(([A-Z]+):([A-Z0-9.]+)\s*,\s*([^)]+)\)$/);
+  
+  if (fullFormatMatch) {
+    const [, name, exchange, symbol, country] = fullFormatMatch;
+    return {
+      displayName: name.trim(),
+      symbol: `${exchange}:${symbol}`,
+      exchange: exchange.trim(),
+      country: country.trim(),
+      rawSymbol: symbol.trim(),
+      isFullFormat: true
+    };
+  }
+  
+  // 检测带交易所前缀的格式：NASDAQ:NVDA
+  const prefixMatch = input.match(/^([A-Z]+):([A-Z0-9.]+)$/);
+  if (prefixMatch) {
+    const [, exchange, symbol] = prefixMatch;
+    return {
+      displayName: symbol,
+      symbol: `${exchange}:${symbol}`,
+      exchange: exchange,
+      country: null,
+      rawSymbol: symbol,
+      isFullFormat: false
+    };
+  }
+  
+  // 简单格式：NVDA
+  return {
+    displayName: input.toUpperCase(),
+    symbol: input.toUpperCase(),
+    exchange: null,
+    country: null,
+    rawSymbol: input.toUpperCase(),
+    isFullFormat: false
+  };
+}
+
+/**
+ * 解析研报命令（v5简化协议 + v5.1完整标的描述）
  * 格式: 研报, 股票代码, 机构名字, 老师名字, 语言
+ * 新增: 股票代码可以是完整描述 "Inmobiliaria Colonial (BME:COL, Spain)"
  * @param {string} userText - 用户输入
- * @returns {Object|null} - 解析结果 { symbol, firm, analyst, lang } 或 null
+ * @returns {Object|null} - 解析结果 { symbol, firm, analyst, lang, symbolInfo } 或 null
  */
 function parseResearchReportCommand(userText) {
   console.log(`📊 [Parse Report Command] 输入: "${userText}"`);
@@ -408,14 +458,16 @@ function parseResearchReportCommand(userText) {
   }
   
   // 提取参数（带默认值）
-  const symbol = (parts[0] || '').toUpperCase().trim();
+  const symbolInput = parts[0] || '';
   const firm = (parts[1] || 'USIS Research Division').trim();
   const analyst = (parts[2] || 'System (USIS Brain)').trim();
   const langRaw = (parts[3] || '英文').toLowerCase().trim();
   
-  // 验证股票代码
-  if (!symbol || symbol.length === 0 || !/^[A-Z0-9.]+$/.test(symbol)) {
-    console.log(`   ❌ 股票代码无效: "${symbol}"`);
+  // 🆕 v5.1: 解析符号描述
+  const symbolInfo = parseSymbolDescription(symbolInput);
+  
+  if (!symbolInfo || !symbolInfo.symbol) {
+    console.log(`   ❌ 股票代码无效: "${symbolInput}"`);
     return null;
   }
   
@@ -423,14 +475,17 @@ function parseResearchReportCommand(userText) {
   const lang = languageMap[langRaw] || 'en';
   
   const result = {
-    symbol,
+    symbol: symbolInfo.symbol,
     firm,
     analyst,
-    lang
+    lang,
+    symbolInfo
   };
   
   console.log(`✅ [Parse Report Command] 解析成功:`);
-  console.log(`   股票: ${symbol}`);
+  console.log(`   股票: ${symbolInfo.symbol} (${symbolInfo.displayName})`);
+  if (symbolInfo.exchange) console.log(`   交易所: ${symbolInfo.exchange}`);
+  if (symbolInfo.country) console.log(`   国家: ${symbolInfo.country}`);
   console.log(`   机构: ${firm}`);
   console.log(`   分析师: ${analyst}`);
   console.log(`   语言: ${lang} (原始: ${langRaw})`);
@@ -440,5 +495,6 @@ function parseResearchReportCommand(userText) {
 
 module.exports = {
   parseUserIntent,
-  parseResearchReportCommand
+  parseResearchReportCommand,
+  parseSymbolDescription
 };

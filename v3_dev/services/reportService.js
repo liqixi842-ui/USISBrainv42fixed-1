@@ -400,10 +400,32 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
   const brand = brandOptions.brand || 'USIS Research';
   const firm = brandOptions.firm || 'USIS Research Division';
   const analyst = brandOptions.analyst || 'System (USIS Brain)';
+  const language = brandOptions.language || 'en';
+  const symbolMetadata = brandOptions.symbolMetadata || {};
+  
+  // 🆕 v5.1: Industry Classification
+  const { classifyIndustry } = require('./industryClassifier');
+  const industry = classifyIndustry({
+    displayName: symbolMetadata.displayName || symbol,
+    exchange: symbolMetadata.exchange,
+    country: symbolMetadata.country,
+    symbol: symbol
+  });
   
   console.log(`\n╔════════════════════════════════════════════════════════════════╗`);
   console.log(`║  USIS Research Report Engine v2.0 - ${symbol} (${assetType})      `);
   console.log(`║  Brand: ${brand.padEnd(55)}║`);
+  console.log(`║  Language: ${language.padEnd(51)}║`);
+  if (symbolMetadata.displayName) {
+    console.log(`║  Company: ${symbolMetadata.displayName.padEnd(50)}║`);
+  }
+  if (symbolMetadata.exchange) {
+    console.log(`║  Exchange: ${symbolMetadata.exchange.padEnd(49)}║`);
+  }
+  if (symbolMetadata.country) {
+    console.log(`║  Country: ${symbolMetadata.country.padEnd(50)}║`);
+  }
+  console.log(`║  Industry: ${industry.padEnd(49)}║`);
   console.log(`╚════════════════════════════════════════════════════════════════╝`);
   
   const startTime = Date.now();
@@ -690,8 +712,15 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
     console.log(`║  ACTIVATING v5.0 ALL-IN ENGINE                                 ║`);
     console.log(`╚════════════════════════════════════════════════════════════════╝`);
     
+    // 🆕 v5.1: Pass industry and language context to v5 engine
+    const v5Options = {
+      industry,
+      language,
+      symbolMetadata
+    };
+    
     // Call v5 Report Builder (replaces old SellSideWriter v1/v2)
-    report = await reportBuilderV5.buildStockReport(report);
+    report = await reportBuilderV5.buildStockReport(report, v5Options);
     
     // v5 sets v5_protected = true, so TasteTruthLayer will skip these fields
     console.log(`\n✅ v5.0 Pipeline Complete - All institutional enhancements applied`);

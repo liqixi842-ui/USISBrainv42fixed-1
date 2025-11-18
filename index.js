@@ -6408,7 +6408,7 @@ if (!TOKEN_IS_SAFE) {
           return;
         }
         
-        const { symbol, firm, analyst, lang } = reportParams;
+        const { symbol, firm, analyst, lang, symbolInfo } = reportParams;
         
         try {
           // 发送开始消息
@@ -6417,12 +6417,28 @@ if (!TOKEN_IS_SAFE) {
             'fr': '法语', 'de': '德语', 'ja': '日语', 'ko': '韩语'
           }[lang] || '英文';
           
+          const displayName = symbolInfo?.displayName || symbol;
+          const startMessage = [
+            `📊 **正在生成机构级研报** (${displayName})`,
+            '',
+            `🏢 **机构**: ${firm}`,
+            `👤 **分析师**: ${analyst}`,
+            `🌐 **语言**: ${langName}`,
+            symbolInfo?.exchange ? `📍 **交易所**: ${symbolInfo.exchange}` : '',
+            symbolInfo?.country ? `🌍 **国家**: ${symbolInfo.country}` : '',
+            '',
+            `⏱ 预计需要 2-5 分钟`,
+            `📄 包含专业财务分析 + 图表`,
+            '',
+            `请稍候，AI正在分析中...`
+          ].filter(Boolean).join('\n');
+          
           await telegramAPI('sendMessage', { 
             chat_id: chatId, 
-            text: `📊 **正在生成机构级研报** (${symbol})\n\n🏢 **机构**: ${firm}\n👤 **分析师**: ${analyst}\n🌐 **语言**: ${langName}\n\n⏱ 预计需要 2-5 分钟\n📄 包含专业财务分析 + 图表\n\n请稍候，AI正在分析中...`
+            text: startMessage
           });
           
-          // 调用本地 v3/report API（v5参数）
+          // 调用本地 v3/report API（v5参数 + 符号元数据）
           const apiUrl = 'http://localhost:3000';
           const params = new URLSearchParams({
             format: 'pdf',
@@ -6432,12 +6448,22 @@ if (!TOKEN_IS_SAFE) {
             analyst: analyst,
             lang: lang
           });
+          
+          // 🆕 v5.1: 传递符号元数据
+          if (symbolInfo) {
+            if (symbolInfo.exchange) params.append('exchange', symbolInfo.exchange);
+            if (symbolInfo.country) params.append('country', symbolInfo.country);
+            if (symbolInfo.displayName) params.append('display_name', symbolInfo.displayName);
+          }
+          
           const url = `${apiUrl}/v3/report/${symbol}?${params.toString()}`;
           
-          console.log(`📡 [主Bot v5] /report ${symbol} → calling v3 API with v5 params`);
+          console.log(`📡 [主Bot v5] /report ${symbol} → calling v3 API with v5.1 params`);
           console.log(`   机构: ${firm}`);
           console.log(`   分析师: ${analyst}`);
           console.log(`   语言: ${lang}`);
+          if (symbolInfo?.exchange) console.log(`   交易所: ${symbolInfo.exchange}`);
+          if (symbolInfo?.country) console.log(`   国家: ${symbolInfo.country}`);
           
           const axios = require('axios');
           const response = await axios.get(url, { 
