@@ -97,9 +97,9 @@ async function generateReport({ symbol, firm, analyst, brand, lang, chatId, tele
     });
     
     // Build URL parameters
+    // Note: asset_type is NOT passed - let the API auto-detect (equity/index/etf/crypto)
     const params = new URLSearchParams({
       format: 'pdf',
-      asset_type: 'equity',
       firm: firm,
       analyst: analyst
     });
