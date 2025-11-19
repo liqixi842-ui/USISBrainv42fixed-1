@@ -1,0 +1,34 @@
+# USIS Brain v5.1 文件同步清单
+# 以下文件需要从 Replit 同步到 myusis.net 生产服务器
+
+## 核心服务文件（必需）
+v3_dev/services/reportService.js
+v3_dev/services/industryClassifier.js
+v3_dev/services/devBotHandler.js
+v3_dev/services/v5/reportBuilderV5.js
+v3_dev/services/v5/writerStockV3.js
+v3_dev/services/v5/styleEngine.js
+v3_dev/services/v5/textCleanerEngine.js
+v3_dev/services/v5/riskCatalystEngine.js
+v3_dev/services/v5/coherenceEngine.js
+
+## 路由文件（必需）
+v3_dev/routes/report.js
+
+## 根目录文件（必需）
+semanticIntentAgent.js
+
+## 配置文件（可选）
+v3_dev/config/bot-config.js
+
+## 文档文件（可选，建议同步）
+v3_dev/TESTING_GUIDE.md
+v3_dev/TELEGRAM_TEST_EXAMPLES.md
+v3_dev/DUAL_ENTRY_SUMMARY.md
+v3_dev/DEPLOYMENT_GUIDE_v5.1.md
+v3_dev/FILES_TO_SYNC.txt
+v3_dev/QUICK_DEPLOY.sh
+
+## 总计
+必需文件：12 个
+可选文件：6 个
