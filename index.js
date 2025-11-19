@@ -6306,74 +6306,50 @@ if (!TOKEN_IS_SAFE) {
     });
   }
   
-  // 🆕 v6.0: 解票功能处理函数 (Ticket Analysis Handler)
+  // 🆕 v6.0: 解票功能处理函数 (Ticket Analysis Handler) - 轻量级版本
   async function handleTicketAnalysis({ symbol, mode, chatId }) {
     let statusMsg = null;
     let t0 = null;
-    const axios = require('axios');
-    
-    const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:3000';
     
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎯 [主Bot] Ticket Analysis Request`);
+    console.log(`🎯 [主Bot] Ticket Analysis Request (Lightweight)`);
     console.log(`   ├─ Symbol: ${symbol}`);
     console.log(`   ├─ Mode: ${mode}`);
-    console.log(`   └─ API URL: ${REPLIT_API_URL}`);
+    console.log(`   └─ Using: generateStockChart (fast path)`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
     
     try {
       // Send initial status message
       statusMsg = await telegramAPI('sendMessage', {
         chat_id: chatId,
-        text: `🎯 正在解票 ${symbol}\n\n⏳ 正在抓取数据和生成分析...\n\n(这可能需要 1-3 分钟)`
+        text: `🎯 正在解票 ${symbol}\n\n⏳ 正在抓取数据和技术分析...\n\n(预计 15-30 秒)`
       });
       
-      // Call v3 API to get full report object (JSON format)
-      const url = `${REPLIT_API_URL}/v3/report/${symbol}?format=json`;
-      
+      // ✅ 使用轻量级路径：调用 generateStockChart 而不是重量级研报API
       t0 = Date.now();
-      console.log(`📡 [主Bot] Calling Report API: ${url}`);
+      console.log(`📡 [主Bot] Calling lightweight analysis: generateStockChart(${symbol})`);
       
-      const response = await axios.get(url, { 
-        timeout: 240000  // 4 minutes timeout (matches v3-dev bot)
+      const chartResult = await generateStockChart(symbol, {
+        interval: 'D',
+        userText: `解票 ${symbol}`
       });
       
       const dt = Date.now() - t0;
-      const report = response.data;
       
-      console.log(`✅ [主Bot] Report API completed in ${dt} ms`);
-      console.log(`   ├─ Symbol: ${report.symbol}`);
-      console.log(`   ├─ Rating: ${report.rating}`);
-      console.log(`   └─ Asset Type: ${report.asset_type}\n`);
-      
-      // Update status
-      await telegramAPI('editMessageText', {
-        chat_id: chatId,
-        message_id: statusMsg.result.message_id,
-        text: `🎯 正在解票 ${symbol}\n\n✅ 数据获取完成\n⏳ 正在格式化输出...`
-      });
-      
-      // Determine format options based on mode
-      let formatOptions = {
-        mode: 'standard',
-        bilingual_split: false,
-        primary_lang: 'zh'
-      };
-      
-      if (mode === '双语') {
-        formatOptions.bilingual_split = true;
-      } else if (mode === '聊天版' || mode === '人话版') {
-        formatOptions.mode = 'human';
-      } else if (mode === '完整版') {
-        formatOptions.mode = 'standard_plus_human';
-        formatOptions.bilingual_split = true;
+      if (!chartResult || (!chartResult.success && !chartResult.chartAnalysis)) {
+        throw new Error('Stock chart analysis failed');
       }
       
-      // Format messages using ticketFormatter
-      console.log(`📝 [主Bot] Formatting messages with options:`, formatOptions);
-      const messages = await ticketFormatter.formatTicket(report, formatOptions);
+      // 从图表分析结果构建 ticketData（轻量级数据结构）
+      const ticketData = {
+        symbol: symbol,
+        analysis: chartResult.chartAnalysis || chartResult.comprehensiveAnalysis || '技术分析暂时无法生成'
+      };
       
-      console.log(`✅ [主Bot] Generated ${messages.length} message(s)`);
+      console.log(`✅ [主Bot] Lightweight analysis completed in ${dt} ms`);
+      console.log(`   ├─ Symbol: ${symbol}`);
+      console.log(`   ├─ Success: ${chartResult.success}`);
+      console.log(`   └─ Analysis length: ${ticketData.analysis.length} chars\n`);
       
       // Delete status message
       await telegramAPI('deleteMessage', {
@@ -6381,22 +6357,23 @@ if (!TOKEN_IS_SAFE) {
         message_id: statusMsg.result.message_id
       });
       
-      // Send all formatted messages sequentially
-      for (let i = 0; i < messages.length; i++) {
-        const msg = messages[i];
-        console.log(`📤 [主Bot] Sending message ${i + 1}/${messages.length} (${msg.length} chars)`);
-        
-        await telegramAPI('sendMessage', {
-          chat_id: chatId,
-          text: msg,
-          parse_mode: 'Markdown'
-        });
-        
-        // Small delay between messages to avoid rate limits
-        if (i < messages.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
+      // 发送图表（如果有）
+      if (chartResult.buffer) {
+        await sendDocumentBuffer(
+          TELEGRAM_TOKEN,
+          chatId,
+          chartResult.buffer,
+          `${symbol}_chart.png`,
+          '📊 K线图'
+        );
+        console.log('✅ K线图已发送');
       }
+      
+      // 发送技术分析文本
+      await telegramAPI('sendMessage', {
+        chat_id: chatId,
+        text: ticketData.analysis.slice(0, 4000)
+      });
       
       console.log(`✅ [主Bot] Ticket analysis completed for ${symbol}`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
