@@ -73,7 +73,7 @@ const { dialogueManager } = require("./dialogueManager");
 // 🆕 v6.2: 智能对话系统（处理greeting/help/casual对话）
 const { handleConversation, isGreeting, isHelpRequest, isSystemCommand } = require("./conversationAgent");
 // 🆕 v6.0: Ticket Formatter（解票功能）
-const ticketFormatter = require("./v3_dev/services/v5/ticketFormatter");
+const { formatTicketStandardCN, formatTicketStandardEN, formatTicketHumanCN } = require("./v3_dev/services/lightweightTicketFormatter");
 
 const app = express();
 app.set('trust proxy', 1);
@@ -6311,10 +6311,16 @@ if (!TOKEN_IS_SAFE) {
     let statusMsg = null;
     let t0 = null;
     
+    // 🔍 解析用户意图：双语、解析（人话版）
+    const isBilingual = mode.includes('双语');
+    const wantHuman = mode.includes('解析') || mode.includes('聊天') || mode.includes('人话');
+    
     console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎯 [主Bot] Ticket Analysis Request (Lightweight)`);
     console.log(`   ├─ Symbol: ${symbol}`);
     console.log(`   ├─ Mode: ${mode}`);
+    console.log(`   ├─ Bilingual: ${isBilingual}`);
+    console.log(`   ├─ Human Voice: ${wantHuman}`);
     console.log(`   └─ Using: generateStockChart (fast path)`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
     
@@ -6369,11 +6375,42 @@ if (!TOKEN_IS_SAFE) {
         console.log('✅ K线图已发送');
       }
       
-      // 发送技术分析文本
-      await telegramAPI('sendMessage', {
-        chat_id: chatId,
-        text: ticketData.analysis.slice(0, 4000)
-      });
+      // 📝 格式化并发送分析文本
+      const messages = [];
+      
+      // 1. 中文标准版（必发）
+      const cnStandard = formatTicketStandardCN(ticketData);
+      messages.push({ text: cnStandard, label: '中文标准版' });
+      
+      // 2. 英文标准版（如果是双语）
+      if (isBilingual) {
+        const enStandard = formatTicketStandardEN(ticketData);
+        messages.push({ text: enStandard, label: '英文标准版' });
+      }
+      
+      // 3. 中文人话版（如果要解析）
+      if (wantHuman) {
+        const cnHuman = formatTicketHumanCN(ticketData);
+        messages.push({ text: cnHuman, label: '中文人话版' });
+      }
+      
+      console.log(`📝 [主Bot] 准备发送 ${messages.length} 条消息`);
+      
+      // 依次发送所有消息
+      for (let i = 0; i < messages.length; i++) {
+        const msg = messages[i];
+        console.log(`📤 [主Bot] 发送消息 ${i + 1}/${messages.length}: ${msg.label} (${msg.text.length} chars)`);
+        
+        await telegramAPI('sendMessage', {
+          chat_id: chatId,
+          text: msg.text
+        });
+        
+        // 消息之间稍微延迟，避免触发限流
+        if (i < messages.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
       
       console.log(`✅ [主Bot] Ticket analysis completed for ${symbol}`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
