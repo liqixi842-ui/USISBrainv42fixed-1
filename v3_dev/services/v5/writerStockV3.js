@@ -10,8 +10,11 @@ async function generateThesis(report, analystInfo = {}) {
   
   // 🆕 v5.1: Use industry-specific guidance
   const industryContext = report._industryContext || { industry: 'unknown', focus: [], metrics: [], tone: 'balanced' };
-  const industryNote = industryContext.industry !== 'unknown'
-    ? `\n**Industry Context:** ${industryContext.industry}\n**Focus Areas:** ${industryContext.focus.join(', ')}\n**Key Metrics:** ${industryContext.metrics.join(', ')}\n`
+  // 🔧 Ensure focus and metrics are arrays
+  const focus = Array.isArray(industryContext.focus) ? industryContext.focus : [];
+  const metrics = Array.isArray(industryContext.metrics) ? industryContext.metrics : [];
+  const industryNote = industryContext.industry !== 'unknown' && focus.length > 0
+    ? `\n**Industry Context:** ${industryContext.industry}\n**Focus Areas:** ${focus.join(', ')}\n**Key Metrics:** ${metrics.join(', ')}\n`
     : '';
   
   const prompt = `You are writing an investment thesis for ${report.symbol} as ${analyst}, lead analyst at ${firm}.
@@ -66,7 +69,7 @@ Write a 900-1000 word institutional investment thesis with **ANALYST VOICE**:
 - **REQUIRED**: Every claim must cite a specific metric, percentage, or dollar figure
 - **MINIMUM LENGTH**: 900 words (this is critical - do NOT write less than 800 words)
 - 3 subheaders minimum
-- Tone: ${industryContext.tone} (institutional sell-side style)${industryContext.focus.length > 0 ? `\n- MUST address these industry-specific factors: ${industryContext.focus.join(', ')}` : ''}${industryContext.metrics.length > 0 ? `\n- Prioritize these metrics: ${industryContext.metrics.slice(0,4).join(', ')}` : ''}
+- Tone: ${industryContext.tone} (institutional sell-side style)${focus.length > 0 ? `\n- MUST address these industry-specific factors: ${focus.join(', ')}` : ''}${metrics.length > 0 ? `\n- Prioritize these metrics: ${metrics.slice(0,4).join(', ')}` : ''}
 
 Thesis:`;
 
