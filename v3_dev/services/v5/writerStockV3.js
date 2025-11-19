@@ -188,8 +188,10 @@ async function generateOverview(report, analystInfo = {}) {
   
   // 🆕 v5.1: Use industry-specific guidance
   const industryContext = report._industryContext || { industry: 'unknown', focus: [], metrics: [], tone: 'balanced' };
-  const industryNote = industryContext.industry !== 'unknown'
-    ? `\nIndustry: ${industryContext.industry} (Focus: ${industryContext.focus.slice(0,3).join(', ')})`
+  // 🔧 Ensure focus is array
+  const focus = Array.isArray(industryContext.focus) ? industryContext.focus : [];
+  const industryNote = industryContext.industry !== 'unknown' && focus.length > 0
+    ? `\nIndustry: ${industryContext.industry} (Focus: ${focus.slice(0,3).join(', ')})`
     : '';
 
   const prompt = `You are writing a company overview for ${report.symbol} as ${analyst}, lead analyst at ${firm}.
