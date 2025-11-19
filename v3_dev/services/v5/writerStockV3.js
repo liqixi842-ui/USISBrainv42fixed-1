@@ -13,19 +13,30 @@ async function generateThesis(report, analystInfo = {}) {
   // 🔧 Ensure focus and metrics are arrays
   const focus = Array.isArray(industryContext.focus) ? industryContext.focus : [];
   const metrics = Array.isArray(industryContext.metrics) ? industryContext.metrics : [];
+
   const industryNote = industryContext.industry !== 'unknown' && focus.length > 0
     ? `\n**Industry Context:** ${industryContext.industry}\n**Focus Areas:** ${focus.join(', ')}\n**Key Metrics:** ${metrics.join(', ')}\n`
     : '';
-  
-  const prompt = `You are writing an investment thesis for ${report.symbol} as ${analyst}, lead analyst at ${firm}.
 
-Company: ${report.company_name || report.symbol}
+  // 🆕 v5.2: Asset-type aware subject labelling
+  const assetType = (report.asset_type || analystInfo.assetType || 'equity').toLowerCase();
+  let subjectLabel = 'company';
+  if (assetType === 'index') subjectLabel = 'equity index';
+  else if (assetType === 'etf') subjectLabel = 'exchange-traded fund';
+  else if (assetType === 'crypto') subjectLabel = 'digital asset';
+
+  const subjectName = report.company_name || report.symbol;
+
+  const prompt = `You are writing an investment thesis on ${subjectName} (${subjectLabel}) as ${analyst}, lead analyst at ${firm}.
+
+Subject: ${subjectName}
+Asset Type: ${assetType.toUpperCase()}
 Sector: ${report.sector || 'N/A'}
 Price: $${report.price?.last || 'N/A'}
 Target: $${report.targets?.base?.price || 'N/A'} (${report.targets?.base?.upside_pct || 'N/A'}% upside)
 Rating: ${report.rating || 'N/A'}${industryNote}
 
-Financial Data:
+Financial / Network Data (if applicable):
 - Revenue: ${report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A'}
 - EPS: $${report.fundamentals?.eps || 'N/A'}
 - ROE: ${report.fundamentals?.roe || 'N/A'}%
@@ -46,30 +57,30 @@ Write a 900-1000 word institutional investment thesis with **ANALYST VOICE**:
 
 **Structure:**
 1. Core Investment Rationale (250-300 words)
-   - Lead with strongest bull case (with analyst attribution)
+   - Lead with strongest bull/base case (with analyst attribution)
    - Quantify opportunity size
    - State conviction level
 
-2. Competitive Position (350 words)
-   - Market leadership metrics
+2. Competitive / Strategic Position (350 words)
+   - Market leadership metrics or network effects (for index/ETF/crypto)
    - Structural advantages
    - Barriers to entry
    - Include at least 1 analyst voice reference here
 
-3. Financial Framework (300-350 words)
-   - Margin trajectory
-   - Capital efficiency
-   - Cash generation
+3. Financial / Network Framework (300-350 words)
+   - Margin or economics trajectory (for companies)
+   - Capital efficiency / on-chain metrics for crypto
+   - Cash generation or network value accrual
    - Include at least 1 analyst voice reference here
 
 **Requirements:**
 - Mix "we" (research team) with explicit ${analyst} attributions
-- Include specific numbers and timeframes
+- Include specific numbers and timeframes where they exist (earnings, multiples, network stats)
 - **PROHIBITED WORDS**: exciting, amazing, poised to, well-positioned, compelling, attractive, robust
-- **REQUIRED**: Every claim must cite a specific metric, percentage, or dollar figure
+- **REQUIRED**: Every claim must cite a specific metric, percentage, or dollar figure where applicable
 - **MINIMUM LENGTH**: 900 words (this is critical - do NOT write less than 800 words)
 - 3 subheaders minimum
-- Tone: ${industryContext.tone} (institutional sell-side style)${focus.length > 0 ? `\n- MUST address these industry-specific factors: ${focus.join(', ')}` : ''}${metrics.length > 0 ? `\n- Prioritize these metrics: ${metrics.slice(0,4).join(', ')}` : ''}
+- Tone: ${industryContext.tone} (institutional sell-side style)${focus.length > 0 ? `\n- MUST address these asset/industry-specific factors: ${focus.join(', ')}` : ''}${metrics.length > 0 ? `\n- Prioritize these metrics: ${metrics.slice(0,4).join(', ')}` : ''}
 
 Thesis:`;
 
@@ -79,12 +90,24 @@ Thesis:`;
     const MIN_WORD_COUNT = 900; // 🔧 Architect fix: Match prompt requirement (900-1000 words)
     const ABSOLUTE_MIN = 600; // Fallback threshold
     
+    // 🆕 v5.2: Asset-type aware system prompt
+    let systemPrompt;
+    if (assetType === 'equity') {
+      systemPrompt = `You are ${analyst}, a senior sell-side equity analyst at ${firm}. Write institutional-grade investment theses with your personal analytical voice.`;
+    } else if (assetType === 'index' || assetType === 'etf') {
+      systemPrompt = `You are ${analyst}, a senior research strategist at ${firm}. Write institutional-grade investment theses on indices and ETFs with your personal analytical voice.`;
+    } else if (assetType === 'crypto') {
+      systemPrompt = `You are ${analyst}, a senior digital assets analyst at ${firm}. Write institutional-grade investment theses on cryptocurrencies and blockchain networks with your personal analytical voice.`;
+    } else {
+      systemPrompt = `You are ${analyst}, a senior analyst at ${firm}. Write institutional-grade investment theses with your personal analytical voice.`;
+    }
+    
     // 🆕 v5.2: Retry with exponential backoff until we get sufficient content
     while (attempts < 3) {
       attempts++;
       
       const response = await callOpenAI([
-        { role: 'system', content: `You are ${analyst}, a senior sell-side equity analyst at ${firm}. Write institutional-grade investment theses with your personal analytical voice.` },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt }
       ], {
         model: 'gpt-4o',
@@ -136,8 +159,8 @@ Thesis:`;
       return existingContent;
     }
     
-    // Generate enriched data-driven thesis with institutional tone
-    const companyName = report.company_name || report.symbol;
+    // 🆕 v5.2: Asset-type aware fallback generation
+    const subjectName = report.company_name || report.symbol;
     const rating = report.rating || 'our investment view';
     const price = report.price?.last;
     const targetPrice = report.targets?.base?.price;
@@ -150,11 +173,6 @@ Thesis:`;
       ? `supports our ${rating} rating`
       : 'supports our investment thesis';
     
-    // Build financial metrics sentence
-    const metricsStatement = revenue
-      ? `The company generates annual revenue of ${revenue}${margin ? ` with EBITDA margins of ${margin}%` : ''}${roe ? ` and ROE of ${roe}%` : ''}, reflecting operational discipline and capital efficiency.`
-      : 'The company demonstrates operational discipline and capital efficiency.';
-    
     // Build valuation sentence only if we have both price and target
     let valuationStatement = '';
     if (price && targetPrice && price > 0 && targetPrice > 0) {
@@ -162,16 +180,47 @@ Thesis:`;
       valuationStatement = `Our price target of $${targetPrice} implies ${upside}% ${upside > 0 ? 'upside' : 'downside'} from current levels of $${price}, reflecting a probability-weighted scenario analysis. `;
     }
     
-    // 🔧 v5.2: Enhanced fallback with 800-1000 chars and 3+ analyst attributions
-    const fallback = `In ${analyst}'s view, ${companyName} ${ratingStatement} based on three core factors: sustainable competitive advantages, execution momentum, and valuation framework. ${metricsStatement}
+    // 🔧 v5.2: Enhanced fallback with asset-type branching
+    let fallback;
+    
+    if (assetType === 'equity') {
+      // Equity-specific fallback (company language)
+      const metricsStatement = revenue
+        ? `The company generates annual revenue of ${revenue}${margin ? ` with EBITDA margins of ${margin}%` : ''}${roe ? ` and ROE of ${roe}%` : ''}, reflecting operational discipline and capital efficiency.`
+        : 'The company demonstrates operational discipline and capital efficiency.';
+      
+      fallback = `In ${analyst}'s view, ${subjectName} ${ratingStatement} based on three core factors: sustainable competitive advantages, execution momentum, and valuation framework. ${metricsStatement}
 
 ${analyst} argues that the company's market position creates durable barriers to entry through scale economies, technology leadership, and customer relationships. The business model demonstrates network effects and switching costs that protect market share against competitive pressures. Management has demonstrated consistent ability to allocate capital toward high-return projects while maintaining balance sheet flexibility.
 
 From an operational perspective, ${analyst} highlights that the company has delivered consistent margin expansion through operating leverage and cost discipline. The management team's track record of navigating market cycles and executing strategic initiatives supports our confidence in forward estimates. Industry positioning provides secular tailwinds that should support above-market growth over the intermediate term.
 
 ${valuationStatement}According to ${analyst}, the risk-reward framework favors long-term investors given structural growth drivers and margin expansion opportunities. As ${analyst} notes, current valuation incorporates near-term headwinds while underappreciating the durability of competitive advantages and the compounding nature of market position. We maintain conviction in the investment thesis based on fundamental analysis, industry positioning, and management's proven execution capability.`;
+    } else if (assetType === 'index' || assetType === 'etf') {
+      // Index/ETF-specific fallback
+      const vehicleType = assetType === 'index' ? 'index' : 'exchange-traded fund';
+      fallback = `In ${analyst}'s view, ${subjectName} ${ratingStatement} based on three core factors: diversification profile, structural positioning, and cost efficiency.
+
+${analyst} argues that this ${vehicleType} provides investors with broad market exposure across multiple sectors and constituents, offering systematic risk mitigation relative to single-stock holdings. The benchmark methodology ensures rules-based rebalancing and transparent constituent selection, reducing idiosyncratic risks associated with active management decisions.
+
+From a structural perspective, ${analyst} highlights that the ${vehicleType}'s sector weights and factor exposures align with long-term economic growth drivers. ${assetType === 'etf' ? 'The fund\'s low expense ratio and high liquidity make it a cost-effective vehicle for gaining market exposure.' : 'The index construction rules provide transparent, repeatable methodology for tracking market performance.'} Historical performance demonstrates resilience across market cycles, with consistent tracking of underlying fundamentals.
+
+${valuationStatement}According to ${analyst}, the risk-reward framework favors investors seeking diversified equity exposure with minimal tracking error and operational complexity. As ${analyst} notes, current valuations reflect market consensus while providing exposure to structural growth themes across constituent holdings.`;
+    } else if (assetType === 'crypto') {
+      // Crypto-specific fallback
+      fallback = `In ${analyst}'s view, ${subjectName} ${ratingStatement} based on three core factors: network fundamentals, adoption trajectory, and protocol economics.
+
+${analyst} argues that the digital asset's decentralized architecture creates a permissionless value transfer network, reducing reliance on centralized intermediaries. The protocol's security model, supported by distributed consensus mechanisms, has demonstrated resilience against attacks while maintaining operational continuity. Network effects and growing developer ecosystem activity reinforce the asset's positioning within the broader blockchain landscape.
+
+From a fundamental perspective, ${analyst} highlights that on-chain metrics including active addresses, transaction volumes, and hash rate trends provide insight into network health and adoption dynamics. The asset's monetary policy and supply dynamics are transparent and programmatically enforced, offering predictable issuance schedules relative to fiat alternatives.
+
+${valuationStatement}According to ${analyst}, the risk-reward framework reflects both the asset's structural innovation and inherent volatility associated with emerging technology adoption. As ${analyst} notes, regulatory developments and institutional participation remain key variables influencing long-term valuation trajectories.`;
+    } else {
+      // Generic fallback for unknown asset types
+      fallback = `In ${analyst}'s view, ${subjectName} ${ratingStatement} based on fundamental analysis, market positioning, and structural factors. ${analyst} highlights that the investment opportunity reflects a balanced assessment of growth potential and risk considerations. According to ${analyst}, the current valuation framework incorporates both near-term catalysts and long-term strategic positioning.`;
+    }
     
-    console.log(`⚠️  [WriterStockV3] Generated enriched fallback thesis: ${fallback.length} chars (${fallback.split(/\s+/).length} words)`);
+    console.log(`⚠️  [WriterStockV3] Generated asset-aware fallback thesis (${assetType}): ${fallback.length} chars (${fallback.split(/\s+/).length} words)`);
     return fallback;
   }
 }
@@ -182,64 +231,99 @@ async function generateOverview(report, analystInfo = {}) {
   const firm = analystInfo.firm || 'our firm';
   
   // 🔧 Critical Fix: 使用统一的 segment 数据源（避免文本和表格矛盾）
-  const segments = report.segments && report.segments.length > 0
-    ? report.segments.map(s => `${s.name}: ${s.revenue_pct}% revenue`).join(', ')
-    : 'Segment data pending';
-  
+  const rawSegments = Array.isArray(report.segments) ? report.segments : [];
+
+  // 🆕 v5.2: 资产类型感知
+  const assetType = (report.asset_type || analystInfo.assetType || 'equity').toLowerCase();
+
+  // 默认业务模型文案按资产类型区分
+  let defaultBusinessModel = 'multi-segment operating company';
+  if (assetType === 'index') {
+    defaultBusinessModel = 'broad-based equity index representing large-cap companies';
+  } else if (assetType === 'etf') {
+    defaultBusinessModel = 'exchange-traded fund tracking a benchmark index';
+  } else if (assetType === 'crypto') {
+    defaultBusinessModel = 'decentralized digital asset and blockchain network';
+  }
+
+  const businessModel = report.business_model || defaultBusinessModel;
+
+  // Segments 文案：只有 equity 才用真实分部，其他资产用合适描述
+  let segmentsLine;
+  if (assetType === 'equity') {
+    segmentsLine = rawSegments.length > 0
+      ? rawSegments.map(s => `${s.name}: ${s.revenue_pct}% revenue`).join(', ')
+      : 'Segment data not disclosed';
+  } else if (assetType === 'index') {
+    segmentsLine = 'Sector and style weights across the underlying benchmark (e.g., IT, Financials, Healthcare, Communication Services, Consumer sectors).';
+  } else if (assetType === 'etf') {
+    segmentsLine = 'Exposures by sector, style, and top holdings of the underlying index basket.';
+  } else if (assetType === 'crypto') {
+    segmentsLine = 'Ecosystem participants including miners/validators, exchanges, custodians, and end-users.';
+  } else {
+    segmentsLine = 'Multiple segments / exposures depending on the asset mandate.';
+  }
+
   // 🆕 v5.1: Use industry-specific guidance
   const industryContext = report._industryContext || { industry: 'unknown', focus: [], metrics: [], tone: 'balanced' };
-  // 🔧 Ensure focus is array
-  const focus = Array.isArray(industryContext.focus) ? industryContext.focus : [];
-  const industryNote = industryContext.industry !== 'unknown' && focus.length > 0
-    ? `\nIndustry: ${industryContext.industry} (Focus: ${focus.slice(0,3).join(', ')})`
+  const industryNote = industryContext.industry !== 'unknown'
+    ? `\nIndustry: ${industryContext.industry} (Focus: ${(industryContext.focus || []).slice(0,3).join(', ')})`
     : '';
 
-  const prompt = `You are writing a company overview for ${report.symbol} as ${analyst}, lead analyst at ${firm}.
+  const subjectName = report.company_name || report.symbol;
+  const subjectLabel = assetType === 'equity'
+    ? 'company'
+    : assetType === 'index'
+      ? 'equity index'
+      : assetType === 'etf'
+        ? 'exchange-traded fund'
+        : assetType === 'crypto'
+          ? 'digital asset'
+          : 'asset';
 
-Company: ${report.company_name || report.symbol}
-Business Model: ${report.business_model || 'Multi-segment technology company'}
-Segments: ${segments}${industryNote}
+  const prompt = `You are writing a ${subjectLabel} / vehicle overview for ${subjectName} as ${analyst}, lead analyst at ${firm}.
 
-Financial Profile:
-- Market Cap: $${report.valuation?.market_cap ? (report.valuation.market_cap / 1e9).toFixed(1) + 'B' : 'N/A'}
-- Revenue: $${report.fundamentals?.revenue ? (report.fundamentals.revenue / 1e9).toFixed(1) + 'B' : 'N/A'}
-- EBITDA Margin: ${report.fundamentals?.ebitda_margin || 'N/A'}%
-- ROE: ${report.fundamentals?.roe || 'N/A'}%
+Name: ${subjectName}
+Asset Type: ${assetType.toUpperCase()}
+Business Model / Structure: ${businessModel}
+Segments / Exposures: ${segmentsLine}${industryNote}
 
-Write an 800-900 word company overview with segment breakdown and **ANALYST VOICE**:
+Financial / Network Profile (if applicable):
+- Market Cap / AUM: $${report.valuation?.market_cap ? (report.valuation.market_cap / 1e9).toFixed(1) + 'B' : 'N/A'}
+- Revenue (if company): $${report.fundamentals?.revenue ? (report.fundamentals.revenue / 1e9).toFixed(1) + 'B' : 'N/A'}
+- EBITDA Margin (if company): ${report.fundamentals?.ebitda_margin || 'N/A'}%
+- ROE (if company): ${report.fundamentals?.roe || 'N/A'}%
+
+Write an 800-900 word overview with **asset-appropriate structure** and **ANALYST VOICE**:
 
 **CRITICAL - Analyst Voice Requirements:**
 - Include AT LEAST 2 explicit analyst references using ${analyst}'s name:
   * "${analyst} highlights that ..."
   * "As ${analyst} notes, ..."
   * "${analyst} observes that ..."
-- Make it sound like ${analyst} is explaining the business to clients
-
-**CRITICAL - Data Accuracy**:
-When discussing business segments, you MUST use the EXACT percentages provided in the "Segments" data above. Do NOT make up different percentages. This ensures consistency with the data table.
+- Make it sound like ${analyst} is explaining the ${subjectLabel} and its role in client portfolios
 
 **Structure:**
-1. Business Overview (250 words)
-   - Core operations (with 1 analyst attribution)
-   - Revenue model
-   - Geographic footprint
+1. High-level overview (250 words)
+   - What this ${subjectLabel} is and how it works
+   - Revenue model OR value accrual / index methodology
+   - Geographic / sector / user-base footprint
 
-2. Segment Analysis (400 words)
-   - For each segment, state the EXACT percentage from the data above
-   - Margin and growth drivers
-   - DO NOT use phrases like "approximately" or "roughly" - use the exact numbers provided
-   - Include 1 analyst observation about segment mix
+2. Exposures / Components (400 words)
+   - For equity: classic business segments (with exact percentages if available)
+   - For index/ETF: sector and factor weights, top constituents
+   - For crypto: mining / transactions / use cases / ecosystem participants
+   - Include at least 1 analyst observation about the mix and its implications
 
-3. Operational Excellence (200-250 words)
-   - Execution track record
-   - Management quality
-   - Capital allocation discipline
+3. Execution & Governance / Design (200-250 words)
+   - For companies: execution track record, management quality, capital allocation
+   - For index/ETF: index construction rules, rebalancing, sponsor and liquidity
+   - For crypto: protocol governance, developer ecosystem, security track record
 
 **Requirements:**
 - Mix "we" (research team) with explicit ${analyst} attributions
-- Quantify each segment's contribution with exact percentages
+- Quantify exposures and key metrics where available
 - **PROHIBITED**: exciting, innovative, leading, cutting-edge, state-of-the-art
-- **REQUIRED**: Cite revenue mix, margin data, growth rates for each segment
 - **MINIMUM LENGTH**: 800 words (do NOT write less than 700 words)
 - No marketing language or superlatives
 
@@ -251,12 +335,24 @@ Overview:`;
     const MIN_WORD_COUNT = 800; // 🔧 Architect fix: Match prompt requirement (800-900 words)
     const ABSOLUTE_MIN = 500; // Fallback threshold
     
+    // 🆕 v5.2: Asset-type aware system prompt
+    let systemPrompt;
+    if (assetType === 'equity') {
+      systemPrompt = `You are ${analyst}, a senior sell-side equity analyst at ${firm}. Write institutional-grade company overviews with your personal analytical voice.`;
+    } else if (assetType === 'index' || assetType === 'etf') {
+      systemPrompt = `You are ${analyst}, a senior research strategist at ${firm}. Write institutional-grade index and ETF overviews with your personal analytical voice.`;
+    } else if (assetType === 'crypto') {
+      systemPrompt = `You are ${analyst}, a senior digital assets analyst at ${firm}. Write institutional-grade cryptocurrency and blockchain network overviews with your personal analytical voice.`;
+    } else {
+      systemPrompt = `You are ${analyst}, a senior analyst at ${firm}. Write institutional-grade asset overviews with your personal analytical voice.`;
+    }
+    
     // 🆕 v5.2: Retry with exponential backoff until we get sufficient content
     while (attempts < 3) {
       attempts++;
       
       const response = await callOpenAI([
-        { role: 'system', content: `You are ${analyst}, a senior sell-side equity analyst at ${firm}. Write institutional-grade company overviews with your personal analytical voice.` },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt }
       ], {
         model: 'gpt-4o',
@@ -304,28 +400,55 @@ Overview:`;
       return existingContent;
     }
     
-    // Generate enriched data-driven overview with segment details
-    const companyName = report.company_name || report.symbol;
-    const businessModel = report.business_model || 'a diversified technology company';
+    // 🆕 v5.2: Asset-type aware fallback overview generation
+    const subjectName = report.company_name || report.symbol;
     const revenue = report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A';
     const employees = report.employees || 'N/A';
     const marketCap = report.valuation?.market_cap ? `$${(report.valuation.market_cap / 1e9).toFixed(1)}B` : 'N/A';
     
-    // Extract segment data if available
-    const segmentInfo = report.segments && report.segments.length > 0
-      ? report.segments.slice(0, 3).map(s => `${s.name} (${s.revenue_pct}% of revenue)`).join(', ')
-      : 'multiple business segments';
+    let fallback;
     
-    // 🔧 v5.2: Enhanced fallback with 700-900 chars and 2+ analyst attributions
-    const fallback = `${companyName} operates as ${businessModel} with ${revenue} in annual revenue and a market capitalization of ${marketCap}. The organization employs approximately ${employees} people globally across its operational footprint.
+    if (assetType === 'equity') {
+      // Equity-specific fallback (company language)
+      const companyBusinessModel = report.business_model || 'a diversified operating company';
+      const segmentInfo = rawSegments.length > 0
+        ? rawSegments.slice(0, 3).map(s => `${s.name} (${s.revenue_pct}% of revenue)`).join(', ')
+        : 'multiple business segments';
+      
+      fallback = `${subjectName} operates as ${companyBusinessModel} with ${revenue} in annual revenue and a market capitalization of ${marketCap}. The organization employs approximately ${employees} people globally across its operational footprint.
 
 ${analyst} highlights that the company's business model centers on ${segmentInfo}. This diversified structure provides both revenue stability and growth optionality across economic cycles. The segment mix reflects strategic capital allocation decisions and management's assessment of market opportunities across different customer segments and geographic regions.
 
 The operational framework emphasizes margin discipline, R&D investment, and customer retention. ${analyst} notes that management has established track records in capital efficiency, reflected in consistent cash generation and return on invested capital metrics that exceed industry medians. The company maintains competitive positioning through proprietary technology, distribution advantages, and brand equity accumulated over multiple product cycles.
 
 From an organizational perspective, ${analyst} observes that leadership continuity and execution culture support sustained performance through market volatility. The management team demonstrates ability to adapt strategy while maintaining financial discipline. The balance sheet structure provides flexibility for both organic growth investments and inorganic opportunities, while maintaining appropriate leverage ratios for the sector and credit rating objectives.`;
+    } else if (assetType === 'index' || assetType === 'etf') {
+      // Index/ETF-specific fallback
+      const vehicleType = assetType === 'index' ? 'equity index' : 'exchange-traded fund';
+      const constituents = assetType === 'index' ? 'constituent companies' : 'underlying holdings';
+      
+      fallback = `${subjectName} is a ${vehicleType} with ${marketCap} in total ${assetType === 'index' ? 'market capitalization of constituents' : 'assets under management'}. ${analyst} highlights that this ${vehicleType} provides investors with diversified exposure to ${assetType === 'index' ? 'the broader equity market' : 'a benchmark index'} through a rules-based methodology.
+
+The ${vehicleType} employs a ${assetType === 'index' ? 'market-capitalization weighting scheme' : 'passive replication strategy'}, ensuring that ${constituents} are represented according to their relative market values. ${analyst} notes that this approach minimizes idiosyncratic risk while capturing broad market returns. The index methodology includes periodic rebalancing to maintain target exposures and ensure constituent eligibility based on predefined criteria including market capitalization, liquidity, and sector classification.
+
+Sector exposures typically span technology, healthcare, financials, consumer discretionary, industrials, and other major economic sectors, providing comprehensive market coverage. ${analyst} observes that the ${vehicleType}'s construction rules ensure transparency and replicability, key attributes valued by institutional investors. ${assetType === 'etf' ? 'The fund\'s expense ratio and tracking error remain competitive within its category, contributing to cost-efficient market access.' : 'The index serves as a benchmark for performance measurement and as the basis for derivative products and passive investment vehicles.'}
+
+Historical performance demonstrates correlation with underlying economic fundamentals and corporate earnings growth. The ${vehicleType} has navigated multiple market cycles, providing investors with systematic equity exposure while avoiding concentration risks associated with individual securities or narrow sector bets.`;
+    } else if (assetType === 'crypto') {
+      // Crypto-specific fallback
+      fallback = `${subjectName} is a decentralized digital asset operating on a blockchain network with ${marketCap} in total market capitalization. ${analyst} highlights that this cryptocurrency functions as both a medium of exchange and a store of value within its ecosystem, supported by cryptographic security and distributed consensus mechanisms.
+
+The protocol's architecture enables permissionless transactions across a global network of nodes, eliminating reliance on centralized intermediaries. ${analyst} notes that network security is maintained through distributed validators or miners who confirm transactions and extend the blockchain, receiving protocol rewards in return. This economic model aligns participant incentives with network integrity and operational continuity.
+
+The digital asset's monetary policy follows a predetermined issuance schedule, providing transparent supply dynamics relative to fiat alternatives. ${analyst} observes that on-chain metrics including transaction volumes, active addresses, and network hash rate offer insight into adoption trends and fundamental demand. The asset supports various use cases including peer-to-peer transfers, decentralized finance applications, and smart contract functionality depending on protocol capabilities.
+
+Development activity and governance structures determine protocol evolution, with open-source codebases enabling community participation and technical audits. The ecosystem encompasses exchanges, custodians, wallets, and infrastructure providers that facilitate access and liquidity. Regulatory frameworks continue to evolve across jurisdictions, influencing institutional adoption and market structure development.`;
+    } else {
+      // Generic fallback for unknown asset types
+      fallback = `${subjectName} represents an investment vehicle with ${marketCap} in market capitalization. ${analyst} highlights the asset's role in providing portfolio exposure based on its underlying structure and investment mandate. ${analyst} observes that the investment framework balances growth potential with risk management considerations appropriate for the asset class.`;
+    }
     
-    console.log(`⚠️  [WriterStockV3] Generated enriched fallback overview: ${fallback.length} chars (${fallback.split(/\s+/).length} words)`);
+    console.log(`⚠️  [WriterStockV3] Generated asset-aware fallback overview (${assetType}): ${fallback.length} chars (${fallback.split(/\s+/).length} words)`);
     return fallback;
   }
 }
