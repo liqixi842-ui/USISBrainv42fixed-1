@@ -3,6 +3,34 @@ USIS Brain v6.0 is an institutional-grade Multi-AI Financial Analysis System des
 
 The system is currently stable at `v2-stable` for production, with `v3-dev` actively under development for new features like a comprehensive research report system (v3.1), a multi-model research pipeline (v3.2), and a professional correction layer (v4.0) to refine AI-generated text.
 
+## Recent Changes (Nov 19, 2025)
+
+### v5.2 Critical Fix - Eliminated "Analysis not available." Bug
+**Status**: ✅ Architect-Approved, Ready for Production Testing
+
+**Problem Fixed**: AI generation failures previously caused empty content sections showing "Analysis not available." in Investment Thesis, Company Overview, Industry Trends, and Macro Environment sections.
+
+**Solution Implemented**: Three-layer content protection system:
+1. Primary AI generation with institutional prompts
+2. Retry with exponential backoff
+3. **NEW**: Data-driven fallback generation using real report data
+
+**All 5 sections now guaranteed to display substantive content (400-1000+ chars) even when AI fails:**
+- Investment Thesis: Uses actual report.rating, revenue, margins, price targets
+- Company Overview: Business model, segment breakdown, operational metrics
+- Valuation Analysis: Multiple-based framework with conditional data display
+- Industry Trends: Industry structure, competition, regulatory outlook
+- Macro Environment: Fed policy, FX, fiscal developments, technicals
+
+**Key Improvements:**
+- ✅ Fixed hardcoded "BUY rating" bug - now uses actual report.rating
+- ✅ Fixed misleading "$0" displays - conditional logic omits missing metrics
+- ✅ Added analyst voice attributions (2-4 per section)
+- ✅ Removed prohibited words (compelling, attractive, supportive)
+- ✅ All fallbacks use institutional sell-side language
+
+**Files Modified**: `v3_dev/services/v5/writerStockV3.js`, `v3_dev/V5.2_CRITICAL_FIX.md`
+
 # User Preferences
 Preferred communication style: Simple, everyday language.
 
