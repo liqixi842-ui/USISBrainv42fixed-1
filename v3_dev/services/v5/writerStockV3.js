@@ -350,8 +350,10 @@ async function generateOverview(report, analystInfo = {}) {
 
   // 🆕 v5.1: Use industry-specific guidance
   const industryContext = report._industryContext || { industry: 'unknown', focus: [], metrics: [], tone: 'balanced' };
+  // 🔧 v6.0 bugfix: Ensure focus is always treated as array (handle string case)
+  const focusArray = Array.isArray(industryContext.focus) ? industryContext.focus : [];
   const industryNote = industryContext.industry !== 'unknown'
-    ? `\nIndustry: ${industryContext.industry} (Focus: ${(industryContext.focus || []).slice(0,3).join(', ')})`
+    ? `\nIndustry: ${industryContext.industry} (Focus: ${focusArray.slice(0,3).join(', ')})`
     : '';
 
   const subjectName = report.company_name || report.symbol;
