@@ -3,10 +3,45 @@ USIS Brain v6.0 is an institutional-grade Multi-AI Financial Analysis System des
 
 The system is currently stable at `v2-stable` for production, with `v3-dev` actively under development for new features like a comprehensive research report system (v3.1), a multi-model research pipeline (v3.2), and a professional correction layer (v4.0) to refine AI-generated text.
 
-## Recent Changes (Nov 19, 2025)
+## Recent Changes (Jan 19, 2025)
+
+### v6.0 Ticket Formatter - 解票功能统一输出层
+**Status**: ✅ Fully Implemented, Ready for Testing
+
+**New Feature**: Unified output formatting layer for "解票/股票分析" (ticket analysis) with three professional output formats:
+1. **Standard CN/EN**: 6-section technical analysis (Trend/Levels/Patterns/Indicators/Signals/Risks)
+2. **Human Voice**: Natural trader talk style, avoiding AI-like language
+
+**Output Modes**:
+- Standard: Single language (CN or EN)
+- Bilingual: CN + EN (2 messages)
+- Human: Conversational style (CN or EN)
+- Complete: CN + EN + Human (3 messages)
+
+**Key Features**:
+- ✅ Asset-type aware (equity/index/etf/crypto)
+- ✅ Short sentences, NO long paragraphs
+- ✅ Smart fallback for missing data (never shows "Analysis not available")
+- ✅ Telegram character limit protection (<2500 chars)
+- ✅ Multi-message sequential delivery with rate limiting
+
+**Telegram Commands**:
+- `解票 NVDA` - Standard CN
+- `解票 NVDA 双语` - CN + EN
+- `解票 NVDA 聊天版` - Human voice
+- `解票 NVDA 完整版` - All formats
+
+**Files Created**:
+- `v3_dev/services/v5/ticketFormatter.js` - Core formatter module
+- `v3_dev/V6.0_TICKET_FORMATTER.md` - Complete documentation
+
+**Files Modified**:
+- `v3_dev/services/devBotHandler.js` - Added handleTicketAnalysis() and command routing
+
+---
 
 ### v5.2 Critical Fix - Eliminated "Analysis not available." Bug
-**Status**: ✅ Architect-Approved, Ready for Production Testing
+**Status**: ✅ Architect-Approved, Production Ready
 
 **Problem Fixed**: AI generation failures previously caused empty content sections showing "Analysis not available." in Investment Thesis, Company Overview, Industry Trends, and Macro Environment sections.
 
@@ -56,6 +91,7 @@ The v6.0 pipeline processes user input via language detection, semantic intent p
 - **Cost Tracking**: Monitors costs, response times, and model usage using PostgreSQL.
 - **Multilingual Intelligence**: Automatic language detection, Google Translate integration, and specialized Chinese financial analysis via DeepSeek.
 - **API Timeout Protection**: Implements AbortController for OpenAI (15s) and Finnhub (10s) APIs, and enhanced error catching for Telegram.
+- **🆕 Ticket Formatter (v6.0)**: Unified output formatting layer for "解票" feature with standard (CN/EN) and human voice modes, supporting bilingual and complete output combinations.
 
 ## News System Architecture (N8N-Distributed + Chinese Translation)
 This system provides institutional-grade news aggregation with distributed processing, automated translation, and AI commentary. It uses an "Eyes & Brain" architecture where N8N handles lightweight RSS collection, and USIS Brain performs heavy computation including translation, AI commentary generation, ImpactRank 2.0 scoring, deduplication, routing, and push notifications.

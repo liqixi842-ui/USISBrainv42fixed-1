@@ -9,6 +9,9 @@ const axios = require('axios');
 // 🆕 v5.1: Import natural language parser (align with production bot)
 const { parseResearchReportCommand, parseSymbolDescription } = require('../../semanticIntentAgent');
 
+// 🆕 v6.0: Import ticket formatter for 解票 feature
+const ticketFormatter = require('./v5/ticketFormatter');
+
 /**
  * 发送 PDF 文件到 Telegram（使用 multipart/form-data）
  * @param {string} chatId - Chat ID
@@ -58,7 +61,7 @@ async function sendPDFDocument(chatId, pdfBuffer, filename, caption, botToken) {
   });
 }
 
-const VALID_COMMANDS = ['/test', '/status', '/v3', '/help', '/report', '研报', '/研报'];
+const VALID_COMMANDS = ['/test', '/status', '/v3', '/help', '/report', '研报', '/研报', '解票', '/解票'];
 
 /**
  * 🆕 v5.1: Universal Report Generator (used by both natural language and structured commands)
@@ -256,6 +259,149 @@ function parseParams(paramString) {
   return params;
 }
 
+/**
+ * 🆕 v6.0: 解票功能 - Ticket Analysis with Multiple Output Formats
+ * Supports 3 modes:
+ * 1. 解票 SYMBOL - Standard CN only
+ * 2. 解票 SYMBOL 双语 - Standard CN + EN
+ * 3. 解票 SYMBOL 聊天版 / 人话版 - Human voice (CN)
+ * 4. 解票 SYMBOL 完整版 - CN + EN + Human
+ */
+async function handleTicketAnalysis({ symbol, mode, chatId, telegramAPI }) {
+  let statusMsg = null;
+  let t0 = null;
+  
+  const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:3000';
+  
+  console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+  console.log(`🎯 [DEV_BOT] Ticket Analysis Request`);
+  console.log(`   ├─ Symbol: ${symbol}`);
+  console.log(`   ├─ Mode: ${mode}`);
+  console.log(`   └─ API URL: ${REPLIT_API_URL}`);
+  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+  
+  try {
+    // Send initial status message
+    statusMsg = await telegramAPI('sendMessage', {
+      chat_id: chatId,
+      text: `🎯 正在解票 ${symbol}\n\n⏳ 正在抓取数据和生成分析...\n\n(这可能需要 30-60 秒)`
+    });
+    
+    // Call v3 API to get full report object (JSON format)
+    const url = `${REPLIT_API_URL}/v3/report/${symbol}?format=json`;
+    
+    t0 = Date.now();
+    console.log(`📡 [DEV_BOT] Calling Report API: ${url}`);
+    
+    const response = await axios.get(url, { 
+      timeout: 120000  // 2 minutes timeout
+    });
+    
+    const dt = Date.now() - t0;
+    const report = response.data;
+    
+    console.log(`✅ [DEV_BOT] Report API completed in ${dt} ms`);
+    console.log(`   ├─ Symbol: ${report.symbol}`);
+    console.log(`   ├─ Rating: ${report.rating}`);
+    console.log(`   └─ Asset Type: ${report.asset_type}\n`);
+    
+    // Update status
+    await telegramAPI('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.result.message_id,
+      text: `🎯 正在解票 ${symbol}\n\n✅ 数据获取完成\n⏳ 正在格式化输出...`
+    });
+    
+    // Determine format options based on mode
+    let formatOptions = {
+      mode: 'standard',
+      bilingual_split: false,
+      primary_lang: 'zh'
+    };
+    
+    if (mode === '双语') {
+      formatOptions.bilingual_split = true;
+    } else if (mode === '聊天版' || mode === '人话版') {
+      formatOptions.mode = 'human';
+    } else if (mode === '完整版') {
+      formatOptions.mode = 'standard_plus_human';
+      formatOptions.bilingual_split = true;
+    }
+    
+    // Format messages using ticketFormatter
+    console.log(`📝 [DEV_BOT] Formatting messages with options:`, formatOptions);
+    const messages = await ticketFormatter.formatTicket(report, formatOptions);
+    
+    console.log(`✅ [DEV_BOT] Generated ${messages.length} message(s)`);
+    
+    // Delete status message
+    await telegramAPI('deleteMessage', {
+      chat_id: chatId,
+      message_id: statusMsg.result.message_id
+    });
+    
+    // Send all formatted messages sequentially
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      console.log(`📤 [DEV_BOT] Sending message ${i + 1}/${messages.length} (${msg.length} chars)`);
+      
+      await telegramAPI('sendMessage', {
+        chat_id: chatId,
+        text: msg,
+        parse_mode: 'Markdown'
+      });
+      
+      // Small delay between messages to avoid rate limits
+      if (i < messages.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+    
+    console.log(`✅ [DEV_BOT] Ticket analysis completed for ${symbol}`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+    
+  } catch (error) {
+    const dt = t0 ? Date.now() - t0 : 0;
+    console.error(`❌ [DEV_BOT] Ticket analysis ERROR after ${dt} ms`);
+    console.error(`   ├─ Error code: ${error.code || 'N/A'}`);
+    console.error(`   ├─ Error message: ${error.message}`);
+    console.error(`   └─ Stack: ${error.stack}\n`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+    
+    // Delete status message if exists
+    if (statusMsg?.result?.message_id) {
+      try {
+        await telegramAPI('deleteMessage', {
+          chat_id: chatId,
+          message_id: statusMsg.result.message_id
+        });
+      } catch (delErr) {
+        // Ignore delete errors
+      }
+    }
+    
+    // Send error message
+    let errorMsg = `❌ 解票失败\n\n标的: ${symbol}\n\n`;
+    
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      errorMsg += `原因: API 请求超时（可能是股票代码不存在或服务繁忙）\n\n建议：\n• 检查股票代码是否正确\n• 稍后重试`;
+    } else if (error.response) {
+      errorMsg += `原因: API 返回错误 (${error.response.status})\n\n错误信息: ${error.response.statusText}`;
+    } else if (error.request) {
+      errorMsg += `原因: 无法连接到 API\n\n建议：\n• 检查 Replit 服务是否在运行\n• 检查网络连接`;
+    } else {
+      errorMsg += `原因: ${error.message}`;
+    }
+    
+    errorMsg += `\n\n(v3-dev 解票功能 - 模式: ${mode})`;
+    
+    await telegramAPI('sendMessage', {
+      chat_id: chatId,
+      text: errorMsg
+    });
+  }
+}
+
 async function handleDevBotMessage(message, telegramAPI, botToken) {
   const chatId = message.chat.id;
   const text = (message.text || '').trim();
@@ -264,6 +410,36 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
   console.log(`\n🔧 [DEV_BOT] Message from ${userId}: "${text}"`);
   
   try {
+    // 🆕 v6.0: Priority 0 - 解票 (Ticket Analysis) Command
+    // Supports: 解票 SYMBOL [双语|聊天版|人话版|完整版]
+    if (text.startsWith('解票') || text.startsWith('/解票')) {
+      console.log(`🎯 [DEV_BOT] Detected ticket analysis command`);
+      
+      // Parse command: 解票 NVDA [双语|聊天版|人话版|完整版]
+      const parts = text.replace(/^(解票|\/解票)\s*/i, '').trim().split(/\s+/);
+      
+      if (parts.length === 0 || !parts[0]) {
+        await telegramAPI('sendMessage', {
+          chat_id: chatId,
+          text: `❌ 解票命令格式错误\n\n**正确格式：**\n解票 股票代码 [模式]\n\n**示例：**\n• 解票 NVDA（标准中文版）\n• 解票 NVDA 双语（中文+英文）\n• 解票 NVDA 聊天版（人话版）\n• 解票 NVDA 人话版（同上）\n• 解票 NVDA 完整版（中文+英文+人话版）\n\n**支持的模式：**\n• 默认：标准中文版\n• 双语：中英文标准版\n• 聊天版/人话版：自然口吻解析\n• 完整版：所有格式`
+        });
+        return;
+      }
+      
+      const symbol = parts[0].toUpperCase();
+      const mode = parts[1] || '标准版';
+      
+      // Call ticket analysis handler
+      await handleTicketAnalysis({
+        symbol,
+        mode,
+        chatId,
+        telegramAPI
+      });
+      
+      return;
+    }
+    
     // 🆕 v5.1: Priority 1 - Natural Language Report Command (aligned with production bot)
     // Supports: 研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文
     if (text.startsWith('研报') || text.startsWith('/研报')) {
@@ -349,6 +525,22 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
 /v3 - v3-dev信息
 /help - 帮助信息
 
+**🆕 解票功能（v6.0）:**
+
+格式：解票 股票代码 [模式]
+
+**模式选项：**
+• 解票 NVDA（标准中文版）
+• 解票 NVDA 双语（中文+英文）
+• 解票 NVDA 聊天版（人话版）
+• 解票 NVDA 完整版（所有格式）
+
+**输出说明：**
+• 标准版：6大板块技术分析（趋势/价位/形态/指标/信号/风险）
+• 双语：中英文标准版（分两条消息发送）
+• 聊天版：老交易员口吻，自然对话风格
+• 完整版：标准双语 + 人话版（共3条消息）
+
 **研报生成（双入口）:**
 
 🔹 **自然语言入口**（推荐）
@@ -360,9 +552,9 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
 示例：/report NVDA brand=VADA firm=Aberdeen Investments analyst=Anthony Venn Dutton
 
 **注意:**
-• 两种方式均可生成完整研报
-• 自然语言更简洁，结构化命令支持brand参数
-• 生成时间：60-120秒`;
+• 解票功能：30-60秒，快速技术分析
+• 研报功能：60-120秒，完整机构级研报
+• 两种方式均支持全球市场（股票/指数/ETF/加密货币）`;
       
       await telegramAPI('sendMessage', {
         chat_id: chatId,
