@@ -72,6 +72,8 @@ const getN8NClient = () => require("./n8nClient").getN8NClient();
 const { dialogueManager } = require("./dialogueManager");
 // 🆕 v6.2: 智能对话系统（处理greeting/help/casual对话）
 const { handleConversation, isGreeting, isHelpRequest, isSystemCommand } = require("./conversationAgent");
+// 🆕 v6.0: Ticket Formatter（解票功能）
+const ticketFormatter = require("./v3_dev/services/v5/ticketFormatter");
 
 const app = express();
 app.set('trust proxy', 1);
@@ -6304,6 +6306,143 @@ if (!TOKEN_IS_SAFE) {
     });
   }
   
+  // 🆕 v6.0: 解票功能处理函数 (Ticket Analysis Handler)
+  async function handleTicketAnalysis({ symbol, mode, chatId }) {
+    let statusMsg = null;
+    let t0 = null;
+    const axios = require('axios');
+    
+    const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:3000';
+    
+    console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`🎯 [主Bot] Ticket Analysis Request`);
+    console.log(`   ├─ Symbol: ${symbol}`);
+    console.log(`   ├─ Mode: ${mode}`);
+    console.log(`   └─ API URL: ${REPLIT_API_URL}`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+    
+    try {
+      // Send initial status message
+      statusMsg = await telegramAPI('sendMessage', {
+        chat_id: chatId,
+        text: `🎯 正在解票 ${symbol}\n\n⏳ 正在抓取数据和生成分析...\n\n(这可能需要 30-60 秒)`
+      });
+      
+      // Call v3 API to get full report object (JSON format)
+      const url = `${REPLIT_API_URL}/v3/report/${symbol}?format=json`;
+      
+      t0 = Date.now();
+      console.log(`📡 [主Bot] Calling Report API: ${url}`);
+      
+      const response = await axios.get(url, { 
+        timeout: 120000  // 2 minutes timeout
+      });
+      
+      const dt = Date.now() - t0;
+      const report = response.data;
+      
+      console.log(`✅ [主Bot] Report API completed in ${dt} ms`);
+      console.log(`   ├─ Symbol: ${report.symbol}`);
+      console.log(`   ├─ Rating: ${report.rating}`);
+      console.log(`   └─ Asset Type: ${report.asset_type}\n`);
+      
+      // Update status
+      await telegramAPI('editMessageText', {
+        chat_id: chatId,
+        message_id: statusMsg.result.message_id,
+        text: `🎯 正在解票 ${symbol}\n\n✅ 数据获取完成\n⏳ 正在格式化输出...`
+      });
+      
+      // Determine format options based on mode
+      let formatOptions = {
+        mode: 'standard',
+        bilingual_split: false,
+        primary_lang: 'zh'
+      };
+      
+      if (mode === '双语') {
+        formatOptions.bilingual_split = true;
+      } else if (mode === '聊天版' || mode === '人话版') {
+        formatOptions.mode = 'human';
+      } else if (mode === '完整版') {
+        formatOptions.mode = 'standard_plus_human';
+        formatOptions.bilingual_split = true;
+      }
+      
+      // Format messages using ticketFormatter
+      console.log(`📝 [主Bot] Formatting messages with options:`, formatOptions);
+      const messages = await ticketFormatter.formatTicket(report, formatOptions);
+      
+      console.log(`✅ [主Bot] Generated ${messages.length} message(s)`);
+      
+      // Delete status message
+      await telegramAPI('deleteMessage', {
+        chat_id: chatId,
+        message_id: statusMsg.result.message_id
+      });
+      
+      // Send all formatted messages sequentially
+      for (let i = 0; i < messages.length; i++) {
+        const msg = messages[i];
+        console.log(`📤 [主Bot] Sending message ${i + 1}/${messages.length} (${msg.length} chars)`);
+        
+        await telegramAPI('sendMessage', {
+          chat_id: chatId,
+          text: msg,
+          parse_mode: 'Markdown'
+        });
+        
+        // Small delay between messages to avoid rate limits
+        if (i < messages.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      console.log(`✅ [主Bot] Ticket analysis completed for ${symbol}`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+      
+    } catch (error) {
+      const dt = t0 ? Date.now() - t0 : 0;
+      console.error(`❌ [主Bot] Ticket analysis ERROR after ${dt} ms`);
+      console.error(`   ├─ Error code: ${error.code || 'N/A'}`);
+      console.error(`   ├─ Error message: ${error.message}`);
+      console.error(`   └─ Stack: ${error.stack}\n`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+      
+      // Delete status message if exists
+      if (statusMsg?.result?.message_id) {
+        try {
+          await telegramAPI('deleteMessage', {
+            chat_id: chatId,
+            message_id: statusMsg.result.message_id
+          });
+        } catch (delErr) {
+          // Ignore delete errors
+        }
+      }
+      
+      // Send error message
+      let errorMsg = `❌ 解票失败\n\n标的: ${symbol}\n\n`;
+      
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        errorMsg += `原因: API 请求超时（可能是股票代码不存在或服务繁忙）\n\n建议：\n• 检查股票代码是否正确\n• 稍后重试`;
+      } else if (error.response) {
+        errorMsg += `原因: API 返回错误 (${error.response.status})\n\n错误信息: ${error.response.statusText}`;
+      } else if (error.request) {
+        errorMsg += `原因: 无法连接到 API\n\n建议：\n• 检查服务是否在运行\n• 检查网络连接`;
+      } else {
+        errorMsg += `原因: ${error.message}`;
+      }
+      
+      errorMsg += `\n\n(解票功能 v6.0 - 模式: ${mode})`;
+      
+      await telegramAPI('sendMessage', {
+        chat_id: chatId,
+        text: errorMsg
+      });
+    }
+  }
+  
   // 消息处理函数
   async function handleTelegramMessage(message) {
     const chatId = message.chat.id;
@@ -6389,6 +6528,35 @@ if (!TOKEN_IS_SAFE) {
         
         console.log('✅ 对话响应已发送');
         return; // 不继续执行分析流程
+      }
+      
+      // 🆕 v6.0: 解票命令 (Ticket Analysis) - 优先级高于研报命令
+      // 支持: 解票 SYMBOL [双语|聊天版|人话版|完整版]
+      if (text.startsWith('解票') || text.startsWith('/解票')) {
+        console.log('🎯 [主Bot] 检测到解票命令');
+        
+        // Parse command: 解票 NVDA [双语|聊天版|人话版|完整版]
+        const parts = text.replace(/^(解票|\/解票)\s*/i, '').trim().split(/\s+/);
+        
+        if (parts.length === 0 || !parts[0]) {
+          await telegramAPI('sendMessage', {
+            chat_id: chatId,
+            text: `❌ 解票命令格式错误\n\n**正确格式：**\n解票 股票代码 [模式]\n\n**示例：**\n• 解票 NVDA（标准中文版）\n• 解票 NVDA 双语（中文+英文）\n• 解票 NVDA 聊天版（人话版）\n• 解票 NVDA 人话版（同上）\n• 解票 NVDA 完整版（中文+英文+人话版）\n\n**支持的模式：**\n• 默认：标准中文版\n• 双语：中英文标准版\n• 聊天版/人话版：自然口吻解析\n• 完整版：所有格式`
+          });
+          return;
+        }
+        
+        const symbol = parts[0].toUpperCase();
+        const mode = parts[1] || '标准版';
+        
+        // Call ticket analysis handler
+        await handleTicketAnalysis({
+          symbol,
+          mode,
+          chatId
+        });
+        
+        return;
       }
       
       // 🆕 v5.0: 研报命令（简化协议: 研报, 股票代码, 机构名字, 老师名字, 语言）
