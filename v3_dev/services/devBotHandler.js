@@ -220,11 +220,9 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
       let statusMsg = null;
       let t0 = null; // Timer for latency tracking
       
-      // 🔧 v5.1 FIX: Use dynamic URL based on environment instead of hardcoded dev URL
-      // v6.0: Updated default to myusis.net (new production server)
-      const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 
-                             process.env.REPLIT_DEV_DOMAIN || 
-                             'http://myusis.net:3000';
+      // 🔧 v5.1 FIX: Use localhost for development testing (faster, no network latency)
+      // For production deployment, use REPLIT_DEPLOYMENT_URL environment variable
+      const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:3000';
       
       console.log(`[URL_FIX_v5.1] Using API URL: ${REPLIT_API_URL}`);
       
