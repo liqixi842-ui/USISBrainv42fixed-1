@@ -333,8 +333,10 @@ From an organizational perspective, ${analyst} observes that leadership continui
 async function generateValuation(report) {
   // 🆕 v5.1: Use industry-specific metrics
   const industryContext = report._industryContext || { industry: 'unknown', focus: [], metrics: [], tone: 'balanced' };
-  const metricsNote = industryContext.metrics.length > 0
-    ? `\n**Industry-Specific Metrics:** ${industryContext.metrics.join(', ')}`
+  // 🔧 Ensure metrics is array
+  const metrics = Array.isArray(industryContext.metrics) ? industryContext.metrics : [];
+  const metricsNote = metrics.length > 0
+    ? `\n**Industry-Specific Metrics:** ${metrics.join(', ')}`
     : '';
   
   const prompt = `You are a J.P. Morgan equity analyst writing valuation analysis for ${report.symbol}.
