@@ -355,15 +355,18 @@ async function generateOverview(report, analystInfo = {}) {
     : '';
 
   const subjectName = report.company_name || report.symbol;
-  const subjectLabel = assetType === 'equity'
-    ? 'company'
-    : assetType === 'index'
-      ? 'equity index'
-      : assetType === 'etf'
-        ? 'exchange-traded fund'
-        : assetType === 'crypto'
-          ? 'digital asset'
-          : 'asset';
+  let subjectLabel;
+  if (assetType === 'equity') {
+    subjectLabel = localize('company', 'empresa', '公司');
+  } else if (assetType === 'index') {
+    subjectLabel = localize('equity index', 'índice bursátil', '股票指数');
+  } else if (assetType === 'etf') {
+    subjectLabel = localize('exchange-traded fund', 'fondo cotizado', '交易型开放式基金');
+  } else if (assetType === 'crypto') {
+    subjectLabel = localize('digital asset', 'activo digital', '数字资产');
+  } else {
+    subjectLabel = localize('asset', 'activo', '资产');
+  }
 
   const prompt = `You are writing a ${subjectLabel} / vehicle overview for ${subjectName} as ${analyst}, lead analyst at ${firm}.
 
@@ -419,17 +422,23 @@ Overview:`;
     const MIN_WORD_COUNT = 800; // 🔧 Architect fix: Match prompt requirement (800-900 words)
     const ABSOLUTE_MIN = 500; // Fallback threshold
     
-    // 🆕 v5.2: Asset-type aware system prompt
-    let systemPrompt;
+    // 🆕 v5.2: Asset-type and language-aware system prompt
+    let roleDesc;
     if (assetType === 'equity') {
-      systemPrompt = `You are ${analyst}, a senior sell-side equity analyst at ${firm}. Write institutional-grade company overviews with your personal analytical voice.`;
+      roleDesc = localize('senior sell-side equity analyst', 'analista senior de renta variable', '高级卖方股票分析师');
     } else if (assetType === 'index' || assetType === 'etf') {
-      systemPrompt = `You are ${analyst}, a senior research strategist at ${firm}. Write institutional-grade index and ETF overviews with your personal analytical voice.`;
+      roleDesc = localize('senior research strategist', 'estratega senior de análisis', '高级研究策略师');
     } else if (assetType === 'crypto') {
-      systemPrompt = `You are ${analyst}, a senior digital assets analyst at ${firm}. Write institutional-grade cryptocurrency and blockchain network overviews with your personal analytical voice.`;
+      roleDesc = localize('senior digital assets analyst', 'analista senior de activos digitales', '高级数字资产分析师');
     } else {
-      systemPrompt = `You are ${analyst}, a senior analyst at ${firm}. Write institutional-grade asset overviews with your personal analytical voice.`;
+      roleDesc = localize('senior analyst', 'analista senior', '高级分析师');
     }
+    
+    const systemPrompt = localize(
+      `You are ${analyst}, a ${roleDesc} at ${firm}. Write institutional-grade overviews with explicit analyst voice.`,
+      `Eres ${analyst}, ${roleDesc} en ${firm}. Escribe análisis institucionales con voz explícita del analista.`,
+      `你是 ${analyst}，来自 ${firm} 的${roleDesc}。请以机构研究风格撰写分析，并在内容中加入明确的"分析师发言"。`
+    );
     
     // 🆕 v5.2: Retry with exponential backoff until we get sufficient content
     while (attempts < 3) {
@@ -537,7 +546,15 @@ Development activity and governance structures determine protocol evolution, wit
   }
 }
 
-async function generateValuation(report) {
+async function generateValuation(report, analystInfo = {}) {
+  // 🆕 v5.2: Language switcher (en / es / zh)
+  const lang = (analystInfo.language || 'en').toLowerCase();
+  function localize(textEN, textES, textZH) {
+    if (lang === 'es') return textES;
+    if (lang === 'zh') return textZH;
+    return textEN;
+  }
+  
   // 🆕 v5.1: Use industry-specific metrics
   const industryContext = report._industryContext || { industry: 'unknown', focus: [], metrics: [], tone: 'balanced' };
   // 🔧 Ensure metrics is array
@@ -642,8 +659,16 @@ The valuation framework considers both absolute metrics and relative positioning
   }
 }
 
-async function generateIndustry(report) {
-  const analyst = report._analystInfo?.analyst || 'the research team';
+async function generateIndustry(report, analystInfo = {}) {
+  // 🆕 v5.2: Language switcher (en / es / zh)
+  const lang = (analystInfo.language || 'en').toLowerCase();
+  function localize(textEN, textES, textZH) {
+    if (lang === 'es') return textES;
+    if (lang === 'zh') return textZH;
+    return textEN;
+  }
+  
+  const analyst = report._analystInfo?.analyst || analystInfo.analyst || 'the research team';
   
   const prompt = `You are a Barclays equity analyst writing industry analysis for ${report.symbol} in ${report.sector || 'Technology'} sector.
 
@@ -744,7 +769,15 @@ From a regulatory perspective, the industry faces evolving standards around data
   }
 }
 
-async function generateMacro(report) {
+async function generateMacro(report, analystInfo = {}) {
+  // 🆕 v5.2: Language switcher (en / es / zh)
+  const lang = (analystInfo.language || 'en').toLowerCase();
+  function localize(textEN, textES, textZH) {
+    if (lang === 'es') return textES;
+    if (lang === 'zh') return textZH;
+    return textEN;
+  }
+  
   const prompt = `You are a Citi equity analyst writing macro analysis for ${report.symbol}.
 
 Macro Context:
