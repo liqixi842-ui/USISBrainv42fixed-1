@@ -712,11 +712,14 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
     console.log(`║  ACTIVATING v5.0 ALL-IN ENGINE                                 ║`);
     console.log(`╚════════════════════════════════════════════════════════════════╝`);
     
-    // 🆕 v5.1: Pass industry and language context to v5 engine
+    // 🆕 v5.2: Pass industry, language, and analyst info to v5 engine
     const v5Options = {
       industry,
       language,
-      symbolMetadata
+      symbolMetadata,
+      analyst,  // 🆕 v5.2
+      firm,     // 🆕 v5.2
+      brand     // 🆕 v5.2
     };
     
     // Call v5 Report Builder (replaces old SellSideWriter v1/v2)

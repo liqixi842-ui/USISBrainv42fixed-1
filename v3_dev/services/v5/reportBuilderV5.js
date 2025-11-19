@@ -7,25 +7,28 @@ const coherenceEngine = require('./coherenceEngine');
 /**
  * Main entry: build stock report with v5 enhancements
  * @param {Object} report - Base report data
- * @param {Object} v5Options - v5.1 options: { industry, language, symbolMetadata }
+ * @param {Object} v5Options - v5.2 options: { industry, language, symbolMetadata, analyst, firm, brand }
  */
 async function buildStockReport(report, v5Options = {}) {
-  const { industry = 'unknown', language = 'en', symbolMetadata = {} } = v5Options;
+  const { industry = 'unknown', language = 'en', symbolMetadata = {}, analyst, firm, brand } = v5Options;
   
   console.log(`\n╔════════════════════════════════════════════════════════════════╗`);
-  console.log(`║  USIS Research Brain v5.0 - Report Builder Activated          ║`);
+  console.log(`║  USIS Research Brain v5.2 - Report Builder Activated          ║`);
   console.log(`║  Symbol: ${report.symbol.padEnd(52)}║`);
   if (industry !== 'unknown') {
     console.log(`║  Industry: ${industry.padEnd(49)}║`);
+  }
+  if (analyst) {
+    console.log(`║  Analyst: ${analyst.substring(0,48).padEnd(49)}║`);
   }
   console.log(`╚════════════════════════════════════════════════════════════════╝\n`);
   
   const startTime = Date.now();
   
   try {
-    // PHASE 1: WriterStockV3 - Generate all 5 sections (with industry guidance)
-    console.log('[Phase 1/5] WriterStockV3 - Institutional Content Generation');
-    report = await writerStockV3.enhanceReport(report, { industry, language, symbolMetadata });
+    // PHASE 1: WriterStockV3 - Generate all 5 sections (with industry guidance + analyst voice)
+    console.log('[Phase 1/5] WriterStockV3 - Institutional Content Generation with Analyst Voice');
+    report = await writerStockV3.enhanceReport(report, { industry, language, symbolMetadata, analyst, firm, brand });
     
     // PHASE 2: RiskCatalystEngine - Clean, quantify, complete
     console.log('\n[Phase 2/5] RiskCatalystEngine v2 - Processing Risks & Catalysts');

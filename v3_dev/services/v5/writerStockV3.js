@@ -3,14 +3,18 @@ const styleEngine = require('./styleEngine');
 const sentenceEngine = require('./sentenceEngine');
 const { cleanText } = require('./textCleanerEngine');
 
-async function generateThesis(report) {
+async function generateThesis(report, analystInfo = {}) {
+  // 🆕 v5.2: Extract analyst/firm parameters
+  const analyst = analystInfo.analyst || 'the research team';
+  const firm = analystInfo.firm || 'our firm';
+  
   // 🆕 v5.1: Use industry-specific guidance
   const industryContext = report._industryContext || { industry: 'unknown', focus: [], metrics: [], tone: 'balanced' };
   const industryNote = industryContext.industry !== 'unknown'
     ? `\n**Industry Context:** ${industryContext.industry}\n**Focus Areas:** ${industryContext.focus.join(', ')}\n**Key Metrics:** ${industryContext.metrics.join(', ')}\n`
     : '';
   
-  const prompt = `You are a Morgan Stanley equity analyst writing an investment thesis for ${report.symbol}.
+  const prompt = `You are writing an investment thesis for ${report.symbol} as ${analyst}, lead analyst at ${firm}.
 
 Company: ${report.company_name || report.symbol}
 Sector: ${report.sector || 'N/A'}
@@ -25,63 +29,115 @@ Financial Data:
 - PE: ${report.valuation?.pe_ttm || 'N/A'}x
 - Margin: ${report.fundamentals?.profit_margin || 'N/A'}%
 
-Write a 800-900 word institutional investment thesis with:
+Write a 900-1000 word institutional investment thesis with **ANALYST VOICE**:
+
+**CRITICAL - Analyst Voice Requirements:**
+- Include AT LEAST 3 explicit analyst references using ${analyst}'s name:
+  * "In ${analyst}'s view, ..."
+  * "${analyst} argues that ..."
+  * "According to ${analyst}, ..."
+  * "${analyst} highlights that ..."
+  * "As ${analyst} notes, ..."
+- Make it feel like ${analyst} is personally presenting this analysis
+- Use a mix of "we" (for the research team) and direct analyst attribution
 
 **Structure:**
-1. Core Investment Rationale (200 words)
-   - Lead with strongest bull case
+1. Core Investment Rationale (250-300 words)
+   - Lead with strongest bull case (with analyst attribution)
    - Quantify opportunity size
    - State conviction level
 
-2. Competitive Position (300 words)
+2. Competitive Position (350 words)
    - Market leadership metrics
    - Structural advantages
    - Barriers to entry
+   - Include at least 1 analyst voice reference here
 
-3. Financial Framework (300 words)
+3. Financial Framework (300-350 words)
    - Margin trajectory
    - Capital efficiency
    - Cash generation
+   - Include at least 1 analyst voice reference here
 
 **Requirements:**
-- Use sell-side language: "We believe", "Our analysis suggests", "We project"
+- Mix "we" (research team) with explicit ${analyst} attributions
 - Include specific numbers and timeframes
 - **PROHIBITED WORDS**: exciting, amazing, poised to, well-positioned, compelling, attractive, robust
 - **REQUIRED**: Every claim must cite a specific metric, percentage, or dollar figure
+- **MINIMUM LENGTH**: 900 words (this is critical - do NOT write less than 800 words)
 - 3 subheaders minimum
-- Tone: ${industryContext.tone} (Morgan Stanley style)${industryContext.focus.length > 0 ? `\n- MUST address these industry-specific factors: ${industryContext.focus.join(', ')}` : ''}${industryContext.metrics.length > 0 ? `\n- Prioritize these metrics: ${industryContext.metrics.slice(0,4).join(', ')}` : ''}
+- Tone: ${industryContext.tone} (institutional sell-side style)${industryContext.focus.length > 0 ? `\n- MUST address these industry-specific factors: ${industryContext.focus.join(', ')}` : ''}${industryContext.metrics.length > 0 ? `\n- Prioritize these metrics: ${industryContext.metrics.slice(0,4).join(', ')}` : ''}
 
 Thesis:`;
 
   try {
-    const response = await callOpenAI([
-      { role: 'system', content: 'You are a senior sell-side equity analyst at Morgan Stanley. Write institutional-grade investment theses.' },
-      { role: 'user', content: prompt }
-    ], {
-      model: 'gpt-4o',
-      max_tokens: 1500,
-      temperature: 0.4
-    });
+    let thesis = '';
+    let attempts = 0;
+    const MIN_WORD_COUNT = 900; // 🔧 Architect fix: Match prompt requirement (900-1000 words)
+    const ABSOLUTE_MIN = 600; // Fallback threshold
     
-    let thesis = response.trim();
+    // 🆕 v5.2: Retry until we get sufficient content
+    while (attempts < 2) {
+      attempts++;
+      
+      const response = await callOpenAI([
+        { role: 'system', content: `You are ${analyst}, a senior sell-side equity analyst at ${firm}. Write institutional-grade investment theses with your personal analytical voice.` },
+        { role: 'user', content: prompt }
+      ], {
+        model: 'gpt-4o',
+        max_tokens: 1800,
+        temperature: 0.4
+      });
+      
+      thesis = response.trim();
+      
+      // Apply style and sentence normalization
+      thesis = styleEngine.applyStyle(thesis);
+      thesis = sentenceEngine.normalize(thesis);
+      
+      // Apply text cleaning (remove duplicate words, AI clichés)
+      thesis = cleanText(thesis);
+      
+      const wordCount = thesis.split(/\s+/).length;
+      console.log(`[WriterStockV3] Thesis attempt ${attempts}: ${thesis.length} chars, ${wordCount} words`);
+      
+      if (wordCount >= MIN_WORD_COUNT) {
+        console.log(`✅ Thesis meets minimum requirement (${wordCount} ≥ ${MIN_WORD_COUNT} words)`);
+        break; // Success!
+      }
+      
+      if (attempts < 2) {
+        console.log(`⚠️  [WriterStockV3] Thesis too short (${wordCount} < ${MIN_WORD_COUNT} words), retrying...`);
+      }
+    }
     
-    // Apply style and sentence normalization
-    thesis = styleEngine.applyStyle(thesis);
-    thesis = sentenceEngine.normalize(thesis);
+    // 🔧 Architect fix: Enforce strict minimum after retries
+    const finalWordCount = thesis.split(/\s+/).length;
+    if (finalWordCount < ABSOLUTE_MIN) {
+      throw new Error(`Investment Thesis generation failed: ${finalWordCount} words (required: ${MIN_WORD_COUNT}). Content too short even after ${attempts} attempts.`);
+    } else if (finalWordCount < MIN_WORD_COUNT) {
+      console.log(`⚠️  [WriterStockV3] Thesis below target (${finalWordCount} < ${MIN_WORD_COUNT}) but above absolute minimum (${ABSOLUTE_MIN}). Proceeding.`);
+    }
     
-    // Apply text cleaning (remove duplicate words, AI clichés)
-    thesis = cleanText(thesis);
-    
-    console.log(`[WriterStockV3] Thesis generated: ${thesis.length} chars`);
     return thesis;
     
   } catch (error) {
-    console.error('[WriterStockV3] Thesis generation failed:', error.message);
-    return report.investment_thesis || report.summary_text || '';
+    console.error('[WriterStockV3] ❌ Thesis generation failed:', error.message);
+    // 🆕 v5.2: NO FALLBACK to empty placeholders - return existing content or throw
+    const fallback = report.investment_thesis || report.summary_text || '';
+    if (!fallback) {
+      throw new Error(`Investment Thesis generation failed and no fallback available: ${error.message}`);
+    }
+    console.log(`⚠️  [WriterStockV3] Using fallback thesis: ${fallback.length} chars`);
+    return fallback;
   }
 }
 
-async function generateOverview(report) {
+async function generateOverview(report, analystInfo = {}) {
+  // 🆕 v5.2: Extract analyst/firm parameters
+  const analyst = analystInfo.analyst || 'the research team';
+  const firm = analystInfo.firm || 'our firm';
+  
   // 🔧 Critical Fix: 使用统一的 segment 数据源（避免文本和表格矛盾）
   const segments = report.segments && report.segments.length > 0
     ? report.segments.map(s => `${s.name}: ${s.revenue_pct}% revenue`).join(', ')
@@ -93,7 +149,7 @@ async function generateOverview(report) {
     ? `\nIndustry: ${industryContext.industry} (Focus: ${industryContext.focus.slice(0,3).join(', ')})`
     : '';
 
-  const prompt = `You are a Goldman Sachs equity analyst writing a company overview for ${report.symbol}.
+  const prompt = `You are writing a company overview for ${report.symbol} as ${analyst}, lead analyst at ${firm}.
 
 Company: ${report.company_name || report.symbol}
 Business Model: ${report.business_model || 'Multi-segment technology company'}
@@ -105,13 +161,21 @@ Financial Profile:
 - EBITDA Margin: ${report.fundamentals?.ebitda_margin || 'N/A'}%
 - ROE: ${report.fundamentals?.roe || 'N/A'}%
 
-Write a 900 word company overview with segment breakdown:
+Write an 800-900 word company overview with segment breakdown and **ANALYST VOICE**:
 
-**CRITICAL**: When discussing business segments, you MUST use the EXACT percentages provided in the "Segments" data above. Do NOT make up different percentages. This ensures consistency with the data table.
+**CRITICAL - Analyst Voice Requirements:**
+- Include AT LEAST 2 explicit analyst references using ${analyst}'s name:
+  * "${analyst} highlights that ..."
+  * "As ${analyst} notes, ..."
+  * "${analyst} observes that ..."
+- Make it sound like ${analyst} is explaining the business to clients
+
+**CRITICAL - Data Accuracy**:
+When discussing business segments, you MUST use the EXACT percentages provided in the "Segments" data above. Do NOT make up different percentages. This ensures consistency with the data table.
 
 **Structure:**
 1. Business Overview (250 words)
-   - Core operations
+   - Core operations (with 1 analyst attribution)
    - Revenue model
    - Geographic footprint
 
@@ -119,42 +183,78 @@ Write a 900 word company overview with segment breakdown:
    - For each segment, state the EXACT percentage from the data above
    - Margin and growth drivers
    - DO NOT use phrases like "approximately" or "roughly" - use the exact numbers provided
+   - Include 1 analyst observation about segment mix
 
-3. Operational Excellence (250 words)
+3. Operational Excellence (200-250 words)
    - Execution track record
    - Management quality
    - Capital allocation discipline
 
 **Requirements:**
-- Sell-side institutional tone: "We note", "Our analysis shows", "Management reports"
+- Mix "we" (research team) with explicit ${analyst} attributions
 - Quantify each segment's contribution with exact percentages
 - **PROHIBITED**: exciting, innovative, leading, cutting-edge, state-of-the-art
 - **REQUIRED**: Cite revenue mix, margin data, growth rates for each segment
+- **MINIMUM LENGTH**: 800 words (do NOT write less than 700 words)
 - No marketing language or superlatives
 
 Overview:`;
 
   try {
-    const response = await callOpenAI([
-      { role: 'system', content: 'You are a senior sell-side equity analyst at Goldman Sachs. Write institutional-grade company overviews.' },
-      { role: 'user', content: prompt }
-    ], {
-      model: 'gpt-4o',
-      max_tokens: 1500,
-      temperature: 0.4
-    });
+    let overview = '';
+    let attempts = 0;
+    const MIN_WORD_COUNT = 800; // 🔧 Architect fix: Match prompt requirement (800-900 words)
+    const ABSOLUTE_MIN = 500; // Fallback threshold
     
-    let overview = response.trim();
-    overview = styleEngine.applyStyle(overview);
-    overview = sentenceEngine.normalize(overview);
-    overview = cleanText(overview);
+    // 🆕 v5.2: Retry until we get sufficient content
+    while (attempts < 2) {
+      attempts++;
+      
+      const response = await callOpenAI([
+        { role: 'system', content: `You are ${analyst}, a senior sell-side equity analyst at ${firm}. Write institutional-grade company overviews with your personal analytical voice.` },
+        { role: 'user', content: prompt }
+      ], {
+        model: 'gpt-4o',
+        max_tokens: 1600,
+        temperature: 0.4
+      });
+      
+      overview = response.trim();
+      overview = styleEngine.applyStyle(overview);
+      overview = sentenceEngine.normalize(overview);
+      overview = cleanText(overview);
+      
+      const wordCount = overview.split(/\s+/).length;
+      console.log(`[WriterStockV3] Overview attempt ${attempts}: ${overview.length} chars, ${wordCount} words`);
+      
+      if (wordCount >= MIN_WORD_COUNT) {
+        console.log(`✅ Overview meets minimum requirement (${wordCount} ≥ ${MIN_WORD_COUNT} words)`);
+        break; // Success!
+      }
+      
+      if (attempts < 2) {
+        console.log(`⚠️  [WriterStockV3] Overview too short (${wordCount} < ${MIN_WORD_COUNT} words), retrying...`);
+      }
+    }
     
-    console.log(`[WriterStockV3] Overview generated: ${overview.length} chars`);
+    // 🔧 Architect fix: Enforce strict minimum after retries
+    const finalWordCount = overview.split(/\s+/).length;
+    if (finalWordCount < ABSOLUTE_MIN) {
+      throw new Error(`Company Overview generation failed: ${finalWordCount} words (required: ${MIN_WORD_COUNT}). Content too short even after ${attempts} attempts.`);
+    } else if (finalWordCount < MIN_WORD_COUNT) {
+      console.log(`⚠️  [WriterStockV3] Overview below target (${finalWordCount} < ${MIN_WORD_COUNT}) but above absolute minimum (${ABSOLUTE_MIN}). Proceeding.`);
+    }
+    
     return overview;
     
   } catch (error) {
-    console.error('[WriterStockV3] Overview generation failed:', error.message);
-    return report.company_overview || report.segment_text || '';
+    console.error('[WriterStockV3] ❌ Overview generation failed:', error.message);
+    const fallback = report.company_overview || report.segment_text || '';
+    if (!fallback) {
+      throw new Error(`Company Overview generation failed and no fallback available: ${error.message}`);
+    }
+    console.log(`⚠️  [WriterStockV3] Using fallback overview: ${fallback.length} chars`);
+    return fallback;
   }
 }
 
@@ -352,20 +452,28 @@ Macro Analysis:`;
 }
 
 /**
- * Enhance report with v5.1 industry-aware prompts
+ * Enhance report with v5.1 industry-aware prompts + v5.2 analyst voice
  * @param {Object} report - Base report
- * @param {Object} v5Options - { industry, language, symbolMetadata }
+ * @param {Object} v5Options - { industry, language, symbolMetadata, analyst, firm, brand }
  */
 async function enhanceReport(report, v5Options = {}) {
-  const { industry = 'unknown', language = 'en', symbolMetadata = {} } = v5Options;
+  const { industry = 'unknown', language = 'en', symbolMetadata = {}, analyst, firm, brand } = v5Options;
+  
+  // 🆕 v5.2: Prepare analyst info for all generators
+  const analystInfo = {
+    analyst: analyst || 'the research team',
+    firm: firm || 'our firm',
+    brand: brand || firm || 'our firm'
+  };
   
   // 🆕 v5.1: Get industry-specific prompt guidance
   const { getIndustryPromptGuidance } = require('../industryClassifier');
   const industryGuidance = getIndustryPromptGuidance(industry);
   
   console.log(`\n════════════════════════════════════════════════════════════════`);
-  console.log(`[WriterStockV3] Enhancing ${report.symbol} with 5-Engine Framework`);
+  console.log(`[WriterStockV3] Enhancing ${report.symbol} with 5-Engine Framework + Analyst Voice`);
   console.log(`  Industry: ${industry} | Language: ${language}`);
+  console.log(`  Analyst: ${analystInfo.analyst} | Firm: ${analystInfo.firm}`);
   console.log(`════════════════════════════════════════════════════════════════\n`);
   
   const startTime = Date.now();
@@ -378,10 +486,13 @@ async function enhanceReport(report, v5Options = {}) {
     tone: industryGuidance.tone
   };
   
-  // Generate all 5 sections in parallel
+  // 🆕 v5.2: Augment report with analyst info (for other engines to use)
+  report._analystInfo = analystInfo;
+  
+  // Generate all 5 sections in parallel with analyst voice
   const [thesis, overview, valuation, industry_text, macro] = await Promise.all([
-    generateThesis(report),
-    generateOverview(report),
+    generateThesis(report, analystInfo),
+    generateOverview(report, analystInfo),
     generateValuation(report),
     generateIndustry(report),
     generateMacro(report)
