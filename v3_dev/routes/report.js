@@ -17,6 +17,9 @@ const {
   generateMarkdownReport
 } = require('../services/reportService');
 
+// Asset type classifier (equity / index / etf / crypto)
+const { classifyAssetType } = require('../services/assetClassifier');
+
 // 尝试导入 dataBroker（如果可用）
 let fetchMarketData;
 try {
@@ -98,6 +101,28 @@ router.get('/:symbol', async (req, res) => {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // Phase 0: Auto-detect asset type if not explicitly provided
+    // ═══════════════════════════════════════════════════════════════
+    const symbolMetadata = {
+      exchange,
+      country,
+      displayName: display_name,
+      asset_type
+    };
+    
+    // Auto-classify if user didn't override via query parameter
+    const detectedAssetType = classifyAssetType(
+      normalizedSymbol, 
+      display_name || '', 
+      symbolMetadata
+    );
+    
+    // Use user-provided asset_type if explicitly set, otherwise use detected
+    const finalAssetType = (req.query.asset_type !== undefined) ? asset_type : detectedAssetType;
+    
+    console.log(`🔍 [v3/report] Asset type for ${normalizedSymbol}: ${finalAssetType}${detectedAssetType !== finalAssetType ? ` (detected: ${detectedAssetType}, overridden by user)` : ''}`);
+
+    // ═══════════════════════════════════════════════════════════════
     // Phase 1: Generate ResearchReport v1 (Generic for ANY symbol)
     // ═══════════════════════════════════════════════════════════════
     console.log(`🔬 [v3/report] Building ResearchReport v1...`);
@@ -113,7 +138,7 @@ router.get('/:symbol', async (req, res) => {
         displayName: display_name
       }
     };
-    const report = await buildResearchReport(normalizedSymbol, asset_type, brandOptions);
+    const report = await buildResearchReport(normalizedSymbol, finalAssetType, brandOptions);
     console.log(`✅ [v3/report] ResearchReport v1 complete (${report.meta.latency_ms}ms)`);
 
     // ═══════════════════════════════════════════════════════════════
