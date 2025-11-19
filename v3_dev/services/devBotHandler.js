@@ -6,6 +6,9 @@ const FormData = require('form-data');
 const https = require('https');
 const axios = require('axios');
 
+// 🆕 v5.1: Import natural language parser (align with production bot)
+const { parseResearchReportCommand, parseSymbolDescription } = require('../../semanticIntentAgent');
+
 /**
  * 发送 PDF 文件到 Telegram（使用 multipart/form-data）
  * @param {string} chatId - Chat ID
@@ -55,7 +58,146 @@ async function sendPDFDocument(chatId, pdfBuffer, filename, caption, botToken) {
   });
 }
 
-const VALID_COMMANDS = ['/test', '/status', '/v3', '/help', '/report'];
+const VALID_COMMANDS = ['/test', '/status', '/v3', '/help', '/report', '研报', '/研报'];
+
+/**
+ * 🆕 v5.1: Universal Report Generator (used by both natural language and structured commands)
+ * @param {object} params - Report parameters
+ * @param {string} params.symbol - Stock symbol
+ * @param {string} params.firm - Institution name
+ * @param {string} params.analyst - Analyst name
+ * @param {string} params.brand - Brand name (optional, for structured commands)
+ * @param {string} params.lang - Language code (optional)
+ * @param {number} params.chatId - Telegram chat ID
+ * @param {Function} params.telegramAPI - Telegram API function
+ * @param {string} params.botToken - Bot token
+ * @param {string} params.commandType - Command type: 'natural' or 'structured'
+ */
+async function generateReport({ symbol, firm, analyst, brand, lang, chatId, telegramAPI, botToken, commandType = 'structured' }) {
+  let statusMsg = null;
+  let t0 = null;
+  
+  const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:3000';
+  
+  console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+  console.log(`📊 [DEV_BOT] Research Report Request (${commandType} mode)`);
+  console.log(`   ├─ Symbol: ${symbol}`);
+  console.log(`   ├─ Firm: ${firm}`);
+  console.log(`   ├─ Analyst: ${analyst}`);
+  if (brand) console.log(`   ├─ Brand: ${brand}`);
+  if (lang) console.log(`   ├─ Language: ${lang}`);
+  console.log(`   └─ API URL: ${REPLIT_API_URL}`);
+  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+  
+  try {
+    // Send initial status message
+    statusMsg = await telegramAPI('sendMessage', {
+      chat_id: chatId,
+      text: `🔬 正在生成 ${symbol} 研报\n\n⏳ 正在调用 Replit v3_dev PDF API...\n\n(这可能需要 60-120 秒)`
+    });
+    
+    // Build URL parameters
+    const params = new URLSearchParams({
+      format: 'pdf',
+      asset_type: 'equity',
+      firm: firm,
+      analyst: analyst
+    });
+    
+    // Add brand parameter if provided (for structured commands)
+    if (brand) {
+      params.append('brand', brand);
+    }
+    
+    // Add language parameter if provided (for natural language commands)
+    if (lang) {
+      params.append('lang', lang);
+    }
+    
+    const url = `${REPLIT_API_URL}/v3/report/${symbol}?${params.toString()}`;
+    
+    // Start timer
+    t0 = Date.now();
+    console.log(`📡 [DEV_BOT] Calling PDF API: ${url}`);
+    
+    // Call v3_dev PDF API
+    const response = await axios.get(url, { 
+      responseType: 'arraybuffer',
+      timeout: 240000  // 4 minutes timeout
+    });
+    
+    const dt = Date.now() - t0;
+    const pdfBuffer = Buffer.from(response.data);
+    
+    console.log(`✅ [DEV_BOT] PDF API completed in ${dt} ms`);
+    console.log(`   ├─ Size: ${(pdfBuffer.length / 1024).toFixed(1)} KB`);
+    console.log(`   ├─ Status: ${response.status}`);
+    console.log(`   └─ Content-Type: ${response.headers['content-type']}\n`);
+    
+    // Update status
+    await telegramAPI('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.result.message_id,
+      text: `🔬 正在生成 ${symbol} 研报\n\n✅ PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 正在发送 PDF...`
+    });
+    
+    // Send PDF
+    const safeFilename = `${symbol}-Research-Report.pdf`;
+    const safeCaption = `📊 Research Report - ${symbol}\n\nFirm: ${firm}\nAnalyst: ${analyst}\n\nGenerated via v3_dev API`;
+    
+    console.log(`📤 [DEV_BOT] Sending PDF to Telegram...`);
+    await sendPDFDocument(chatId, pdfBuffer, safeFilename, safeCaption, botToken);
+    
+    // Delete status message
+    await telegramAPI('deleteMessage', {
+      chat_id: chatId,
+      message_id: statusMsg.result.message_id
+    });
+    
+    console.log(`✅ [DEV_BOT] Report sent successfully for ${symbol}`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+    
+  } catch (error) {
+    const dt = t0 ? Date.now() - t0 : 0;
+    console.error(`❌ [DEV_BOT] Report generation ERROR after ${dt} ms`);
+    console.error(`   ├─ Error code: ${error.code || 'N/A'}`);
+    console.error(`   ├─ Error message: ${error.message}`);
+    console.error(`   └─ Stack: ${error.stack}\n`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+    
+    // Delete status message if exists
+    if (statusMsg?.result?.message_id) {
+      try {
+        await telegramAPI('deleteMessage', {
+          chat_id: chatId,
+          message_id: statusMsg.result.message_id
+        });
+      } catch (delErr) {
+        // Ignore delete errors
+      }
+    }
+    
+    // Send error message
+    let errorMsg = `❌ 研报生成失败\n\n标的: ${symbol}\n\n`;
+    
+    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+      errorMsg += `原因: API 请求超时（可能是股票代码不存在或 AI 服务繁忙）\n\n建议：\n• 检查股票代码是否正确\n• 稍后重试`;
+    } else if (error.response) {
+      errorMsg += `原因: Replit API 返回错误 (${error.response.status})\n\n错误信息: ${error.response.statusText}`;
+    } else if (error.request) {
+      errorMsg += `原因: 无法连接到 Replit API\n\n建议：\n• 检查 Replit 服务是否在运行\n• 检查网络连接`;
+    } else {
+      errorMsg += `原因: ${error.message}`;
+    }
+    
+    errorMsg += `\n\n(v3-dev 测试版本 - 命令类型: ${commandType})`;
+    
+    await telegramAPI('sendMessage', {
+      chat_id: chatId,
+      text: errorMsg
+    });
+  }
+}
 
 /**
  * D Mode Parameter Parser - Robust parsing for brand/firm/analyst parameters
@@ -122,6 +264,36 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
   console.log(`\n🔧 [DEV_BOT] Message from ${userId}: "${text}"`);
   
   try {
+    // 🆕 v5.1: Priority 1 - Natural Language Report Command (aligned with production bot)
+    // Supports: 研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文
+    if (text.startsWith('研报') || text.startsWith('/研报')) {
+      console.log(`📊 [DEV_BOT] Detected natural language report command`);
+      
+      const reportParams = parseResearchReportCommand(text);
+      
+      if (!reportParams) {
+        await telegramAPI('sendMessage', {
+          chat_id: chatId,
+          text: '❌ 研报命令格式错误\n\n正确格式：\n研报, 股票代码, 机构名字, 分析师名字, 语言\n\n示例：\n研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文\n\n或使用结构化命令：\n/report NVDA brand=VADA firm=Aberdeen Investments analyst=Anthony Venn Dutton'
+        });
+        return;
+      }
+      
+      // Call universal report generator
+      await generateReport({
+        symbol: reportParams.symbol,
+        firm: reportParams.firm,
+        analyst: reportParams.analyst,
+        lang: reportParams.lang,
+        chatId,
+        telegramAPI,
+        botToken,
+        commandType: 'natural'
+      });
+      
+      return;
+    }
+    
     // /test command
     if (text === '/test') {
       await telegramAPI('sendMessage', {
@@ -169,23 +341,44 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
     
     // /help command
     if (text === '/help') {
+      const helpText = `📚 v3-dev Bot Help
+
+**基础命令:**
+/test - 测试连接
+/status - Bot状态
+/v3 - v3-dev信息
+/help - 帮助信息
+
+**研报生成（双入口）:**
+
+🔹 **自然语言入口**（推荐）
+格式：研报, 股票代码, 机构名字, 分析师名字, 语言
+示例：研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文
+
+🔹 **结构化入口**（精确参数）
+格式：/report SYMBOL [brand=...] [firm=...] [analyst=...]
+示例：/report NVDA brand=VADA firm=Aberdeen Investments analyst=Anthony Venn Dutton
+
+**注意:**
+• 两种方式均可生成完整研报
+• 自然语言更简洁，结构化命令支持brand参数
+• 生成时间：60-120秒`;
+      
       await telegramAPI('sendMessage', {
         chat_id: chatId,
-        text: '📚 v3-dev Bot Help\n\n/test - Test connectivity\n/status - Bot status\n/v3 - v3-dev info\n/report [SYMBOL] - Generate research report (v1 test)\n/help - This message'
+        text: helpText
       });
       return;
     }
     
-    // /report command - 调用 Replit v3_dev PDF API
+    // Priority 2: Structured /report command (for advanced users and brand parameter testing)
     if (text.startsWith('/report')) {
-      // Extract symbol and parameters using regex
       const match = text.match(/^\/report\s+(\S+)\s*(.*)$/);
       
-      // Check if symbol is provided
       if (!match || !match[1].trim()) {
         await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: '📊 请提供股票代码\n\n格式：/report SYMBOL [brand=...] [firm=...] [analyst=...]\n\n示例（3种写法均支持）：\n1) /report NVDA brand=VADA firm=Aberdeen_Investments analyst=Anthony_Venn_Dutton\n2) /report NVDA brand="VADA" firm="Aberdeen Investments" analyst="Anthony Venn Dutton"\n3) /report NVDA brand=VADA firm=Aberdeen Investments analyst=Anthony Venn Dutton\n\n将通过 Replit v3_dev API 生成完整 PDF 研报（D Mode）。'
+          text: '📊 请提供股票代码\n\n**格式：**\n/report SYMBOL [brand=...] [firm=...] [analyst=...]\n\n**示例（3种写法均支持）：**\n1) /report NVDA brand=VADA firm=Aberdeen_Investments analyst=Anthony_Venn_Dutton\n2) /report NVDA brand="VADA" firm="Aberdeen Investments" analyst="Anthony Venn Dutton"\n3) /report NVDA brand=VADA firm=Aberdeen Investments analyst=Anthony Venn Dutton\n\n**或使用自然语言：**\n研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文'
         });
         return;
       }
@@ -193,7 +386,7 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
       const symbol = match[1].trim().toUpperCase();
       const paramString = match[2].trim();
       
-      // D Mode: Use robust parameter parser
+      // Parse structured parameters
       const parsedParams = parseParams(paramString);
       
       // Apply defaults
@@ -201,132 +394,27 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
       const firm = parsedParams.firm || 'USIS Research Division';
       const analyst = parsedParams.analyst || 'System (USIS Brain)';
       
-      // Debug logging for D Mode parsing
-      console.log(`\n[BRAND_DEBUG] D Mode Parameter Parsing Results:`);
-      console.log(`[BRAND_DEBUG]   Raw input: "${paramString}"`);
-      console.log(`[BRAND_DEBUG]   Parsed params:`, parsedParams);
-      console.log(`[BRAND_DEBUG]   Final values after defaults:`);
-      console.log(`[BRAND_DEBUG]     brand="${brand}"`);
-      console.log(`[BRAND_DEBUG]     firm="${firm}"`);
-      console.log(`[BRAND_DEBUG]     analyst="${analyst}"`);
+      // Debug logging
+      console.log(`\n[STRUCT_CMD] Structured Command Parsing Results:`);
+      console.log(`[STRUCT_CMD]   Raw input: "${paramString}"`);
+      console.log(`[STRUCT_CMD]   Parsed params:`, parsedParams);
+      console.log(`[STRUCT_CMD]   Final values:`);
+      console.log(`[STRUCT_CMD]     brand="${brand}"`);
+      console.log(`[STRUCT_CMD]     firm="${firm}"`);
+      console.log(`[STRUCT_CMD]     analyst="${analyst}"`);
       
-      console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      console.log(`📊 [DEV_BOT] /report ${symbol} - Calling Replit v3_dev PDF API (D Mode)`);
-      console.log(`   ├─ Brand: ${brand}`);
-      console.log(`   ├─ Firm: ${firm}`);
-      console.log(`   └─ Analyst: ${analyst}`);
-      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
+      // Call universal report generator
+      await generateReport({
+        symbol,
+        firm,
+        analyst,
+        brand,
+        chatId,
+        telegramAPI,
+        botToken,
+        commandType: 'structured'
+      });
       
-      let statusMsg = null;
-      let t0 = null; // Timer for latency tracking
-      
-      // 🔧 v5.1 FIX: Use localhost for development testing (faster, no network latency)
-      // For production deployment, use REPLIT_DEPLOYMENT_URL environment variable
-      const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:3000';
-      
-      console.log(`[URL_FIX_v5.1] Using API URL: ${REPLIT_API_URL}`);
-      
-      try {
-        // Send initial status message
-        statusMsg = await telegramAPI('sendMessage', {
-          chat_id: chatId,
-          text: `🔬 正在生成 ${symbol} 研报\n\n⏳ 正在调用 Replit v3_dev PDF API...\n\n(这可能需要 60-120 秒)`
-        });
-        
-        // Build URL with brand/firm/analyst parameters
-        const params = new URLSearchParams({
-          format: 'pdf',
-          asset_type: 'equity',
-          brand: brand,
-          firm: firm,
-          analyst: analyst
-        });
-        const url = `${REPLIT_API_URL}/v3/report/${symbol}?${params.toString()}`;
-        
-        // Start timer for latency tracking
-        t0 = Date.now();
-        console.log(`📡 [DEV_BOT] /report ${symbol} → calling PDF API: ${url}`);
-        
-        // Call Replit v3_dev PDF API with 240s timeout
-        const response = await axios.get(url, { 
-          responseType: 'arraybuffer',
-          timeout: 240000  // 240 seconds (4 minutes) timeout
-        });
-        
-        const dt = Date.now() - t0;
-        const pdfBuffer = Buffer.from(response.data);
-        
-        console.log(`✅ [DEV_BOT] /report ${symbol} → PDF API done in ${dt} ms`);
-        console.log(`   ├─ Size: ${(pdfBuffer.length / 1024).toFixed(1)} KB`);
-        console.log(`   ├─ Status: ${response.status}`);
-        console.log(`   └─ Content-Type: ${response.headers['content-type']}\n`);
-        
-        // Update status
-        await telegramAPI('editMessageText', {
-          chat_id: chatId,
-          message_id: statusMsg.result.message_id,
-          text: `🔬 正在生成 ${symbol} 研报\n\n✅ PDF 生成完成 (${(pdfBuffer.length / 1024).toFixed(1)} KB)\n⏳ 正在发送 PDF...`
-        });
-        
-        // Send PDF to user
-        const safeFilename = `${symbol}-USIS-Research.pdf`;
-        const safeCaption = `📊 USIS Research Report - ${symbol}\n\nGenerated via Replit v3_dev API\nSource: ${REPLIT_API_URL}`;
-        
-        console.log(`📤 [DEV_BOT] Sending PDF to Telegram...`);
-        console.log(`   └─ Filename: ${safeFilename}`);
-        
-        // Use multipart/form-data to send PDF
-        await sendPDFDocument(chatId, pdfBuffer, safeFilename, safeCaption, botToken);
-        
-        // Delete status message
-        await telegramAPI('deleteMessage', {
-          chat_id: chatId,
-          message_id: statusMsg.result.message_id
-        });
-        
-        console.log(`✅ [DEV_BOT] /report: PDF sent successfully for ${symbol}`);
-        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
-        
-      } catch (error) {
-        const dt = Date.now() - t0;
-        console.error(`❌ [DEV_BOT] /report ${symbol} ERROR after ${dt} ms`);
-        console.error(`   ├─ Error code: ${error.code || 'N/A'}`);
-        console.error(`   ├─ Error message: ${error.message}`);
-        console.error(`   └─ Stack: ${error.stack}\n`);
-        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
-        
-        // Delete status message if exists
-        if (statusMsg?.result?.message_id) {
-          try {
-            await telegramAPI('deleteMessage', {
-              chat_id: chatId,
-              message_id: statusMsg.result.message_id
-            });
-          } catch (delErr) {
-            // Ignore delete errors
-          }
-        }
-        
-        // Send error message
-        let errorMsg = `❌ 研报生成失败\n\n标的: ${symbol}\n\n`;
-        
-        if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-          errorMsg += `原因: API 请求超时（可能是股票代码不存在或 AI 服务繁忙）\n\n建议：\n• 检查股票代码是否正确\n• 稍后重试`;
-        } else if (error.response) {
-          errorMsg += `原因: Replit API 返回错误 (${error.response.status})\n\n错误信息: ${error.response.statusText}`;
-        } else if (error.request) {
-          errorMsg += `原因: 无法连接到 Replit API\n\n建议：\n• 检查 Replit 服务是否在运行\n• 检查网络连接`;
-        } else {
-          errorMsg += `原因: ${error.message}`;
-        }
-        
-        errorMsg += `\n\n(v3-dev 测试版本 - Replit API)`;
-        
-        await telegramAPI('sendMessage', {
-          chat_id: chatId,
-          text: errorMsg
-        });
-      }
       return;
     }
     

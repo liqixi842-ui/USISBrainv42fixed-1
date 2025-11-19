@@ -1,6 +1,18 @@
 # Telegram Bot 测试示例
 ## v3-dev Bot (@chaojilaos_bot 或您的开发Bot)
 
+## 🎯 双入口支持（v5.1 新增）
+
+v3-dev Bot 现在支持 **两种命令方式**：
+
+1. **自然语言入口**（推荐，与生产Bot一致）  
+   格式：`研报, 股票代码, 机构名字, 分析师名字, 语言`
+
+2. **结构化入口**（高级用户，支持brand参数）  
+   格式：`/report SYMBOL brand=... firm=... analyst=...`
+
+---
+
 ## 快速测试命令
 
 ### 1. 基础功能测试
@@ -12,29 +24,47 @@
 ```
 /help
 ```
-📚 查看所有可用命令
+📚 查看所有可用命令（包含双入口说明）
 
 ---
 
-### 2. 默认品牌测试
+### 2. 自然语言测试（推荐）
 ```
-/report NVDA
+研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文
 ```
 **测试目标：**
-- ✅ 默认品牌 "USIS Research"
-- ✅ 完整20页PDF生成
-- ✅ 行业分类：Technology
+- ✅ 自然语言解析正确
+- ✅ 机构名：Aberdeen Investments
+- ✅ 分析师：Anthony Venn Dutton
+- ✅ 语言：英文
 
 **预期输出：**
-- PDF文件：`NVDA-USIS-Research.pdf`
-- 标题栏：USIS Research Division — Equity Research
-- 分析师：Lead Analyst: System (USIS Brain)
+- PDF文件：`NVDA-Research-Report.pdf`
+- 标题栏：Aberdeen Investments — Equity Research
+- 分析师：Lead Analyst: Anthony Venn Dutton
 
 ---
 
-### 3. REIT行业分类测试
+### 3. 结构化命令测试
 ```
-/report O
+/report NVDA brand=VADA firm=Aberdeen Investments analyst=Anthony Venn Dutton
+```
+**测试目标：**
+- ✅ 结构化参数解析
+- ✅ 支持 brand 参数（自然语言不支持）
+- ✅ 与自然语言使用相同底层函数
+
+**预期输出：**
+- PDF文件：`NVDA-Research-Report.pdf`
+- 品牌名：VADA（在封面显示）
+- 标题栏：Aberdeen Investments — Equity Research
+- 分析师：Lead Analyst: Anthony Venn Dutton
+
+---
+
+### 4. REIT行业分类测试（自然语言）
+```
+研报, O, USIS Research Division, System (USIS Brain), 英文
 ```
 **测试目标：**
 - ✅ 行业识别：Real Estate Investment Trust (REIT)
@@ -47,7 +77,7 @@
 
 ---
 
-### 4. 白标品牌测试（3种写法）
+### 5. 结构化命令参数写法测试（3种）
 
 #### 写法1：下划线分隔（适合快速输入）
 ```
@@ -70,11 +100,13 @@
 - ✅ 品牌名：VADA
 - ✅ 分析师：`Lead Analyst: Anthony Venn Dutton`
 
+**注意：** brand 参数仅在结构化命令中支持，自然语言不支持
+
 ---
 
-### 5. 金融行业测试
+### 6. 金融行业测试（自然语言）
 ```
-/report JPM brand=Goldman firm=Goldman Sachs analyst=Michael Chen
+研报, JPM, Goldman Sachs, Michael Chen, 英文
 ```
 **测试目标：**
 - ✅ 行业识别：Financial Services
@@ -83,9 +115,9 @@
 
 ---
 
-### 6. 医疗行业测试
+### 7. 医疗行业测试（默认参数）
 ```
-/report JNJ
+研报, JNJ
 ```
 **测试目标：**
 - ✅ 行业识别：Healthcare
@@ -93,9 +125,9 @@
 
 ---
 
-### 7. 能源行业测试
+### 8. 能源行业测试（默认参数）
 ```
-/report XOM
+研报, XOM
 ```
 **测试目标：**
 - ✅ 行业识别：Energy
@@ -107,21 +139,22 @@
 
 ### 阶段1：基础功能验证
 1. `/test` - 确认Bot在线
-2. `/help` - 查看命令列表
-3. `/report NVDA` - 测试默认配置
+2. `/help` - 查看命令列表（验证双入口说明）
+3. `研报, NVDA` - 测试自然语言默认配置
 
-### 阶段2：行业分类验证
-4. `/report O` - REIT行业
-5. `/report JPM` - 金融行业
-6. `/report JNJ` - 医疗行业
+### 阶段2：自然语言入口验证
+4. `研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文` - 完整参数
+5. `研报, O, USIS Research, System (USIS Brain), 英文` - REIT行业
+6. `研报, JPM, Goldman Sachs, Michael Chen, 英文` - 金融行业
 
-### 阶段3：白标品牌验证
-7. `/report NVDA brand=VADA firm=Aberdeen_Investments analyst=Anthony_Venn_Dutton`
-8. 检查PDF文档中所有品牌元素
+### 阶段3：结构化命令验证（含brand参数）
+7. `/report NVDA brand=VADA firm=Aberdeen Investments analyst=Anthony Venn Dutton`
+8. 检查PDF中 brand 参数是否正确显示
 
-### 阶段4：综合测试
-9. `/report TSLA brand=Morgan firm=Morgan Stanley analyst=Adam Jonas`
-10. 验证：Tesla（汽车/科技混合行业）+ 自定义品牌
+### 阶段4：双入口对比测试
+9. 自然语言：`研报, TSLA, Morgan Stanley, Adam Jonas, 英文`
+10. 结构化：`/report TSLA firm=Morgan Stanley analyst=Adam Jonas`
+11. 验证：两种方式生成结果一致（除brand参数外）
 
 ---
 
