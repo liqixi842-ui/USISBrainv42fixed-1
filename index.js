@@ -6325,7 +6325,7 @@ if (!TOKEN_IS_SAFE) {
       // Send initial status message
       statusMsg = await telegramAPI('sendMessage', {
         chat_id: chatId,
-        text: `🎯 正在解票 ${symbol}\n\n⏳ 正在抓取数据和生成分析...\n\n(这可能需要 30-60 秒)`
+        text: `🎯 正在解票 ${symbol}\n\n⏳ 正在抓取数据和生成分析...\n\n(这可能需要 1-3 分钟)`
       });
       
       // Call v3 API to get full report object (JSON format)
@@ -6335,7 +6335,7 @@ if (!TOKEN_IS_SAFE) {
       console.log(`📡 [主Bot] Calling Report API: ${url}`);
       
       const response = await axios.get(url, { 
-        timeout: 120000  // 2 minutes timeout
+        timeout: 240000  // 4 minutes timeout (matches v3-dev bot)
       });
       
       const dt = Date.now() - t0;
