@@ -8,6 +8,14 @@ async function generateThesis(report, analystInfo = {}) {
   const analyst = analystInfo.analyst || 'the research team';
   const firm = analystInfo.firm || 'our firm';
   
+  // 🆕 v5.2: Language switcher (en / es / zh)
+  const lang = (analystInfo.language || 'en').toLowerCase();
+  function localize(textEN, textES, textZH) {
+    if (lang === 'es') return textES;
+    if (lang === 'zh') return textZH;
+    return textEN;
+  }
+  
   // 🆕 v5.1: Use industry-specific guidance
   const industryContext = report._industryContext || { industry: 'unknown', focus: [], metrics: [], tone: 'balanced' };
   // 🔧 Ensure focus and metrics are arrays
@@ -20,14 +28,16 @@ async function generateThesis(report, analystInfo = {}) {
 
   // 🆕 v5.2: Asset-type aware subject labelling
   const assetType = (report.asset_type || analystInfo.assetType || 'equity').toLowerCase();
-  let subjectLabel = 'company';
-  if (assetType === 'index') subjectLabel = 'equity index';
-  else if (assetType === 'etf') subjectLabel = 'exchange-traded fund';
-  else if (assetType === 'crypto') subjectLabel = 'digital asset';
+  let subjectLabel = localize('company', 'empresa', '公司');
+  if (assetType === 'index') subjectLabel = localize('equity index', 'índice bursátil', '股票指数');
+  else if (assetType === 'etf') subjectLabel = localize('exchange-traded fund', 'fondo cotizado', '交易型开放式基金');
+  else if (assetType === 'crypto') subjectLabel = localize('digital asset', 'activo digital', '数字资产');
 
   const subjectName = report.company_name || report.symbol;
 
-  const prompt = `You are writing an investment thesis on ${subjectName} (${subjectLabel}) as ${analyst}, lead analyst at ${firm}.
+  const prompt = localize(
+    // EN
+    `You are writing an investment thesis on ${subjectName} (${subjectLabel}) as ${analyst}, lead analyst at ${firm}.
 
 Subject: ${subjectName}
 Asset Type: ${assetType.toUpperCase()}
@@ -50,39 +60,99 @@ Write a 900-1000 word institutional investment thesis with **ANALYST VOICE**:
   * "In ${analyst}'s view, ..."
   * "${analyst} argues that ..."
   * "According to ${analyst}, ..."
-  * "${analyst} highlights that ..."
-  * "As ${analyst} notes, ..."
 - Make it feel like ${analyst} is personally presenting this analysis
-- Use a mix of "we" (for the research team) and direct analyst attribution
+- Use a mix of "we" (research team) and direct analyst attribution
 
 **Structure:**
 1. Core Investment Rationale (250-300 words)
-   - Lead with strongest bull/base case (with analyst attribution)
-   - Quantify opportunity size
-   - State conviction level
-
 2. Competitive / Strategic Position (350 words)
-   - Market leadership metrics or network effects (for index/ETF/crypto)
-   - Structural advantages
-   - Barriers to entry
-   - Include at least 1 analyst voice reference here
-
 3. Financial / Network Framework (300-350 words)
-   - Margin or economics trajectory (for companies)
-   - Capital efficiency / on-chain metrics for crypto
-   - Cash generation or network value accrual
-   - Include at least 1 analyst voice reference here
 
 **Requirements:**
-- Mix "we" (research team) with explicit ${analyst} attributions
-- Include specific numbers and timeframes where they exist (earnings, multiples, network stats)
-- **PROHIBITED WORDS**: exciting, amazing, poised to, well-positioned, compelling, attractive, robust
-- **REQUIRED**: Every claim must cite a specific metric, percentage, or dollar figure where applicable
-- **MINIMUM LENGTH**: 900 words (this is critical - do NOT write less than 800 words)
-- 3 subheaders minimum
-- Tone: ${industryContext.tone} (institutional sell-side style)${focus.length > 0 ? `\n- MUST address these asset/industry-specific factors: ${focus.join(', ')}` : ''}${metrics.length > 0 ? `\n- Prioritize these metrics: ${metrics.slice(0,4).join(', ')}` : ''}
+- Mix "we" with explicit ${analyst} attributions
+- **PROHIBITED WORDS**: exciting, amazing, well-positioned, compelling, attractive, robust
+- **MINIMUM LENGTH**: 900 words${focus.length > 0 ? `\n- MUST address: ${focus.join(', ')}` : ''}
 
-Thesis:`;
+Thesis:`,
+
+    // ES
+    `Estás redactando una tesis de inversión para ${subjectName} (${subjectLabel}) como ${analyst}, analista principal en ${firm}.
+
+Activo: ${subjectName}
+Tipo: ${assetType.toUpperCase()}
+Sector: ${report.sector || 'N/A'}
+Precio: $${report.price?.last || 'N/A'}
+Precio objetivo: $${report.targets?.base?.price || 'N/A'} (${report.targets?.base?.upside_pct || 'N/A'}% potencial)
+Recomendación: ${report.rating || 'N/A'}${industryNote}
+
+Datos financieros / de red (si aplica):
+- Ingresos: ${report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A'}
+- BPA: $${report.fundamentals?.eps || 'N/A'}
+- ROE: ${report.fundamentals?.roe || 'N/A'}%
+- PER: ${report.valuation?.pe_ttm || 'N/A'}x
+- Margen: ${report.fundamentals?.profit_margin || 'N/A'}%
+
+Escribe una tesis de inversión institucional de 900-1000 palabras con **VOZ DEL ANALISTA**:
+
+**CRÍTICO - Requisitos de voz del analista:**
+- Incluye AL MENOS 3 referencias explícitas usando el nombre ${analyst}:
+  * "En opinión de ${analyst}, ..."
+  * "${analyst} considera que ..."
+  * "Según ${analyst}, ..."
+- Haz que parezca que ${analyst} está presentando personalmente el análisis
+- Mezcla "nosotros" (equipo) con atribuciones directas al analista
+
+**Estructura:**
+1. Tesis central de inversión (250-300 palabras)
+2. Posicionamiento competitivo / estratégico (350 palabras)
+3. Marco financiero o de red (300-350 palabras)
+
+**Requisitos:**
+- Mezcla "nosotros" con atribuciones a ${analyst}
+- **PALABRAS PROHIBIDAS**: emocionante, increíble, líder, de vanguardia
+- **LONGITUD MÍNIMA**: 900 palabras${focus.length > 0 ? `\n- DEBE abordar: ${focus.join(', ')}` : ''}
+
+Tesis:`,
+
+    // ZH
+    `你现在以 ${firm} 首席分析师 ${analyst} 的身份，为标的 ${subjectName}（${subjectLabel}）撰写一篇 900-1000 字的机构级《投资逻辑》。
+
+标的: ${subjectName}
+资产类型: ${assetType.toUpperCase()}
+行业: ${report.sector || 'N/A'}
+现价: $${report.price?.last || 'N/A'}
+目标价: $${report.targets?.base?.price || 'N/A'}（预期涨跌幅 ${report.targets?.base?.upside_pct || 'N/A'}%）
+评级: ${report.rating || 'N/A'}${industryNote}
+
+财务/网络数据（如适用）：
+- 营收: ${report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A'}
+- EPS: $${report.fundamentals?.eps || 'N/A'}
+- ROE: ${report.fundamentals?.roe || 'N/A'}%
+- PE: ${report.valuation?.pe_ttm || 'N/A'}x
+- 利润率: ${report.fundamentals?.profit_margin || 'N/A'}%
+
+写作要求（必须满足）：
+
+**关键 - 分析师发言要求:**
+- 必须包含至少 3 次明确使用 ${analyst} 名字的陈述:
+  * "在 ${analyst} 看来，……"
+  * "${analyst} 认为……"
+  * "据 ${analyst} 分析，……"
+- 让读者感觉 ${analyst} 在亲自呈现分析
+- 结合"我们（研究团队）"与 ${analyst} 个人归因
+
+**结构:**
+1. 核心投资逻辑（250-300 字）
+2. 竞争格局与优势（约 350 字）
+3. 财务/网络框架（约 300-350 字）
+
+**要求:**
+- 混合使用"我们"和对 ${analyst} 的明确归因
+- **禁用词汇**: 激动人心、爆发式、完美、绝佳机会
+- **最低长度**: 900 字${focus.length > 0 ? `\n- 必须涵盖: ${focus.join(', ')}` : ''}
+
+投资逻辑:`
+  );
 
   try {
     let thesis = '';
@@ -90,17 +160,23 @@ Thesis:`;
     const MIN_WORD_COUNT = 900; // 🔧 Architect fix: Match prompt requirement (900-1000 words)
     const ABSOLUTE_MIN = 600; // Fallback threshold
     
-    // 🆕 v5.2: Asset-type aware system prompt
-    let systemPrompt;
+    // 🆕 v5.2: Asset-type and language-aware system prompt
+    let roleDesc;
     if (assetType === 'equity') {
-      systemPrompt = `You are ${analyst}, a senior sell-side equity analyst at ${firm}. Write institutional-grade investment theses with your personal analytical voice.`;
+      roleDesc = localize('senior sell-side equity analyst', 'analista senior de renta variable', '高级卖方股票分析师');
     } else if (assetType === 'index' || assetType === 'etf') {
-      systemPrompt = `You are ${analyst}, a senior research strategist at ${firm}. Write institutional-grade investment theses on indices and ETFs with your personal analytical voice.`;
+      roleDesc = localize('senior research strategist', 'estratega senior de análisis', '高级研究策略师');
     } else if (assetType === 'crypto') {
-      systemPrompt = `You are ${analyst}, a senior digital assets analyst at ${firm}. Write institutional-grade investment theses on cryptocurrencies and blockchain networks with your personal analytical voice.`;
+      roleDesc = localize('senior digital assets analyst', 'analista senior de activos digitales', '高级数字资产分析师');
     } else {
-      systemPrompt = `You are ${analyst}, a senior analyst at ${firm}. Write institutional-grade investment theses with your personal analytical voice.`;
+      roleDesc = localize('senior analyst', 'analista senior', '高级分析师');
     }
+    
+    const systemPrompt = localize(
+      `You are ${analyst}, a ${roleDesc} at ${firm}. Write institutional-grade investment theses with explicit analyst voice.`,
+      `Eres ${analyst}, ${roleDesc} en ${firm}. Escribe tesis de inversión institucionales con voz explícita del analista.`,
+      `你是 ${analyst}，来自 ${firm} 的${roleDesc}。请以机构研究风格撰写投资报告，并在内容中加入明确的"分析师发言"。`
+    );
     
     // 🆕 v5.2: Retry with exponential backoff until we get sufficient content
     while (attempts < 3) {
@@ -229,6 +305,14 @@ async function generateOverview(report, analystInfo = {}) {
   // 🆕 v5.2: Extract analyst/firm parameters
   const analyst = analystInfo.analyst || 'the research team';
   const firm = analystInfo.firm || 'our firm';
+  
+  // 🆕 v5.2: Language switcher (en / es / zh)
+  const lang = (analystInfo.language || 'en').toLowerCase();
+  function localize(textEN, textES, textZH) {
+    if (lang === 'es') return textES;
+    if (lang === 'zh') return textZH;
+    return textEN;
+  }
   
   // 🔧 Critical Fix: 使用统一的 segment 数据源（避免文本和表格矛盾）
   const rawSegments = Array.isArray(report.segments) ? report.segments : [];
@@ -744,7 +828,8 @@ async function enhanceReport(report, v5Options = {}) {
   const analystInfo = {
     analyst: analyst || 'the research team',
     firm: firm || 'our firm',
-    brand: brand || firm || 'our firm'
+    brand: brand || firm || 'our firm',
+    language: language // 🆕 v5.2: Language support (en/es/zh)
   };
   
   // 🆕 v5.1: Get industry-specific prompt guidance
