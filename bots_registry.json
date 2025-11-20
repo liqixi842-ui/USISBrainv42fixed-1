@@ -1,0 +1,29 @@
+{
+  "manager": {
+    "id": "manager",
+    "username": "qixizhuguan_bot",
+    "name": "主管机器人",
+    "role": "主管机器人 / 权限管理 / 机器人通讯录",
+    "description": "管理所有机器人的注册、权限和状态监控",
+    "status": "active",
+    "notes": "负责机器人集群的统一管理和协调"
+  },
+  "news": {
+    "id": "news",
+    "username": "chaojilaos_bot",
+    "name": "新闻机器人",
+    "role": "新闻资讯 / 实时推送 / 快速摘要",
+    "description": "提供实时金融新闻、市场动态和快讯推送",
+    "status": "active",
+    "notes": "每2小时推送Top-10新闻摘要，支持ImpactRank智能评分"
+  },
+  "research": {
+    "id": "research",
+    "username": "qixijiepiao_bot",
+    "name": "解票机器人",
+    "role": "个股解票 / 深度分析 / 研报生成",
+    "description": "提供个股技术分析、深度研报和投资建议",
+    "status": "active",
+    "notes": "支持标准CN/EN、聊天版、双语和完整版四种输出格式"
+  }
+}
