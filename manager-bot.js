@@ -128,6 +128,12 @@ class ManagerBot {
       
       console.log(`\n📨 [ManagerBot] Received: "${text}" from user ${userId}`);
       
+      // 🔧 如果是斜杠命令，跳过此处理器，交给 bot.command() 处理
+      if (text.startsWith('/')) {
+        console.log('⏭️  [ManagerBot] Command detected, passing to bot.command() handlers');
+        return;
+      }
+      
       // 1️⃣ 检测解票/分析命令
       if (/解票|\/解票|分析/i.test(text) && !/研报/.test(text)) {
         console.log('🎯 [ManagerBot] Routing to Research Bot (解票功能)');
