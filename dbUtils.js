@@ -21,13 +21,10 @@ function getPool() {
   }
 
   if (!pool) {
-    // Neon配置：保留完整URL，使用require模式
+    // Neon配置：最简单的SSL配置
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: {
-        require: true,
-        rejectUnauthorized: false
-      },
+      ssl: true,  // 简单启用SSL，让Neon自动处理
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,

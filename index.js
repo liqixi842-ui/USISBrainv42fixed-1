@@ -121,13 +121,10 @@ function getPool() {
       throw new Error("DATABASE_URL not found");
     }
     
-    // Neon配置：保留完整URL，使用require模式
+    // Neon配置：最简单的SSL配置
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: {
-        require: true,
-        rejectUnauthorized: false
-      },
+      ssl: true,  // 简单启用SSL，让Neon自动处理
       max: 10, // 最大连接数
       idleTimeoutMillis: 30000, // 30秒空闲超时
       connectionTimeoutMillis: 5000 // 5秒连接超时
