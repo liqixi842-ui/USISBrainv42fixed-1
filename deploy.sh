@@ -7,6 +7,15 @@ set -e  # 遇到错误立即退出
 echo "🚀 USIS Brain v6.5.2 部署脚本"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+# 🔧 自动加载 .env 文件
+if [ -f .env ]; then
+  echo "📂 加载 .env 文件..."
+  export $(grep -v '^#' .env | xargs)
+  echo "✅ 环境变量已加载"
+else
+  echo "⚠️  .env 文件不存在，使用系统环境变量"
+fi
+
 # Step 1: 验证环境变量
 echo ""
 echo "📋 Step 1: 验证必需的环境变量..."
@@ -36,7 +45,7 @@ if [ ${#MISSING_VARS[@]} -gt 0 ]; then
   echo "❌ 错误：以下环境变量未设置："
   printf '   - %s\n' "${MISSING_VARS[@]}"
   echo ""
-  echo "请在 Replit Secrets 中设置这些变量后重新运行"
+  echo "请在 .env 文件或 Replit Secrets 中设置这些变量后重新运行"
   exit 1
 fi
 
@@ -96,15 +105,15 @@ echo "✅ 部署前检查完成！"
 echo ""
 echo "📝 下一步："
 echo "1. 确认上述信息正确"
-echo "2. 在 Replit 中点击 'Run' 按钮重启应用"
-echo "3. 查看启动日志，确认看到："
-echo "   - ✅ [Token Check] All 3 bot tokens validated"
-echo "   - ✅ [ManagerBot] Manager Bot started successfully"
-echo "   - ✅ [Architecture] Manager Bot routing enabled"
+echo "2. 运行以下命令启动应用："
+echo ""
+echo "   source .env && nohup node index.js > logs/app.log 2>&1 &"
+echo ""
+echo "3. 查看启动日志："
+echo "   tail -f logs/app.log | grep -E 'ManagerBot|Token Check|Architecture'"
 echo ""
 echo "4. 测试消息路由："
 echo "   向 @qixizhuguan_bot 发送: 解票 NVDA"
-echo "   应该收到来自 @qixijiepiao_bot 的分析回复"
 echo ""
 echo "🎉 准备就绪！"
 
