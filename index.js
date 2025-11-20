@@ -6340,9 +6340,14 @@ if (!TOKEN_IS_SAFE) {
   }
   
   // 🆕 v6.0: 解票功能处理函数 (Ticket Analysis Handler) - 轻量级版本
-  async function handleTicketAnalysis({ symbol, mode, chatId }) {
+  // v6.5.2: 支持可选的 telegramAPI 和 botToken 参数（用于 Manager Bot 集成）
+  async function handleTicketAnalysis({ symbol, mode, chatId, telegramAPI: customTelegramAPI, botToken: customBotToken }) {
     let statusMsg = null;
     let t0 = null;
+    
+    // 使用传入的 telegramAPI 或默认的全局 telegramAPI
+    const api = customTelegramAPI || telegramAPI;
+    const token = customBotToken || TELEGRAM_TOKEN;
     
     // 🔍 解析用户意图：双语、解析（人话版）
     const isBilingual = mode.includes('双语');
@@ -6354,12 +6359,13 @@ if (!TOKEN_IS_SAFE) {
     console.log(`   ├─ Mode: ${mode}`);
     console.log(`   ├─ Bilingual: ${isBilingual}`);
     console.log(`   ├─ Human Voice: ${wantHuman}`);
-    console.log(`   └─ Using: generateStockChart (fast path)`);
+    console.log(`   ├─ Using: generateStockChart (fast path)`);
+    console.log(`   └─ Custom API: ${customTelegramAPI ? 'Yes (Manager Bot)' : 'No (Direct)'}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
     
     try {
       // Send initial status message
-      statusMsg = await telegramAPI('sendMessage', {
+      statusMsg = await api('sendMessage', {
         chat_id: chatId,
         text: `🎯 正在解票 ${symbol}\n\n⏳ 正在抓取数据和技术分析...\n\n(预计 15-30 秒)`
       });
@@ -6391,7 +6397,7 @@ if (!TOKEN_IS_SAFE) {
       console.log(`   └─ Analysis length: ${ticketData.analysis.length} chars\n`);
       
       // Delete status message
-      await telegramAPI('deleteMessage', {
+      await api('deleteMessage', {
         chat_id: chatId,
         message_id: statusMsg.result.message_id
       });
@@ -6399,7 +6405,7 @@ if (!TOKEN_IS_SAFE) {
       // 发送图表（如果有）
       if (chartResult.buffer) {
         await sendDocumentBuffer(
-          TELEGRAM_TOKEN,
+          token,
           chatId,
           chartResult.buffer,
           `${symbol}_chart.png`,
@@ -6434,7 +6440,7 @@ if (!TOKEN_IS_SAFE) {
         const msg = messages[i];
         console.log(`📤 [主Bot] 发送消息 ${i + 1}/${messages.length}: ${msg.label} (${msg.text.length} chars)`);
         
-        await telegramAPI('sendMessage', {
+        await api('sendMessage', {
           chat_id: chatId,
           text: msg.text
         });
@@ -6459,7 +6465,7 @@ if (!TOKEN_IS_SAFE) {
       // Delete status message if exists
       if (statusMsg?.result?.message_id) {
         try {
-          await telegramAPI('deleteMessage', {
+          await api('deleteMessage', {
             chat_id: chatId,
             message_id: statusMsg.result.message_id
           });
@@ -6483,7 +6489,7 @@ if (!TOKEN_IS_SAFE) {
       
       errorMsg += `\n\n(解票功能 v6.0 - 模式: ${mode})`;
       
-      await telegramAPI('sendMessage', {
+      await api('sendMessage', {
         chat_id: chatId,
         text: errorMsg
       });
@@ -7455,18 +7461,22 @@ if (MANAGER_BOT_TOKEN) {
   
   const researchBotTelegramAPI = createResearchBotTelegramAPI(RESEARCH_BOT_TOKEN);
   
-  // 🔧 导入解票和研报处理函数（v3_dev版本）
-  const { handleTicketAnalysis: v3HandleTicketAnalysis } = require('./v3_dev/services/devBotHandler');
-  
-  // 🎯 注册外部处理器：解票功能
+  // 🎯 注册外部处理器：解票功能（v6.5.2: 使用正式版轻量级快速路径）
   async function handleTicketAnalysisWrapper({ symbol, mode, chatId }) {
-    console.log(`\n🔀 [ManagerBot] Routing ticket analysis to Research Bot`);
+    console.log(`\n🔀 [ManagerBot → V3 Production] Routing ticket analysis to Research Bot`);
     console.log(`   ├─ Symbol: ${symbol}`);
     console.log(`   ├─ Mode: ${mode}`);
+    console.log(`   ├─ Endpoint: generateStockChart (FAST PATH - Production)`);
     console.log(`   └─ Reply Token: RESEARCH_BOT_TOKEN (${RESEARCH_BOT_TOKEN.slice(0, 10)}...)`);
+    console.log('[MANAGER → TICKET]', {
+      symbol,
+      mode,
+      endpoint: 'generateStockChart (Production v3 - Lightweight)'
+    });
     
-    // 调用 v3_dev 的完整解票功能，使用 RESEARCH_BOT_TOKEN 发送回复
-    await v3HandleTicketAnalysis({
+    // ✅ 调用正式版轻量级解票功能（15-30秒，不走 v3_dev 重量级路由）
+    // 使用 index.js 第 6345 行定义的正式版 handleTicketAnalysis
+    await handleTicketAnalysis({
       symbol,
       mode,
       chatId,
