@@ -6107,13 +6107,20 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log('⚠️  N8N监控已禁用以节省内存');
 });
 
-// ====== Telegram Bot v6.5 (精简架构 - 三机器人分工) ======
-// 🆕 v6.5.1: 强制使用独立Token（不允许共用，移除向后兼容fallback）
+// ====== Telegram Bot v6.5.2 (真正的三机器人分工架构) ======
+// 架构：主管Bot监听所有消息 → 路由到专职Bot → 专职Bot用自己的Token回复
+const MANAGER_BOT_TOKEN = process.env.MANAGER_BOT_TOKEN;
 const RESEARCH_BOT_TOKEN = process.env.RESEARCH_BOT_TOKEN;
 const NEWS_BOT_TOKEN = process.env.NEWS_BOT_TOKEN;
 const TELEGRAM_TOKEN = RESEARCH_BOT_TOKEN; // 保留变量名供旧代码引用
 
-// 🔒 v6.5.1: 启动检查 - 确保Token已配置且不重复
+// 🔒 v6.5.2: 启动检查 - 确保所有Token已配置且不重复
+if (!MANAGER_BOT_TOKEN) {
+  console.error('❌ [Fatal] MANAGER_BOT_TOKEN is required for @qixizhuguan_bot');
+  console.error('💡 Please set MANAGER_BOT_TOKEN in environment variables');
+  process.exit(1);
+}
+
 if (!RESEARCH_BOT_TOKEN) {
   console.error('❌ [Fatal] RESEARCH_BOT_TOKEN is required for @qixijiepiao_bot');
   console.error('💡 Please set RESEARCH_BOT_TOKEN in environment variables');
@@ -6126,15 +6133,19 @@ if (!NEWS_BOT_TOKEN) {
   process.exit(1);
 }
 
-if (RESEARCH_BOT_TOKEN === NEWS_BOT_TOKEN) {
-  console.error('❌ [Fatal] RESEARCH_BOT_TOKEN and NEWS_BOT_TOKEN must be different!');
+// 确保所有Token都不同
+const tokens = [MANAGER_BOT_TOKEN, RESEARCH_BOT_TOKEN, NEWS_BOT_TOKEN];
+const uniqueTokens = new Set(tokens);
+if (uniqueTokens.size !== tokens.length) {
+  console.error('❌ [Fatal] All bot tokens must be unique!');
   console.error('💡 Each bot requires its own unique token from @BotFather');
   process.exit(1);
 }
 
+console.log(`👔 [Manager Bot] Token: ${MANAGER_BOT_TOKEN.slice(0, 10)}...`);
 console.log(`🤖 [Research Bot] Token: ${RESEARCH_BOT_TOKEN.slice(0, 10)}...`);
 console.log(`📰 [News Bot] Token: ${NEWS_BOT_TOKEN.slice(0, 10)}...`);
-console.log('✅ [Token Check] All bot tokens validated (unique and configured)');
+console.log('✅ [Token Check] All 3 bot tokens validated (unique and configured)');
 
 // 🆕 v1.1: PID文件锁机制（防止重复启动Bot）
 const fs = require('fs');

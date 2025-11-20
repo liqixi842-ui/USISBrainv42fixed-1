@@ -73,21 +73,112 @@ class ManagerBot {
   }
 
   /**
-   * 设置命令处理器
+   * 设置外部处理器（由 index.js 注入）
+   */
+  setExternalHandlers(handlers) {
+    this.externalHandlers = handlers || {};
+    console.log('📌 [ManagerBot] External handlers registered:', Object.keys(this.externalHandlers));
+  }
+
+  /**
+   * 安全提取股票代码（防止误识别关键词）
+   */
+  extractStockSymbol(text) {
+    // 保留关键词黑名单（不能被识别为股票代码）
+    const RESERVED_KEYWORDS = new Set([
+      'START', 'HELP', 'STATUS', 'TEST', 'STOP', 'INFO', 'ABOUT',
+      '解票', '分析', '研报', '双语', '聊天版', '人话版', '完整版', '标准版'
+    ]);
+    
+    // 移除常见命令词和修饰词
+    const cleaned = text
+      .replace(/@\w+\s*/g, '') // 移除 @mention
+      .replace(/^(解票|分析|\/解票|\/分析|\/start|start)\s*/i, '') // 移除命令前缀
+      .replace(/(双语|聊天版|人话版|完整版|标准版)/g, '') // 移除模式词
+      .trim();
+    
+    // 提取所有可能的股票代码（1-10个字符，字母开头）
+    const matches = cleaned.match(/\b([A-Z][A-Z0-9.:-]{0,9})\b/g);
+    
+    if (!matches || matches.length === 0) {
+      return null;
+    }
+    
+    // 过滤掉保留关键词
+    const validSymbols = matches.filter(sym => !RESERVED_KEYWORDS.has(sym.toUpperCase()));
+    
+    // 返回第一个有效的股票代码
+    return validSymbols.length > 0 ? validSymbols[0] : null;
+  }
+
+  /**
+   * 设置命令处理器 + 消息路由
    */
   setupHandlers() {
-    // /start 命令
-    this.bot.command('start', async (ctx) => {
-      if (!this.canUseCommand(ctx)) {
-        return; // 不响应未授权用户
+    // 🆕 消息路由：监听所有文本消息
+    this.bot.on('text', async (ctx) => {
+      const text = ctx.message.text;
+      const chatId = ctx.chat.id;
+      const userId = ctx.from.id;
+      
+      console.log(`\n📨 [ManagerBot] Received: "${text}" from user ${userId}`);
+      
+      // 1️⃣ 检测解票/分析命令
+      if (/解票|\/解票|分析/i.test(text) && !/研报/.test(text)) {
+        console.log('🎯 [ManagerBot] Routing to Research Bot (解票功能)');
+        
+        const symbol = this.extractStockSymbol(text);
+        console.log(`[DEBUG ticket] Original: "${text}" → Extracted: "${symbol}"`);
+        
+        if (!symbol || !/^[A-Z][A-Z0-9.:-]{0,9}$/.test(symbol)) {
+          await ctx.reply('❌ 无法识别股票代码，请使用格式：解票 NVDA 或 分析 TSLA 双语');
+          return;
+        }
+        
+        // 提取模式
+        let mode = '标准版';
+        if (/双语/.test(text)) mode = '双语';
+        if (/聊天版|人话版/.test(text)) mode = mode.includes('双语') ? '双语 聊天版' : '聊天版';
+        if (/完整版/.test(text)) mode = '完整版';
+        
+        // 调用解票处理器（如果已注册）
+        if (this.externalHandlers?.handleTicketAnalysis) {
+          await this.externalHandlers.handleTicketAnalysis({ symbol, mode, chatId });
+        } else {
+          await ctx.reply('❌ 解票功能暂不可用');
+        }
+        return;
       }
       
+      // 2️⃣ 检测研报命令
+      if (/^(研报|\/研报)/i.test(text)) {
+        console.log('📊 [ManagerBot] Routing to Research Bot (研报功能)');
+        
+        if (this.externalHandlers?.handleResearchReport) {
+          await this.externalHandlers.handleResearchReport({ text, chatId });
+        } else {
+          await ctx.reply('❌ 研报功能暂不可用');
+        }
+        return;
+      }
+      
+      // 3️⃣ 其他消息：交给默认命令处理
+      // 命令会被 bot.command() 自动处理，这里不需要额外逻辑
+    });
+
+    // /start 命令
+    this.bot.command('start', async (ctx) => {
       await ctx.reply(
-        '🤖 主管机器人已启动\n\n' +
-        '可用命令：\n' +
-        '/bots - 查看所有机器人\n' +
-        '/botinfo <id> - 查看机器人详情\n' +
-        '/help - 显示帮助信息',
+        '👋 欢迎使用USIS Brain智能投研系统！\n\n' +
+        '我是主管机器人，负责协调各专职机器人为您服务：\n\n' +
+        '🔬 **解票研报机器人** @qixijiepiao_bot\n' +
+        '   • 解票 NVDA - 快速技术分析\n' +
+        '   • 研报, TSLA, 机构, 分析师, 语言\n\n' +
+        '📰 **新闻资讯机器人** @chaojilaos_bot\n' +
+        '   • 定时推送金融新闻摘要\n\n' +
+        '📋 **管理命令**：\n' +
+        '   /bots - 查看所有机器人\n' +
+        '   /help - 显示帮助信息',
         { data_testid: 'message-start-response' }
       );
     });
