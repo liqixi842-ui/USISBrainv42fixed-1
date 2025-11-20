@@ -3,7 +3,53 @@ USIS Brain v6.0 is an institutional-grade Multi-AI Financial Analysis System des
 
 The system is currently stable at `v2-stable` for production, with `v3-dev` actively under development for new features like a comprehensive research report system (v3.1), a multi-model research pipeline (v3.2), and a professional correction layer (v4.0) to refine AI-generated text.
 
-## Recent Changes (Jan 19, 2025)
+## Recent Changes (Jan 20, 2025)
+
+### v6.5.2 Three-Bot Architecture - Manager Bot Message Routing
+**Status**: ✅ Fully Implemented, Ready for Production Deployment
+
+**Critical Architecture Change**: Implemented strict three-bot separation with centralized message routing to eliminate duplicate responses and enforce bot specialization.
+
+**Architecture**:
+```
+User → Manager Bot (@qixizhuguan_bot) → Routes by command → Specialized Bot replies
+   ├─ "解票 SYMBOL" → Research Bot (@qixijiepiao_bot)
+   ├─ "研报, ..." → Research Bot (@qixijiepiao_bot)
+   └─ News delivery → News Bot (@chaojilaos_bot) (automated only)
+```
+
+**Key Changes**:
+1. **Manager Bot (NEW)**: Central message router listening to ALL user messages
+   - Intelligent command detection with regex pattern matching
+   - Safe stock symbol extraction with keyword blacklist (START, HELP, etc.)
+   - Mode parsing: maps user input to exact formats (标准版, 双语, 聊天版, 完整版)
+   - Routes to specialized bots via external handler registration
+
+2. **Token Separation**: Each bot uses dedicated Telegram token
+   - MANAGER_BOT_TOKEN (@qixizhuguan_bot) - listens only
+   - RESEARCH_BOT_TOKEN (@qixijiepiao_bot) - replies only
+   - NEWS_BOT_TOKEN (@chaojilaos_bot) - automated news only
+   - Startup validation ensures all tokens are present and unique
+
+3. **Legacy Poller Disabled**: Old RESEARCH_BOT direct polling disabled when Manager Bot is active
+   - Prevents duplicate responses
+   - Single entry point for all user interactions
+
+**Files Created**:
+- `manager-bot.js` - Manager Bot class with message routing logic
+- `bots_registry.json` - Bot metadata registry
+- `DEPLOYMENT_v6.5.2.md` - Deployment guide and testing procedures
+
+**Files Modified**:
+- `index.js` - Added Manager Bot startup, token validation, legacy poller gating
+- `v3_dev/services/devBotHandler.js` - Exported handleTicketAnalysis for routing integration
+
+**Architect Reviews**: 3 reviews passed
+- ✅ extractStockSymbol keyword filtering
+- ✅ Token separation and validation
+- ✅ Mode parsing alignment with handleTicketAnalysis
+
+---
 
 ### v6.0 Ticket Formatter - 解票功能统一输出层
 **Status**: ✅ Fully Implemented, Ready for Testing

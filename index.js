@@ -6225,6 +6225,11 @@ if (!TOKEN_IS_SAFE) {
     isRotating: BOT_TOKEN === 'ROTATING'
   });
   console.log('💡 [SAFE MODE] 设置有效的TELEGRAM_BOT_TOKEN后重启应用');
+} else if (ENABLE_TELEGRAM && TELEGRAM_TOKEN && MANAGER_BOT_TOKEN) {
+  // 🆕 v6.5.2: Manager Bot 已启用，跳过旧的直接轮询器
+  console.log('✅ [Architecture] Manager Bot routing enabled - legacy RESEARCH_BOT poller disabled');
+  console.log('📋 [Info] All user messages will be routed through Manager Bot (@qixizhuguan_bot)');
+  console.log('📋 [Info] Research Bot (@qixijiepiao_bot) will reply via Manager Bot routing only');
 } else if (ENABLE_TELEGRAM && TELEGRAM_TOKEN && !MANAGER_BOT_TOKEN) {
   // 🆕 v6.5.2: 只有当 Manager Bot 未启用时才启动旧的直接轮询器
   // 当 Manager Bot 启用时，所有消息路由由 Manager Bot 处理
@@ -7382,17 +7387,25 @@ if (ENABLE_NEWS_SYSTEM && ENABLE_DB) {
 if (MANAGER_BOT_TOKEN) {
   console.log('\n👔 [ManagerBot] Initializing Manager Bot (@qixizhuguan_bot)...');
   
-  // 🔒 v6.5.2: 验证必需的 Token 配置
-  if (!RESEARCH_BOT_TOKEN || !NEWS_BOT_TOKEN) {
-    console.error('❌ [ManagerBot] Cannot start: RESEARCH_BOT_TOKEN or NEWS_BOT_TOKEN is missing');
-    console.error('💡 Manager Bot requires all three tokens to be configured');
+  // 🔒 v6.5.2: 完整验证所有必需的配置
+  const OWNER_TELEGRAM_ID = process.env.OWNER_TELEGRAM_ID;
+  const missingConfigs = [];
+  
+  if (!RESEARCH_BOT_TOKEN) missingConfigs.push('RESEARCH_BOT_TOKEN');
+  if (!NEWS_BOT_TOKEN) missingConfigs.push('NEWS_BOT_TOKEN');
+  if (!OWNER_TELEGRAM_ID) missingConfigs.push('OWNER_TELEGRAM_ID');
+  
+  if (missingConfigs.length > 0) {
+    console.error('❌ [ManagerBot] Cannot start: Missing required configuration');
+    console.error(`💡 Missing: ${missingConfigs.join(', ')}`);
+    console.error('💡 Manager Bot requires all three tokens and OWNER_TELEGRAM_ID to be configured');
   } else if (MANAGER_BOT_TOKEN === RESEARCH_BOT_TOKEN || MANAGER_BOT_TOKEN === NEWS_BOT_TOKEN || RESEARCH_BOT_TOKEN === NEWS_BOT_TOKEN) {
     console.error('❌ [ManagerBot] Cannot start: Token collision detected');
     console.error('💡 All three tokens must be unique');
   } else {
+    console.log('✅ [ManagerBot] All required configs validated (3 unique tokens + OWNER_ID)');
     // ✅ All tokens validated
     const ManagerBot = require('./manager-bot');
-    const OWNER_TELEGRAM_ID = process.env.OWNER_TELEGRAM_ID;
     
     // 🔧 创建专用的 telegramAPI 函数（使用 RESEARCH_BOT_TOKEN 发送回复）
     function createResearchBotTelegramAPI(token) {
