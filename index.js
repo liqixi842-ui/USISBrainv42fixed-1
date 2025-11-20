@@ -6487,6 +6487,32 @@ if (!TOKEN_IS_SAFE) {
     }
     
     try {
+      // 🆕 v6.5.2: /start 命令处理（优先级最高，防止误解析）
+      if (text === '/start' || text.toLowerCase().startsWith('/start')) {
+        const welcomeText = `👋 欢迎使用解票研报机器人！
+
+我可以为您提供：
+• 🎯 快速解票分析（15-30秒）
+• 📊 机构级研报生成（2-5分钟）
+
+━━━━━━━━━━━━━━━━━━━
+**快速开始：**
+
+• 解票 NVDA
+• 分析 TSLA 双语
+• 研报, AAPL, 摩根士丹利, 张三, 中文
+
+发送 /help 查看详细使用说明`;
+        
+        await telegramAPI('sendMessage', { 
+          chat_id: chatId, 
+          text: welcomeText,
+          parse_mode: 'Markdown'
+        });
+        console.log('✅ /start 欢迎消息已发送');
+        return;
+      }
+      
       // 🎯 版本查询命令（用于确认运行环境）
       if (text === '/版本' || text.toLowerCase() === '/version') {
         const versionInfo = `📍 **USIS Brain v6.2 (2025-11-13)**
