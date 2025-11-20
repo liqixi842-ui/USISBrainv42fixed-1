@@ -59,9 +59,13 @@ class ManagerBot {
     const chatType = ctx.chat?.type;
     const chatId = ctx.chat?.id;
     
+    console.log(`🔍 [ManagerBot] canUseCommand check: userId=${userId} (type: ${typeof userId}), ownerId=${this.ownerId} (type: ${typeof this.ownerId}), chatType=${chatType}`);
+    
     // 1. 私聊：只有OWNER可以使用
     if (chatType === 'private') {
-      return this.isOwner(userId);
+      const isOwner = this.isOwner(userId);
+      console.log(`🔍 [ManagerBot] Private chat - isOwner: ${isOwner}`);
+      return isOwner;
     }
     
     // 2. 群聊：必须是授权的群组
@@ -69,6 +73,7 @@ class ManagerBot {
       return this.isAuthorizedGroup(chatId) && this.isOwner(userId);
     }
     
+    console.log(`❌ [ManagerBot] Unknown chat type: ${chatType}`);
     return false;
   }
 
