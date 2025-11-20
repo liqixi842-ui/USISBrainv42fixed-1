@@ -121,12 +121,13 @@ function getPool() {
       throw new Error("DATABASE_URL not found");
     }
     
-    // 移除URL中的sslmode参数，使用代码中的SSL配置
-    const dbUrl = process.env.DATABASE_URL.split('?')[0];
-    
+    // Neon配置：保留完整URL，使用require模式
     pool = new Pool({
-      connectionString: dbUrl,
-      ssl: { rejectUnauthorized: false },
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      },
       max: 10, // 最大连接数
       idleTimeoutMillis: 30000, // 30秒空闲超时
       connectionTimeoutMillis: 5000 // 5秒连接超时
