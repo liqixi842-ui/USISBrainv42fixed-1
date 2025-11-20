@@ -120,8 +120,12 @@ function getPool() {
     if (!process.env.DATABASE_URL) {
       throw new Error("DATABASE_URL not found");
     }
+    
+    // 移除URL中的sslmode参数，使用代码中的SSL配置
+    const dbUrl = process.env.DATABASE_URL.split('?')[0];
+    
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: dbUrl,
       ssl: { rejectUnauthorized: false },
       max: 10, // 最大连接数
       idleTimeoutMillis: 30000, // 30秒空闲超时

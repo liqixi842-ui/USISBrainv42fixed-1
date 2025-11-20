@@ -21,8 +21,11 @@ function getPool() {
   }
 
   if (!pool) {
+    // 移除URL中的sslmode参数，使用代码中的SSL配置
+    const dbUrl = process.env.DATABASE_URL.split('?')[0];
+    
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: dbUrl,
       ssl: { rejectUnauthorized: false },
       max: 20,
       idleTimeoutMillis: 30000,
