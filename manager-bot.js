@@ -149,7 +149,7 @@ class ManagerBot {
         '🤖 *主管机器人 - 帮助文档*\n\n' +
         '*命令列表：*\n' +
         '`/bots` - 显示所有登记的机器人\n' +
-        '`/botinfo <id>` - 显示指定机器人的详细信息\n' +
+        '`/botinfo ID` - 显示指定机器人的详细信息\n' +
         '`/help` - 显示此帮助信息\n\n' +
         '*权限说明：*\n' +
         '• 私聊：仅OWNER可使用\n' +
@@ -185,7 +185,7 @@ class ManagerBot {
       index++;
     }
     
-    message += `\n💡 使用 \`/botinfo <id>\` 查看详情`;
+    message += `\n💡 使用 /botinfo 命令查看详情`;
     
     return message;
   }
