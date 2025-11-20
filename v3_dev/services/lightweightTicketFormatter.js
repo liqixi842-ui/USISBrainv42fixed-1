@@ -11,6 +11,49 @@
  */
 
 /**
+ * 🛡️ 数据清洗/兜底层 - 处理N/A和异常价格区间
+ * @param {Object} rawLevels - 原始价格水平数据
+ * @returns {Object} 清洗后的数据（null表示无有效数据）
+ */
+function sanitizeLevels(rawLevels) {
+  const { support, resistance, rangeLow, rangeHigh } = rawLevels || {};
+
+  // 统一转成数字或 null
+  const toNum = (v) => {
+    if (v === null || v === undefined) return null;
+    if (typeof v === 'string') {
+      const upper = v.toUpperCase();
+      if (upper === 'N/A' || upper === 'NA' || upper === '') return null;
+      v = v.replace(/[$,]/g, ''); // 移除 $ 和逗号
+    }
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  let supportNum = toNum(support);
+  let resistanceNum = toNum(resistance);
+  let rangeLowNum = toNum(rangeLow);
+  let rangeHighNum = toNum(rangeHigh);
+
+  // 区间上下颠倒时自动交换
+  if (rangeLowNum !== null && rangeHighNum !== null && rangeLowNum > rangeHighNum) {
+    [rangeLowNum, rangeHighNum] = [rangeHighNum, rangeLowNum];
+  }
+
+  // 支撑阻力颠倒时自动交换
+  if (supportNum !== null && resistanceNum !== null && supportNum > resistanceNum) {
+    [supportNum, resistanceNum] = [resistanceNum, supportNum];
+  }
+
+  return {
+    support: supportNum,
+    resistance: resistanceNum,
+    rangeLow: rangeLowNum,
+    rangeHigh: rangeHighNum
+  };
+}
+
+/**
  * 从AI分析文本中提取关键信息
  * @param {string} analysisText - AI生成的技术分析文本
  * @returns {Object} 提取的结构化数据
@@ -19,8 +62,8 @@ function extractKeyInfo(analysisText) {
   const extracted = {
     trend: '未明确',
     trendStrength: 5,
-    support: 'N/A',
-    resistance: 'N/A',
+    support: null,
+    resistance: null,
     buySignal: 4,
     sellSignal: 4,
     riskLevel: '中等',
@@ -43,17 +86,31 @@ function extractKeyInfo(analysisText) {
 
   // 提取支撑阻力（简单正则）
   const supportMatch = analysisText.match(/支撑.*?(\$?\d+\.?\d*)/);
-  if (supportMatch) extracted.support = `$${supportMatch[1]}`;
-
   const resistanceMatch = analysisText.match(/阻力.*?(\$?\d+\.?\d*)/);
-  if (resistanceMatch) extracted.resistance = `$${resistanceMatch[1]}`;
 
   // 提取价格区间
   const rangeMatch = analysisText.match(/(\$?\d+\.?\d*).*?(\$?\d+\.?\d*)/);
+  let rangeLow = null;
+  let rangeHigh = null;
   if (rangeMatch) {
+    rangeLow = rangeMatch[1].replace('$', '');
+    rangeHigh = rangeMatch[2].replace('$', '');
+  }
+
+  // 🛡️ 使用数据清洗层
+  const cleaned = sanitizeLevels({
+    support: supportMatch ? supportMatch[1] : null,
+    resistance: resistanceMatch ? resistanceMatch[1] : null,
+    rangeLow: rangeLow,
+    rangeHigh: rangeHigh
+  });
+
+  extracted.support = cleaned.support;
+  extracted.resistance = cleaned.resistance;
+  if (cleaned.rangeLow !== null && cleaned.rangeHigh !== null) {
     extracted.priceRange = {
-      low: parseFloat(rangeMatch[1].replace('$', '')),
-      high: parseFloat(rangeMatch[2].replace('$', ''))
+      low: cleaned.rangeLow,
+      high: cleaned.rangeHigh
     };
   }
 
@@ -68,15 +125,36 @@ function formatTicketStandardCN(ticketData) {
   const analysis = ticketData.analysis || '';
   const info = extractKeyInfo(analysis);
 
+  // 🛡️ 兜底文案处理
+  const supportText = info.support !== null 
+    ? `约在 $${info.support.toFixed(2)}` 
+    : '当前尚未形成清晰支撑区域';
+  
+  const resistanceText = info.resistance !== null 
+    ? `约在 $${info.resistance.toFixed(2)}` 
+    : '当前尚未形成清晰阻力区域';
+  
+  const breakoutText = (info.support !== null && info.resistance !== null)
+    ? `突破$${info.resistance.toFixed(2)}可能预示进一步上涨，跌破$${info.support.toFixed(2)}可能预示下跌。`
+    : '待关键价位形成后，可根据突破方向判断趋势。';
+  
+  const rangeText = info.priceRange 
+    ? `可能在$${info.priceRange.low.toFixed(2)}至$${info.priceRange.high.toFixed(2)}之间波动` 
+    : '以关键支撑位和阻力位为主要参考';
+  
+  const stopLossText = info.support !== null
+    ? `若持有多头，止损位可设在$${info.support.toFixed(2)}下方`
+    : '建议根据个人风险承受能力设定止损位';
+
   return `【📈 I. 趋势识别】
 • 主要趋势方向：当前趋势为${info.trend}。
 • 趋势强度评估：${info.trendStrength}分（${info.trendStrength >= 7 ? '较强' : info.trendStrength <= 4 ? '较弱' : '中等'}）
 • 趋势持续性判断：短期内${info.trend === '盘整' ? '可能继续震荡，需关注突破信号' : '建议关注关键价位支撑'}。
 
 【🎯 II. 关键价格水平】
-• 重要支撑位：约在 ${info.support}
-• 重要阻力位：约在 ${info.resistance}
-• 突破/跌破信号：突破${info.resistance}可能预示进一步上涨，跌破${info.support}可能预示下跌。
+• 重要支撑位：${supportText}
+• 重要阻力位：${resistanceText}
+• 突破/跌破信号：${breakoutText}
 
 【🔧 III. 技术形态分析】
 • K线形态：${info.trend === '盘整' ? '近期出现多根小实体K线，显示市场犹豫' : '趋势明确'}。
@@ -96,8 +174,8 @@ function formatTicketStandardCN(ticketData) {
 
 【⚠️ VI. 风险评估】
 • 技术面风险等级：${info.riskLevel === '低' ? '2' : info.riskLevel === '高' ? '4' : '3'}（${info.riskLevel}风险）
-• 短期波动预期：可能在${info.priceRange ? `$${info.priceRange.low}至$${info.priceRange.high}` : '当前区间'}之间波动。
-• 止损位建议：若持有多头，止损位可设在${info.support}下方。
+• 短期波动预期：${rangeText}。
+• 止损位建议：${stopLossText}。
 
 请根据市场变化及时调整策略。`;
 }
@@ -113,15 +191,36 @@ function formatTicketStandardEN(ticketData) {
   const trendEN = info.trend === '上涨' ? 'Upward' : info.trend === '下跌' ? 'Downward' : 'Sideways';
   const strengthEN = info.trendStrength >= 7 ? 'strong' : info.trendStrength <= 4 ? 'weak' : 'moderate';
 
+  // 🛡️ 兜底文案处理
+  const supportText = info.support !== null 
+    ? `Around $${info.support.toFixed(2)}` 
+    : 'No clear support zone yet';
+  
+  const resistanceText = info.resistance !== null 
+    ? `Around $${info.resistance.toFixed(2)}` 
+    : 'No clear resistance zone yet';
+  
+  const breakoutText = (info.support !== null && info.resistance !== null)
+    ? `A break above $${info.resistance.toFixed(2)} may start a new up-leg, while a break below $${info.support.toFixed(2)} could open room for further downside.`
+    : 'Watch for key levels to form before making breakout decisions.';
+  
+  const rangeText = info.priceRange 
+    ? `between $${info.priceRange.low.toFixed(2)} and $${info.priceRange.high.toFixed(2)}` 
+    : 'within current trading range; use key support/resistance as reference';
+  
+  const stopLossText = info.support !== null
+    ? `For long positions, a stop below around $${info.support.toFixed(2)} can be considered`
+    : 'Set stop-loss based on personal risk tolerance';
+
   return `【📈 I. Trend Identification】
 • Main Trend Direction: Current trend is ${trendEN.toLowerCase()}.
 • Trend Strength Assessment: ${info.trendStrength}/10 (${strengthEN})
 • Trend Sustainability: In the short term, ${info.trend === '盘整' ? 'the stock may continue to trade in a range; a clear breakout is needed' : 'watch key support levels'}.
 
 【🎯 II. Key Price Levels】
-• Key Support: Around ${info.support}
-• Key Resistance: Around ${info.resistance}
-• Breakout/Breakdown Signals: A break above ${info.resistance} may start a new up-leg, while a break below ${info.support} could open room for further downside.
+• Key Support: ${supportText}
+• Key Resistance: ${resistanceText}
+• Breakout/Breakdown Signals: ${breakoutText}
 
 【🔧 III. Technical Pattern Analysis】
 • Candlestick Pattern: ${info.trend === '盘整' ? 'Recent candles have small bodies, indicating indecision in the market' : 'Trend is clear'}.
@@ -141,8 +240,8 @@ function formatTicketStandardEN(ticketData) {
 
 【⚠️ VI. Risk Assessment】
 • Technical Risk Level: ${info.riskLevel === '低' ? '2' : info.riskLevel === '高' ? '4' : '3'} (${info.riskLevel === '低' ? 'low' : info.riskLevel === '高' ? 'high' : 'medium'} risk)
-• Short-Term Volatility Expectation: Price may continue to oscillate ${info.priceRange ? `between $${info.priceRange.low} and $${info.priceRange.high}` : 'in current range'}.
-• Suggested Stop-Loss: For long positions, a stop below around ${info.support} can be considered.
+• Short-Term Volatility Expectation: Price may continue to oscillate ${rangeText}.
+• Suggested Stop-Loss: ${stopLossText}.
 
 Please adjust your strategy promptly based on how the market evolves.`;
 }
@@ -163,13 +262,26 @@ function formatTicketHumanCN(ticketData) {
                             info.trend === '上涨' ? '可以考虑按节奏减一点高位仓' :
                             '空仓的话，等反弹或者企稳再考虑';
 
+  // 🛡️ 人话版兜底文案
+  const resistanceHuman = info.resistance !== null 
+    ? `$${info.resistance.toFixed(2)}` 
+    : '上方的压力位';
+  
+  const supportHuman = info.support !== null 
+    ? `$${info.support.toFixed(2)}` 
+    : '下方的支撑位';
+  
+  const rangeHuman = info.priceRange 
+    ? `价格在 $${info.priceRange.low.toFixed(2)}–$${info.priceRange.high.toFixed(2)} 来回晃。` 
+    : '';
+
   return `🧩 解票速览（${symbol}）
 
 1）现在这票的感觉
-整体${trendFeel}。${info.priceRange ? `价格在 $${info.priceRange.low}–$${info.priceRange.high} 来回晃。` : ''}这个位置${actionSuggestion}。
+整体${trendFeel}。${rangeHuman}这个位置${actionSuggestion}。
 
 2）我会盯的价位
-上面先看 ${info.resistance} 一带，${info.trend === '上涨' ? '有放量突破再说"新一段行情"' : '能不能突破要看量配合'}；下面 ${info.support} 是比较关键的防守位，${info.trend === '下跌' ? '跌穿了可能还要再看低一点' : '哪天跌穿了，就当这段震荡区间告一段落'}。
+上面先看 ${resistanceHuman} 一带，${info.trend === '上涨' ? '有放量突破再说"新一段行情"' : '能不能突破要看量配合'}；下面 ${supportHuman} 是比较关键的防守位，${info.trend === '下跌' ? '跌穿了可能还要再看低一点' : '哪天跌穿了，就当这段震荡区间告一段落'}。
 
 3）操作思路
 ${info.trend === '上涨' ? '已经拿着的人，可以按照自己成本稍微锁一下止损，别被一根阴线吓出去' : 

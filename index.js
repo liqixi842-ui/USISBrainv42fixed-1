@@ -6546,22 +6546,55 @@ if (!TOKEN_IS_SAFE) {
       
       // 🆕 v6.0: 解票命令 (Ticket Analysis) - 优先级高于研报命令
       // 支持: 解票 SYMBOL [双语|聊天版|人话版|完整版]
-      if (text.startsWith('解票') || text.startsWith('/解票')) {
-        console.log('🎯 [主Bot] 检测到解票命令');
+      // 🆕 v6.1: 同时支持"分析 XXX"、"XXX分析"等变体
+      const compact = text.replace(/\s+/g, '');
+      const hasJiepiao = /解票|\/解票/.test(text);
+      const hasFenxi = /分析/.test(compact) && !/研报/.test(text); // "分析"但不是"研报"
+      const isTicketCommand = hasJiepiao || hasFenxi;
+      
+      if (isTicketCommand) {
+        console.log('🎯 [主Bot] 检测到解票/分析命令');
         
-        // Parse command: 解票 NVDA [双语|聊天版|人话版|完整版]
-        const parts = text.replace(/^(解票|\/解票)\s*/i, '').trim().split(/\s+/);
+        let symbol = null;
+        let mode = '标准版';
         
-        if (parts.length === 0 || !parts[0]) {
+        if (hasJiepiao) {
+          // 解票 NVDA [双语|聊天版]
+          const parts = text.replace(/^(解票|\/解票)\s*/i, '').trim().split(/\s+/);
+          symbol = parts[0];
+          mode = parts.slice(1).join(' ') || '标准版';
+        } else if (hasFenxi) {
+          // 处理 "分析 NVDA 双语" 或 "NVDA分析 双语" 或 "APM分析双语"
+          const fenxiMatch = compact.match(/([A-Z]{1,5})分析(.*)/) || 
+                             compact.match(/分析([A-Z]{1,5})(.*)/);
+          
+          if (fenxiMatch) {
+            symbol = fenxiMatch[1];
+            const restCompact = fenxiMatch[2] || '';
+            // 从紧凑文本中提取模式
+            if (/双语|雙語/.test(restCompact)) mode = '双语';
+            if (/聊天|人话|解析/.test(restCompact)) {
+              mode = mode.includes('双语') ? '双语 聊天版' : '聊天版';
+            }
+          } else {
+            // 尝试传统空格分隔: "分析 AMZN 双语"
+            const parts = text.replace(/分析\s*/i, '').trim().split(/\s+/);
+            symbol = parts[0];
+            mode = parts.slice(1).join(' ') || '标准版';
+          }
+        }
+        
+        if (!symbol || !/^[A-Z]{1,5}$/.test(symbol.toUpperCase())) {
           await telegramAPI('sendMessage', {
-            chat_id: chatId,
-            text: `❌ 解票命令格式错误\n\n**正确格式：**\n解票 股票代码 [模式]\n\n**示例：**\n• 解票 NVDA（标准中文版）\n• 解票 NVDA 双语（中文+英文）\n• 解票 NVDA 聊天版（人话版）\n• 解票 NVDA 人话版（同上）\n• 解票 NVDA 完整版（中文+英文+人话版）\n\n**支持的模式：**\n• 默认：标准中文版\n• 双语：中英文标准版\n• 聊天版/人话版：自然口吻解析\n• 完整版：所有格式`
+            chatId,
+            text: `❌ 命令格式错误\n\n**正确格式：**\n解票 股票代码 [模式]\n分析 股票代码 [模式]\n股票代码分析 [模式]\n\n**示例：**\n• 解票 NVDA（标准中文版）\n• 分析 NVDA 双语（中文+英文）\n• APM分析 双语\n• BBAI分析 聊天版\n\n**支持的模式：**\n• 默认：标准中文版\n• 双语：中英文标准版\n• 聊天版/解析/人话版：自然口吻解析`
           });
           return;
         }
         
-        const symbol = parts[0].toUpperCase();
-        const mode = parts[1] || '标准版';
+        symbol = symbol.toUpperCase();
+        
+        console.log(`🎯 [主Bot] 解析结果: symbol=${symbol}, mode=${mode}`);
         
         // Call ticket analysis handler
         await handleTicketAnalysis({
