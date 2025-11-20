@@ -121,15 +121,17 @@ function getPool() {
       throw new Error("DATABASE_URL not found");
     }
     
-    // Neon配置：最简单的SSL配置
+    // 智能SSL检测：Neon云数据库用SSL，本地数据库不用SSL
+    const isLocalDB = process.env.DATABASE_URL?.includes('127.0.0.1') || 
+                      process.env.DATABASE_URL?.includes('localhost');
+    const isNeon = process.env.DATABASE_URL?.includes('neon.tech');
+    
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: true,  // 简单启用SSL，让Neon自动处理
-      max: 10, // 最大连接数
-      idleTimeoutMillis: 30000, // 30秒空闲超时
-      connectionTimeoutMillis: 5000 // 5秒连接超时
-      // 🔧 移除statement_timeout（Neon不支持启动参数）
-      // 改为在每个连接建立后设置
+      ssl: isNeon ? true : (isLocalDB ? false : true),  // 自动检测
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000
     });
     
     // 🆕 v1.1: 连接建立后设置statement_timeout（Neon兼容）

@@ -21,10 +21,14 @@ function getPool() {
   }
 
   if (!pool) {
-    // Neon配置：最简单的SSL配置
+    // 智能SSL检测：Neon云数据库用SSL，本地数据库不用SSL
+    const isLocalDB = process.env.DATABASE_URL?.includes('127.0.0.1') || 
+                      process.env.DATABASE_URL?.includes('localhost');
+    const isNeon = process.env.DATABASE_URL?.includes('neon.tech');
+    
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: true,  // 简单启用SSL，让Neon自动处理
+      ssl: isNeon ? true : (isLocalDB ? false : true),  // 自动检测
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
