@@ -6225,7 +6225,11 @@ if (!TOKEN_IS_SAFE) {
     isRotating: BOT_TOKEN === 'ROTATING'
   });
   console.log('💡 [SAFE MODE] 设置有效的TELEGRAM_BOT_TOKEN后重启应用');
-} else if (ENABLE_TELEGRAM && TELEGRAM_TOKEN) {
+} else if (ENABLE_TELEGRAM && TELEGRAM_TOKEN && !MANAGER_BOT_TOKEN) {
+  // 🆕 v6.5.2: 只有当 Manager Bot 未启用时才启动旧的直接轮询器
+  // 当 Manager Bot 启用时，所有消息路由由 Manager Bot 处理
+  console.log('⚠️  [Legacy Mode] Starting RESEARCH_BOT direct poller (Manager Bot not configured)');
+  console.log('💡 [Tip] Set MANAGER_BOT_TOKEN to enable v6.5.2 three-bot architecture');
   // 🆕 v1.1: 获取Bot锁（防止重复启动）
   if (!acquireBotLock()) {
     console.error('❌ 无法启动Telegram Bot: 已有实例在运行');
@@ -7366,4 +7370,144 @@ if (ENABLE_NEWS_SYSTEM && ENABLE_DB) {
   console.warn('⚠️  [USIS News v2.0] 需要数据库支持，但数据库已禁用');
 } else {
   console.log('ℹ️  [USIS News v2.0] 已禁用 (设置 ENABLE_NEWS_SYSTEM=true 启用)');
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🆕 v6.5.2: Manager Bot - 主管机器人（消息路由中枢）
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 架构：
+// User → Manager Bot (监听所有消息) → 路由识别 → 调用专职Bot处理函数 → 专职Bot回复
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+if (MANAGER_BOT_TOKEN) {
+  console.log('\n👔 [ManagerBot] Initializing Manager Bot (@qixizhuguan_bot)...');
+  
+  // 🔒 v6.5.2: 验证必需的 Token 配置
+  if (!RESEARCH_BOT_TOKEN || !NEWS_BOT_TOKEN) {
+    console.error('❌ [ManagerBot] Cannot start: RESEARCH_BOT_TOKEN or NEWS_BOT_TOKEN is missing');
+    console.error('💡 Manager Bot requires all three tokens to be configured');
+  } else if (MANAGER_BOT_TOKEN === RESEARCH_BOT_TOKEN || MANAGER_BOT_TOKEN === NEWS_BOT_TOKEN || RESEARCH_BOT_TOKEN === NEWS_BOT_TOKEN) {
+    console.error('❌ [ManagerBot] Cannot start: Token collision detected');
+    console.error('💡 All three tokens must be unique');
+  } else {
+    // ✅ All tokens validated
+    const ManagerBot = require('./manager-bot');
+    const OWNER_TELEGRAM_ID = process.env.OWNER_TELEGRAM_ID;
+    
+    // 🔧 创建专用的 telegramAPI 函数（使用 RESEARCH_BOT_TOKEN 发送回复）
+    function createResearchBotTelegramAPI(token) {
+    return function telegramAPI(method, params = {}, timeout = 35000) {
+      return new Promise((resolve, reject) => {
+        const data = JSON.stringify(params);
+        const options = {
+          hostname: 'api.telegram.org',
+          port: 443,
+          path: `/bot${token}/${method}`,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(data, 'utf8')
+          },
+          timeout
+        };
+
+        const req = https.request(options, (res) => {
+          let body = '';
+          res.on('data', chunk => body += chunk);
+          res.on('end', () => {
+            try {
+              const result = JSON.parse(body);
+              if (!result.ok) {
+                reject(new Error(result.description || 'API call failed'));
+              } else {
+                resolve(result);
+              }
+            } catch (e) {
+              reject(e);
+            }
+          });
+        });
+
+        req.on('error', reject);
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error(`Timeout for ${method}`));
+        });
+
+        req.write(data);
+        req.end();
+      });
+    };
+  }
+  
+  const researchBotTelegramAPI = createResearchBotTelegramAPI(RESEARCH_BOT_TOKEN);
+  
+  // 🔧 导入解票和研报处理函数（v3_dev版本）
+  const { handleTicketAnalysis: v3HandleTicketAnalysis } = require('./v3_dev/services/devBotHandler');
+  
+  // 🎯 注册外部处理器：解票功能
+  async function handleTicketAnalysisWrapper({ symbol, mode, chatId }) {
+    console.log(`\n🔀 [ManagerBot] Routing ticket analysis to Research Bot`);
+    console.log(`   ├─ Symbol: ${symbol}`);
+    console.log(`   ├─ Mode: ${mode}`);
+    console.log(`   └─ Reply Token: RESEARCH_BOT_TOKEN (${RESEARCH_BOT_TOKEN.slice(0, 10)}...)`);
+    
+    // 调用 v3_dev 的完整解票功能，使用 RESEARCH_BOT_TOKEN 发送回复
+    await v3HandleTicketAnalysis({
+      symbol,
+      mode,
+      chatId,
+      telegramAPI: researchBotTelegramAPI,
+      botToken: RESEARCH_BOT_TOKEN
+    });
+  }
+  
+  // 🎯 注册外部处理器：研报功能（暂时占位，未来实现）
+  async function handleResearchReportWrapper({ text, chatId }) {
+    console.log(`\n🔀 [ManagerBot] Routing research report to Research Bot`);
+    console.log(`   ├─ Text: ${text}`);
+    console.log(`   └─ Reply Token: RESEARCH_BOT_TOKEN (${RESEARCH_BOT_TOKEN.slice(0, 10)}...)`);
+    
+    await researchBotTelegramAPI('sendMessage', {
+      chat_id: chatId,
+      text: '❌ 研报功能正在开发中，敬请期待！'
+    });
+  }
+  
+  // 🚀 启动 Manager Bot
+  try {
+    const managerBot = new ManagerBot({
+      token: MANAGER_BOT_TOKEN,
+      ownerId: parseInt(OWNER_TELEGRAM_ID),
+      allowedGroupIds: [] // 可根据需要添加授权群组ID
+    });
+    
+    // 注册外部处理器
+    managerBot.setExternalHandlers({
+      handleTicketAnalysis: handleTicketAnalysisWrapper,
+      handleResearchReport: handleResearchReportWrapper
+    });
+    
+    // 启动 Manager Bot
+    managerBot.start();
+    console.log('✅ [ManagerBot] Manager Bot started successfully');
+    
+    // 优雅关闭
+    process.on('SIGTERM', () => {
+      console.log('👔 [ManagerBot] Stopping...');
+      managerBot.stop();
+    });
+    
+    process.on('SIGINT', () => {
+      console.log('👔 [ManagerBot] Stopping...');
+      managerBot.stop();
+    });
+    
+  } catch (error) {
+    console.error('❌ [ManagerBot] Failed to start:', error.message);
+  }
+  
+  } // 🔒 v6.5.2: Close token validation block
+} else {
+  console.warn('⚠️  [ManagerBot] MANAGER_BOT_TOKEN not configured, Manager Bot disabled');
 }

@@ -135,11 +135,17 @@ class ManagerBot {
           return;
         }
         
-        // 提取模式
+        // 提取模式（handleTicketAnalysis 只识别4种精确格式）
         let mode = '标准版';
-        if (/双语/.test(text)) mode = '双语';
-        if (/聊天版|人话版/.test(text)) mode = mode.includes('双语') ? '双语 聊天版' : '聊天版';
-        if (/完整版/.test(text)) mode = '完整版';
+        if (/完整版/.test(text)) {
+          mode = '完整版';  // 完整版 = 中文 + 英文 + 人话版
+        } else if (/双语/.test(text) && /聊天版|人话版/.test(text)) {
+          mode = '完整版';  // 双语+聊天版 = 完整版
+        } else if (/双语/.test(text)) {
+          mode = '双语';    // 双语 = 中文 + 英文标准版
+        } else if (/聊天版|人话版/.test(text)) {
+          mode = '聊天版';  // 聊天版/人话版 = 人话版
+        }
         
         // 调用解票处理器（如果已注册）
         if (this.externalHandlers?.handleTicketAnalysis) {

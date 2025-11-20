@@ -629,4 +629,7 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
   }
 }
 
-module.exports = { handleDevBotMessage };
+module.exports = { 
+  handleDevBotMessage,
+  handleTicketAnalysis  // 🆕 v6.5.2: Export for Manager Bot integration
+};
