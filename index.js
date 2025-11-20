@@ -122,7 +122,7 @@ function getPool() {
     }
     pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: { rejectUnauthorized: false },
       max: 10, // 最大连接数
       idleTimeoutMillis: 30000, // 30秒空闲超时
       connectionTimeoutMillis: 5000 // 5秒连接超时
