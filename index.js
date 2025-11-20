@@ -6108,13 +6108,33 @@ app.listen(PORT, "0.0.0.0", () => {
 });
 
 // ====== Telegram Bot v6.5 (精简架构 - 三机器人分工) ======
-// 🆕 v6.5: 统一环境变量命名（向后兼容）
-const RESEARCH_BOT_TOKEN = process.env.RESEARCH_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
-const NEWS_BOT_TOKEN = process.env.NEWS_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_TOKEN = RESEARCH_BOT_TOKEN; // 向后兼容（保留旧代码引用）
+// 🆕 v6.5.1: 强制使用独立Token（不允许共用，移除向后兼容fallback）
+const RESEARCH_BOT_TOKEN = process.env.RESEARCH_BOT_TOKEN;
+const NEWS_BOT_TOKEN = process.env.NEWS_BOT_TOKEN;
+const TELEGRAM_TOKEN = RESEARCH_BOT_TOKEN; // 保留变量名供旧代码引用
 
-console.log(`🤖 [Research Bot] Token: ${RESEARCH_BOT_TOKEN ? RESEARCH_BOT_TOKEN.slice(0, 10) + '...' : 'MISSING'}`);
-console.log(`📰 [News Bot] Token: ${NEWS_BOT_TOKEN ? NEWS_BOT_TOKEN.slice(0, 10) + '...' : 'MISSING'}`);
+// 🔒 v6.5.1: 启动检查 - 确保Token已配置且不重复
+if (!RESEARCH_BOT_TOKEN) {
+  console.error('❌ [Fatal] RESEARCH_BOT_TOKEN is required for @qixijiepiao_bot');
+  console.error('💡 Please set RESEARCH_BOT_TOKEN in environment variables');
+  process.exit(1);
+}
+
+if (!NEWS_BOT_TOKEN) {
+  console.error('❌ [Fatal] NEWS_BOT_TOKEN is required for @chaojilaos_bot');
+  console.error('💡 Please set NEWS_BOT_TOKEN in environment variables');
+  process.exit(1);
+}
+
+if (RESEARCH_BOT_TOKEN === NEWS_BOT_TOKEN) {
+  console.error('❌ [Fatal] RESEARCH_BOT_TOKEN and NEWS_BOT_TOKEN must be different!');
+  console.error('💡 Each bot requires its own unique token from @BotFather');
+  process.exit(1);
+}
+
+console.log(`🤖 [Research Bot] Token: ${RESEARCH_BOT_TOKEN.slice(0, 10)}...`);
+console.log(`📰 [News Bot] Token: ${NEWS_BOT_TOKEN.slice(0, 10)}...`);
+console.log('✅ [Token Check] All bot tokens validated (unique and configured)');
 
 // 🆕 v1.1: PID文件锁机制（防止重复启动Bot）
 const fs = require('fs');
