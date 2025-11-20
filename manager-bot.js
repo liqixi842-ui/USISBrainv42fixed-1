@@ -100,7 +100,6 @@ class ManagerBot {
       
       const botsList = this.formatBotsList();
       await ctx.reply(botsList, { 
-        parse_mode: 'Markdown',
         data_testid: 'message-bots-list' 
       });
     });
@@ -127,7 +126,6 @@ class ManagerBot {
       
       if (botInfo) {
         await ctx.reply(botInfo, { 
-          parse_mode: 'Markdown',
           data_testid: `message-botinfo-${botId}` 
         });
       } else {
@@ -146,17 +144,16 @@ class ManagerBot {
       }
       
       await ctx.reply(
-        '🤖 *主管机器人 - 帮助文档*\n\n' +
-        '*命令列表：*\n' +
-        '`/bots` - 显示所有登记的机器人\n' +
-        '`/botinfo ID` - 显示指定机器人的详细信息\n' +
-        '`/help` - 显示此帮助信息\n\n' +
-        '*权限说明：*\n' +
+        '🤖 主管机器人 - 帮助文档\n\n' +
+        '命令列表：\n' +
+        '/bots - 显示所有登记的机器人\n' +
+        '/botinfo ID - 显示指定机器人的详细信息\n' +
+        '/help - 显示此帮助信息\n\n' +
+        '权限说明：\n' +
         '• 私聊：仅OWNER可使用\n' +
         '• 群聊：仅授权群组中的OWNER可使用\n\n' +
-        `*当前登记机器人：${Object.keys(botsRegistry).length}个*`,
+        `当前登记机器人：${Object.keys(botsRegistry).length}个`,
         { 
-          parse_mode: 'Markdown',
           data_testid: 'message-help-response'
         }
       );
@@ -172,13 +169,13 @@ class ManagerBot {
    * 格式化机器人列表
    */
   formatBotsList() {
-    let message = '🤖 *当前登记的机器人：*\n\n';
+    let message = '🤖 当前登记的机器人：\n\n';
     
     let index = 1;
     for (const [id, bot] of Object.entries(botsRegistry)) {
       const statusIcon = bot.status === 'active' ? '✅' : '⏸️';
       
-      message += `*${index})* \`${id}\` — @${bot.username}\n`;
+      message += `${index}) ${id} — @${bot.username}\n`;
       message += `   角色：${bot.role}\n`;
       message += `   状态：${statusIcon} ${bot.status}\n\n`;
       
@@ -202,16 +199,16 @@ class ManagerBot {
     
     const statusIcon = bot.status === 'active' ? '✅' : '⏸️';
     
-    let message = `🤖 *机器人详情*\n\n`;
-    message += `*ID:* \`${bot.id}\`\n`;
-    message += `*用户名:* @${bot.username}\n`;
-    message += `*名称:* ${bot.name}\n`;
-    message += `*角色:* ${bot.role}\n`;
-    message += `*状态:* ${statusIcon} ${bot.status}\n\n`;
-    message += `*描述:*\n${bot.description}\n\n`;
+    let message = `🤖 机器人详情\n\n`;
+    message += `ID: ${bot.id}\n`;
+    message += `用户名: @${bot.username}\n`;
+    message += `名称: ${bot.name}\n`;
+    message += `角色: ${bot.role}\n`;
+    message += `状态: ${statusIcon} ${bot.status}\n\n`;
+    message += `描述:\n${bot.description}\n\n`;
     
     if (bot.notes) {
-      message += `*备注:*\n${bot.notes}`;
+      message += `备注:\n${bot.notes}`;
     }
     
     return message;
