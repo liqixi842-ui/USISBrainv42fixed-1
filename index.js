@@ -6107,11 +6107,14 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log('⚠️  N8N监控已禁用以节省内存');
 });
 
-// ====== Telegram Bot v5.0 (手动轮询 - Replit兼容) ======
-// 🆕 v6.4: 直接使用TELEGRAM_BOT_TOKEN（Publishing已删除TEST token）
-const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+// ====== Telegram Bot v6.5 (精简架构 - 三机器人分工) ======
+// 🆕 v6.5: 统一环境变量命名（向后兼容）
+const RESEARCH_BOT_TOKEN = process.env.RESEARCH_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+const NEWS_BOT_TOKEN = process.env.NEWS_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_TOKEN = RESEARCH_BOT_TOKEN; // 向后兼容（保留旧代码引用）
 
-console.log(`🤖 [Bot Token] Token: ${TELEGRAM_TOKEN ? TELEGRAM_TOKEN.slice(0, 10) + '...' : 'MISSING'}`);
+console.log(`🤖 [Research Bot] Token: ${RESEARCH_BOT_TOKEN ? RESEARCH_BOT_TOKEN.slice(0, 10) + '...' : 'MISSING'}`);
+console.log(`📰 [News Bot] Token: ${NEWS_BOT_TOKEN ? NEWS_BOT_TOKEN.slice(0, 10) + '...' : 'MISSING'}`);
 
 // 🆕 v1.1: PID文件锁机制（防止重复启动Bot）
 const fs = require('fs');
@@ -6174,28 +6177,14 @@ process.on('exit', () => {
   releaseBotLock();
 });
 
-// 🔒 安全阀：检查Token状态，防止冲突
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const DEV_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN_DEV;
-
-// Token collision check
-if (DEV_BOT_TOKEN && DEV_BOT_TOKEN === BOT_TOKEN) {
-  console.error('❌ FATAL: TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_TOKEN_DEV must be different!');
-  console.error('💡 Please use different bot tokens for production and development');
-  process.exit(1);
-}
+// 🔒 安全阀：检查Token状态（v6.5 精简版：只检查生产Bot）
+const BOT_TOKEN = RESEARCH_BOT_TOKEN;
 
 const TOKEN_IS_SAFE = BOT_TOKEN && 
                       BOT_TOKEN !== 'ROTATING' && 
                       BOT_TOKEN.length > 10 &&
                       BOT_TOKEN !== 'undefined' &&
                       BOT_TOKEN !== 'null';
-
-const DEV_TOKEN_IS_SAFE = DEV_BOT_TOKEN && 
-                          DEV_BOT_TOKEN !== 'ROTATING' && 
-                          DEV_BOT_TOKEN.length > 10 &&
-                          DEV_BOT_TOKEN !== 'undefined' &&
-                          DEV_BOT_TOKEN !== 'null';
 
 if (!TOKEN_IS_SAFE) {
   console.log('🛡️  [SAFE MODE] Telegram bot disabled (no token or rotating)');
@@ -6494,58 +6483,53 @@ if (!TOKEN_IS_SAFE) {
         return;
       }
       
-      // 🆕 v6.2: 优先检测对话类意图（greeting/help/casual）
-      if (isGreeting(text) || isHelpRequest(text) || isSystemCommand(text)) {
-        console.log('💬 检测到对话类意图，路由到对话系统');
-        
-        // 获取用户历史（用于个性化对话）
-        let userHistory = [];
-        if (ENABLE_DB) {
-          try {
-            const result = await safeQuery(
-              'SELECT * FROM user_memory WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 5',
-              [`tg_${userId}`]
-            );
-            userHistory = result.rows;
-          } catch (dbError) {
-            console.log('⚠️  数据库查询失败，使用空历史:', dbError.message);
-          }
-        }
-        
-        // 调用对话系统
-        let intentType = 'casual';
-        if (isGreeting(text)) intentType = 'greeting';
-        else if (isHelpRequest(text)) intentType = 'help';
-        else if (isSystemCommand(text)) intentType = 'meta';
-        
-        const conversationResponse = await handleConversation(text, intentType, userHistory);
-        
-        // 处理系统命令（清除记忆）
-        if (conversationResponse.type === 'system' && conversationResponse.action === 'clear_memory') {
-          if (ENABLE_DB) {
-            try {
-              await safeQuery('DELETE FROM user_memory WHERE user_id = $1', [`tg_${userId}`]);
-              console.log(`✅ 已清除用户 ${userId} 的记忆`);
-            } catch (dbError) {
-              console.log('⚠️  清除记忆失败:', dbError.message);
-            }
-          }
-        }
-        
-        // 发送响应
-        let responseText = conversationResponse.text;
-        if (conversationResponse.suggestions && conversationResponse.suggestions.length > 0) {
-          responseText += `\n\n💡 **建议尝试**：\n${conversationResponse.suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
-        }
+      // 🆕 v6.5: 基础命令处理（/help, /status）
+      if (isHelpRequest(text)) {
+        const helpText = `🤖 **解票研报机器人 - 帮助文档**
+
+📍 **专属功能**：
+• 解票分析（快速技术分析，15-30秒）
+• 研报生成（完整机构级研报，2-5分钟）
+
+📋 **解票命令格式**：
+\`解票 股票代码 [模式]\`
+
+**示例：**
+• \`解票 NVDA\` - 标准中文版
+• \`解票 TSLA 双语\` - 中英文双语版
+• \`解票 AAPL 聊天版\` - 自然对话风格
+• \`解票 GOOGL 完整版\` - 所有格式组合
+
+📊 **研报命令格式**：
+\`研报, 股票代码, 机构名, 分析师名, 语言\`
+
+**示例：**
+• \`研报, NVDA, 摩根士丹利, 王明, 中文\`
+• \`研报, TSLA, Goldman Sachs, John Smith, 英文\`
+
+━━━━━━━━━━━━━━━━━━━
+
+🔹 **其他服务**：
+• 新闻 / 宏观资讯 → @chaojilaos_bot
+• 系统管理 / 机器人列表 → @qixizhuguan_bot`;
         
         await telegramAPI('sendMessage', { 
           chat_id: chatId, 
-          text: responseText,
+          text: helpText,
           parse_mode: 'Markdown'
         });
-        
-        console.log('✅ 对话响应已发送');
-        return; // 不继续执行分析流程
+        console.log('✅ 帮助信息已发送');
+        return;
+      }
+      
+      // 🆕 v6.5: 问候语简化回复
+      if (isGreeting(text)) {
+        await telegramAPI('sendMessage', { 
+          chat_id: chatId, 
+          text: `你好！我是解票研报机器人 🤖\n\n我可以为您提供：\n• 快速解票分析\n• 机构级研报生成\n\n发送 /help 查看使用说明`
+        });
+        console.log('✅ 问候响应已发送');
+        return;
       }
       
       // 🆕 v6.0: 解票命令 (Ticket Analysis) - 优先级高于研报命令
@@ -7243,150 +7227,37 @@ if (!TOKEN_IS_SAFE) {
   
   } // 🆕 v1.1: 闭合acquireBotLock的else块
 } else {
-  console.log('⚠️  未配置 TELEGRAM_BOT_TOKEN');
+  console.log('⚠️  未配置 RESEARCH_BOT_TOKEN');
 }
 
-// 🚀 v3-dev: Development Bot启动（独立运行，完全隔离）
-if (DEV_TOKEN_IS_SAFE) {
-  console.log('\n🔧 [DEV_BOT] Starting v3-dev development bot...');
-  console.log(`🔧 [DEV_BOT] Token: ${DEV_BOT_TOKEN.substring(0, 10)}...`);
-  
-  const https = require('https');
-  const { handleDevBotMessage } = require('./v3_dev/services/devBotHandler');
-  
-  // Dev bot专用的telegramAPI函数
-  function devBotAPI(method, params = {}, timeout = 35000) {
-    return new Promise((resolve, reject) => {
-      const data = JSON.stringify(params);
-      const options = {
-        hostname: 'api.telegram.org',
-        port: 443,
-        path: `/bot${DEV_BOT_TOKEN}/${method}`,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(data, 'utf8')
-        },
-        timeout
-      };
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🚫 v6.5: Development Bot 已停用（精简架构）
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//
+// 为简化系统架构，开发Bot已移除。
+// v3_dev/services/devBotHandler.js 保留作为内部函数库，
+// 生产解票Bot可复用其中的研报生成逻辑。
+//
+// 旧代码位置: 7249-7376 行
+// 移除原因: 三机器人分工架构不再需要独立的开发Bot
+//
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-      const req = https.request(options, (res) => {
-        let body = '';
-        res.on('data', chunk => body += chunk);
-        res.on('end', () => {
-          try {
-            const result = JSON.parse(body);
-            if (!result.ok) {
-              reject(new Error(result.description || 'API call failed'));
-            } else {
-              resolve(result);
-            }
-          } catch (e) {
-            reject(e);
-          }
-        });
-      });
+console.log('ℹ️  [DEV_BOT] Development bot disabled in v6.5 (three-bot architecture)');
 
-      req.on('error', reject);
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error(`Timeout for ${method}`));
-      });
-
-      req.write(data);
-      req.end();
-    });
-  }
-  
-  // Dev bot轮询循环
-  let devOffset = 0;
-  let devPolling = false;
-  let devShouldStop = false;
-  
-  async function pollDevBot() {
-    if (devShouldStop) {
-      console.log('🛑 [DEV_BOT] Polling stopped gracefully');
-      return;
-    }
-    if (devPolling) return;
-    devPolling = true;
-    
-    try {
-      const result = await devBotAPI('getUpdates', { offset: devOffset, timeout: 25 }, 35000);
-      
-      if (result.result && result.result.length > 0) {
-        console.log(`📬 [DEV_BOT] Got ${result.result.length} updates`);
-        
-        for (const update of result.result) {
-          devOffset = update.update_id + 1;
-          
-          // 只处理消息，不处理callback_query等复杂功能
-          if (update.message && update.message.text) {
-            await handleDevBotMessage(update.message, devBotAPI, DEV_BOT_TOKEN);
-          }
-        }
-      }
-    } catch (e) {
-      console.error('[DEV_BOT] Poll error:', e.message);
-    } finally {
-      devPolling = false;
-      setTimeout(pollDevBot, 1000);
-    }
-  }
-  
-  // 延迟3秒启动dev bot轮询（避免与prod bot冲突）
-  setTimeout(async () => {
-    try {
-      console.log('🔄 [DEV_BOT] Deleting webhook before starting polling...');
-      const deleteResult = await devBotAPI('deleteWebhook', { drop_pending_updates: true }, 10000);
-      if (deleteResult.ok) {
-        console.log('✅ [DEV_BOT] Webhook deleted successfully');
-      }
-    } catch (deleteError) {
-      console.error('⚠️  [DEV_BOT] Failed to delete webhook:', deleteError.message);
-    }
-    
-    console.log('✅ [DEV_BOT] v3-dev Bot started (manual polling)');
-    console.log('💬 [DEV_BOT] Development bot is ready for testing');
-    
-    try {
-      pollDevBot().catch(err => {
-        console.error('[DEV_BOT] Poll startup error:', err.message);
-        setTimeout(pollDevBot, 5000);
-      });
-    } catch (syncError) {
-      console.error('[DEV_BOT] Poll sync error:', syncError.message);
-      setTimeout(pollDevBot, 5000);
-    }
-  }, 3000);
-  
-  // 优雅关闭dev bot
-  process.on('SIGTERM', () => {
-    console.log('📡 [DEV_BOT] Stopping dev bot polling...');
-    devShouldStop = true;
-  });
-  
-  process.on('SIGINT', () => {
-    console.log('📡 [DEV_BOT] Stopping dev bot polling...');
-    devShouldStop = true;
-  });
-  
-} else {
-  console.log('⚠️  [DEV_BOT] TELEGRAM_BOT_TOKEN_DEV not configured, dev bot disabled');
-}
-
-// 🆕 USIS News v2.0 - 新闻系统启动
+// 🆕 USIS News v2.0 - 新闻系统启动（v6.5: 使用独立NEWS_BOT_TOKEN）
 const ENABLE_NEWS_SYSTEM = process.env.ENABLE_NEWS_SYSTEM === 'true';
 const NEWS_CHANNEL_ID = process.env.NEWS_CHANNEL_ID; // Telegram频道ID用于推送新闻
 
 if (ENABLE_NEWS_SYSTEM && ENABLE_DB) {
   console.log('\n📰 [USIS News v2.0] 正在启动新闻系统...');
+  console.log(`📰 [News Bot] Using NEWS_BOT_TOKEN: ${NEWS_BOT_TOKEN ? NEWS_BOT_TOKEN.slice(0, 10) + '...' : 'MISSING'}`);
   
   const { getScheduler } = require('./scheduler/newsScheduler');
   
   const newsScheduler = getScheduler({
     enabled: true,
-    telegramToken: TELEGRAM_TOKEN,
+    telegramToken: NEWS_BOT_TOKEN,  // 🆕 v6.5: 使用新闻Bot专用Token
     newsChannelId: NEWS_CHANNEL_ID
   });
   
