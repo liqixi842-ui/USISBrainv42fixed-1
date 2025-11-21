@@ -147,6 +147,9 @@ class ManagerBot {
           mode = '聊天版';  // 聊天版/人话版 = 人话版
         }
         
+        // 发送确认消息
+        await ctx.reply(`✅ 收到！正在分析 ${symbol}...`);
+        
         // 调用解票处理器（如果已注册）
         if (this.externalHandlers?.handleTicketAnalysis) {
           await this.externalHandlers.handleTicketAnalysis({ symbol, mode, chatId });
@@ -159,6 +162,9 @@ class ManagerBot {
       // 2️⃣ 检测研报命令
       if (/^(研报|\/研报)/i.test(text)) {
         console.log('📊 [ManagerBot] Routing to Research Bot (研报功能)');
+        
+        // 发送确认消息
+        await ctx.reply('✅ 收到！正在生成研报...');
         
         if (this.externalHandlers?.handleResearchReport) {
           await this.externalHandlers.handleResearchReport({ text, chatId });
