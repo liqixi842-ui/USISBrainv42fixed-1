@@ -6227,7 +6227,35 @@ if (ENABLE_TELEGRAM && SUPERVISOR_BOT_TOKEN) {
     // 启动Telegraf Bot（只有Supervisor Bot监听消息）
     const bot = new Telegraf(SUPERVISOR_BOT_TOKEN);
     
+    // 注册消息处理器 - 将所有消息路由到supervisorBot
+    bot.on('text', async (ctx) => {
+      try {
+        await supervisorBot.handleUpdate(ctx);
+      } catch (error) {
+        console.error('❌ [Telegraf] Error in message handler:', error.message);
+      }
+    });
+    
+    // 启动Telegraf polling
     console.log('📡 Starting Telegraf polling...');
+    bot.launch()
+      .then(() => {
+        console.log('✅ [Telegraf] Bot polling started successfully!');
+        console.log('💬 [Telegraf] Ready to receive messages');
+      })
+      .catch((error) => {
+        console.error('❌ [Telegraf] Failed to start polling:', error.message);
+      });
+    
+    // 优雅关闭
+    process.once('SIGINT', () => {
+      console.log('📡 [Telegraf] Stopping bot...');
+      bot.stop('SIGINT');
+    });
+    process.once('SIGTERM', () => {
+      console.log('📡 [Telegraf] Stopping bot...');
+      bot.stop('SIGTERM');
+    });
   
   // ===== Telegram Document Sender (safe multipart) =====
   async function sendDocumentBuffer(token, chatId, buffer, filename, caption = '') {
