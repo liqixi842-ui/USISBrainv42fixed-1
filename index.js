@@ -6107,45 +6107,34 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log('⚠️  N8N监控已禁用以节省内存');
 });
 
-// ====== Telegram Bot v6.5.2 (真正的三机器人分工架构) ======
-// 架构：主管Bot监听所有消息 → 路由到专职Bot → 专职Bot用自己的Token回复
-const MANAGER_BOT_TOKEN = process.env.MANAGER_BOT_TOKEN;
-const RESEARCH_BOT_TOKEN = process.env.RESEARCH_BOT_TOKEN;
-const NEWS_BOT_TOKEN = process.env.NEWS_BOT_TOKEN;
-const TELEGRAM_TOKEN = RESEARCH_BOT_TOKEN; // 保留变量名供旧代码引用
+// ====== Telegram Bot v7.0 (单进程多机器人架构 - Supervisor Pattern) ======
+// 架构：Supervisor Bot监听所有消息 → 智能路由到Worker Bots → Worker Bots用各自Token回复
+// 特点：一个Node.js进程，多个Telegram Bot账号，清晰分工
 
-// 🔒 v6.5.2: 启动检查 - 确保所有Token已配置且不重复
-if (!MANAGER_BOT_TOKEN) {
-  console.error('❌ [Fatal] MANAGER_BOT_TOKEN is required for @qixizhuguan_bot');
-  console.error('💡 Please set MANAGER_BOT_TOKEN in environment variables');
+// 🔑 Bot Tokens配置
+const SUPERVISOR_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN; // 主管机器人（接收所有用户消息）
+const TICKET_BOT_TOKEN = process.env.TICKET_BOT_TOKEN || SUPERVISOR_BOT_TOKEN; // 解票机器人（可独立或共用）
+const NEWS_BOT_TOKEN = process.env.NEWS_BOT_TOKEN || SUPERVISOR_BOT_TOKEN; // 新闻机器人（可独立或共用）
+const REPORT_BOT_TOKEN = process.env.REPORT_BOT_TOKEN || SUPERVISOR_BOT_TOKEN; // 研报机器人（可独立或共用）
+
+// 保留变量名供旧代码引用
+const TELEGRAM_TOKEN = SUPERVISOR_BOT_TOKEN;
+const ENABLE_TELEGRAM = process.env.ENABLE_TELEGRAM !== 'false';
+
+// 🔒 v7.0: 启动检查 - 至少需要Supervisor Bot Token
+if (!SUPERVISOR_BOT_TOKEN) {
+  console.error('❌ [Fatal] TELEGRAM_BOT_TOKEN is required for Supervisor Bot');
+  console.error('💡 Please set TELEGRAM_BOT_TOKEN in environment variables');
   process.exit(1);
 }
 
-if (!RESEARCH_BOT_TOKEN) {
-  console.error('❌ [Fatal] RESEARCH_BOT_TOKEN is required for @qixijiepiao_bot');
-  console.error('💡 Please set RESEARCH_BOT_TOKEN in environment variables');
-  process.exit(1);
-}
-
-if (!NEWS_BOT_TOKEN) {
-  console.error('❌ [Fatal] NEWS_BOT_TOKEN is required for @chaojilaos_bot');
-  console.error('💡 Please set NEWS_BOT_TOKEN in environment variables');
-  process.exit(1);
-}
-
-// 确保所有Token都不同
-const tokens = [MANAGER_BOT_TOKEN, RESEARCH_BOT_TOKEN, NEWS_BOT_TOKEN];
-const uniqueTokens = new Set(tokens);
-if (uniqueTokens.size !== tokens.length) {
-  console.error('❌ [Fatal] All bot tokens must be unique!');
-  console.error('💡 Each bot requires its own unique token from @BotFather');
-  process.exit(1);
-}
-
-console.log(`👔 [Manager Bot] Token: ${MANAGER_BOT_TOKEN.slice(0, 10)}...`);
-console.log(`🤖 [Research Bot] Token: ${RESEARCH_BOT_TOKEN.slice(0, 10)}...`);
-console.log(`📰 [News Bot] Token: ${NEWS_BOT_TOKEN.slice(0, 10)}...`);
-console.log('✅ [Token Check] All 3 bot tokens validated (unique and configured)');
+console.log('\n🏗️  ===== USIS Brain v7.0 Bot Architecture =====');
+console.log(`👔 [Supervisor Bot] Token: ${SUPERVISOR_BOT_TOKEN.slice(0, 10)}... (Main entry point)`);
+console.log(`🎫 [Ticket Bot] Token: ${TICKET_BOT_TOKEN.slice(0, 10)}... ${TICKET_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared)' : '(Dedicated)'}`);
+console.log(`📰 [News Bot] Token: ${NEWS_BOT_TOKEN.slice(0, 10)}... ${NEWS_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared)' : '(Dedicated)'}`);
+console.log(`📊 [Report Bot] Token: ${REPORT_BOT_TOKEN.slice(0, 10)}... ${REPORT_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared)' : '(Dedicated)'}`);
+console.log('✅ [Token Check] Supervisor Bot token validated');
+console.log('==============================================\n');
 
 // 🆕 v1.1: PID文件锁机制（防止重复启动Bot）
 const fs = require('fs');
@@ -6208,44 +6197,42 @@ process.on('exit', () => {
   releaseBotLock();
 });
 
-// 🔒 安全阀：检查Token状态（v6.5 精简版：只检查生产Bot）
-const BOT_TOKEN = RESEARCH_BOT_TOKEN;
-
-const TOKEN_IS_SAFE = BOT_TOKEN && 
-                      BOT_TOKEN !== 'ROTATING' && 
-                      BOT_TOKEN.length > 10 &&
-                      BOT_TOKEN !== 'undefined' &&
-                      BOT_TOKEN !== 'null';
-
-if (!TOKEN_IS_SAFE) {
-  console.log('🛡️  [SAFE MODE] Telegram bot disabled (no token or rotating)');
-  console.log('📋 [SAFE MODE] Token状态:', {
-    exists: !!BOT_TOKEN,
-    value: BOT_TOKEN?.substring(0, 10) + '...' || 'undefined',
-    isRotating: BOT_TOKEN === 'ROTATING'
-  });
-  console.log('💡 [SAFE MODE] 设置有效的TELEGRAM_BOT_TOKEN后重启应用');
-} else if (ENABLE_TELEGRAM && TELEGRAM_TOKEN && MANAGER_BOT_TOKEN) {
-  // 🆕 v6.5.2: Manager Bot 已启用，跳过旧的直接轮询器
-  console.log('✅ [Architecture] Manager Bot routing enabled - legacy RESEARCH_BOT poller disabled');
-  console.log('📋 [Info] All user messages will be routed through Manager Bot (@qixizhuguan_bot)');
-  console.log('📋 [Info] Research Bot (@qixijiepiao_bot) will reply via Manager Bot routing only');
-} else if (ENABLE_TELEGRAM && TELEGRAM_TOKEN && !MANAGER_BOT_TOKEN) {
-  // 🆕 v6.5.2: 只有当 Manager Bot 未启用时才启动旧的直接轮询器
-  // 当 Manager Bot 启用时，所有消息路由由 Manager Bot 处理
-  console.log('⚠️  [Legacy Mode] Starting RESEARCH_BOT direct poller (Manager Bot not configured)');
-  console.log('💡 [Tip] Set MANAGER_BOT_TOKEN to enable v6.5.2 three-bot architecture');
-  // 🆕 v1.1: 获取Bot锁（防止重复启动）
+// 🚀 v7.0: 启动Supervisor Bot架构（单进程多机器人）
+if (ENABLE_TELEGRAM && SUPERVISOR_BOT_TOKEN) {
+  // 获取Bot锁（防止重复启动）
   if (!acquireBotLock()) {
     console.error('❌ 无法启动Telegram Bot: 已有实例在运行');
     console.error('💡 提示: 设置环境变量 SKIP_BOT_LOCK=true 可跳过锁检查');
   } else {
-    // 🛡️ v6.1: 懒加载Telegraf（节省~200MB内存）
+    // 懒加载Telegraf（节省~200MB内存）
     const { Telegraf } = require('telegraf');
-    const https = require('https');
-    const FormData = require('form-data');
     
-    console.log('🤖 启动 Telegram Bot (Manual Polling)...');
+    console.log('\n🚀 启动 Supervisor Bot 架构 (v7.0)...');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    
+    // 初始化Worker Bots（子机器人）
+    const TicketBot = require('./bots/ticketBot');
+    const NewsBot = require('./bots/newsBot');
+    const ReportBot = require('./bots/reportBot');
+    const SupervisorBot = require('./bots/supervisorBot');
+    
+    const ticketBot = new TicketBot(TICKET_BOT_TOKEN);
+    const newsBot = new NewsBot(NEWS_BOT_TOKEN);
+    const reportBot = new ReportBot(REPORT_BOT_TOKEN);
+    
+    // 初始化Supervisor Bot并注入Worker Bots
+    const supervisorBot = new SupervisorBot(SUPERVISOR_BOT_TOKEN, {
+      ticketBot,
+      newsBot,
+      reportBot
+    });
+    
+    console.log('✅ All bots initialized successfully\n');
+    
+    // 启动Telegraf Bot（只有Supervisor Bot监听消息）
+    const bot = new Telegraf(SUPERVISOR_BOT_TOKEN);
+    
+    console.log('📡 Starting Telegraf polling...');
   
   // ===== Telegram Document Sender (safe multipart) =====
   async function sendDocumentBuffer(token, chatId, buffer, filename, caption = '') {
@@ -6496,7 +6483,7 @@ if (!TOKEN_IS_SAFE) {
     }
   }
   
-  // 消息处理函数
+  // 🆕 v7.0: 消息处理函数（简化版 - 所有逻辑委托给Supervisor Bot）
   async function handleTelegramMessage(message) {
     const chatId = message.chat.id;
     let text = message.text || '';
@@ -6508,10 +6495,51 @@ if (!TOKEN_IS_SAFE) {
       // 移除 "@botname " 前缀，保留用户实际输入
       text = text.replace(/^@\w+\s*/i, '').trim();
       console.log(`\n📨 [TG] 群组消息 from ${userId}: "${message.text}" → 清理后: "${text}"`);
+      
+      // 更新message对象中的text（确保supervisorBot看到清理后的文本）
+      message.text = text;
     } else {
       console.log(`\n📨 [TG] Message from ${userId}: "${text}"`);
     }
     
+    try {
+      // 🚀 v7.0: 将所有消息委托给Supervisor Bot处理
+      // 构造Telegraf兼容的ctx对象
+      const ctx = {
+        message: message,
+        chat: message.chat,
+        from: message.from,
+        update: {
+          message: message
+        }
+      };
+      
+      // 调用Supervisor Bot的消息处理器
+      await supervisorBot.handleUpdate(ctx);
+      return;
+    } catch (error) {
+      console.error('[TG] Supervisor Bot error:', error.message);
+      try {
+        await telegramAPI('sendMessage', { 
+          chat_id: chatId, 
+          text: `⚠️ 处理失败: ${error.message}\n\n请稍后重试或联系管理员。` 
+        });
+      } catch (e) {
+        console.error('[TG] Failed to send error message:', e.message);
+      }
+    }
+  }
+  
+  // 🆕 v7.0: 保留旧的handleTelegramMessage_Legacy以防回滚
+  async function handleTelegramMessage_Legacy(message) {
+    const chatId = message.chat.id;
+    let text = message.text || '';
+    const userId = message.from.id;
+    
+    console.log(`[LEGACY] This handler is disabled in v7.0 - all messages go through Supervisor Bot`);
+    return;
+    
+    // 旧的代码保留但不执行
     try {
       // 🆕 v6.5.2: /start 命令处理（优先级最高，防止误解析）
       if (text === '/start' || text.toLowerCase().startsWith('/start')) {

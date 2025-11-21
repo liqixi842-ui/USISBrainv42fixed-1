@@ -3,10 +3,65 @@ USIS Brain v6.0 is an institutional-grade Multi-AI Financial Analysis System des
 
 The system is currently stable at `v2-stable` for production, with `v3-dev` actively under development for new features like a comprehensive research report system (v3.1), a multi-model research pipeline (v3.2), and a professional correction layer (v4.0) to refine AI-generated text.
 
-## Recent Changes (Jan 20, 2025)
+## Recent Changes (Nov 21, 2025)
 
-### v6.5.2 Three-Bot Architecture - Manager Bot Message Routing
-**Status**: ✅ Fully Implemented, Ready for Production Deployment
+### v7.0 Supervisor Bot Architecture - Single Process Multi-Bot Pattern
+**Status**: ✅ Fully Implemented, Ready for Testing
+
+**Critical Architecture Change**: Upgraded from failed Manager Bot (v6.5.2) to a clean Supervisor Bot pattern with single-process multi-bot design.
+
+**Architecture**:
+```
+User → Supervisor Bot (TELEGRAM_BOT_TOKEN) → Routes by intent → Worker Bots reply
+   ├─ Intent: STOCK_QUERY / "解票" → Ticket Bot
+   ├─ Intent: RESEARCH_REPORT / "研报" → Report Bot
+   ├─ Intent: NEWS / "新闻" → News Bot
+   └─ Intent: CASUAL_CHAT / HELP → Supervisor Bot handles directly
+```
+
+**Key Features**:
+1. **Single Process**: All bots run in one Node.js process (no multi-process complexity)
+2. **Clean Separation**: Each bot is a self-contained module with dedicated responsibility
+3. **Flexible Token Strategy**: 
+   - Dedicated tokens: Each bot uses its own Telegram account
+   - Shared tokens: All bots use the same token (for testing/development)
+   - Configuration via environment variables (TICKET_BOT_TOKEN, NEWS_BOT_TOKEN, REPORT_BOT_TOKEN)
+4. **Zero Business Logic Changes**: All existing handlers (handleTicketAnalysis, reportService, newsBot) remain unchanged - only wrapped in bot classes
+5. **Intelligent Routing**: Uses semanticIntentAgent for AI-powered intent classification
+
+**Files Created**:
+- `bots/telegramUtils.js` - Shared Telegram API utilities
+- `bots/supervisorBot.js` - Main supervisor that receives all user messages
+- `bots/ticketBot.js` - Wraps ticket analysis (解票) functionality
+- `bots/newsBot.js` - Wraps news delivery functionality
+- `bots/reportBot.js` - Wraps research report generation
+
+**Files Modified**:
+- `index.js` - Removed old Manager Bot validation logic, integrated Supervisor Bot architecture, simplified handleTelegramMessage to delegate to supervisorBot.handleUpdate
+- `replit.md` - Updated documentation
+
+**Benefits Over v6.5.2**:
+- ✅ No process.exit(1) failures due to missing tokens
+- ✅ Simpler deployment (only TELEGRAM_BOT_TOKEN required)
+- ✅ Clear code organization (each bot in separate file)
+- ✅ Easy to test (can mock individual worker bots)
+- ✅ Graceful degradation (missing worker tokens fall back to shared token)
+
+**Environment Variables**:
+```bash
+# Required
+TELEGRAM_BOT_TOKEN=...  # Supervisor Bot (main entry point)
+
+# Optional (for dedicated bot accounts)
+TICKET_BOT_TOKEN=...    # Dedicated ticket analysis bot
+NEWS_BOT_TOKEN=...      # Dedicated news delivery bot  
+REPORT_BOT_TOKEN=...    # Dedicated research report bot
+```
+
+---
+
+### v6.5.2 Three-Bot Architecture - Manager Bot Message Routing (DEPRECATED)
+**Status**: ❌ Rolled back due to deployment failures
 
 **Critical Architecture Change**: Implemented strict three-bot separation with centralized message routing to eliminate duplicate responses and enforce bot specialization.
 
