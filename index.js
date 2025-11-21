@@ -6223,8 +6223,9 @@ process.on('exit', () => {
   releaseBotLock();
 });
 
-// 🔒 安全阀：检查Token状态（v6.5 精简版：只检查生产Bot）
-const BOT_TOKEN = RESEARCH_BOT_TOKEN;
+// 🔒 安全阀：检查Token状态
+// 单Bot模式用TELEGRAM_TOKEN，三Bot模式用RESEARCH_BOT_TOKEN
+const BOT_TOKEN = TELEGRAM_TOKEN;
 
 const TOKEN_IS_SAFE = BOT_TOKEN && 
                       BOT_TOKEN !== 'ROTATING' && 
@@ -6240,16 +6241,15 @@ if (!TOKEN_IS_SAFE) {
     isRotating: BOT_TOKEN === 'ROTATING'
   });
   console.log('💡 [SAFE MODE] 设置有效的TELEGRAM_BOT_TOKEN后重启应用');
-} else if (ENABLE_TELEGRAM && TELEGRAM_TOKEN && MANAGER_BOT_TOKEN) {
-  // 🆕 v6.5.2: Manager Bot 已启用，跳过旧的直接轮询器
-  console.log('✅ [Architecture] Manager Bot routing enabled - legacy RESEARCH_BOT poller disabled');
+} else if (ENABLE_TELEGRAM && TELEGRAM_TOKEN && ENABLE_MANAGER_BOT) {
+  // 三Bot模式：Manager Bot 已启用，跳过旧的直接轮询器
+  console.log('✅ [Architecture] Manager Bot routing enabled - legacy single-bot poller disabled');
   console.log('📋 [Info] All user messages will be routed through Manager Bot (@qixizhuguan_bot)');
   console.log('📋 [Info] Research Bot (@qixijiepiao_bot) will reply via Manager Bot routing only');
-} else if (ENABLE_TELEGRAM && TELEGRAM_TOKEN && !MANAGER_BOT_TOKEN) {
-  // 🆕 v6.5.2: 只有当 Manager Bot 未启用时才启动旧的直接轮询器
-  // 当 Manager Bot 启用时，所有消息路由由 Manager Bot 处理
-  console.log('⚠️  [Legacy Mode] Starting RESEARCH_BOT direct poller (Manager Bot not configured)');
-  console.log('💡 [Tip] Set MANAGER_BOT_TOKEN to enable v6.5.2 three-bot architecture');
+} else if (ENABLE_TELEGRAM && TELEGRAM_TOKEN && !ENABLE_MANAGER_BOT) {
+  // 单Bot模式：启动传统直接轮询器
+  console.log('✅ [Single-Bot Mode] Starting traditional bot poller with解票/研报/新闻 features');
+  console.log(`💡 Using token: ${TELEGRAM_TOKEN.slice(0, 10)}...`);
   // 🆕 v1.1: 获取Bot锁（防止重复启动）
   if (!acquireBotLock()) {
     console.error('❌ 无法启动Telegram Bot: 已有实例在运行');
