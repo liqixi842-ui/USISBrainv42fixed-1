@@ -33,6 +33,7 @@ process.on('uncaughtException', (err) => {
 
 const express = require("express");
 const fetch = require("node-fetch");
+const https = require("https");
 const { Pool } = require("pg");
 const cron = require("node-cron");
 // 🛡️ v6.1: Telegraf moved to conditional loading (see line ~5575)
@@ -7224,6 +7225,10 @@ if (ENABLE_TELEGRAM && SUPERVISOR_BOT_TOKEN) {
     }
   }
   
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 🗑️  v7.0: 手动轮询已禁用 - Supervisor Bot架构使用Telegraf polling
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  if (false) { // 🚫 已禁用：v7.0使用Telegraf，不需要手动轮询
   // 轮询循环
   let offset = 0;
   let polling = false;
@@ -7319,6 +7324,9 @@ if (ENABLE_TELEGRAM && SUPERVISOR_BOT_TOKEN) {
     if (originalSIGINT) await originalSIGINT();
   });
   
+  } // 🚫 闭合if (false) - 已禁用的手动轮询代码块
+  console.log('ℹ️  [Legacy Polling] Manual polling disabled - using v7.0 Supervisor Bot with Telegraf');
+  
   } // 🆕 v1.1: 闭合acquireBotLock的else块
 } else {
   console.log('⚠️  未配置 RESEARCH_BOT_TOKEN');
@@ -7406,153 +7414,6 @@ if (ENABLE_NEWS_SYSTEM && ENABLE_DB) {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 🆕 v6.5.2: Manager Bot - 主管机器人（消息路由中枢）
+// ✅ v7.0: Supervisor Bot architecture is now initialized above (line ~6200)
+// 🗑️  v6.5.2 Manager Bot code removed - replaced by cleaner Supervisor pattern
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// 架构：
-// User → Manager Bot (监听所有消息) → 路由识别 → 调用专职Bot处理函数 → 专职Bot回复
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-if (MANAGER_BOT_TOKEN) {
-  console.log('\n👔 [ManagerBot] Initializing Manager Bot (@qixizhuguan_bot)...');
-  
-  // 🔒 v6.5.2: 完整验证所有必需的配置
-  const OWNER_TELEGRAM_ID = process.env.OWNER_TELEGRAM_ID;
-  const missingConfigs = [];
-  
-  if (!RESEARCH_BOT_TOKEN) missingConfigs.push('RESEARCH_BOT_TOKEN');
-  if (!NEWS_BOT_TOKEN) missingConfigs.push('NEWS_BOT_TOKEN');
-  if (!OWNER_TELEGRAM_ID) missingConfigs.push('OWNER_TELEGRAM_ID');
-  
-  if (missingConfigs.length > 0) {
-    console.error('❌ [ManagerBot] Cannot start: Missing required configuration');
-    console.error(`💡 Missing: ${missingConfigs.join(', ')}`);
-    console.error('💡 Manager Bot requires all three tokens and OWNER_TELEGRAM_ID to be configured');
-  } else if (MANAGER_BOT_TOKEN === RESEARCH_BOT_TOKEN || MANAGER_BOT_TOKEN === NEWS_BOT_TOKEN || RESEARCH_BOT_TOKEN === NEWS_BOT_TOKEN) {
-    console.error('❌ [ManagerBot] Cannot start: Token collision detected');
-    console.error('💡 All three tokens must be unique');
-  } else {
-    console.log('✅ [ManagerBot] All required configs validated (3 unique tokens + OWNER_ID)');
-    // ✅ All tokens validated
-    const ManagerBot = require('./manager-bot');
-    
-    // 🔧 创建专用的 telegramAPI 函数（使用 RESEARCH_BOT_TOKEN 发送回复）
-    function createResearchBotTelegramAPI(token) {
-    return function telegramAPI(method, params = {}, timeout = 35000) {
-      return new Promise((resolve, reject) => {
-        const data = JSON.stringify(params);
-        const options = {
-          hostname: 'api.telegram.org',
-          port: 443,
-          path: `/bot${token}/${method}`,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(data, 'utf8')
-          },
-          timeout
-        };
-
-        const req = https.request(options, (res) => {
-          let body = '';
-          res.on('data', chunk => body += chunk);
-          res.on('end', () => {
-            try {
-              const result = JSON.parse(body);
-              if (!result.ok) {
-                reject(new Error(result.description || 'API call failed'));
-              } else {
-                resolve(result);
-              }
-            } catch (e) {
-              reject(e);
-            }
-          });
-        });
-
-        req.on('error', reject);
-        req.on('timeout', () => {
-          req.destroy();
-          reject(new Error(`Timeout for ${method}`));
-        });
-
-        req.write(data);
-        req.end();
-      });
-    };
-  }
-  
-  const researchBotTelegramAPI = createResearchBotTelegramAPI(RESEARCH_BOT_TOKEN);
-  
-  // 🎯 注册外部处理器：解票功能（v6.5.2: 使用正式版轻量级快速路径）
-  async function handleTicketAnalysisWrapper({ symbol, mode, chatId }) {
-    console.log(`\n🔀 [ManagerBot → V3 Production] Routing ticket analysis to Research Bot`);
-    console.log(`   ├─ Symbol: ${symbol}`);
-    console.log(`   ├─ Mode: ${mode}`);
-    console.log(`   ├─ Endpoint: generateStockChart (FAST PATH - Production)`);
-    console.log(`   └─ Reply Token: RESEARCH_BOT_TOKEN (${RESEARCH_BOT_TOKEN.slice(0, 10)}...)`);
-    console.log('[MANAGER → TICKET]', {
-      symbol,
-      mode,
-      endpoint: 'generateStockChart (Production v3 - Lightweight)'
-    });
-    
-    // ✅ 调用正式版轻量级解票功能（15-30秒，不走 v3_dev 重量级路由）
-    // 使用 index.js 第 6345 行定义的正式版 handleTicketAnalysis
-    await handleTicketAnalysis({
-      symbol,
-      mode,
-      chatId,
-      telegramAPI: researchBotTelegramAPI,
-      botToken: RESEARCH_BOT_TOKEN
-    });
-  }
-  
-  // 🎯 注册外部处理器：研报功能（暂时占位，未来实现）
-  async function handleResearchReportWrapper({ text, chatId }) {
-    console.log(`\n🔀 [ManagerBot] Routing research report to Research Bot`);
-    console.log(`   ├─ Text: ${text}`);
-    console.log(`   └─ Reply Token: RESEARCH_BOT_TOKEN (${RESEARCH_BOT_TOKEN.slice(0, 10)}...)`);
-    
-    await researchBotTelegramAPI('sendMessage', {
-      chat_id: chatId,
-      text: '❌ 研报功能正在开发中，敬请期待！'
-    });
-  }
-  
-  // 🚀 启动 Manager Bot
-  try {
-    const managerBot = new ManagerBot({
-      token: MANAGER_BOT_TOKEN,
-      ownerId: parseInt(OWNER_TELEGRAM_ID),
-      allowedGroupIds: [] // 可根据需要添加授权群组ID
-    });
-    
-    // 注册外部处理器
-    managerBot.setExternalHandlers({
-      handleTicketAnalysis: handleTicketAnalysisWrapper,
-      handleResearchReport: handleResearchReportWrapper
-    });
-    
-    // 启动 Manager Bot
-    managerBot.start();
-    console.log('✅ [ManagerBot] Manager Bot started successfully');
-    
-    // 优雅关闭
-    process.on('SIGTERM', () => {
-      console.log('👔 [ManagerBot] Stopping...');
-      managerBot.stop();
-    });
-    
-    process.on('SIGINT', () => {
-      console.log('👔 [ManagerBot] Stopping...');
-      managerBot.stop();
-    });
-    
-  } catch (error) {
-    console.error('❌ [ManagerBot] Failed to start:', error.message);
-  }
-  
-  } // 🔒 v6.5.2: Close token validation block
-} else {
-  console.warn('⚠️  [ManagerBot] MANAGER_BOT_TOKEN not configured, Manager Bot disabled');
-}
