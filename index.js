@@ -6244,8 +6244,23 @@ if (ENABLE_TELEGRAM && SUPERVISOR_BOT_TOKEN) {
         console.log('💬 [Telegraf] Ready to receive messages');
       })
       .catch((error) => {
-        console.error('❌ [Telegraf] Failed to start polling:', error.message);
+        console.error('❌ [Telegraf] Failed to start polling:');
+        console.error('   Error message:', error.message);
+        console.error('   Error stack:', error.stack);
       });
+    
+    // 全局错误处理器
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('❌ [Global] Unhandled Promise Rejection:');
+      console.error('   Reason:', reason);
+      console.error('   Promise:', promise);
+    });
+    
+    process.on('uncaughtException', (error) => {
+      console.error('❌ [Global] Uncaught Exception:');
+      console.error('   Message:', error.message);
+      console.error('   Stack:', error.stack);
+    });
     
     // 优雅关闭
     process.once('SIGINT', () => {
