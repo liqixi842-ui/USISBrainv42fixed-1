@@ -6240,9 +6240,19 @@ if (ENABLE_TELEGRAM && SUPERVISOR_BOT_TOKEN) {
       }
     });
     
-    // 启动Telegraf polling
+    // 启动Telegraf polling（带409冲突解决方案）
     console.log('📡 Starting Telegraf polling...');
-    bot.launch()
+    
+    // 🔧 先删除webhook，避免409冲突
+    bot.telegram.deleteWebhook({ drop_pending_updates: true })
+      .then(() => {
+        console.log('✅ [Telegraf] Webhook deleted, starting polling...');
+        
+        // 启动polling，跳过旧消息
+        return bot.launch({
+          dropPendingUpdates: true
+        });
+      })
       .then(() => {
         console.log('✅ [Telegraf] Bot polling started successfully!');
         console.log('💬 [Telegraf] Ready to receive messages');
