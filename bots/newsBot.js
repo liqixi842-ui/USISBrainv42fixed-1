@@ -1,20 +1,20 @@
-// News Bot - 新闻机器人
-// Wraps existing news fetching and ranking logic with dedicated bot token
+// News Bot - 新闻机器人（多Token架构）
+// Uses dedicated NEWS_BOT_TOKEN to send news updates
 
-const { createTelegramAPI } = require('./telegramUtils');
-const { fetchAndRankNews, formatNewsOutput } = require('../newsBroker');
+const { sendWithToken, createTelegramAPI } = require('./telegramUtils');
+const { fetchAndRankNews } = require('../newsBroker');
 
 class NewsBot {
-  constructor(botToken) {
-    this.botToken = botToken || process.env.TELEGRAM_BOT_TOKEN;
-    this.telegramAPI = createTelegramAPI(this.botToken);
+  constructor(newsBotToken) {
+    this.newsBotToken = newsBotToken || process.env.NEWS_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+    this.telegramAPI = createTelegramAPI(this.newsBotToken);  // For convenience methods
     
-    console.log(`📰 [NewsBot] Initialized with token: ${this.botToken ? this.botToken.slice(0, 10) + '...' : 'MISSING'}`);
+    console.log(`📰 [NewsBot] Initialized`);
+    console.log(`   └─ News Bot Token: ${this.newsBotToken.slice(0, 10)}...`);
   }
 
   /**
-   * Fetch and send top market news to user
-   * Uses existing newsBroker.fetchAndRankNews() function
+   * Fetch and send top market news to user - Uses NEWS_BOT_TOKEN
    * 
    * @param {object} params - News parameters
    * @param {number} params.chatId - Telegram chat ID
@@ -28,13 +28,13 @@ class NewsBot {
     console.log(`   ├─ ChatId: ${chatId}`);
     console.log(`   ├─ Symbols: ${symbols.join(', ') || 'None (market news)'}`);
     console.log(`   ├─ Limit: ${limit}`);
-    console.log(`   └─ Time Window: ${timeWindowMinutes} minutes`);
+    console.log(`   ├─ Time Window: ${timeWindowMinutes} minutes`);
+    console.log(`   └─ Using: NEWS_BOT_TOKEN`);
     
-    // Hoist statusMsg to outer scope to avoid ReferenceError in catch block
     let statusMsg = null;
     
     try {
-      // Send status message
+      // Send status message using NEWS_BOT_TOKEN
       statusMsg = await this.telegramAPI('sendMessage', {
         chat_id: chatId,
         text: `📰 新闻机器人正在获取${timeWindowMinutes}分钟内的重要新闻...\n\n⏳ 请稍候...`
@@ -63,31 +63,31 @@ class NewsBot {
       
       // Check if news found
       if (!rankedNews || rankedNews.length === 0) {
-        await this.telegramAPI('sendMessage', {
-          chat_id: chatId,
-          text: `📰 新闻机器人：最近${timeWindowMinutes}分钟内暂无重要新闻\n\n提示：可能是市场休市时段，或者没有重大事件发生。`
-        });
+        await sendWithToken(
+          this.newsBotToken,
+          chatId,
+          `📰 新闻机器人：最近${timeWindowMinutes}分钟内暂无重要新闻\n\n提示：可能是市场休市时段，或者没有重大事件发生。`
+        );
         return;
       }
       
-      // Send header message
-      await this.telegramAPI('sendMessage', {
-        chat_id: chatId,
-        text: `📰 Top ${rankedNews.length} 重要新闻（最近${timeWindowMinutes}分钟）\n⏰ ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n\n由新闻机器人为您推送`
-      });
+      // Send header message using NEWS_BOT_TOKEN
+      await sendWithToken(
+        this.newsBotToken,
+        chatId,
+        `📰 Top ${rankedNews.length} 重要新闻（最近${timeWindowMinutes}分钟）\n⏰ ${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\n\n由新闻机器人为您推送`
+      );
       
-      // Send each news item
+      // Send each news item using NEWS_BOT_TOKEN
       for (let i = 0; i < rankedNews.length; i++) {
         const item = rankedNews[i];
         const score = item.impact_score || 0;
         
-        // Note: fetchAndRankNews returns objects with 'title' property (not 'headline')
         const title = item.title || 'No Title';
         const summary = item.summary || '';
         const source = item.source || '未知';
         const url = item.url || '';
         
-        // Parse datetime (already in milliseconds from newsBroker)
         const publishedTime = new Date(item.datetime).toLocaleString('zh-CN', { 
           timeZone: 'Asia/Shanghai',
           month: '2-digit',
@@ -112,10 +112,7 @@ class NewsBot {
           message = message.substring(0, 3900) + '...\n\n🔗 ' + url;
         }
         
-        await this.telegramAPI('sendMessage', {
-          chat_id: chatId,
-          text: message
-        });
+        await sendWithToken(this.newsBotToken, chatId, message);
         
         // Rate limiting
         if (i < rankedNews.length - 1) {
@@ -127,7 +124,7 @@ class NewsBot {
     } catch (error) {
       console.error(`❌ [NewsBot] News delivery failed:`, error.message);
       
-      // Delete status message if exists (safe now - statusMsg hoisted to outer scope)
+      // Delete status message if exists
       try {
         if (statusMsg?.result?.message_id) {
           await this.telegramAPI('deleteMessage', {
@@ -139,12 +136,13 @@ class NewsBot {
         // Ignore
       }
       
-      // Send error message
+      // Send error message using NEWS_BOT_TOKEN
       try {
-        await this.telegramAPI('sendMessage', {
-          chat_id: chatId,
-          text: `❌ 新闻机器人：获取新闻时出错\n\n原因: ${error.message}\n\n请稍后重试。`
-        });
+        await sendWithToken(
+          this.newsBotToken,
+          chatId,
+          `❌ 新闻机器人：获取新闻时出错\n\n原因: ${error.message}\n\n请稍后重试。`
+        );
       } catch (sendError) {
         console.error(`❌ [NewsBot] Failed to send error message:`, sendError.message);
       }

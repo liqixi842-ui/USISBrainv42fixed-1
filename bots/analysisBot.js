@@ -1,20 +1,29 @@
-// Analysis Bot - 股票分析机器人
+// Analysis Bot - 股票分析机器人（多Token架构）
 // Handles both ticket analysis (解票) and research reports (研报)
-// Unified bot for all stock analysis features
+// Uses different bot tokens for different job types
 
-const { createTelegramAPI } = require('./telegramUtils');
+const { sendWithToken, sendDocumentWithToken } = require('./telegramUtils');
 const { handleTicketAnalysis, generateReport } = require('../v3_dev/services/devBotHandler');
 
 class AnalysisBot {
-  constructor(botToken) {
-    this.botToken = botToken || process.env.TELEGRAM_BOT_TOKEN;
-    this.telegramAPI = createTelegramAPI(this.botToken);
+  constructor(ticketBotToken, reportBotToken) {
+    // Ticket analysis token (解票机器人)
+    this.ticketBotToken = ticketBotToken || process.env.TICKET_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
     
-    console.log(`📊 [AnalysisBot] Initialized with token: ${this.botToken ? this.botToken.slice(0, 10) + '...' : 'MISSING'}`);
+    // Research report token (研报机器人) - 可暂时共用ticketBotToken
+    this.reportBotToken = reportBotToken || process.env.REPORT_BOT_TOKEN || this.ticketBotToken;
+    
+    console.log(`📊 [AnalysisBot] Initialized`);
+    console.log(`   ├─ Ticket Bot Token: ${this.ticketBotToken.slice(0, 10)}...`);
+    console.log(`   └─ Report Bot Token: ${this.reportBotToken.slice(0, 10)}...`);
+    
+    if (this.ticketBotToken === this.reportBotToken) {
+      console.log(`   ℹ️  Note: Ticket and Report bots sharing same token`);
+    }
   }
 
   /**
-   * Run ticket analysis (解票)
+   * Run ticket analysis (解票) - Uses TICKET_BOT_TOKEN
    * @param {object} params - Analysis parameters
    * @param {number} params.chatId - Telegram chat ID
    * @param {string} params.symbol - Stock symbol (e.g., "NVDA")
@@ -25,27 +34,31 @@ class AnalysisBot {
     console.log(`\n📊 [AnalysisBot] Starting ticket analysis`);
     console.log(`   ├─ Symbol: ${symbol}`);
     console.log(`   ├─ Mode: ${mode}`);
-    console.log(`   └─ ChatId: ${chatId}`);
+    console.log(`   ├─ ChatId: ${chatId}`);
+    console.log(`   └─ Using: TICKET_BOT_TOKEN`);
     
     try {
-      // Call existing ticket analysis handler
+      // Call existing ticket analysis handler with TICKET_BOT_TOKEN
+      // Note: handleTicketAnalysis internally uses the telegramAPI we pass
+      // We need to modify how we pass the token to it
       await handleTicketAnalysis({
         symbol,
         mode,
         chatId,
-        telegramAPI: this.telegramAPI
+        botToken: this.ticketBotToken  // Pass the ticket bot token
       });
       
       console.log(`✅ [AnalysisBot] Ticket analysis completed for ${symbol}`);
     } catch (error) {
       console.error(`❌ [AnalysisBot] Ticket analysis failed:`, error.message);
       
-      // Send error message
+      // Send error message using TICKET_BOT_TOKEN
       try {
-        await this.telegramAPI('sendMessage', {
-          chat_id: chatId,
-          text: `❌ 股票分析机器人：解票 ${symbol} 时出错\n\n原因: ${error.message}`
-        });
+        await sendWithToken(
+          this.ticketBotToken,
+          chatId,
+          `❌ 解票机器人：分析 ${symbol} 时出错\n\n原因: ${error.message}`
+        );
       } catch (sendError) {
         console.error(`❌ [AnalysisBot] Failed to send error message:`, sendError.message);
       }
@@ -55,7 +68,7 @@ class AnalysisBot {
   }
 
   /**
-   * Generate and send research report (研报)
+   * Generate and send research report (研报) - Uses REPORT_BOT_TOKEN
    * @param {object} params - Report parameters
    * @param {number} params.chatId - Telegram chat ID
    * @param {string} params.symbol - Stock symbol (e.g., "NVDA")
@@ -70,18 +83,18 @@ class AnalysisBot {
     console.log(`   ├─ Firm: ${firm}`);
     console.log(`   ├─ Analyst: ${analyst}`);
     console.log(`   ├─ Language: ${language}`);
-    console.log(`   └─ ChatId: ${chatId}`);
+    console.log(`   ├─ ChatId: ${chatId}`);
+    console.log(`   └─ Using: REPORT_BOT_TOKEN`);
     
     try {
-      // Call existing generateReport function from devBotHandler
+      // Call existing generateReport function with REPORT_BOT_TOKEN
       await generateReport({
         symbol,
         firm,
         analyst,
         lang: language,
         chatId,
-        telegramAPI: this.telegramAPI,
-        botToken: this.botToken,
+        botToken: this.reportBotToken,  // Use report bot token
         commandType: 'supervisor_routed'
       });
       

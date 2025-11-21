@@ -1,18 +1,20 @@
-// Supervisor Bot - 主管机器人
-// Central message router for all user interactions
+// Supervisor Bot - 主管机器人（多Token架构）
+// Central message router - ONLY receives messages and routes to worker bots
+// Uses SUPERVISOR_BOT_TOKEN exclusively
 
-const { createTelegramAPI } = require('./telegramUtils');
+const { sendWithToken, createTelegramAPI } = require('./telegramUtils');
 const { parseUserIntent } = require('../semanticIntentAgent');
 const { handleConversation, isGreeting, isHelpRequest } = require('../conversationAgent');
 
 class SupervisorBot {
-  constructor(botToken, workerBots = {}) {
-    this.botToken = botToken || process.env.TELEGRAM_BOT_TOKEN;
-    this.telegramAPI = createTelegramAPI(this.botToken);
+  constructor(supervisorBotToken, workerBots = {}) {
+    this.supervisorBotToken = supervisorBotToken || process.env.SUPERVISOR_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+    this.telegramAPI = createTelegramAPI(this.supervisorBotToken);
     this.workerBots = workerBots;
     
-    console.log(`👔 [SupervisorBot] Initialized with token: ${this.botToken ? this.botToken.slice(0, 10) + '...' : 'MISSING'}`);
-    console.log(`👔 [SupervisorBot] Worker bots configured:`, Object.keys(workerBots));
+    console.log(`👔 [SupervisorBot] Initialized`);
+    console.log(`   ├─ Supervisor Bot Token: ${this.supervisorBotToken.slice(0, 10)}...`);
+    console.log(`   └─ Worker bots configured:`, Object.keys(workerBots));
   }
 
   /**
@@ -30,6 +32,7 @@ class SupervisorBot {
     }
     
     console.log(`\n👔 [SupervisorBot] Received message from user ${userId}: "${text}"`);
+    console.log(`   └─ Using: SUPERVISOR_BOT_TOKEN`);
     
     try {
       // Quick detection: greetings and help requests
@@ -60,12 +63,13 @@ class SupervisorBot {
     } catch (error) {
       console.error(`❌ [SupervisorBot] Error handling message:`, error.message);
       
-      // Send error message to user
+      // Send error message to user using SUPERVISOR_BOT_TOKEN
       try {
-        await this.telegramAPI('sendMessage', {
-          chat_id: chatId,
-          text: `❌ 主管机器人：处理您的请求时出错\n\n错误信息: ${error.message}\n\n请稍后重试，或使用 /help 查看帮助。`
-        });
+        await sendWithToken(
+          this.supervisorBotToken,
+          chatId,
+          `❌ 主管机器人：处理您的请求时出错\n\n错误信息: ${error.message}\n\n请稍后重试，或使用 /help 查看帮助。`
+        );
       } catch (sendError) {
         console.error(`❌ [SupervisorBot] Failed to send error message:`, sendError.message);
       }
@@ -74,15 +78,13 @@ class SupervisorBot {
 
   /**
    * Route intent to appropriate worker bot or handle directly
-   * @param {object} intent - Parsed intent object
-   * @param {number} chatId - Telegram chat ID
-   * @param {number} userId - Telegram user ID
-   * @param {string} originalText - Original user text
+   * All messages from Supervisor use SUPERVISOR_BOT_TOKEN
+   * Worker bots use their own tokens to reply
    */
   async routeIntent(intent, chatId, userId, originalText) {
     const { intentType, entities, reportParams } = intent;
     
-    // Case 1: Ticket Analysis / Stock Query
+    // Case 1: Ticket Analysis / Stock Query → 解票机器人
     if (intentType === 'STOCK_QUERY' || /解票|分析|ticket/i.test(originalText)) {
       console.log(`👔 [SupervisorBot] → Routing to Analysis Bot (Ticket Mode)`);
       
@@ -91,23 +93,25 @@ class SupervisorBot {
       const symbol = symbolEntity?.value || this.extractSymbolFromText(originalText);
       
       if (!symbol) {
-        await this.telegramAPI('sendMessage', {
-          chat_id: chatId,
-          text: '❌ 无法识别股票代码\n\n请使用格式：解票 股票代码 [模式]\n\n示例：\n• 解票 NVDA\n• 解票 NVDA 双语\n• 解票 NVDA 聊天版'
-        });
+        await sendWithToken(
+          this.supervisorBotToken,
+          chatId,
+          '❌ 无法识别股票代码\n\n请使用格式：解票 股票代码 [模式]\n\n示例：\n• 解票 NVDA\n• 解票 NVDA 双语\n• 解票 NVDA 聊天版'
+        );
         return;
       }
       
       // Detect mode from text
       const mode = this.detectTicketMode(originalText);
       
-      // Supervisor acknowledgment
-      await this.telegramAPI('sendMessage', {
-        chat_id: chatId,
-        text: `✅ 收到！我已经让【股票分析机器人】帮你解票 ${symbol}\n\n模式：${mode}\n\n稍后它会直接给你发送分析结果...`
-      });
+      // ✅ Supervisor acknowledgment using SUPERVISOR_BOT_TOKEN
+      await sendWithToken(
+        this.supervisorBotToken,
+        chatId,
+        `✅ 收到，我已经安排【解票机器人】帮你分析 ${symbol}\n\n模式：${mode}\n\n稍后解票机器人会直接给你发送分析结果...`
+      );
       
-      // Delegate to Analysis Bot
+      // Delegate to Analysis Bot (will use TICKET_BOT_TOKEN to reply)
       if (this.workerBots.analysisBot) {
         await this.workerBots.analysisBot.runTicketJob({ chatId, symbol, mode });
       } else {
@@ -116,25 +120,27 @@ class SupervisorBot {
       return;
     }
     
-    // Case 2: Research Report
+    // Case 2: Research Report → 研报机器人
     if (intentType === 'RESEARCH_REPORT_V5' || /研报|report/i.test(originalText)) {
       console.log(`👔 [SupervisorBot] → Routing to Analysis Bot (Report Mode)`);
       
       if (!reportParams || !reportParams.symbol) {
-        await this.telegramAPI('sendMessage', {
-          chat_id: chatId,
-          text: '❌ 研报命令格式错误\n\n正确格式：\n研报, 股票代码, 机构名字, 分析师名字, 语言\n\n示例：\n研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文'
-        });
+        await sendWithToken(
+          this.supervisorBotToken,
+          chatId,
+          '❌ 研报命令格式错误\n\n正确格式：\n研报, 股票代码, 机构名字, 分析师名字, 语言\n\n示例：\n研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文'
+        );
         return;
       }
       
-      // Supervisor acknowledgment
-      await this.telegramAPI('sendMessage', {
-        chat_id: chatId,
-        text: `✅ 收到！我已经让【股票分析机器人】帮你生成 ${reportParams.symbol} 的研究报告\n\n机构：${reportParams.firm}\n分析师：${reportParams.analyst}\n语言：${reportParams.lang === 'en' ? '英文' : '中文'}\n\n稍后它会直接给你发送PDF报告...`
-      });
+      // ✅ Supervisor acknowledgment using SUPERVISOR_BOT_TOKEN
+      await sendWithToken(
+        this.supervisorBotToken,
+        chatId,
+        `✅ 收到，我已经安排【研报机器人】帮你生成 ${reportParams.symbol} 的研究报告\n\n机构：${reportParams.firm}\n分析师：${reportParams.analyst}\n语言：${reportParams.lang === 'en' ? '英文' : '中文'}\n\n稍后研报机器人会直接给你发送PDF报告...`
+      );
       
-      // Delegate to Analysis Bot
+      // Delegate to Analysis Bot (will use REPORT_BOT_TOKEN to reply)
       if (this.workerBots.analysisBot) {
         await this.workerBots.analysisBot.runReportJob({
           chatId,
@@ -149,17 +155,18 @@ class SupervisorBot {
       return;
     }
     
-    // Case 3: News Request
+    // Case 3: News Request → 新闻机器人
     if (intentType === 'NEWS' || /新闻|news|头条/i.test(originalText)) {
       console.log(`👔 [SupervisorBot] → Routing to News Bot`);
       
-      // Supervisor acknowledgment
-      await this.telegramAPI('sendMessage', {
-        chat_id: chatId,
-        text: `✅ 收到！我已经让【新闻机器人】帮你获取今日要闻\n\n稍后它会直接给你发送新闻列表...`
-      });
+      // ✅ Supervisor acknowledgment using SUPERVISOR_BOT_TOKEN
+      await sendWithToken(
+        this.supervisorBotToken,
+        chatId,
+        `✅ 收到，我已经安排【新闻机器人】帮你获取今日要闻\n\n稍后新闻机器人会直接给你发送新闻列表...`
+      );
       
-      // Delegate to News Bot
+      // Delegate to News Bot (will use NEWS_BOT_TOKEN to reply)
       if (this.workerBots.newsBot) {
         await this.workerBots.newsBot.runNewsJob({ chatId, limit: 5 });
       } else {
@@ -172,26 +179,28 @@ class SupervisorBot {
     if (intentType === 'SECTOR_HEATMAP') {
       console.log(`👔 [SupervisorBot] → Handling heatmap request directly`);
       
-      await this.telegramAPI('sendMessage', {
-        chat_id: chatId,
-        text: '📊 热力图功能开发中...\n\n目前支持的功能：\n• 解票分析\n• 研报生成\n• 新闻推送'
-      });
+      await sendWithToken(
+        this.supervisorBotToken,
+        chatId,
+        '📊 热力图功能开发中...\n\n目前支持的功能：\n• 解票分析\n• 研报生成\n• 新闻推送'
+      );
       return;
     }
     
-    // Case 5: Casual conversation - Supervisor handles directly
+    // Case 5: Casual conversation - Supervisor handles directly using SUPERVISOR_BOT_TOKEN
     console.log(`👔 [SupervisorBot] → Handling casual conversation`);
     
     const conversationResponse = await handleConversation(originalText, userId);
     
-    await this.telegramAPI('sendMessage', {
-      chat_id: chatId,
-      text: conversationResponse || '我是USIS Brain主管机器人。\n\n请使用 /help 查看我能帮你做什么。'
-    });
+    await sendWithToken(
+      this.supervisorBotToken,
+      chatId,
+      conversationResponse || '我是USIS Brain主管机器人。\n\n请使用 /help 查看我能帮你做什么。'
+    );
   }
 
   /**
-   * Handle greeting messages
+   * Handle greeting messages - Supervisor replies directly
    */
   async handleGreeting(chatId, userId) {
     const greetings = [
@@ -202,14 +211,15 @@ class SupervisorBot {
     
     const greeting = greetings[Math.floor(Math.random() * greetings.length)];
     
-    await this.telegramAPI('sendMessage', {
-      chat_id: chatId,
-      text: `${greeting}\n\n我能帮你：\n• 📊 股票分析（解票 + 研报）\n• 📰 新闻推送（今日重要财经资讯）\n\n输入 /help 查看详细帮助`
-    });
+    await sendWithToken(
+      this.supervisorBotToken,
+      chatId,
+      `${greeting}\n\n我能帮你：\n• 📊 股票分析（解票 + 研报）\n• 📰 新闻推送（今日重要财经资讯）\n\n输入 /help 查看详细帮助`
+    );
   }
 
   /**
-   * Handle help requests
+   * Handle help requests - Supervisor replies directly
    */
   async handleHelp(chatId) {
     const helpText = `
@@ -218,9 +228,9 @@ class SupervisorBot {
 我是您的智能投资助手，负责协调专业机器人为您服务。
 
 ━━━━━━━━━━━━━━━━━━
-📊 **股票分析**（由股票分析机器人提供）
+📊 **股票分析**
 
-包含两种模式：
+我们有专门的【解票机器人】和【研报机器人】为您服务：
 
 **1. 解票分析** - 快速技术分析，6大维度解读：
 • 趋势判断
@@ -253,7 +263,9 @@ class SupervisorBot {
 研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文
 
 ━━━━━━━━━━━━━━━━━━
-📰 **新闻推送**（由新闻机器人提供）
+📰 **新闻推送**
+
+我们有专门的【新闻机器人】为您服务：
 
 今日重要财经资讯，智能评分：
 • 自动翻译（中英文）
@@ -272,89 +284,67 @@ class SupervisorBot {
 /系统 - 系统信息
 
 ━━━━━━━━━━━━━━━━━━
-💡 **技术架构**
+由主管机器人为您提供`;
 
-USIS Brain采用"一个进程，多机器人"架构：
-• 主管机器人（我）：接收您的指令，智能路由
-• 股票分析机器人：解票 + 研报双模式
-• 新闻机器人：财经资讯推送
-
-每个机器人使用独立的Telegram账号，分工明确。
-
-━━━━━━━━━━━━━━━━━━
-有任何问题，随时找我！`;
-
-    await this.telegramAPI('sendMessage', {
-      chat_id: chatId,
-      text: helpText
-    });
+    await sendWithToken(this.supervisorBotToken, chatId, helpText);
   }
 
   /**
-   * Handle system info requests
+   * Handle system info requests - Supervisor replies directly
    */
   async handleSystemInfo(chatId) {
-    const workerStatus = Object.entries(this.workerBots).map(([name, bot]) => {
-      const token = bot.botToken;
-      return `• ${name}: ${token ? '✅ 已配置' : '❌ 未配置'}`;
-    }).join('\n');
-    
-    const systemInfo = `
-🏗️ USIS Brain 系统架构
-
-**架构模式：** 单进程多机器人
-
-**主管机器人（Supervisor）：**
-• 负责接收所有用户消息
-• 智能意图识别和路由
-• Token: ${this.botToken ? this.botToken.slice(0, 10) + '...' : '未配置'}
-
-**子机器人（Workers）：**
-${workerStatus}
+    const systemText = `
+🤖 USIS Brain v7.0 系统架构
 
 ━━━━━━━━━━━━━━━━━━
-**使用的付费API服务：**
+**多机器人协作架构**
 
-🤖 AI模型（6个）：
-• OpenAI GPT-4o/GPT-4o-mini
-• Anthropic Claude 3.5 Sonnet
-• Google Gemini 2.5 Flash
-• DeepSeek V3
-• Mistral Large
-• Perplexity Sonar Pro
-
-📊 金融数据（4个）：
-• Finnhub（美股实时行情）
-• Twelve Data（全球市场）
-• Alpha Vantage（备用数据）
-• FRED（美联储经济数据）
-
-📸 其他服务：
-• ScreenshotAPI（图表截图）
-• Google Translate（翻译）
-• PostgreSQL（数据库）
-• N8N（工作流自动化）
+本系统采用"单进程，多机器人账号"设计：
+• 1个 Node.js 进程
+• 4个 Telegram 机器人账号
 
 ━━━━━━━━━━━━━━━━━━
-**运行环境：**
-• Platform: Replit Reserved VM
-• Process ID: ${process.pid}
-• Uptime: ${Math.floor(process.uptime())}s
-• Node.js: ${process.version}
+👔 **主管机器人**（我）
+• 接收所有用户消息
+• 识别您的意图
+• 分配任务给专业机器人
+
+📊 **解票机器人**
+• 负责股票技术分析
+• 6大维度快速解读
+• 支持4种输出模式
+
+📝 **研报机器人**
+• 负责生成投资研报
+• 专业PDF格式
+• 支持中英文
+
+📰 **新闻机器人**
+• 负责推送财经新闻
+• 智能评分排序
+• AI影响解读
 
 ━━━━━━━━━━━━━━━━━━
-输入 /help 查看使用帮助`;
+**工作流程**
 
-    await this.telegramAPI('sendMessage', {
-      chat_id: chatId,
-      text: systemInfo
-    });
+1️⃣ 您发送消息给我（主管机器人）
+2️⃣ 我识别您的需求
+3️⃣ 我通知对应的专业机器人
+4️⃣ 专业机器人直接给您回复
+
+所有机器人都在同一个群里，但各自以自己的身份说话。
+
+━━━━━━━━━━━━━━━━━━
+由主管机器人为您提供`;
+
+    await sendWithToken(this.supervisorBotToken, chatId, systemText);
   }
 
   /**
-   * Extract stock symbol from text (simple regex)
+   * Extract stock symbol from text
    */
   extractSymbolFromText(text) {
+    // Match common stock symbol patterns
     const match = text.match(/\b([A-Z]{1,5})\b/);
     return match ? match[1] : null;
   }
@@ -363,15 +353,9 @@ ${workerStatus}
    * Detect ticket analysis mode from text
    */
   detectTicketMode(text) {
-    if (/完整版/.test(text)) {
-      return '完整版';
-    } else if (/双语/.test(text) && /聊天版|人话版/.test(text)) {
-      return '完整版';
-    } else if (/双语/.test(text)) {
-      return '双语';
-    } else if (/聊天版|人话版/.test(text)) {
-      return '聊天版';
-    }
+    if (/双语|bilingual/i.test(text)) return '双语';
+    if (/聊天|chat|人话/i.test(text)) return '聊天版';
+    if (/完整|complete|full/i.test(text)) return '完整版';
     return '标准版';
   }
 }

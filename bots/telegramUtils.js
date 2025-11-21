@@ -107,7 +107,75 @@ async function sendDocument(botToken, chatId, buffer, filename, caption = '') {
   });
 }
 
+/**
+ * Send a text message using a specific bot token
+ * Universal function for multi-bot architecture where different bots send messages
+ * @param {string} botToken - Telegram bot token
+ * @param {number|string} chatId - Chat ID
+ * @param {string} text - Message text
+ * @param {Object} extraOptions - Extra Telegram options (parse_mode, reply_markup, etc.)
+ * @returns {Promise<Object>} Telegram API response
+ */
+async function sendWithToken(botToken, chatId, text, extraOptions = {}) {
+  const telegramAPI = createTelegramAPI(botToken);
+  const params = {
+    chat_id: chatId,
+    text: text,
+    ...extraOptions
+  };
+  
+  try {
+    const result = await telegramAPI('sendMessage', params);
+    return result;
+  } catch (error) {
+    console.error(`[TelegramUtils] sendWithToken failed:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Send a photo using a specific bot token
+ * @param {string} botToken - Telegram bot token
+ * @param {number|string} chatId - Chat ID
+ * @param {string} photoUrl - Photo URL or file_id
+ * @param {Object} extraOptions - Extra options (caption, parse_mode, etc.)
+ * @returns {Promise<Object>} Telegram API response
+ */
+async function sendPhotoWithToken(botToken, chatId, photoUrl, extraOptions = {}) {
+  const telegramAPI = createTelegramAPI(botToken);
+  const params = {
+    chat_id: chatId,
+    photo: photoUrl,
+    ...extraOptions
+  };
+  
+  try {
+    const result = await telegramAPI('sendPhoto', params);
+    return result;
+  } catch (error) {
+    console.error(`[TelegramUtils] sendPhotoWithToken failed:`, error.message);
+    throw error;
+  }
+}
+
+/**
+ * Send a document using a specific bot token (wrapper for backward compatibility)
+ * @param {string} botToken - Telegram bot token
+ * @param {number|string} chatId - Chat ID
+ * @param {Buffer} buffer - File buffer
+ * @param {string} filename - File name
+ * @param {string} caption - Caption text
+ * @returns {Promise<Object>} Telegram API response
+ */
+async function sendDocumentWithToken(botToken, chatId, buffer, filename, caption = '') {
+  return sendDocument(botToken, chatId, buffer, filename, caption);
+}
+
 module.exports = {
   createTelegramAPI,
-  sendDocument
+  sendDocument,
+  // Multi-bot token utilities
+  sendWithToken,
+  sendPhotoWithToken,
+  sendDocumentWithToken
 };

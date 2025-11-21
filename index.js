@@ -6112,26 +6112,29 @@ app.listen(PORT, "0.0.0.0", () => {
 // 架构：Supervisor Bot监听所有消息 → 智能路由到Worker Bots → Worker Bots用各自Token回复
 // 特点：一个Node.js进程，多个Telegram Bot账号，清晰分工
 
-// 🔑 Bot Tokens配置
-const SUPERVISOR_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN; // 主管机器人（接收所有用户消息）
-const ANALYSIS_BOT_TOKEN = process.env.ANALYSIS_BOT_TOKEN || SUPERVISOR_BOT_TOKEN; // 股票分析机器人（解票 + 研报，可独立或共用）
-const NEWS_BOT_TOKEN = process.env.NEWS_BOT_TOKEN || SUPERVISOR_BOT_TOKEN; // 新闻机器人（可独立或共用）
+// 🔑 Bot Tokens配置（v7.0 多Bot账号架构）
+// 优先使用专用Token，如未设置则回退到 TELEGRAM_BOT_TOKEN
+const SUPERVISOR_BOT_TOKEN = process.env.SUPERVISOR_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN; // 主管机器人（接收所有用户消息）
+const TICKET_BOT_TOKEN = process.env.TICKET_BOT_TOKEN || SUPERVISOR_BOT_TOKEN; // 解票机器人（股票技术分析）
+const REPORT_BOT_TOKEN = process.env.REPORT_BOT_TOKEN || TICKET_BOT_TOKEN; // 研报机器人（可独立或共用TICKET_BOT_TOKEN）
+const NEWS_BOT_TOKEN = process.env.NEWS_BOT_TOKEN || SUPERVISOR_BOT_TOKEN; // 新闻机器人（新闻推送）
 
 // 保留变量名供旧代码引用
 const TELEGRAM_TOKEN = SUPERVISOR_BOT_TOKEN;
 
 // 🔒 v7.0: 启动检查 - 至少需要Supervisor Bot Token
 if (!SUPERVISOR_BOT_TOKEN) {
-  console.error('❌ [Fatal] TELEGRAM_BOT_TOKEN is required for Supervisor Bot');
-  console.error('💡 Please set TELEGRAM_BOT_TOKEN in environment variables');
+  console.error('❌ [Fatal] SUPERVISOR_BOT_TOKEN (or TELEGRAM_BOT_TOKEN) is required');
+  console.error('💡 Please set SUPERVISOR_BOT_TOKEN or TELEGRAM_BOT_TOKEN in environment variables');
   process.exit(1);
 }
 
-console.log('\n🏗️  ===== USIS Brain v7.0 Bot Architecture =====');
+console.log('\n🏗️  ===== USIS Brain v7.0 多Bot账号架构 =====');
 console.log(`👔 [Supervisor Bot] Token: ${SUPERVISOR_BOT_TOKEN.slice(0, 10)}... (Main entry point)`);
-console.log(`📊 [Analysis Bot] Token: ${ANALYSIS_BOT_TOKEN.slice(0, 10)}... ${ANALYSIS_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared)' : '(Dedicated)'} - Handles 解票 + 研报`);
-console.log(`📰 [News Bot] Token: ${NEWS_BOT_TOKEN.slice(0, 10)}... ${NEWS_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared)' : '(Dedicated)'}`);
-console.log('✅ [Token Check] Supervisor Bot token validated');
+console.log(`🎫 [Ticket Bot] Token: ${TICKET_BOT_TOKEN.slice(0, 10)}... ${TICKET_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared)' : '(Dedicated)'} - 解票分析`);
+console.log(`📝 [Report Bot] Token: ${REPORT_BOT_TOKEN.slice(0, 10)}... ${REPORT_BOT_TOKEN === TICKET_BOT_TOKEN ? '(Shared with Ticket)' : REPORT_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared with Supervisor)' : '(Dedicated)'} - 研报生成`);
+console.log(`📰 [News Bot] Token: ${NEWS_BOT_TOKEN.slice(0, 10)}... ${NEWS_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared)' : '(Dedicated)'} - 新闻推送`);
+console.log('✅ [Token Check] All bot tokens validated');
 console.log('==============================================\n');
 
 // 🆕 v1.1: PID文件锁机制（防止重复启动Bot）
@@ -6213,7 +6216,8 @@ if (ENABLE_TELEGRAM && SUPERVISOR_BOT_TOKEN) {
     const NewsBot = require('./bots/newsBot');
     const SupervisorBot = require('./bots/supervisorBot');
     
-    const analysisBot = new AnalysisBot(ANALYSIS_BOT_TOKEN);
+    // AnalysisBot 使用两个Token：解票用 TICKET_BOT_TOKEN，研报用 REPORT_BOT_TOKEN
+    const analysisBot = new AnalysisBot(TICKET_BOT_TOKEN, REPORT_BOT_TOKEN);
     const newsBot = new NewsBot(NEWS_BOT_TOKEN);
     
     // 初始化Supervisor Bot并注入Worker Bots
