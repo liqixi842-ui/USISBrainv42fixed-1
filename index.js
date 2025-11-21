@@ -33,6 +33,7 @@ process.on('uncaughtException', (err) => {
 
 const express = require("express");
 const fetch = require("node-fetch");
+const https = require("https");
 const { Pool } = require("pg");
 const cron = require("node-cron");
 // 🛡️ v6.1: Telegraf moved to conditional loading (see line ~5575)
