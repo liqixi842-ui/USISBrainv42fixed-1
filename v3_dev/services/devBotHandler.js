@@ -12,6 +12,11 @@ const { parseResearchReportCommand, parseSymbolDescription } = require('../../se
 // 🆕 v6.0: Import ticket formatter for 解票 feature
 const ticketFormatter = require('./v5/ticketFormatter');
 
+// 🆕 v7.0: Import v6 full logic (direct local calls, no HTTP API)
+const reportService = require('./reportService');
+const { buildHtmlFromReport } = require('./reportService');
+const { generatePdfWithDocRaptor } = require('./reportService');
+
 /**
  * 发送 PDF 文件到 Telegram（使用 multipart/form-data）
  * @param {string} chatId - Chat ID
@@ -80,62 +85,63 @@ async function generateReport({ symbol, firm, analyst, brand, lang, chatId, tele
   let statusMsg = null;
   let t0 = null;
   
-  const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:3000';
-  
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  console.log(`📊 [DEV_BOT] Research Report Request (${commandType} mode)`);
+  console.log(`📊 [DEV_BOT] Research Report Request (${commandType} mode) - DIRECT v6 LOGIC`);
   console.log(`   ├─ Symbol: ${symbol}`);
   console.log(`   ├─ Firm: ${firm}`);
   console.log(`   ├─ Analyst: ${analyst}`);
   if (brand) console.log(`   ├─ Brand: ${brand}`);
   if (lang) console.log(`   ├─ Language: ${lang}`);
-  console.log(`   └─ API URL: ${REPLIT_API_URL}`);
+  console.log(`   └─ Method: Direct local call (buildResearchReport + PDF generation)`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
   
   try {
     // Send initial status message
     statusMsg = await telegramAPI('sendMessage', {
       chat_id: chatId,
-      text: `🔬 正在生成 ${symbol} 研报\n\n⏳ 正在调用 Replit v3_dev PDF API...\n\n(这可能需要 60-120 秒)`
+      text: `🔬 正在生成 ${symbol} 研报\n\n⏳ 正在调用完整研报引擎...\n\n包括：Multi-AI分析、完整财务数据、专业PDF生成\n(这可能需要 60-120 秒)`
     });
-    
-    // Build URL parameters
-    // Note: asset_type is NOT passed - let the API auto-detect (equity/index/etf/crypto)
-    const params = new URLSearchParams({
-      format: 'pdf',
-      firm: firm,
-      analyst: analyst
-    });
-    
-    // Add brand parameter if provided (for structured commands)
-    if (brand) {
-      params.append('brand', brand);
-    }
-    
-    // Add language parameter if provided (for natural language commands)
-    if (lang) {
-      params.append('lang', lang);
-    }
-    
-    const url = `${REPLIT_API_URL}/v3/report/${symbol}?${params.toString()}`;
     
     // Start timer
     t0 = Date.now();
-    console.log(`📡 [DEV_BOT] Calling PDF API: ${url}`);
+    console.log(`📡 [DEV_BOT] Calling buildResearchReport() directly...`);
     
-    // Call v3_dev PDF API
-    const response = await axios.get(url, { 
-      responseType: 'arraybuffer',
-      timeout: 240000  // 4 minutes timeout
+    // ✅ v7.0 FIX: Call v6 full logic directly (no HTTP API)
+    // Step 1: Build complete research report using v6 multi-model pipeline
+    const brandOptions = {
+      brand: brand || 'USIS Research',
+      firm: firm,
+      analyst: analyst,
+      language: lang || 'zh'
+    };
+    
+    const report = await reportService.buildResearchReport(symbol, 'equity', brandOptions);
+    
+    console.log(`✅ [DEV_BOT] buildResearchReport() completed`);
+    console.log(`   ├─ Symbol: ${report.symbol}`);
+    console.log(`   ├─ Rating: ${report.rating}`);
+    console.log(`   ├─ Company: ${report.company_name || 'N/A'}`);
+    
+    // Update status
+    await telegramAPI('editMessageText', {
+      chat_id: chatId,
+      message_id: statusMsg.result.message_id,
+      text: `🔬 正在生成 ${symbol} 研报\n\n✅ 研报分析完成\n⏳ 正在生成专业PDF...`
     });
     
-    const dt = Date.now() - t0;
-    const pdfBuffer = Buffer.from(response.data);
+    // Step 2: Build HTML from report
+    console.log(`📄 [DEV_BOT] Building institutional HTML...`);
+    const htmlContent = buildHtmlFromReport(report);
     
-    console.log(`✅ [DEV_BOT] PDF API completed in ${dt} ms`);
-    console.log(`   ├─ Size: ${(pdfBuffer.length / 1024).toFixed(1)} KB`);
-    console.log(`   ├─ Status: ${response.status}`);
-    console.log(`   └─ Content-Type: ${response.headers['content-type']}\n`);
+    // Step 3: Generate PDF using DocRaptor
+    console.log(`📤 [DEV_BOT] Generating PDF with DocRaptor...`);
+    const pdfBuffer = await generatePdfWithDocRaptor(symbol, htmlContent);
+    
+    const dt = Date.now() - t0;
+    
+    console.log(`✅ [DEV_BOT] Full report generation completed in ${dt} ms`);
+    console.log(`   ├─ PDF Size: ${(pdfBuffer.length / 1024).toFixed(1)} KB`);
+    console.log(`   └─ Multi-Model Pipeline: Executed\n`);
     
     // Update status
     await telegramAPI('editMessageText', {
@@ -271,38 +277,41 @@ async function handleTicketAnalysis({ symbol, mode, chatId, telegramAPI }) {
   let statusMsg = null;
   let t0 = null;
   
-  const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:3000';
-  
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  console.log(`🎯 [DEV_BOT] Ticket Analysis Request`);
+  console.log(`🎯 [DEV_BOT] Ticket Analysis Request - DIRECT v6 LOGIC`);
   console.log(`   ├─ Symbol: ${symbol}`);
   console.log(`   ├─ Mode: ${mode}`);
-  console.log(`   └─ API URL: ${REPLIT_API_URL}`);
+  console.log(`   └─ Method: Direct local call (buildResearchReport + ticketFormatter)`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
   
   try {
     // Send initial status message
     statusMsg = await telegramAPI('sendMessage', {
       chat_id: chatId,
-      text: `🎯 正在解票 ${symbol}\n\n⏳ 正在抓取数据和生成分析...\n\n(这可能需要 30-60 秒)`
+      text: `🎯 正在解票 ${symbol}\n\n⏳ 正在调用完整解票引擎...\n\n包括：实时市场数据、技术指标、6段完整分析\n(这可能需要 30-60 秒)`
     });
     
-    // Call v3 API to get full report object (JSON format)
-    const url = `${REPLIT_API_URL}/v3/report/${symbol}?format=json`;
-    
+    // Start timer
     t0 = Date.now();
-    console.log(`📡 [DEV_BOT] Calling Report API: ${url}`);
+    console.log(`📡 [DEV_BOT] Calling buildResearchReport() directly...`);
     
-    const response = await axios.get(url, { 
-      timeout: 120000  // 2 minutes timeout
-    });
+    // ✅ v7.0 FIX: Call v6 full logic directly (no HTTP API)
+    // Build complete research report using v6 multi-model pipeline
+    const brandOptions = {
+      brand: 'USIS Research',
+      firm: 'USIS Research Division',
+      analyst: 'System (USIS Brain)',
+      language: 'zh'
+    };
+    
+    const report = await reportService.buildResearchReport(symbol, 'equity', brandOptions);
     
     const dt = Date.now() - t0;
-    const report = response.data;
     
-    console.log(`✅ [DEV_BOT] Report API completed in ${dt} ms`);
+    console.log(`✅ [DEV_BOT] buildResearchReport() completed in ${dt} ms`);
     console.log(`   ├─ Symbol: ${report.symbol}`);
     console.log(`   ├─ Rating: ${report.rating}`);
+    console.log(`   ├─ Company: ${report.company_name || 'N/A'}`);
     console.log(`   └─ Asset Type: ${report.asset_type}\n`);
     
     // Update status
