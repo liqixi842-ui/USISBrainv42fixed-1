@@ -97,6 +97,7 @@ class AnalysisBot {
         lang: language,
         chatId,
         botToken: this.reportBotToken,  // Use report bot token
+        telegramAPI: this.reportAPI,  // Pass the telegramAPI for sending messages
         commandType: 'supervisor_routed'
       });
       
