@@ -108,6 +108,76 @@ class AnalysisBot {
       throw error;
     }
   }
+
+  /**
+   * 🆕 v7.0.1: Generate research report from natural language text
+   * This allows Supervisor to delegate when reportParams are not available from intent
+   * @param {object} params - Parameters
+   * @param {number} params.chatId - Telegram chat ID
+   * @param {string} params.originalText - Original user text (e.g., "研报, NVDA, Aberdeen Investments, Anthony, 英文")
+   * @returns {Promise<void>}
+   */
+  async runReportJobFromText({ chatId, originalText }) {
+    console.log(`\n📊 [AnalysisBot] Starting research report from natural language`);
+    console.log(`   ├─ Text: "${originalText}"`);
+    console.log(`   ├─ ChatId: ${chatId}`);
+    console.log(`   └─ Using: REPORT_BOT_TOKEN`);
+
+    try {
+      // Import parser at runtime to avoid circular dependencies
+      const { parseResearchReportCommand } = require('../semanticIntentAgent');
+      
+      // Parse the natural language command using legacy parser
+      const reportParams = parseResearchReportCommand(originalText);
+      
+      if (!reportParams || !reportParams.symbol) {
+        console.error(`❌ [AnalysisBot] Failed to parse report params from: "${originalText}"`);
+        await sendWithToken(
+          this.reportBotToken,
+          chatId,
+          '❌ 研报机器人：无法解析命令格式\n\n正确格式：\n研报, 股票代码, 机构名字, 分析师名字, 语言\n\n示例：\n研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文'
+        );
+        return;
+      }
+
+      console.log(`✅ [AnalysisBot] Parsed report params:`);
+      console.log(`   ├─ Symbol: ${reportParams.symbol}`);
+      console.log(`   ├─ Firm: ${reportParams.firm}`);
+      console.log(`   ├─ Analyst: ${reportParams.analyst}`);
+      console.log(`   └─ Language: ${reportParams.lang}`);
+
+      // Call generateReport with parsed params
+      // Note: generateReport handles sending the PDF and all status messages
+      await generateReport({
+        symbol: reportParams.symbol,
+        firm: reportParams.firm,
+        analyst: reportParams.analyst,
+        lang: reportParams.lang,
+        chatId,
+        botToken: this.reportBotToken,
+        telegramAPI: this.reportAPI,  // Pass the telegramAPI for sending messages
+        commandType: 'natural_from_supervisor'
+      });
+      
+      console.log(`✅ [AnalysisBot] Research report sent for ${reportParams.symbol}`);
+    } catch (error) {
+      console.error(`❌ [AnalysisBot] Research report from text failed:`, error.message);
+      console.error(`   Stack: ${error.stack}`);
+      
+      // Send error message using REPORT_BOT_TOKEN
+      try {
+        await sendWithToken(
+          this.reportBotToken,
+          chatId,
+          `❌ 研报机器人：处理请求时出错\n\n原因: ${error.message}`
+        );
+      } catch (sendError) {
+        console.error(`❌ [AnalysisBot] Failed to send error message:`, sendError.message);
+      }
+      
+      throw error;
+    }
+  }
 }
 
 module.exports = AnalysisBot;

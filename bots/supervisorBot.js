@@ -124,30 +124,55 @@ class SupervisorBot {
     if (intentType === 'RESEARCH_REPORT_V5' || /研报|report/i.test(originalText)) {
       console.log(`👔 [SupervisorBot] → Routing to Analysis Bot (Report Mode)`);
       
-      if (!reportParams || !reportParams.symbol) {
+      // 🆕 v7.0.1: Relaxed validation - Let generateReport handle parsing
+      // If reportParams are available from intent, use them; otherwise pass originalText
+      let symbol, firm, analyst, language;
+      
+      if (reportParams && reportParams.symbol) {
+        // Use parsed params from intent
+        symbol = reportParams.symbol;
+        firm = reportParams.firm || 'USIS Research';
+        analyst = reportParams.analyst || 'USIS Brain';
+        language = reportParams.lang || 'zh';
+      } else {
+        // Fall back to parsing from originalText inside Analysis Bot
+        // This allows natural language commands to be handled by the legacy parser
+        console.log(`   ℹ️  No reportParams from intent - Analysis Bot will parse from text`);
+        
+        // ✅ Supervisor acknowledgment (generic)
         await sendWithToken(
           this.supervisorBotToken,
           chatId,
-          '❌ 研报命令格式错误\n\n正确格式：\n研报, 股票代码, 机构名字, 分析师名字, 语言\n\n示例：\n研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文'
+          `✅ 收到研报请求，我已经安排【研报机器人】为你处理\n\n稍后研报机器人会直接给你发送PDF报告...`
         );
+        
+        // Delegate to Analysis Bot with originalText
+        if (this.workerBots.analysisBot) {
+          await this.workerBots.analysisBot.runReportJobFromText({
+            chatId,
+            originalText
+          });
+        } else {
+          throw new Error('Analysis Bot not configured');
+        }
         return;
       }
       
-      // ✅ Supervisor acknowledgment using SUPERVISOR_BOT_TOKEN
+      // ✅ Supervisor acknowledgment using SUPERVISOR_BOT_TOKEN (with parsed params)
       await sendWithToken(
         this.supervisorBotToken,
         chatId,
-        `✅ 收到，我已经安排【研报机器人】帮你生成 ${reportParams.symbol} 的研究报告\n\n机构：${reportParams.firm}\n分析师：${reportParams.analyst}\n语言：${reportParams.lang === 'en' ? '英文' : '中文'}\n\n稍后研报机器人会直接给你发送PDF报告...`
+        `✅ 收到，我已经安排【研报机器人】帮你生成 ${symbol} 的研究报告\n\n机构：${firm}\n分析师：${analyst}\n语言：${language === 'en' ? '英文' : '中文'}\n\n稍后研报机器人会直接给你发送PDF报告...`
       );
       
       // Delegate to Analysis Bot (will use REPORT_BOT_TOKEN to reply)
       if (this.workerBots.analysisBot) {
         await this.workerBots.analysisBot.runReportJob({
           chatId,
-          symbol: reportParams.symbol,
-          firm: reportParams.firm,
-          analyst: reportParams.analyst,
-          language: reportParams.lang
+          symbol,
+          firm,
+          analyst,
+          language
         });
       } else {
         throw new Error('Analysis Bot not configured');
