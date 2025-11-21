@@ -84,7 +84,7 @@ class SupervisorBot {
     
     // Case 1: Ticket Analysis / Stock Query
     if (intentType === 'STOCK_QUERY' || /解票|分析|ticket/i.test(originalText)) {
-      console.log(`👔 [SupervisorBot] → Routing to Ticket Bot`);
+      console.log(`👔 [SupervisorBot] → Routing to Analysis Bot (Ticket Mode)`);
       
       // Extract symbol from intent or text
       const symbolEntity = entities.find(e => e.type === 'symbol');
@@ -104,21 +104,21 @@ class SupervisorBot {
       // Supervisor acknowledgment
       await this.telegramAPI('sendMessage', {
         chat_id: chatId,
-        text: `✅ 收到！我已经让【解票机器人】帮你分析 ${symbol}\n\n模式：${mode}\n\n稍后它会直接给你发送分析结果...`
+        text: `✅ 收到！我已经让【股票分析机器人】帮你解票 ${symbol}\n\n模式：${mode}\n\n稍后它会直接给你发送分析结果...`
       });
       
-      // Delegate to Ticket Bot
-      if (this.workerBots.ticketBot) {
-        await this.workerBots.ticketBot.runTicketJob({ chatId, symbol, mode });
+      // Delegate to Analysis Bot
+      if (this.workerBots.analysisBot) {
+        await this.workerBots.analysisBot.runTicketJob({ chatId, symbol, mode });
       } else {
-        throw new Error('Ticket Bot not configured');
+        throw new Error('Analysis Bot not configured');
       }
       return;
     }
     
     // Case 2: Research Report
     if (intentType === 'RESEARCH_REPORT_V5' || /研报|report/i.test(originalText)) {
-      console.log(`👔 [SupervisorBot] → Routing to Report Bot`);
+      console.log(`👔 [SupervisorBot] → Routing to Analysis Bot (Report Mode)`);
       
       if (!reportParams || !reportParams.symbol) {
         await this.telegramAPI('sendMessage', {
@@ -131,12 +131,12 @@ class SupervisorBot {
       // Supervisor acknowledgment
       await this.telegramAPI('sendMessage', {
         chat_id: chatId,
-        text: `✅ 收到！我已经让【研报机器人】帮你生成 ${reportParams.symbol} 的研究报告\n\n机构：${reportParams.firm}\n分析师：${reportParams.analyst}\n语言：${reportParams.lang === 'en' ? '英文' : '中文'}\n\n稍后它会直接给你发送PDF报告...`
+        text: `✅ 收到！我已经让【股票分析机器人】帮你生成 ${reportParams.symbol} 的研究报告\n\n机构：${reportParams.firm}\n分析师：${reportParams.analyst}\n语言：${reportParams.lang === 'en' ? '英文' : '中文'}\n\n稍后它会直接给你发送PDF报告...`
       });
       
-      // Delegate to Report Bot
-      if (this.workerBots.reportBot) {
-        await this.workerBots.reportBot.runReportJob({
+      // Delegate to Analysis Bot
+      if (this.workerBots.analysisBot) {
+        await this.workerBots.analysisBot.runReportJob({
           chatId,
           symbol: reportParams.symbol,
           firm: reportParams.firm,
@@ -144,7 +144,7 @@ class SupervisorBot {
           language: reportParams.lang
         });
       } else {
-        throw new Error('Report Bot not configured');
+        throw new Error('Analysis Bot not configured');
       }
       return;
     }
@@ -204,7 +204,7 @@ class SupervisorBot {
     
     await this.telegramAPI('sendMessage', {
       chat_id: chatId,
-      text: `${greeting}\n\n我能帮你：\n• 📊 解票分析（股票技术分析）\n• 📋 研报生成（专业投资报告）\n• 📰 新闻推送（今日重要财经资讯）\n\n输入 /help 查看详细帮助`
+      text: `${greeting}\n\n我能帮你：\n• 📊 股票分析（解票 + 研报）\n• 📰 新闻推送（今日重要财经资讯）\n\n输入 /help 查看详细帮助`
     });
   }
 
@@ -215,12 +215,14 @@ class SupervisorBot {
     const helpText = `
 🤖 USIS Brain 主管机器人
 
-我是您的智能投资助手，负责协调多个专业机器人为您服务。
+我是您的智能投资助手，负责协调专业机器人为您服务。
 
 ━━━━━━━━━━━━━━━━━━
-📊 **解票分析**（由解票机器人提供）
+📊 **股票分析**（由股票分析机器人提供）
 
-快速技术分析，6大维度解读：
+包含两种模式：
+
+**1. 解票分析** - 快速技术分析，6大维度解读：
 • 趋势判断
 • 关键价位
 • 形态识别
@@ -237,10 +239,7 @@ class SupervisorBot {
 • 解票 AAPL 聊天版（人话解读）
 • 解票 MSFT 完整版（所有格式）
 
-━━━━━━━━━━━━━━━━━━
-📋 **研报生成**（由研报机器人提供）
-
-专业投资研究报告，PDF格式：
+**2. 研报生成** - 专业投资研究报告，PDF格式：
 • 投资论点
 • 估值分析
 • 行业趋势
@@ -277,11 +276,10 @@ class SupervisorBot {
 
 USIS Brain采用"一个进程，多机器人"架构：
 • 主管机器人（我）：接收您的指令，智能路由
-• 解票机器人：专注股票技术分析
-• 研报机器人：专注研究报告生成
-• 新闻机器人：专注财经资讯推送
+• 股票分析机器人：解票 + 研报双模式
+• 新闻机器人：财经资讯推送
 
-每个机器人都使用独立的Telegram账号，分工明确。
+每个机器人使用独立的Telegram账号，分工明确。
 
 ━━━━━━━━━━━━━━━━━━
 有任何问题，随时找我！`;

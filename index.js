@@ -6113,13 +6113,11 @@ app.listen(PORT, "0.0.0.0", () => {
 
 // 🔑 Bot Tokens配置
 const SUPERVISOR_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN; // 主管机器人（接收所有用户消息）
-const TICKET_BOT_TOKEN = process.env.TICKET_BOT_TOKEN || SUPERVISOR_BOT_TOKEN; // 解票机器人（可独立或共用）
+const ANALYSIS_BOT_TOKEN = process.env.ANALYSIS_BOT_TOKEN || SUPERVISOR_BOT_TOKEN; // 股票分析机器人（解票 + 研报，可独立或共用）
 const NEWS_BOT_TOKEN = process.env.NEWS_BOT_TOKEN || SUPERVISOR_BOT_TOKEN; // 新闻机器人（可独立或共用）
-const REPORT_BOT_TOKEN = process.env.REPORT_BOT_TOKEN || SUPERVISOR_BOT_TOKEN; // 研报机器人（可独立或共用）
 
 // 保留变量名供旧代码引用
 const TELEGRAM_TOKEN = SUPERVISOR_BOT_TOKEN;
-const ENABLE_TELEGRAM = process.env.ENABLE_TELEGRAM !== 'false';
 
 // 🔒 v7.0: 启动检查 - 至少需要Supervisor Bot Token
 if (!SUPERVISOR_BOT_TOKEN) {
@@ -6130,9 +6128,8 @@ if (!SUPERVISOR_BOT_TOKEN) {
 
 console.log('\n🏗️  ===== USIS Brain v7.0 Bot Architecture =====');
 console.log(`👔 [Supervisor Bot] Token: ${SUPERVISOR_BOT_TOKEN.slice(0, 10)}... (Main entry point)`);
-console.log(`🎫 [Ticket Bot] Token: ${TICKET_BOT_TOKEN.slice(0, 10)}... ${TICKET_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared)' : '(Dedicated)'}`);
+console.log(`📊 [Analysis Bot] Token: ${ANALYSIS_BOT_TOKEN.slice(0, 10)}... ${ANALYSIS_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared)' : '(Dedicated)'} - Handles 解票 + 研报`);
 console.log(`📰 [News Bot] Token: ${NEWS_BOT_TOKEN.slice(0, 10)}... ${NEWS_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared)' : '(Dedicated)'}`);
-console.log(`📊 [Report Bot] Token: ${REPORT_BOT_TOKEN.slice(0, 10)}... ${REPORT_BOT_TOKEN === SUPERVISOR_BOT_TOKEN ? '(Shared)' : '(Dedicated)'}`);
 console.log('✅ [Token Check] Supervisor Bot token validated');
 console.log('==============================================\n');
 
@@ -6211,20 +6208,17 @@ if (ENABLE_TELEGRAM && SUPERVISOR_BOT_TOKEN) {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
     // 初始化Worker Bots（子机器人）
-    const TicketBot = require('./bots/ticketBot');
+    const AnalysisBot = require('./bots/analysisBot');
     const NewsBot = require('./bots/newsBot');
-    const ReportBot = require('./bots/reportBot');
     const SupervisorBot = require('./bots/supervisorBot');
     
-    const ticketBot = new TicketBot(TICKET_BOT_TOKEN);
+    const analysisBot = new AnalysisBot(ANALYSIS_BOT_TOKEN);
     const newsBot = new NewsBot(NEWS_BOT_TOKEN);
-    const reportBot = new ReportBot(REPORT_BOT_TOKEN);
     
     // 初始化Supervisor Bot并注入Worker Bots
     const supervisorBot = new SupervisorBot(SUPERVISOR_BOT_TOKEN, {
-      ticketBot,
-      newsBot,
-      reportBot
+      analysisBot,
+      newsBot
     });
     
     console.log('✅ All bots initialized successfully\n');
