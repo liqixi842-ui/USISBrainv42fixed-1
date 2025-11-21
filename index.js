@@ -6107,45 +6107,60 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log('⚠️  N8N监控已禁用以节省内存');
 });
 
-// ====== Telegram Bot v6.5.2 (真正的三机器人分工架构) ======
-// 架构：主管Bot监听所有消息 → 路由到专职Bot → 专职Bot用自己的Token回复
+// ====== Telegram Bot (灵活架构：单Bot或三Bot) ======
+// 🆕 v6.5.3: 添加 ENABLE_MANAGER_BOT 开关支持单Bot和三Bot双模式
+const ENABLE_MANAGER_BOT = process.env.ENABLE_MANAGER_BOT === 'true'; // 默认false（单Bot模式）
 const MANAGER_BOT_TOKEN = process.env.MANAGER_BOT_TOKEN;
 const RESEARCH_BOT_TOKEN = process.env.RESEARCH_BOT_TOKEN;
 const NEWS_BOT_TOKEN = process.env.NEWS_BOT_TOKEN;
-const TELEGRAM_TOKEN = RESEARCH_BOT_TOKEN; // 保留变量名供旧代码引用
 
-// 🔒 v6.5.2: 启动检查 - 确保所有Token已配置且不重复
-if (!MANAGER_BOT_TOKEN) {
-  console.error('❌ [Fatal] MANAGER_BOT_TOKEN is required for @qixizhuguan_bot');
-  console.error('💡 Please set MANAGER_BOT_TOKEN in environment variables');
-  process.exit(1);
+// 兼容传统单Bot模式：优先使用TELEGRAM_BOT_TOKEN_DEV，其次RESEARCH_BOT_TOKEN
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN_DEV || RESEARCH_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+
+if (ENABLE_MANAGER_BOT) {
+  // 🔒 三Bot模式：启动检查 - 确保所有Token已配置且不重复
+  console.log('🏗️  [Architecture] Three-Bot Mode ENABLED (ENABLE_MANAGER_BOT=true)');
+  
+  if (!MANAGER_BOT_TOKEN) {
+    console.error('❌ [Fatal] MANAGER_BOT_TOKEN is required for @qixizhuguan_bot');
+    console.error('💡 Please set MANAGER_BOT_TOKEN in environment variables');
+    process.exit(1);
+  }
+
+  if (!RESEARCH_BOT_TOKEN) {
+    console.error('❌ [Fatal] RESEARCH_BOT_TOKEN is required for @qixijiepiao_bot');
+    console.error('💡 Please set RESEARCH_BOT_TOKEN in environment variables');
+    process.exit(1);
+  }
+
+  if (!NEWS_BOT_TOKEN) {
+    console.error('❌ [Fatal] NEWS_BOT_TOKEN is required for @chaojilaos_bot');
+    console.error('💡 Please set NEWS_BOT_TOKEN in environment variables');
+    process.exit(1);
+  }
+
+  // 确保所有Token都不同
+  const tokens = [MANAGER_BOT_TOKEN, RESEARCH_BOT_TOKEN, NEWS_BOT_TOKEN];
+  const uniqueTokens = new Set(tokens);
+  if (uniqueTokens.size !== tokens.length) {
+    console.error('❌ [Fatal] All bot tokens must be unique!');
+    console.error('💡 Each bot requires its own unique token from @BotFather');
+    process.exit(1);
+  }
+
+  console.log(`👔 [Manager Bot] Token: ${MANAGER_BOT_TOKEN.slice(0, 10)}...`);
+  console.log(`🤖 [Research Bot] Token: ${RESEARCH_BOT_TOKEN.slice(0, 10)}...`);
+  console.log(`📰 [News Bot] Token: ${NEWS_BOT_TOKEN.slice(0, 10)}...`);
+  console.log('✅ [Token Check] All 3 bot tokens validated (unique and configured)');
+} else {
+  // 🎯 单Bot模式（传统模式）
+  console.log('🤖 [Architecture] Single-Bot Mode (ENABLE_MANAGER_BOT=false, default)');
+  console.log(`💡 Using token: ${TELEGRAM_TOKEN ? TELEGRAM_TOKEN.slice(0, 10) + '...' : 'NOT_SET'}`);
+  if (!TELEGRAM_TOKEN) {
+    console.error('❌ [Fatal] No bot token found! Set TELEGRAM_BOT_TOKEN_DEV or RESEARCH_BOT_TOKEN');
+    process.exit(1);
+  }
 }
-
-if (!RESEARCH_BOT_TOKEN) {
-  console.error('❌ [Fatal] RESEARCH_BOT_TOKEN is required for @qixijiepiao_bot');
-  console.error('💡 Please set RESEARCH_BOT_TOKEN in environment variables');
-  process.exit(1);
-}
-
-if (!NEWS_BOT_TOKEN) {
-  console.error('❌ [Fatal] NEWS_BOT_TOKEN is required for @chaojilaos_bot');
-  console.error('💡 Please set NEWS_BOT_TOKEN in environment variables');
-  process.exit(1);
-}
-
-// 确保所有Token都不同
-const tokens = [MANAGER_BOT_TOKEN, RESEARCH_BOT_TOKEN, NEWS_BOT_TOKEN];
-const uniqueTokens = new Set(tokens);
-if (uniqueTokens.size !== tokens.length) {
-  console.error('❌ [Fatal] All bot tokens must be unique!');
-  console.error('💡 Each bot requires its own unique token from @BotFather');
-  process.exit(1);
-}
-
-console.log(`👔 [Manager Bot] Token: ${MANAGER_BOT_TOKEN.slice(0, 10)}...`);
-console.log(`🤖 [Research Bot] Token: ${RESEARCH_BOT_TOKEN.slice(0, 10)}...`);
-console.log(`📰 [News Bot] Token: ${NEWS_BOT_TOKEN.slice(0, 10)}...`);
-console.log('✅ [Token Check] All 3 bot tokens validated (unique and configured)');
 
 // 🆕 v1.1: PID文件锁机制（防止重复启动Bot）
 const fs = require('fs');
