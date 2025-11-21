@@ -631,5 +631,6 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
 
 module.exports = { 
   handleDevBotMessage,
-  handleTicketAnalysis  // 🆕 v6.5.2: Export for Manager Bot integration
+  handleTicketAnalysis,  // 🆕 v6.5.2: Export for Manager Bot integration
+  generateReport  // 🆕 v7.0: Export for Analysis Bot integration
 };
