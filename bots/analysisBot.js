@@ -2,7 +2,7 @@
 // Handles both ticket analysis (解票) and research reports (研报)
 // Uses different bot tokens for different job types
 
-const { sendWithToken, sendDocumentWithToken } = require('./telegramUtils');
+const { createTelegramAPI, sendWithToken, sendDocumentWithToken } = require('./telegramUtils');
 const { handleTicketAnalysis, generateReport } = require('../v3_dev/services/devBotHandler');
 
 class AnalysisBot {
@@ -12,6 +12,10 @@ class AnalysisBot {
     
     // Research report token (研报机器人) - 可暂时共用ticketBotToken
     this.reportBotToken = reportBotToken || process.env.REPORT_BOT_TOKEN || this.ticketBotToken;
+    
+    // Create telegramAPI objects for each token
+    this.ticketAPI = createTelegramAPI(this.ticketBotToken);
+    this.reportAPI = createTelegramAPI(this.reportBotToken);
     
     console.log(`📊 [AnalysisBot] Initialized`);
     console.log(`   ├─ Ticket Bot Token: ${this.ticketBotToken.slice(0, 10)}...`);
@@ -38,14 +42,12 @@ class AnalysisBot {
     console.log(`   └─ Using: TICKET_BOT_TOKEN`);
     
     try {
-      // Call existing ticket analysis handler with TICKET_BOT_TOKEN
-      // Note: handleTicketAnalysis internally uses the telegramAPI we pass
-      // We need to modify how we pass the token to it
+      // Call existing ticket analysis handler with TICKET_BOT telegramAPI
       await handleTicketAnalysis({
         symbol,
         mode,
         chatId,
-        botToken: this.ticketBotToken  // Pass the ticket bot token
+        telegramAPI: this.ticketAPI  // Pass telegramAPI created from TICKET_BOT_TOKEN
       });
       
       console.log(`✅ [AnalysisBot] Ticket analysis completed for ${symbol}`);
