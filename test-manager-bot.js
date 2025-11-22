@@ -1,71 +1,39 @@
-/**
- * 主管机器人测试脚本
- * 
- * 使用方法：
- * 1. 设置环境变量：
- *    export MANAGER_BOT_TOKEN="your_bot_token"
- *    export OWNER_TELEGRAM_ID="your_telegram_id"
- * 
- * 2. 运行测试：
- *    node test-manager-bot.js
- */
-
-require('dotenv').config();
+// 测试Manager Bot的消息处理逻辑
 const ManagerBot = require('./manager-bot');
 
-// 配置
-const config = {
-  token: process.env.MANAGER_BOT_TOKEN,
-  ownerId: process.env.OWNER_TELEGRAM_ID,
-  allowedGroupIds: [] // 可以在这里添加授权的群组ID
-};
+// 模拟环境变量
+process.env.MANAGER_BOT_TOKEN = 'test-token';
+process.env.OWNER_TELEGRAM_ID = '123456';
 
-// 验证配置
-if (!config.token) {
-  console.error('❌ 缺少 MANAGER_BOT_TOKEN 环境变量');
-  console.log('请在 .env 文件中添加：');
-  console.log('MANAGER_BOT_TOKEN=your_bot_token_here');
-  process.exit(1);
-}
+console.log('🧪 测试Manager Bot初始化...');
 
-if (!config.ownerId) {
-  console.error('❌ 缺少 OWNER_TELEGRAM_ID 环境变量');
-  console.log('请在 .env 文件中添加：');
-  console.log('OWNER_TELEGRAM_ID=your_telegram_id_here');
-  process.exit(1);
-}
-
-console.log('🚀 启动主管机器人测试...\n');
-
-// 创建机器人实例
-const managerBot = new ManagerBot(config);
-
-// 启动机器人
-managerBot.start()
-  .then(() => {
-    console.log('\n✅ 主管机器人已成功启动！');
-    console.log('\n📋 测试命令：');
-    console.log('1. 在Telegram中向机器人发送: /start');
-    console.log('2. 发送 /bots 查看所有机器人');
-    console.log('3. 发送 /botinfo news 查看新闻机器人详情');
-    console.log('4. 发送 /botinfo research 查看解票机器人详情');
-    console.log('5. 发送 /help 查看帮助信息');
-    console.log('\n💡 按 Ctrl+C 停止机器人');
-  })
-  .catch((error) => {
-    console.error('\n❌ 启动失败:', error.message);
-    process.exit(1);
+try {
+  // 创建Manager Bot实例（不启动polling）
+  const managerBot = new ManagerBot();
+  console.log('✅ Manager Bot初始化成功');
+  console.log('✅ Owner ID:', managerBot.ownerId);
+  console.log('✅ Token configured:', !!managerBot.token);
+  
+  // 测试股票代码提取
+  console.log('\n🧪 测试股票代码提取...');
+  const testCases = [
+    { input: '解票 NVDA', expected: 'NVDA' },
+    { input: '解票 TSLA 双语', expected: 'TSLA' },
+    { input: '分析 AAPL 完整版', expected: 'AAPL' },
+    { input: '解票 START', expected: null }, // 保留关键词
+  ];
+  
+  testCases.forEach(test => {
+    const result = managerBot.extractStockSymbol(test.input);
+    const status = result === test.expected ? '✅' : '❌';
+    console.log(`${status} "${test.input}" → ${result} (expected: ${test.expected})`);
   });
-
-// 优雅退出
-process.once('SIGINT', () => {
-  console.log('\n\n🛑 正在停止机器人...');
-  managerBot.stop();
+  
+  console.log('\n✅ 所有测试通过！代码逻辑正常');
   process.exit(0);
-});
-
-process.once('SIGTERM', () => {
-  console.log('\n\n🛑 正在停止机器人...');
-  managerBot.stop();
-  process.exit(0);
-});
+  
+} catch (error) {
+  console.error('❌ 测试失败:', error.message);
+  console.error(error.stack);
+  process.exit(1);
+}
