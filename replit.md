@@ -5,8 +5,52 @@ The system is currently stable at `v2-stable` for production, with `v3-dev` acti
 
 ## Recent Changes (Jan 20, 2025)
 
+### v7.0 Direct V6 Engine Integration for Ticket Analysis
+**Status**: ✅ Fully Implemented, Ready for Testing
+
+**Critical Architecture Change**: V7 解票功能 now directly calls V6's complete `buildResearchReport()` engine instead of making HTTP API calls. This ensures the full data pipeline is utilized.
+
+**Before (V6.5.2)**:
+```
+handleTicketAnalysis → HTTP GET /v3/report/{symbol}?format=json → ticketFormatter
+```
+
+**After (V7.0)**:
+```
+handleTicketAnalysis → buildResearchReport() → FinancialDataBroker 
+                     → Finnhub/Twelve/Alpha (3-tier cascade)
+                     → HistoryChartEngine (5Y charts)
+                     → TechnicalEngine (indicators)
+                     → ticketFormatter (6-section output)
+```
+
+**Key Benefits**:
+1. **Complete Data Pipeline**: Now uses FinancialDataBroker's 3-tier API cascade (Finnhub → Twelve Data → Alpha Vantage)
+2. **Real-Time Financial Data**: Direct access to quote, metrics, financials, 5Y history
+3. **Technical Analysis**: Full TechnicalEngine indicators calculation
+4. **Chart Generation**: HistoryChartEngine generates 5-year revenue/EPS trends
+5. **No HTTP Overhead**: Eliminates API call latency and timeout risks
+
+**V6 Core Engine Components Now Used**:
+- ✅ Phase 1: FinancialDataBroker.getAll() - Multi-source data aggregation
+- ✅ Phase 2: multiModelResearchPipeline() - 6 AI models analysis
+- ✅ Phase 2.5: HistoryChartEngine.generateAllCharts() - Historical charts
+- ✅ Phase 2.6: TechnicalEngine.generateTechnicalIndicatorsData() - Tech indicators
+- ✅ Phase 3: Report assembly with complete ResearchReport v3.2 schema
+
+**Files Modified**:
+- `v3_dev/services/devBotHandler.js` - Refactored handleTicketAnalysis() to call buildResearchReport() directly
+
+**Output Modes** (unchanged):
+- `解票 NVDA` - Standard CN
+- `解票 NVDA 双语` - CN + EN
+- `解票 NVDA 聊天版` - Human voice
+- `解票 NVDA 完整版` - All formats
+
+---
+
 ### v6.5.2 Three-Bot Architecture - Manager Bot Message Routing
-**Status**: ✅ Fully Implemented, Ready for Production Deployment
+**Status**: ✅ Fully Implemented, Production Deployed
 
 **Critical Architecture Change**: Implemented strict three-bot separation with centralized message routing to eliminate duplicate responses and enforce bot specialization.
 

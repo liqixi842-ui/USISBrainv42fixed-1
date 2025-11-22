@@ -12,6 +12,9 @@ const { parseResearchReportCommand, parseSymbolDescription } = require('../../se
 // 🆕 v6.0: Import ticket formatter for 解票 feature
 const ticketFormatter = require('./v5/ticketFormatter');
 
+// 🆕 v7.0: Import V6 core report engine for direct ticket analysis
+const { buildResearchReport } = require('./reportService');
+
 /**
  * 发送 PDF 文件到 Telegram（使用 multipart/form-data）
  * @param {string} chatId - Chat ID
@@ -260,8 +263,15 @@ function parseParams(paramString) {
 }
 
 /**
- * 🆕 v6.0: 解票功能 - Ticket Analysis with Multiple Output Formats
- * Supports 3 modes:
+ * 🆕 v7.0: 解票功能 - Direct V6 Core Engine Integration
+ * 
+ * Architecture Change: V7 now directly calls V6's buildResearchReport()
+ * instead of making HTTP API calls. This ensures complete data pipeline:
+ * 
+ * Flow: handleTicketAnalysis → buildResearchReport → FinancialDataBroker
+ *       → Finnhub/Twelve/Alpha → HistoryChartEngine → ticketFormatter
+ * 
+ * Supports 4 output modes:
  * 1. 解票 SYMBOL - Standard CN only
  * 2. 解票 SYMBOL 双语 - Standard CN + EN
  * 3. 解票 SYMBOL 聊天版 / 人话版 - Human voice (CN)
@@ -271,46 +281,61 @@ async function handleTicketAnalysis({ symbol, mode, chatId, telegramAPI }) {
   let statusMsg = null;
   let t0 = null;
   
-  const REPLIT_API_URL = process.env.REPLIT_DEPLOYMENT_URL || 'http://localhost:3000';
-  
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  console.log(`🎯 [DEV_BOT] Ticket Analysis Request`);
+  console.log(`🎯 [V7 TICKET] Direct V6 Engine Integration`);
   console.log(`   ├─ Symbol: ${symbol}`);
   console.log(`   ├─ Mode: ${mode}`);
-  console.log(`   └─ API URL: ${REPLIT_API_URL}`);
+  console.log(`   └─ Engine: buildResearchReport() + FinancialDataBroker`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
   
   try {
     // Send initial status message
     statusMsg = await telegramAPI('sendMessage', {
       chat_id: chatId,
-      text: `🎯 正在解票 ${symbol}\n\n⏳ 正在抓取数据和生成分析...\n\n(这可能需要 30-60 秒)`
+      text: `🎯 正在解票 ${symbol}\n\n⏳ 正在调用V6完整引擎...\n• FinancialDataBroker 数据聚合\n• 多模型AI分析\n• 技术指标计算\n\n(这可能需要 30-60 秒)`
     });
     
-    // Call v3 API to get full report object (JSON format)
-    const url = `${REPLIT_API_URL}/v3/report/${symbol}?format=json`;
+    // ═══════════════════════════════════════════════════════════════
+    // V7 ARCHITECTURE: Direct call to V6 buildResearchReport()
+    // This includes:
+    // - Phase 1: FinancialDataBroker (Finnhub → Twelve → Alpha cascade)
+    // - Phase 2: Multi-model AI analysis
+    // - Phase 2.5: HistoryChartEngine (5Y revenue/EPS charts)
+    // - Phase 2.6: TechnicalEngine (indicators table)
+    // - Phase 3: Report assembly
+    // ═══════════════════════════════════════════════════════════════
     
     t0 = Date.now();
-    console.log(`📡 [DEV_BOT] Calling Report API: ${url}`);
+    console.log(`🔬 [V7 TICKET] Calling buildResearchReport('${symbol}', 'equity')...`);
     
-    const response = await axios.get(url, { 
-      timeout: 120000  // 2 minutes timeout
+    const report = await buildResearchReport(symbol, 'equity', {
+      brand: 'USIS Research',
+      firm: 'USIS Research Division',
+      analyst: 'Research Bot (USIS Brain)',
+      language: 'zh'
     });
     
     const dt = Date.now() - t0;
-    const report = response.data;
     
-    console.log(`✅ [DEV_BOT] Report API completed in ${dt} ms`);
+    console.log(`✅ [V7 TICKET] V6 Engine completed in ${dt} ms`);
     console.log(`   ├─ Symbol: ${report.symbol}`);
+    console.log(`   ├─ Name: ${report.name}`);
+    console.log(`   ├─ Price: ${report.price?.last || 'N/A'}`);
     console.log(`   ├─ Rating: ${report.rating}`);
-    console.log(`   └─ Asset Type: ${report.asset_type}\n`);
+    console.log(`   ├─ Asset Type: ${report.asset_type}`);
+    console.log(`   ├─ Market Cap: ${report.valuation?.market_cap ? '$' + (report.valuation.market_cap / 1e9).toFixed(1) + 'B' : 'N/A'}`);
+    console.log(`   └─ PE TTM: ${report.valuation?.pe_ttm || 'N/A'}\n`);
     
     // Update status
     await telegramAPI('editMessageText', {
       chat_id: chatId,
       message_id: statusMsg.result.message_id,
-      text: `🎯 正在解票 ${symbol}\n\n✅ 数据获取完成\n⏳ 正在格式化输出...`
+      text: `🎯 正在解票 ${symbol}\n\n✅ V6引擎完成 (${dt}ms)\n⏳ 正在格式化输出...`
     });
+    
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 2: ticketFormatter - 6-Section Analysis Formatting
+    // ═══════════════════════════════════════════════════════════════
     
     // Determine format options based on mode
     let formatOptions = {
@@ -328,11 +353,15 @@ async function handleTicketAnalysis({ symbol, mode, chatId, telegramAPI }) {
       formatOptions.bilingual_split = true;
     }
     
-    // Format messages using ticketFormatter
-    console.log(`📝 [DEV_BOT] Formatting messages with options:`, formatOptions);
+    // Format messages using ticketFormatter (6-section analysis)
+    console.log(`📝 [V7 TICKET] Formatting with ticketFormatter...`);
+    console.log(`   ├─ Mode: ${formatOptions.mode}`);
+    console.log(`   ├─ Bilingual: ${formatOptions.bilingual_split}`);
+    console.log(`   └─ Language: ${formatOptions.primary_lang}`);
+    
     const messages = await ticketFormatter.formatTicket(report, formatOptions);
     
-    console.log(`✅ [DEV_BOT] Generated ${messages.length} message(s)`);
+    console.log(`✅ [V7 TICKET] Generated ${messages.length} message(s)`);
     
     // Delete status message
     await telegramAPI('deleteMessage', {
@@ -340,10 +369,14 @@ async function handleTicketAnalysis({ symbol, mode, chatId, telegramAPI }) {
       message_id: statusMsg.result.message_id
     });
     
+    // ═══════════════════════════════════════════════════════════════
+    // Phase 3: Sequential Message Delivery (Rate Limit Protection)
+    // ═══════════════════════════════════════════════════════════════
+    
     // Send all formatted messages sequentially
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
-      console.log(`📤 [DEV_BOT] Sending message ${i + 1}/${messages.length} (${msg.length} chars)`);
+      console.log(`📤 [V7 TICKET] Sending message ${i + 1}/${messages.length} (${msg.length} chars)`);
       
       await telegramAPI('sendMessage', {
         chat_id: chatId,
@@ -357,15 +390,19 @@ async function handleTicketAnalysis({ symbol, mode, chatId, telegramAPI }) {
       }
     }
     
-    console.log(`✅ [DEV_BOT] Ticket analysis completed for ${symbol}`);
+    console.log(`✅ [V7 TICKET] Ticket analysis completed for ${symbol}`);
+    console.log(`   ├─ Total time: ${Date.now() - t0}ms`);
+    console.log(`   ├─ Messages sent: ${messages.length}`);
+    console.log(`   ├─ Data source: FinancialDataBroker (Finnhub/Twelve/Alpha)`);
+    console.log(`   └─ Output mode: ${mode}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
     
   } catch (error) {
     const dt = t0 ? Date.now() - t0 : 0;
-    console.error(`❌ [DEV_BOT] Ticket analysis ERROR after ${dt} ms`);
-    console.error(`   ├─ Error code: ${error.code || 'N/A'}`);
+    console.error(`❌ [V7 TICKET] ERROR after ${dt} ms`);
+    console.error(`   ├─ Error type: ${error.name || 'Unknown'}`);
     console.error(`   ├─ Error message: ${error.message}`);
-    console.error(`   └─ Stack: ${error.stack}\n`);
+    console.error(`   ├─ Stack trace:\n${error.stack}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
     
     // Delete status message if exists
@@ -380,24 +417,26 @@ async function handleTicketAnalysis({ symbol, mode, chatId, telegramAPI }) {
       }
     }
     
-    // Send error message
-    let errorMsg = `❌ 解票失败\n\n标的: ${symbol}\n\n`;
+    // Send error message with detailed diagnosis
+    let errorMsg = `❌ 解票失败\n\n**标的:** ${symbol}\n**模式:** ${mode}\n\n`;
     
-    if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
-      errorMsg += `原因: API 请求超时（可能是股票代码不存在或服务繁忙）\n\n建议：\n• 检查股票代码是否正确\n• 稍后重试`;
-    } else if (error.response) {
-      errorMsg += `原因: API 返回错误 (${error.response.status})\n\n错误信息: ${error.response.statusText}`;
-    } else if (error.request) {
-      errorMsg += `原因: 无法连接到 API\n\n建议：\n• 检查 Replit 服务是否在运行\n• 检查网络连接`;
+    // Categorize error types
+    if (error.message.includes('timeout')) {
+      errorMsg += `**原因:** 数据获取超时\n\n可能情况：\n• 股票代码不存在或已退市\n• Finnhub/Twelve Data API 响应缓慢\n• 网络连接不稳定\n\n**建议：**\n• 验证股票代码是否正确（如：NVDA, AAPL）\n• 稍后重试`;
+    } else if (error.message.includes('FinancialDataBroker')) {
+      errorMsg += `**原因:** 金融数据获取失败\n\n可能情况：\n• API密钥失效或配额用尽\n• 多个数据源同时不可用\n\n**建议：**\n• 检查 FINNHUB_API_KEY 环境变量\n• 检查 TWELVE_DATA_API_KEY 环境变量`;
+    } else if (error.message.includes('buildResearchReport')) {
+      errorMsg += `**原因:** V6报告引擎错误\n\n错误详情: ${error.message}\n\n**建议：**\n• 查看服务器日志获取详细信息\n• 联系技术支持`;
     } else {
-      errorMsg += `原因: ${error.message}`;
+      errorMsg += `**原因:** ${error.message}\n\n**错误类型:** ${error.name || 'Unknown'}`;
     }
     
-    errorMsg += `\n\n(v3-dev 解票功能 - 模式: ${mode})`;
+    errorMsg += `\n\n━━━━━━━━━━━━━━━━━━━━━━\n💡 **V7架构:** 直接调用V6引擎\n🔧 **数据源:** FinancialDataBroker\n📊 **格式化器:** ticketFormatter`;
     
     await telegramAPI('sendMessage', {
       chat_id: chatId,
-      text: errorMsg
+      text: errorMsg,
+      parse_mode: 'Markdown'
     });
   }
 }
