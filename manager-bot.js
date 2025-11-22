@@ -174,8 +174,55 @@ class ManagerBot {
         return;
       }
       
-      // 3️⃣ 其他消息：交给默认命令处理
-      // 命令会被 bot.command() 自动处理，这里不需要额外逻辑
+      // 3️⃣ 检测新闻请求
+      if (/^(新闻|news)$/i.test(text.trim())) {
+        await ctx.reply(
+          '📰 新闻功能由 @chaojilaos_bot 负责！\n\n' +
+          '新闻机器人会定时推送：\n' +
+          '• 2小时新闻摘要\n' +
+          '• 4小时新闻摘要\n' +
+          '• 重大突发新闻\n\n' +
+          '您也可以直接私聊 @chaojilaos_bot 获取最新新闻。'
+        );
+        return;
+      }
+      
+      // 4️⃣ 检测问候和帮助请求
+      const isGreeting = /^(你好|hi|hello|嗨|您好|hey|早|晚上好|在吗)[\s!！?？]*$/i.test(text.trim());
+      const isHelpRequest = /(能做什么|可以做什么|怎么用|如何使用|功能|帮助|help)/i.test(text);
+      
+      if (isGreeting || isHelpRequest) {
+        await ctx.reply(
+          '👋 你好！我是主管机器人，负责协调各专职机器人为您服务！\n\n' +
+          '💡 **我们团队提供**：\n\n' +
+          '🎫 **解票分析** - @qixijiepiao_bot\n' +
+          '   • 发送：解票 NVDA\n' +
+          '   • 快速技术分析（15-30秒）\n' +
+          '   • 支持标准版/双语/聊天版/完整版\n\n' +
+          '📊 **研报生成** - @qixijiepiao_bot\n' +
+          '   • 发送：研报, TSLA, 机构名, 分析师, 语言\n' +
+          '   • 完整PDF研报（2-5分钟）\n\n' +
+          '📰 **新闻推送** - @chaojilaos_bot\n' +
+          '   • 定时推送财经新闻\n' +
+          '   • 实时市场动态\n\n' +
+          '💬 试试发送 "解票 NVDA" 或 "研报, AAPL"！'
+        );
+        return;
+      }
+      
+      // 5️⃣ 其他消息：友好提示
+      if (!text.startsWith('/')) {
+        await ctx.reply(
+          '🤔 我不太理解您的意思...\n\n' +
+          '💡 **常用命令**：\n' +
+          '• 解票 NVDA - 快速解票分析\n' +
+          '• 研报, TSLA, 机构, 分析师, 语言 - 生成研报\n' +
+          '• 新闻 - 查看新闻功能说明\n\n' +
+          '或发送 /help 查看完整帮助！'
+        );
+      }
+      
+      // 命令会被 bot.command() 自动处理
     });
 
     // /start 命令
