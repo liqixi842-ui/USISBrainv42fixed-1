@@ -117,112 +117,117 @@ class ManagerBot {
   setupHandlers() {
     // 🆕 消息路由：监听所有文本消息
     this.bot.on('text', async (ctx) => {
-      const text = ctx.message.text;
-      const chatId = ctx.chat.id;
-      const userId = ctx.from.id;
-      
-      console.log(`\n📨 [ManagerBot] Received: "${text}" from user ${userId}`);
-      
-      // 1️⃣ 检测解票/分析命令
-      if (/解票|\/解票|分析/i.test(text) && !/研报/.test(text)) {
-        console.log('🎯 [ManagerBot] Routing to Research Bot (解票功能)');
+      try {
+        const text = ctx.message.text;
+        const chatId = ctx.chat.id;
+        const userId = ctx.from.id;
         
-        const symbol = this.extractStockSymbol(text);
-        console.log(`[DEBUG ticket] Original: "${text}" → Extracted: "${symbol}"`);
+        console.log(`\n📨 [ManagerBot] Received: "${text}" from user ${userId}`);
         
-        if (!symbol || !/^[A-Z][A-Z0-9.:-]{0,9}$/.test(symbol)) {
-          await ctx.reply('❌ 无法识别股票代码，请使用格式：解票 NVDA 或 分析 TSLA 双语');
+        // 1️⃣ 检测解票/分析命令
+        if (/解票|\/解票|分析/i.test(text) && !/研报/.test(text)) {
+          console.log('🎯 [ManagerBot] Routing to Research Bot (解票功能)');
+          
+          const symbol = this.extractStockSymbol(text);
+          console.log(`[DEBUG ticket] Original: "${text}" → Extracted: "${symbol}"`);
+          
+          if (!symbol || !/^[A-Z][A-Z0-9.:-]{0,9}$/.test(symbol)) {
+            await ctx.reply('❌ 无法识别股票代码，请使用格式：解票 NVDA 或 分析 TSLA 双语');
+            return;
+          }
+          
+          // 提取模式（handleTicketAnalysis 只识别4种精确格式）
+          let mode = '标准版';
+          if (/完整版/.test(text)) {
+            mode = '完整版';  // 完整版 = 中文 + 英文 + 人话版
+          } else if (/双语/.test(text) && /聊天版|人话版/.test(text)) {
+            mode = '完整版';  // 双语+聊天版 = 完整版
+          } else if (/双语/.test(text)) {
+            mode = '双语';    // 双语 = 中文 + 英文标准版
+          } else if (/聊天版|人话版/.test(text)) {
+            mode = '聊天版';  // 聊天版/人话版 = 人话版
+          }
+          
+          // 发送确认消息
+          await ctx.reply(`✅ 收到！正在分析 ${symbol}...`);
+          
+          // 调用解票处理器（如果已注册）
+          if (this.externalHandlers?.handleTicketAnalysis) {
+            await this.externalHandlers.handleTicketAnalysis({ symbol, mode, chatId });
+          } else {
+            await ctx.reply('❌ 解票功能暂不可用');
+          }
           return;
         }
         
-        // 提取模式（handleTicketAnalysis 只识别4种精确格式）
-        let mode = '标准版';
-        if (/完整版/.test(text)) {
-          mode = '完整版';  // 完整版 = 中文 + 英文 + 人话版
-        } else if (/双语/.test(text) && /聊天版|人话版/.test(text)) {
-          mode = '完整版';  // 双语+聊天版 = 完整版
-        } else if (/双语/.test(text)) {
-          mode = '双语';    // 双语 = 中文 + 英文标准版
-        } else if (/聊天版|人话版/.test(text)) {
-          mode = '聊天版';  // 聊天版/人话版 = 人话版
+        // 2️⃣ 检测研报命令
+        if (/^(研报|\/研报)/i.test(text)) {
+          console.log('📊 [ManagerBot] Routing to Research Bot (研报功能)');
+          
+          // 发送确认消息
+          await ctx.reply('✅ 收到！正在生成研报...');
+          
+          if (this.externalHandlers?.handleResearchReport) {
+            await this.externalHandlers.handleResearchReport({ text, chatId });
+          } else {
+            await ctx.reply('❌ 研报功能暂不可用');
+          }
+          return;
         }
         
-        // 发送确认消息
-        await ctx.reply(`✅ 收到！正在分析 ${symbol}...`);
-        
-        // 调用解票处理器（如果已注册）
-        if (this.externalHandlers?.handleTicketAnalysis) {
-          await this.externalHandlers.handleTicketAnalysis({ symbol, mode, chatId });
-        } else {
-          await ctx.reply('❌ 解票功能暂不可用');
+        // 3️⃣ 检测新闻请求
+        if (/^(新闻|news)$/i.test(text.trim())) {
+          await ctx.reply(
+            '📰 新闻功能由 @chaojilaos_bot 负责！\n\n' +
+            '新闻机器人会定时推送：\n' +
+            '• 2小时新闻摘要\n' +
+            '• 4小时新闻摘要\n' +
+            '• 重大突发新闻\n\n' +
+            '您也可以直接私聊 @chaojilaos_bot 获取最新新闻。'
+          );
+          return;
         }
-        return;
-      }
-      
-      // 2️⃣ 检测研报命令
-      if (/^(研报|\/研报)/i.test(text)) {
-        console.log('📊 [ManagerBot] Routing to Research Bot (研报功能)');
         
-        // 发送确认消息
-        await ctx.reply('✅ 收到！正在生成研报...');
+        // 4️⃣ 检测问候和帮助请求
+        const isGreeting = /^(你好|hi|hello|嗨|您好|hey|早|晚上好|在吗)[\s!！?？]*$/i.test(text.trim());
+        const isHelpRequest = /(能做什么|可以做什么|怎么用|如何使用|功能|帮助|help)/i.test(text);
         
-        if (this.externalHandlers?.handleResearchReport) {
-          await this.externalHandlers.handleResearchReport({ text, chatId });
-        } else {
-          await ctx.reply('❌ 研报功能暂不可用');
+        if (isGreeting || isHelpRequest) {
+          await ctx.reply(
+            '👋 你好！我是主管机器人，负责协调各专职机器人为您服务！\n\n' +
+            '💡 **我们团队提供**：\n\n' +
+            '🎫 **解票分析** - @qixijiepiao_bot\n' +
+            '   • 发送：解票 NVDA\n' +
+            '   • 快速技术分析（15-30秒）\n' +
+            '   • 支持标准版/双语/聊天版/完整版\n\n' +
+            '📊 **研报生成** - @qixijiepiao_bot\n' +
+            '   • 发送：研报, TSLA, 机构名, 分析师, 语言\n' +
+            '   • 完整PDF研报（2-5分钟）\n\n' +
+            '📰 **新闻推送** - @chaojilaos_bot\n' +
+            '   • 定时推送财经新闻\n' +
+            '   • 实时市场动态\n\n' +
+            '💬 试试发送 "解票 NVDA" 或 "研报, AAPL"！'
+          );
+          return;
         }
-        return;
+      
+        // 5️⃣ 其他消息：友好提示
+        if (!text.startsWith('/')) {
+          await ctx.reply(
+            '🤔 我不太理解您的意思...\n\n' +
+            '💡 **常用命令**：\n' +
+            '• 解票 NVDA - 快速解票分析\n' +
+            '• 研报, TSLA, 机构, 分析师, 语言 - 生成研报\n' +
+            '• 新闻 - 查看新闻功能说明\n\n' +
+            '或发送 /help 查看完整帮助！'
+          );
+        }
+        
+        // 命令会被 bot.command() 自动处理
+      } catch (error) {
+        console.error('[ManagerBot ERROR]', error.message);
+        console.error('[ManagerBot RESPONSE]', error.response?.description);
       }
-      
-      // 3️⃣ 检测新闻请求
-      if (/^(新闻|news)$/i.test(text.trim())) {
-        await ctx.reply(
-          '📰 新闻功能由 @chaojilaos_bot 负责！\n\n' +
-          '新闻机器人会定时推送：\n' +
-          '• 2小时新闻摘要\n' +
-          '• 4小时新闻摘要\n' +
-          '• 重大突发新闻\n\n' +
-          '您也可以直接私聊 @chaojilaos_bot 获取最新新闻。'
-        );
-        return;
-      }
-      
-      // 4️⃣ 检测问候和帮助请求
-      const isGreeting = /^(你好|hi|hello|嗨|您好|hey|早|晚上好|在吗)[\s!！?？]*$/i.test(text.trim());
-      const isHelpRequest = /(能做什么|可以做什么|怎么用|如何使用|功能|帮助|help)/i.test(text);
-      
-      if (isGreeting || isHelpRequest) {
-        await ctx.reply(
-          '👋 你好！我是主管机器人，负责协调各专职机器人为您服务！\n\n' +
-          '💡 **我们团队提供**：\n\n' +
-          '🎫 **解票分析** - @qixijiepiao_bot\n' +
-          '   • 发送：解票 NVDA\n' +
-          '   • 快速技术分析（15-30秒）\n' +
-          '   • 支持标准版/双语/聊天版/完整版\n\n' +
-          '📊 **研报生成** - @qixijiepiao_bot\n' +
-          '   • 发送：研报, TSLA, 机构名, 分析师, 语言\n' +
-          '   • 完整PDF研报（2-5分钟）\n\n' +
-          '📰 **新闻推送** - @chaojilaos_bot\n' +
-          '   • 定时推送财经新闻\n' +
-          '   • 实时市场动态\n\n' +
-          '💬 试试发送 "解票 NVDA" 或 "研报, AAPL"！'
-        );
-        return;
-      }
-      
-      // 5️⃣ 其他消息：友好提示
-      if (!text.startsWith('/')) {
-        await ctx.reply(
-          '🤔 我不太理解您的意思...\n\n' +
-          '💡 **常用命令**：\n' +
-          '• 解票 NVDA - 快速解票分析\n' +
-          '• 研报, TSLA, 机构, 分析师, 语言 - 生成研报\n' +
-          '• 新闻 - 查看新闻功能说明\n\n' +
-          '或发送 /help 查看完整帮助！'
-        );
-      }
-      
-      // 命令会被 bot.command() 自动处理
     });
 
     // /start 命令
@@ -237,8 +242,7 @@ class ManagerBot {
         '   • 定时推送金融新闻摘要\n\n' +
         '📋 **管理命令**：\n' +
         '   /bots - 查看所有机器人\n' +
-        '   /help - 显示帮助信息',
-        { data_testid: 'message-start-response' }
+        '   /help - 显示帮助信息'
       );
     });
 
@@ -249,9 +253,7 @@ class ManagerBot {
       }
       
       const botsList = this.formatBotsList();
-      await ctx.reply(botsList, { 
-        data_testid: 'message-bots-list' 
-      });
+      await ctx.reply(botsList);
     });
 
     // /botinfo 命令 - 显示单个机器人详情
@@ -265,8 +267,7 @@ class ManagerBot {
         await ctx.reply(
           '❌ 请提供机器人ID\n\n' +
           '用法：/botinfo <id>\n' +
-          '示例：/botinfo news',
-          { data_testid: 'message-botinfo-error' }
+          '示例：/botinfo news'
         );
         return;
       }
@@ -275,14 +276,11 @@ class ManagerBot {
       const botInfo = this.formatBotInfo(botId);
       
       if (botInfo) {
-        await ctx.reply(botInfo, { 
-          data_testid: `message-botinfo-${botId}` 
-        });
+        await ctx.reply(botInfo);
       } else {
         await ctx.reply(
           `❌ 未找到机器人：${botId}\n\n` +
-          `使用 /bots 查看所有可用的机器人`,
-          { data_testid: 'message-botinfo-notfound' }
+          `使用 /bots 查看所有可用的机器人`
         );
       }
     });
@@ -302,10 +300,7 @@ class ManagerBot {
         '权限说明：\n' +
         '• 私聊：仅OWNER可使用\n' +
         '• 群聊：仅授权群组中的OWNER可使用\n\n' +
-        `当前登记机器人：${Object.keys(botsRegistry).length}个`,
-        { 
-          data_testid: 'message-help-response'
-        }
+        `当前登记机器人：${Object.keys(botsRegistry).length}个`
       );
     });
 
