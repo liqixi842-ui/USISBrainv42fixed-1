@@ -13,6 +13,10 @@ build = ["sh", "-c", "npm ci --only=production --no-audit || npm install --produ
 localPort = 3000
 externalPort = 80
 
+[[ports]]
+localPort = 5000
+externalPort = 5000
+
 [userenv]
 
 [userenv.shared]

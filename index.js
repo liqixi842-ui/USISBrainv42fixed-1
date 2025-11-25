@@ -18,6 +18,81 @@
  */
 
 const TelegramBot = require('node-telegram-bot-api');
+const http = require('http');
+
+// ═══════════════════════════════════════════════════════════════
+// HTTP Server for Health Check & Status API
+// ═══════════════════════════════════════════════════════════════
+
+const HTTP_PORT = process.env.PORT || 5000;
+const startTime = Date.now();
+
+const httpServer = http.createServer((req, res) => {
+  const url = req.url;
+  
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  
+  // Health check endpoint
+  if (url === '/health' || url === '/') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'healthy',
+      service: 'USIS Brain v7.0',
+      timestamp: new Date().toISOString(),
+      uptime_seconds: Math.floor((Date.now() - startTime) / 1000)
+    }));
+    return;
+  }
+  
+  // Status API endpoint
+  if (url === '/api/status') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'running',
+      version: '7.0.0',
+      service: 'USIS Brain - Multi-AI Financial Analysis System',
+      telegram_bot: 'active',
+      modules: {
+        ticket_bot: 'ready',
+        report_bot: 'ready',
+        news_bot: 'ready',
+        heatmap_bot: 'ready',
+        brief_bot: 'ready',
+        deep_report_bot: 'ready',
+        supervisor_bot: 'ready',
+        public_bot: 'ready'
+      },
+      supported_markets: ['US', 'Spain', 'HK', 'UK', 'Germany', 'France', 'Japan', 'Canada', 'Australia'],
+      supported_languages: ['en', 'zh', 'es'],
+      ai_models: ['GPT-5-mini', 'GPT-4o', 'GPT-4o-mini', 'DeepSeek-V3', 'Claude-3.5', 'Perplexity'],
+      uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
+      timestamp: new Date().toISOString()
+    }));
+    return;
+  }
+  
+  // 404 for other routes
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    error: 'Not Found',
+    available_endpoints: ['/health', '/api/status']
+  }));
+});
+
+httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
+  console.log(`\n🌐 HTTP Server started on port ${HTTP_PORT}`);
+  console.log(`   ├─ Health: http://0.0.0.0:${HTTP_PORT}/health`);
+  console.log(`   └─ Status: http://0.0.0.0:${HTTP_PORT}/api/status\n`);
+});
 
 // 导入所有 v7 bot 模块（CommonJS 语法）
 const managerBot = require('./bots/manager-bot.js');
