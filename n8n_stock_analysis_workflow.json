@@ -1,0 +1,211 @@
+{
+  "name": "USIS Brain - Stock Analysis (Individual)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "stock_analysis",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-stock-analysis",
+      "name": "Webhook - Stock Analysis Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "stock_analysis"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:5000/brain/orchestrate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $json.body.text || $json.body.query }}"
+            },
+            {
+              "name": "chat_type",
+              "value": "private"
+            },
+            {
+              "name": "mode",
+              "value": "={{ $json.body.mode || 'intraday' }}"
+            },
+            {
+              "name": "user_id",
+              "value": "={{ $json.body.user_id || 'n8n_user' }}"
+            },
+            {
+              "name": "lang",
+              "value": "={{ $json.body.lang || 'zh' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "call-usis-brain",
+      "name": "Call USIS Brain API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 解析USIS Brain响应\nconst response = $json;\n\n// 提取核心数据\nconst finalText = response.final_text || response.synthesis?.synthesized_answer || '未收到分析结果';\nconst symbols = response.symbols || [];\nconst stockChartData = response.stock_chart_data || null;\nconst marketData = response.market_data || {};\n\n// v6.0新增字段\nconst aiModel = response.ai_model || response.model_used || 'gpt-4o';\nconst language = response.language || 'zh';\nconst costUsd = response.cost_usd || 0;\n\n// 图表数据\nconst chartUrl = stockChartData?.chartURL || null;\nconst chartAnalysis = stockChartData?.chartAnalysis || null;\nconst comprehensiveAnalysis = stockChartData?.comprehensiveAnalysis || null;\n\nreturn [{\n  json: {\n    // 核心输出\n    final_text: finalText,\n    symbols: symbols,\n    \n    // v6.0多AI信息\n    ai_model: aiModel,\n    language: language,\n    cost_usd: costUsd,\n    \n    // 图表信息\n    has_chart: !!chartUrl,\n    chart_url: chartUrl,\n    chart_analysis: chartAnalysis,\n    comprehensive_analysis: comprehensiveAnalysis,\n    \n    // 市场数据\n    market_data: marketData,\n    \n    // 完整响应（调试用）\n    full_response: response\n  }\n}];"
+      },
+      "id": "parse-response",
+      "name": "Parse Brain Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "has-chart-condition",
+              "leftValue": "={{ $json.has_chart }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-chart",
+      "name": "Has Stock Chart?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [720, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.chart_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "download-chart",
+      "name": "Download Chart Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [960, -120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 格式化最终输出\nconst textData = $input.first().json;\nconst chartData = $input.all().length > 1 ? $input.all()[1] : null;\n\n// 构建响应文本\nlet responseText = textData.final_text;\n\n// 添加v6.0元数据\nresponseText += `\\n\\n---\\n📊 分析引擎: ${textData.ai_model}`;\nif (textData.language === 'zh') {\n  responseText += ` (中文专项)`;\n}\nresponseText += `\\n💰 成本: $${textData.cost_usd.toFixed(4)}`;\n\nif (textData.comprehensive_analysis) {\n  responseText += `\\n\\n🔬 数据驱动分析:\\n${textData.comprehensive_analysis}`;\n}\n\nreturn [{\n  json: {\n    text: responseText,\n    chart_binary: chartData?.binary || null,\n    symbols: textData.symbols,\n    ai_model: textData.ai_model,\n    language: textData.language,\n    has_chart: !!chartData\n  }\n}];"
+      },
+      "id": "format-output",
+      "name": "Format Final Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "return-response",
+      "name": "Return to Client",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1440, 0]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 无图表时直接格式化输出\nconst data = $json;\n\nlet responseText = data.final_text;\n\n// 添加v6.0元数据\nresponseText += `\\n\\n---\\n📊 分析引擎: ${data.ai_model}`;\nif (data.language === 'zh') {\n  responseText += ` (中文专项)`;\n}\nresponseText += `\\n💰 成本: $${data.cost_usd.toFixed(4)}`;\n\nreturn [{\n  json: {\n    text: responseText,\n    chart_binary: null,\n    symbols: data.symbols,\n    ai_model: data.ai_model,\n    language: data.language,\n    has_chart: false\n  }\n}];"
+      },
+      "id": "format-no-chart",
+      "name": "Format Output (No Chart)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 120]
+    }
+  ],
+  "connections": {
+    "Webhook - Stock Analysis Request": {
+      "main": [[{ "node": "Call USIS Brain API", "type": "main", "index": 0 }]]
+    },
+    "Call USIS Brain API": {
+      "main": [[{ "node": "Parse Brain Response", "type": "main", "index": 0 }]]
+    },
+    "Parse Brain Response": {
+      "main": [[{ "node": "Has Stock Chart?", "type": "main", "index": 0 }]]
+    },
+    "Has Stock Chart?": {
+      "main": [
+        [{ "node": "Download Chart Image", "type": "main", "index": 0 }],
+        [{ "node": "Format Output (No Chart)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Download Chart Image": {
+      "main": [[{ "node": "Format Final Output", "type": "main", "index": 0 }]]
+    },
+    "Format Output (No Chart)": {
+      "main": [[{ "node": "Format Final Output", "type": "main", "index": 0 }]]
+    },
+    "Format Final Output": {
+      "main": [[{ "node": "Return to Client", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "usis-brain-v6-stock-analysis"
+  },
+  "tags": [
+    {
+      "createdAt": "2025-11-07T12:00:00.000Z",
+      "updatedAt": "2025-11-07T12:00:00.000Z",
+      "id": "stock-analysis",
+      "name": "Stock Analysis"
+    }
+  ]
+}

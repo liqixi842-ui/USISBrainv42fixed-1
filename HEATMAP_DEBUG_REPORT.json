@@ -1,0 +1,187 @@
+{
+  "report_generated": "2025-11-05T22:15:00Z",
+  "version": "USIS Brain v4.3",
+  "test_results": {
+    "test_1_spanish_chinese": {
+      "input": "西班牙热力图 带分析 #dbg",
+      "result": {
+        "region": "ES",
+        "index": "IBEX35",
+        "sector": "AUTO",
+        "confidence": 0.9,
+        "rules_fired": [
+          "force_lock_ES_IBEX35"
+        ],
+        "rationale": "检测到西班牙/IBEX关键词",
+        "url": "https://www.tradingview.com/heatmap/stock/?color=change&dataset=IBEX35&group=sector&blockSize=market_cap_basic&blockColor=change"
+      },
+      "status": "✅ PASS - 正确锁定IBEX35"
+    },
+    "test_2_spanish_english": {
+      "input": "Spain IBEX heatmap #dbg",
+      "result": {
+        "region": "ES",
+        "index": "IBEX35",
+        "sector": "AUTO",
+        "confidence": 0.9,
+        "rules_fired": [
+          "force_lock_ES_IBEX35"
+        ],
+        "rationale": "检测到西班牙/IBEX关键词",
+        "url": "https://www.tradingview.com/heatmap/stock/?color=change&dataset=IBEX35&group=sector&blockSize=market_cap_basic&blockColor=change"
+      },
+      "status": "✅ PASS - 正确锁定IBEX35"
+    },
+    "test_3_japan": {
+      "input": "日本大盘热力图 #dbg",
+      "result": {
+        "region": "JP",
+        "index": "NIKKEI225",
+        "sector": "AUTO",
+        "confidence": 0.5,
+        "rules_fired": [
+          "detect_japan"
+        ],
+        "rationale": "规则引擎解析",
+        "url": "https://www.tradingview.com/heatmap/stock/?color=change&dataset=NIKKEI225&group=sector&blockSize=market_cap_basic&blockColor=change"
+      },
+      "status": "✅ PASS - 正确识别日本/NIKKEI225"
+    },
+    "test_4_us_tech": {
+      "input": "美股的科技股的热力图 #dbg",
+      "result": {
+        "region": "US",
+        "index": "SPX500",
+        "sector": "technology",
+        "confidence": 0.5,
+        "rules_fired": [
+          "detect_us_default_spx",
+          "detect_sector_technology"
+        ],
+        "rationale": "规则引擎解析",
+        "url": "https://www.tradingview.com/heatmap/stock/?color=change&dataset=SPX500&group=sector&blockSize=market_cap_basic&blockColor=change&focus_hint=technology"
+      },
+      "status": "✅ PASS - 正确识别美股科技板块"
+    }
+  },
+  "selftest_samples": [
+    {
+      "sample_id": 1,
+      "input": "西班牙热力图 带分析 #dbg",
+      "expected": "IBEX35",
+      "actual": "IBEX35",
+      "region": "ES",
+      "sector": "AUTO",
+      "rules": ["force_lock_ES_IBEX35"],
+      "status": "✅ PASS"
+    },
+    {
+      "sample_id": 2,
+      "input": "Spain IBEX heatmap #dbg",
+      "expected": "IBEX35",
+      "actual": "IBEX35",
+      "region": "ES",
+      "sector": "AUTO",
+      "rules": ["force_lock_ES_IBEX35"],
+      "status": "✅ PASS"
+    },
+    {
+      "sample_id": 3,
+      "input": "日本大盘热力图 #dbg",
+      "expected": "NIKKEI225",
+      "actual": "NIKKEI225",
+      "region": "JP",
+      "sector": "AUTO",
+      "rules": ["detect_japan"],
+      "status": "✅ PASS"
+    },
+    {
+      "sample_id": 4,
+      "input": "美股的科技股的热力图 #dbg",
+      "expected": "SPX500",
+      "actual": "SPX500",
+      "region": "US",
+      "sector": "technology",
+      "rules": ["detect_us_default_spx", "detect_sector_technology"],
+      "status": "✅ PASS"
+    }
+  ],
+  "hotfix_verification": {
+    "name": "西班牙IBEX35强制锁定",
+    "objective": "防止西班牙请求错误回退到SPX500",
+    "implementation": {
+      "keyword_detection": "/(西班牙|spain|ibex\\s*35?|ibex)/iu",
+      "priority": "最高优先级（在所有回退之前执行）",
+      "forced_values": {
+        "region": "ES",
+        "index": "IBEX35",
+        "confidence": 0.9
+      }
+    },
+    "test_results": {
+      "chinese_keyword": "✅ PASS - 西班牙 → IBEX35",
+      "english_keyword": "✅ PASS - Spain → IBEX35",
+      "index_keyword": "✅ PASS - IBEX → IBEX35"
+    },
+    "status": "✅ HOTFIX成功部署并验证"
+  },
+  "anti_leakage_guards": {
+    "layer_1_keyword_lock": {
+      "description": "西班牙/IBEX关键词强制锁定",
+      "trigger": "force_lock_ES_IBEX35",
+      "status": "✅ 已启用"
+    },
+    "layer_2_region_mapping": {
+      "description": "地区到指数的强制映射",
+      "trigger": "map_region_to_default_index",
+      "fallback_policy": "仅当region和index都为AUTO时才允许回退SPX500",
+      "status": "✅ 已启用"
+    },
+    "layer_3_final_guard": {
+      "description": "ES地区必须使用IBEX35的最终校验",
+      "trigger": "region_guard_fix_ES_to_IBEX35",
+      "action": "强制修正 + 抛错阻止发送",
+      "status": "✅ 已启用"
+    }
+  },
+  "region_index_mapping": {
+    "US": "SPX500",
+    "JP": "NIKKEI225",
+    "ES": "IBEX35",
+    "DE": "DAX40",
+    "FR": "CAC40",
+    "UK": "FTSE100",
+    "EU": "EURO50",
+    "HK": "HSI",
+    "CN": "CSI300",
+    "IN": "NIFTY50"
+  },
+  "supported_sectors": [
+    "technology",
+    "financials",
+    "healthcare",
+    "industrials",
+    "energy",
+    "materials",
+    "consumer_discretionary",
+    "consumer_staples",
+    "communication_services",
+    "utilities",
+    "real_estate"
+  ],
+  "system_status": {
+    "parser": "✅ 运行正常",
+    "screenshot_api": "✅ 已配置",
+    "telegram_bot": "✅ 手动polling模式运行中",
+    "database": "✅ PostgreSQL已连接",
+    "overall": "✅ 所有系统正常"
+  },
+  "summary": {
+    "total_tests": 4,
+    "passed": 4,
+    "failed": 0,
+    "pass_rate": "100%",
+    "hotfix_status": "✅ 西班牙IBEX35强制锁定正常工作",
+    "anti_leakage_status": "✅ 三层防串台机制全部生效"
+  }
+}

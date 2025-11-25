@@ -1,0 +1,20 @@
+modules = ["nodejs-20", "postgresql-16"]
+
+[nix]
+channel = "stable-25_05"
+packages = ["glib", "nss", "nspr", "dbus", "atk", "at-spi2-atk", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libXxcb", "libxkbcommon", "alsa-lib", "mesa", "cups", "try", "mmh", "pm2"]
+
+[deployment]
+deploymentTarget = "gce"
+run = ["sh", "-c", "node index.js"]
+build = ["sh", "-c", "npm ci --only=production --no-audit || npm install --production"]
+
+[[ports]]
+localPort = 3000
+externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+REPLIT_DEPLOYMENT_URL = "https://workspace.liqixi842.repl.co"
+N8N_HEATMAP_WEBHOOK = "https://qian.app.n8n.cloud/webhook/heatmap_fixed"

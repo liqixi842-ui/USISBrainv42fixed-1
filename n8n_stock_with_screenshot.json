@@ -1,0 +1,145 @@
+{
+  "name": "USIS Brain v6.0 - Stock Screenshot Only",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "stock_analysis_full",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-input",
+      "name": "📥 接收截图请求",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "stock_analysis_full",
+      "notes": "接收参数: {url, symbols}"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body || {};\nconst tradingview_url = body.url || '';\nconst symbols = body.symbols || [];\n\nreturn [{\n  json: {\n    tradingview_url: tradingview_url,\n    symbols: symbols\n  }\n}];"
+      },
+      "id": "extract-params",
+      "name": "📊 提取参数",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "url": "https://shot.screenshotapi.net/screenshot",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "HHBYB5H-4CT4970-MVZEKM2-EMEWEXX"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.tradingview_url }}"
+            },
+            {
+              "name": "fresh",
+              "value": "true"
+            },
+            {
+              "name": "output",
+              "value": "image"
+            },
+            {
+              "name": "width",
+              "value": "1200"
+            },
+            {
+              "name": "height",
+              "value": "800"
+            },
+            {
+              "name": "delay",
+              "value": "3000"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data",
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "screenshot-chart",
+      "name": "📸 截图个股K线图",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [480, 0],
+      "notes": "使用ScreenshotAPI稳定截图"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 读取binary数据并转换为base64\nconst symbols = $json.symbols || [];\n\n// N8N binary数据需要通过特殊方式读取\nlet base64Data = null;\nif ($binary && $binary.data) {\n  // 获取binary buffer并转换为base64\n  const binaryBuffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n  base64Data = binaryBuffer.toString('base64');\n}\n\nreturn [{\n  json: {\n    chart_binary: base64Data,\n    symbols: symbols,\n    success: !!base64Data\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "📦 格式化响应",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "return-screenshot",
+      "name": "📤 返回截图Binary",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [960, 0]
+    }
+  ],
+  "connections": {
+    "📥 接收截图请求": {
+      "main": [[
+        { "node": "📊 提取参数", "type": "main", "index": 0 }
+      ]]
+    },
+    "📊 提取参数": {
+      "main": [[
+        { "node": "📸 截图个股K线图", "type": "main", "index": 0 }
+      ]]
+    },
+    "📸 截图个股K线图": {
+      "main": [[
+        { "node": "📦 格式化响应", "type": "main", "index": 0 }
+      ]]
+    },
+    "📦 格式化响应": {
+      "main": [[
+        { "node": "📤 返回截图Binary", "type": "main", "index": 0 }
+      ]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "usis-brain-v6-screenshot-only"
+  },
+  "tags": []
+}

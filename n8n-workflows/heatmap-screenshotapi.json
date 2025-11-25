@@ -1,0 +1,185 @@
+{
+  "name": "Heatmap Screenshot via ScreenshotAPI",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "capture_heatmap_screenshotapi",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "📥 接收热力图截图请求",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "capture_heatmap_screenshotapi",
+      "notes": "接收参数: { url: 'https://www.tradingview.com/heatmap/stock/?dataset=NAS100&...' }"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 提取传入的 URL 并记录日志\nconst incomingUrl = $json.body?.url || $json.url || '';\n\nconsole.log('📥 [N8N] 收到热力图请求');\nconsole.log('   URL:', incomingUrl);\n\n// 提取 dataset 参数用于调试\nconst datasetMatch = incomingUrl.match(/dataset=([A-Z0-9]+)/);\nconst dataset = datasetMatch ? datasetMatch[1] : 'UNKNOWN';\n\nconsole.log('   Dataset:', dataset);\n\nreturn [{\n  json: {\n    tradingview_url: incomingUrl,\n    dataset: dataset,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "extract-url",
+      "name": "📊 提取并记录URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300],
+      "notes": "提取 URL 并打印到 n8n 日志"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://shot.screenshotapi.net/screenshot",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "={{ $env.SCREENSHOT_API_KEY }}"
+            },
+            {
+              "name": "url",
+              "value": "={{ $json.tradingview_url }}"
+            },
+            {
+              "name": "fresh",
+              "value": "true"
+            },
+            {
+              "name": "full_page",
+              "value": "false"
+            },
+            {
+              "name": "wait_for_event",
+              "value": "networkidle"
+            },
+            {
+              "name": "delay",
+              "value": "2000"
+            },
+            {
+              "name": "output",
+              "value": "image"
+            },
+            {
+              "name": "file_type",
+              "value": "png"
+            },
+            {
+              "name": "width",
+              "value": "1400"
+            },
+            {
+              "name": "height",
+              "value": "900"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data",
+              "neverError": true
+            }
+          },
+          "timeout": 35000
+        }
+      },
+      "id": "screenshotapi-node",
+      "name": "📸 ScreenshotAPI 截图",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [690, 300],
+      "notes": "fresh=true 避免缓存，delay=2000 等待弹窗消失"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 将 binary 数据转换为 base64 并返回\nlet base64Data = null;\nlet fileSize = 0;\n\nif ($binary && $binary.data) {\n  const binaryBuffer = await this.helpers.getBinaryDataBuffer(0, 'data');\n  base64Data = binaryBuffer.toString('base64');\n  fileSize = binaryBuffer.length;\n}\n\nconst dataset = $json.dataset || 'UNKNOWN';\n\nconsole.log('✅ [N8N] 截图完成');\nconsole.log('   Dataset:', dataset);\nconsole.log('   文件大小:', (fileSize / 1024).toFixed(2), 'KB');\nconsole.log('   Base64 长度:', base64Data ? base64Data.length : 0);\n\nreturn [{\n  json: {\n    screenshot: base64Data ? `data:image/png;base64,${base64Data}` : null,\n    dataset: dataset,\n    fileSize: fileSize,\n    success: !!base64Data,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "📦 格式化响应",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 300],
+      "notes": "转换为 base64 并记录调试信息"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-node",
+      "name": "📤 返回截图数据",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1130, 300]
+    }
+  ],
+  "connections": {
+    "📥 接收热力图截图请求": {
+      "main": [
+        [
+          {
+            "node": "📊 提取并记录URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📊 提取并记录URL": {
+      "main": [
+        [
+          {
+            "node": "📸 ScreenshotAPI 截图",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📸 ScreenshotAPI 截图": {
+      "main": [
+        [
+          {
+            "node": "📦 格式化响应",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📦 格式化响应": {
+      "main": [
+        [
+          {
+            "node": "📤 返回截图数据",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["heatmap", "screenshotapi", "production"],
+  "triggerCount": 0,
+  "updatedAt": "2025-11-25T11:30:00.000Z",
+  "versionId": "2.0"
+}

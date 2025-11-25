@@ -1,0 +1,5 @@
+2025-11-11 18:37:26.227 UTC [3327] LOG:  starting PostgreSQL 16.9 on x86_64-pc-linux-gnu, compiled by clang version 19.1.7, 64-bit
+2025-11-11 18:37:26.232 UTC [3327] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2025-11-11 18:37:26.233 UTC [3327] LOG:  could not bind IPv6 address "::1": Cannot assign requested address
+2025-11-11 18:37:26.244 UTC [3327] FATAL:  could not create lock file "/run/postgresql/.s.PGSQL.5432.lock": No such file or directory
+2025-11-11 18:37:26.247 UTC [3327] LOG:  database system is shut down

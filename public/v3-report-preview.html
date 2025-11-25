@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USIS·研报预览 (v3-dev)</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 36px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .search-box {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 15px 20px;
+            font-size: 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .quick-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .quick-btn {
+            padding: 8px 16px;
+            font-size: 14px;
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-btn:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .report-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .report-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .report-header h2 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .rating-badge {
+            display: inline-block;
+            padding: 10px 30px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 25px;
+            margin-top: 10px;
+        }
+
+        .rating-STRONG_BUY { background: #10b981; }
+        .rating-BUY { background: #34d399; }
+        .rating-HOLD { background: #fbbf24; }
+        .rating-SELL { background: #f87171; }
+        .rating-STRONG_SELL { background: #ef4444; }
+
+        .report-body {
+            padding: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-content {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .price-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .price-item {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .price-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 5px;
+        }
+
+        .price-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .list-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: start;
+            gap: 10px;
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .list-number {
+            background: #667eea;
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .meta-info {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #6b7280;
+            margin-top: 20px;
+        }
+
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .disclaimer {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #92400e;
+        }
+
+        .error {
+            background: #fee2e2;
+            border-left: 4px solid #ef4444;
+            padding: 20px;
+            border-radius: 8px;
+            color: #991b1b;
+        }
+
+        @media (max-width: 600px) {
+            .header h1 {
+                font-size: 24px;
+            }
+            .input-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 USIS·研报预览系统</h1>
+            <p>v3-dev 测试版 | AI 驱动的股票研究报告</p>
+        </div>
+
+        <div class="search-box">
+            <div class="input-group">
+                <input 
+                    type="text" 
+                    id="symbolInput" 
+                    placeholder="输入股票代码（如：AAPL, TSLA, NVDA）"
+                    onkeypress="if(event.key==='Enter') generateReport()"
+                >
+                <button onclick="generateReport()" id="generateBtn">生成研报</button>
+            </div>
+            <div class="quick-buttons">
+                <button class="quick-btn" onclick="quickGenerate('AAPL')">🍎 AAPL</button>
+                <button class="quick-btn" onclick="quickGenerate('TSLA')">🚗 TSLA</button>
+                <button class="quick-btn" onclick="quickGenerate('NVDA')">💻 NVDA</button>
+                <button class="quick-btn" onclick="quickGenerate('MSFT')">🪟 MSFT</button>
+                <button class="quick-btn" onclick="quickGenerate('GOOGL')">🔍 GOOGL</button>
+                <button class="quick-btn" onclick="quickGenerate('AMZN')">📦 AMZN</button>
+            </div>
+        </div>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function generateReport() {
+            const symbol = document.getElementById('symbolInput').value.trim().toUpperCase();
+            
+            if (!symbol) {
+                alert('请输入股票代码');
+                return;
+            }
+
+            const resultDiv = document.getElementById('result');
+            const generateBtn = document.getElementById('generateBtn');
+            
+            // Show loading
+            generateBtn.disabled = true;
+            generateBtn.textContent = '生成中...';
+            resultDiv.innerHTML = `
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p style="color: #667eea; font-size: 18px;">正在生成 ${symbol} 研报...</p>
+                    <p style="color: #999; font-size: 14px; margin-top: 10px;">AI 分析中，请稍候（约3-5秒）</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`/v3/report/${symbol}`);
+                const data = await response.json();
+
+                if (data.ok && data.report) {
+                    displayReport(data.report);
+                } else {
+                    throw new Error(data.message || '生成失败');
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h3 style="margin-bottom: 10px;">❌ 生成失败</h3>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            } finally {
+                generateBtn.disabled = false;
+                generateBtn.textContent = '生成研报';
+            }
+        }
+
+        function quickGenerate(symbol) {
+            document.getElementById('symbolInput').value = symbol;
+            generateReport();
+        }
+
+        function displayReport(report) {
+            const ratingEmoji = {
+                'STRONG_BUY': '🟢🟢',
+                'BUY': '🟢',
+                'HOLD': '🟡',
+                'SELL': '🔴',
+                'STRONG_SELL': '🔴🔴'
+            }[report.rating] || '⚪';
+
+            const html = `
+                <div class="report-card">
+                    <div class="report-header">
+                        <h2>${report.symbol}</h2>
+                        <div class="rating-badge rating-${report.rating}">
+                            ${ratingEmoji} ${report.rating}
+                        </div>
+                        <p style="margin-top: 10px; opacity: 0.9;">时间范围：${report.horizon}</p>
+                    </div>
+
+                    <div class="report-body">
+                        <!-- 价格信息 -->
+                        <div class="section">
+                            <div class="section-title">💰 价格信息</div>
+                            <div class="price-grid">
+                                <div class="price-item">
+                                    <div class="price-label">当前价</div>
+                                    <div class="price-value">${report.price_info.current}</div>
+                                </div>
+                                <div class="price-item">
+                                    <div class="price-label">涨跌</div>
+                                    <div class="price-value" style="color: ${parseFloat(report.price_info.change) >= 0 ? '#10b981' : '#ef4444'}">
+                                        ${report.price_info.change} (${report.price_info.change_percent}%)
+                                    </div>
+                                </div>
+                                <div class="price-item">
+                                    <div class="price-label">最高</div>
+                                    <div class="price-value">${report.price_info.high}</div>
+                                </div>
+                                <div class="price-item">
+                                    <div class="price-label">最低</div>
+                                    <div class="price-value">${report.price_info.low}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 核心观点 -->
+                        <div class="section">
+                            <div class="section-title">📈 核心观点</div>
+                            <div class="section-content">${report.summary}</div>
+                        </div>
+
+                        <!-- 驱动因素 -->
+                        <div class="section">
+                            <div class="section-title">🎯 驱动因素</div>
+                            <div class="section-content">
+                                ${report.drivers.map((driver, i) => `
+                                    <div class="list-item">
+                                        <div class="list-number">${i + 1}</div>
+                                        <div>${driver}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- 风险提示 -->
+                        <div class="section">
+                            <div class="section-title">⚠️ 风险提示</div>
+                            <div class="section-content">
+                                ${report.risks.map((risk, i) => `
+                                    <div class="list-item">
+                                        <div class="list-number">${i + 1}</div>
+                                        <div>${risk}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <!-- 技术面分析 -->
+                        <div class="section">
+                            <div class="section-title">📉 技术面分析</div>
+                            <div class="section-content">${report.technical_view}</div>
+                        </div>
+
+                        <!-- 元信息 -->
+                        <div class="meta-info">
+                            <div class="meta-row">
+                                <span>🤖 AI 模型</span>
+                                <strong>${report.model_used}</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span>⏱ 生成时间</span>
+                                <strong>${report.latency_ms}ms</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span>🔬 环境</span>
+                                <strong>v3-dev (测试版)</strong>
+                            </div>
+                            <div class="meta-row">
+                                <span>📅 生成于</span>
+                                <strong>${new Date(report.generated_at).toLocaleString('zh-CN')}</strong>
+                            </div>
+                        </div>
+
+                        <!-- 免责声明 -->
+                        <div class="disclaimer">
+                            <strong>⚠️ 免责声明</strong><br>
+                            ${report.disclaimer}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('result').innerHTML = html;
+            
+            // Scroll to report
+            document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    </script>
+</body>
+</html>

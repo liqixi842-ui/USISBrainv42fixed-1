@@ -1,0 +1,192 @@
+# ⚡ USIS Brain v4.0 - 一小时投产方案
+
+**状态**: ✅ v4.0已部署，可立即使用  
+**风险**: 🟢 极低（v3.1冷备2分钟可回滚）  
+**时间**: 5分钟启动 + 30分钟验证
+
+---
+
+## 🚀 快速启动（5分钟）
+
+### Step 1: 健康检查
+```bash
+./health_check.sh
+```
+
+**预期结果**：
+```
+✅ 服务器进程: 运行中
+✅ 端口3000: 监听中
+✅ OPENAI_API_KEY: 已设置
+✅ API响应: 正常
+```
+
+### Step 2: 启动实时监控
+```bash
+./quick_monitor.sh
+```
+
+**实时输出**（自动更新）：
+```
+请求#    响应时间      成本         状态        错误率
+----------------------------------------------------------------
+#1       5234ms      $0.0067     ✅ OK      0.00%
+#2       4891ms      $0.0071     ✅ OK      0.00%
+#3       6123ms      $0.0084     ✅ OK      0.00%
+```
+
+### Step 3: 发送测试请求
+```bash
+curl -X POST http://localhost:3000/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "AAPL最近有啥新闻？",
+    "chat_type": "private",
+    "user_id": "test_user"
+  }' | jq '.summary'
+```
+
+## 💬 快速测试示例
+
+### 1. 盘前分析
+```bash
+curl -X POST http://localhost:3000/brain/orchestrate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "盘前看TSLA",
+    "chat_type": "private",
+    "user_id": "user123"
+  }'
+```
+
+### 2. 盘中追踪
+```bash
+curl -X POST http://localhost:3000/brain/orchestrate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "盘中NVDA走势如何",
+    "chat_type": "group",
+    "user_id": "user123"
+  }'
+```
+
+### 3. 盘后复盘
+```bash
+curl -X POST http://localhost:3000/brain/orchestrate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "今天收盘复盘AAPL",
+    "chat_type": "private",
+    "user_id": "user123"
+  }'
+```
+
+## 🎯 关键特性
+
+| 特性 | 说明 |
+|------|------|
+| **6 AI协同** | Claude + DeepSeek + GPT-4 + Gemini + Perplexity + Mistral |
+| **实时数据** | Finnhub (行情+新闻) + Alpha Vantage (技术指标) |
+| **智能综合** | 自动提取关键点，识别共识/分歧，生成连贯报告 |
+| **场景感知** | 盘前简洁(~300字)、盘中中等(~500字)、盘后深度(~800字) |
+| **双输出** | 私聊温暖风格 / 群聊专业风格 |
+| **响应速度** | 13-15秒完成6 AI分析 |
+
+## 📍 核心端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/health` | GET | 健康检查 |
+| `/brain/intent` | POST | 意图识别 |
+| `/brain/orchestrate` | POST | **完整AI分析** ⭐️ |
+| `/brain/memory` | GET | 查看系统记忆 |
+| `/img/imagine` | POST | 图像生成 |
+| `/social/twitter/search` | GET | Twitter搜索 |
+
+## 🔐 必需的环境变量
+
+确保以下密钥已配置在 Replit Secrets:
+
+**AI模型 (6个)**:
+- `CLAUDE_API_KEY`
+- `DEEPSEEK_API_KEY`
+- `OPENAI_API_KEY`
+- `GEMINI_API_KEY`
+- `PERPLEXITY_API_KEY`
+- `MISTRAL_API_KEY`
+
+**数据源 (2个)**:
+- `FINNHUB_API_KEY`
+- `ALPHA_VANTAGE_API_KEY`
+
+## 🚀 部署到生产
+
+1. 确保所有API密钥已配置
+2. 启动服务器: `node index.js`
+3. Replit会自动绑定到公网URL
+4. 在n8n中配置webhook指向你的URL
+
+## 📊 预期响应时间
+
+- 意图识别: <100ms
+- 数据采集: 1-2秒
+- 6 AI分析: 10-12秒（并行）
+- 智能综合: 1-2秒
+- **总计**: 13-15秒
+
+## 🎨 输出风格示例
+
+### 私聊风格 (温暖教师)
+```
+你看，今天我们来聊聊英伟达（NVDA）的盘前分析。
+整体来看，市场情绪相对积极，大家对AI的热情依然高涨 📈
+
+从技术面来看，NVDA的股价短期内有震荡上行的趋势。
+就像你在攀登一座山，虽然有些陡峭，但路途依然宽广 🌄
+
+不过，咱们也得保持警惕...
+```
+
+### 群聊风格 (专业团队)
+```
+【NVDA 盘前分析】
+
+技术面：
+- MACD指标显示动能回升
+- RSI处于中性区域 (50-60)
+- 短期震荡上行趋势
+
+基本面：
+- AI业务持续增长
+- GTC大会临近，市场预期积极
+- 估值偏高，需警惕回调风险
+
+综合判断：BUY
+建议操作：盘前适量增持，设置止损
+```
+
+## 🔍 调试技巧
+
+```bash
+# 查看意图识别是否正确
+curl -X POST http://localhost:3000/brain/intent \
+  -H "Content-Type: application/json" \
+  -d '{"text":"你的测试文本"}'
+
+# 查看系统记忆和用户偏好
+curl http://localhost:3000/brain/memory?limit=5
+
+# 检查服务器日志
+# (在Replit控制台查看)
+```
+
+## 🎯 下一步
+
+将此系统集成到你的Telegram Bot：
+1. 在n8n中创建Telegram Webhook
+2. 添加HTTP Request节点调用 `/brain/orchestrate`
+3. 将响应中的 `final_analysis` 发送回Telegram
+
+---
+
+**准备好了吗？开始使用吧！** ✨

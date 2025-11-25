@@ -1,0 +1,454 @@
+/**
+ * 🆕 v6.0: 多AI模型统一调用器
+ * 支持OpenAI、DeepSeek、Mistral、Perplexity等多个模型
+ * 提供智能路由、降级机制和成本追踪
+ */
+
+const fetch = require('node-fetch');
+const { apiRequest } = require('./apiClient'); // 🆕 v1.1: 统一API客户端
+
+class MultiAIProvider {
+  constructor() {
+    // API密钥配置
+    this.apiKeys = {
+      openai: process.env.OPENAI_API_KEY,
+      deepseek: process.env.DEEPSEEK_API_KEY,
+      mistral: process.env.MISTRAL_API_KEY,
+      perplexity: process.env.PERPLEXITY_API_KEY,
+      anthropic: process.env.ANTHROPIC_API_KEY, // 待配置
+      google: process.env.GOOGLE_API_KEY // 待配置
+    };
+
+    // 模型配置
+    this.models = {
+      // OpenAI系列（已有）
+      'gpt-4o': {
+        provider: 'openai',
+        endpoint: 'https://api.openai.com/v1/chat/completions',
+        costPer1kTokens: { input: 0.0025, output: 0.01 },
+        maxTokens: 128000,
+        features: ['通用分析', '英文优先', '多模态']
+      },
+      'gpt-4o-mini': {
+        provider: 'openai',
+        endpoint: 'https://api.openai.com/v1/chat/completions',
+        costPer1kTokens: { input: 0.00015, output: 0.0006 },
+        maxTokens: 128000,
+        features: ['快速响应', '成本优化']
+      },
+      
+      // DeepSeek V3（中文财经专家）
+      'deepseek-chat': {
+        provider: 'deepseek',
+        endpoint: 'https://api.deepseek.com/v1/chat/completions',
+        costPer1kTokens: { input: 0.00027, output: 0.0011 },
+        maxTokens: 64000,
+        features: ['中文财经', 'A股分析', '本土化术语', '成本极低']
+      },
+      
+      // Claude 3.5 Sonnet（长文深度分析）
+      'claude-3-5-sonnet': {
+        provider: 'anthropic',
+        endpoint: 'https://api.anthropic.com/v1/messages',
+        costPer1kTokens: { input: 0.003, output: 0.015 },
+        maxTokens: 200000,
+        features: ['长文分析', '深度研究', '逻辑推理', '代码理解']
+      },
+      
+      // Gemini 2.5 Flash（快速摘要）
+      'gemini-2.5-flash': {
+        provider: 'google',
+        endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent',
+        costPer1kTokens: { input: 0.00001, output: 0.00004 },
+        maxTokens: 1000000,
+        features: ['超长上下文', '快速摘要', '多模态', '成本极低']
+      },
+      
+      // Mistral Large（快速推理）
+      'mistral-large-latest': {
+        provider: 'mistral',
+        endpoint: 'https://api.mistral.ai/v1/chat/completions',
+        costPer1kTokens: { input: 0.002, output: 0.006 },
+        maxTokens: 128000,
+        features: ['快速推理', '多语言', '函数调用']
+      },
+      
+      // Perplexity（实时搜索增强）
+      'sonar-pro': {
+        provider: 'perplexity',
+        endpoint: 'https://api.perplexity.ai/chat/completions',
+        costPer1kTokens: { input: 0.001, output: 0.001 },
+        maxTokens: 127000,
+        features: ['实时搜索', '引用来源', '最新信息']
+      }
+    };
+
+    // 智能路由规则
+    this.routingRules = {
+      'chinese_analysis': 'deepseek-chat', // 中文分析优先DeepSeek
+      'quick_response': 'mistral-large-latest', // 快速响应用Mistral
+      'real_time_search': 'sonar-pro', // 实时信息用Perplexity
+      'long_context': 'gpt-4o', // 长文分析用GPT-4o
+      'default': 'gpt-4o-mini' // 默认用最经济的模型
+    };
+
+    // 成本追踪
+    this.costTracking = {
+      totalCalls: 0,
+      totalTokens: { input: 0, output: 0 },
+      totalCost: 0,
+      byModel: {}
+    };
+  }
+
+  /**
+   * 智能路由：根据任务类型和上下文选择最佳模型
+   * @param {string} taskType - 任务类型（chinese_analysis, quick_response等）
+   * @param {Object} context - 上下文信息
+   * @returns {string} 推荐的模型名称
+   */
+  selectModel(taskType, context = {}) {
+    // 检测中文输入
+    if (context.text && /[\u4e00-\u9fa5]/.test(context.text)) {
+      console.log('🇨🇳 [MultiAI] 检测到中文输入，路由到DeepSeek');
+      return 'deepseek-chat';
+    }
+
+    // 检测是否需要实时信息
+    if (context.requiresRealTime || /最新|今天|实时|现在/.test(context.text || '')) {
+      console.log('🔍 [MultiAI] 需要实时信息，路由到Perplexity');
+      return 'sonar-pro';
+    }
+
+    // 根据任务类型路由
+    const model = this.routingRules[taskType] || this.routingRules.default;
+    console.log(`🧠 [MultiAI] 任务类型: ${taskType}, 选择模型: ${model}`);
+    return model;
+  }
+
+  /**
+   * 统一的模型调用接口
+   * @param {string} modelName - 模型名称
+   * @param {Array} messages - 对话消息
+   * @param {Object} options - 调用选项
+   * @returns {Promise<Object>} 生成结果
+   */
+  async generate(modelName, messages, options = {}) {
+    const startTime = Date.now();
+    const recursionDepth = options._recursionDepth || 0;
+    
+    // 🔒 防止无限递归（最多允许2次降级）
+    if (recursionDepth > 2) {
+      const errorMsg = '所有AI模型都不可用（API密钥缺失或服务故障）';
+      console.error(`❌ [MultiAI] ${errorMsg}`);
+      return {
+        success: false,
+        text: '❌ 系统暂时不可用，请检查API密钥配置或稍后重试',
+        model: 'error',
+        provider: 'none',
+        error: errorMsg,
+        usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        cost_usd: 0,
+        elapsed_ms: Date.now() - startTime
+      };
+    }
+    
+    const modelConfig = this.models[modelName];
+    
+    if (!modelConfig) {
+      throw new Error(`不支持的模型: ${modelName}`);
+    }
+
+    const provider = modelConfig.provider;
+    const apiKey = this.apiKeys[provider];
+
+    if (!apiKey) {
+      console.warn(`⚠️  [MultiAI] ${provider} API密钥未配置，降级到默认模型 (递归深度: ${recursionDepth})`);
+      return this.fallbackGenerate(messages, { ...options, _recursionDepth: recursionDepth + 1 });
+    }
+
+    try {
+      console.log(`🚀 [MultiAI] 调用 ${modelName} (${provider})`);
+
+      const response = await this.callProvider(
+        provider,
+        modelConfig.endpoint,
+        apiKey,
+        modelName,
+        messages,
+        options
+      );
+
+      // 成本追踪
+      const cost = this.trackCost(modelName, response.usage);
+      const elapsed = Date.now() - startTime;
+
+      console.log(`✅ [MultiAI] ${modelName} 完成 (${elapsed}ms, $${cost.toFixed(4)})`);
+
+      return {
+        success: true,
+        text: response.content,
+        model: modelName,
+        provider: provider,
+        usage: response.usage,
+        cost_usd: cost,
+        elapsed_ms: elapsed,
+        features: modelConfig.features
+      };
+
+    } catch (error) {
+      console.error(`❌ [MultiAI] ${modelName} 调用失败:`, error.message);
+      
+      // 降级处理（避免无限递归）
+      const recursionDepth = options._recursionDepth || 0;
+      if (modelName !== 'gpt-4o-mini' && recursionDepth < 2) {
+        console.log(`🔄 [MultiAI] 降级到备用模型 (递归深度: ${recursionDepth})`);
+        return this.fallbackGenerate(messages, { ...options, _recursionDepth: recursionDepth + 1 });
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * 调用特定提供商的API
+   */
+  async callProvider(provider, endpoint, apiKey, model, messages, options) {
+    // Anthropic Claude特殊处理
+    if (provider === 'anthropic') {
+      return this.callAnthropicAPI(endpoint, apiKey, model, messages, options);
+    }
+
+    // Google Gemini特殊处理
+    if (provider === 'google') {
+      return this.callGoogleAPI(endpoint, apiKey, model, messages, options);
+    }
+
+    // OpenAI兼容格式（OpenAI, DeepSeek, Mistral, Perplexity）
+    const requestBody = {
+      model: model,
+      messages: messages,
+      temperature: options.temperature || 0.7,
+      max_tokens: options.maxTokens || 2048
+    };
+
+    // Perplexity特殊参数
+    if (provider === 'perplexity') {
+      requestBody.return_citations = true;
+      requestBody.return_images = false;
+    }
+
+    // 🆕 v1.1: 使用apiRequest（带超时+重试+熔断器）
+    const response = await apiRequest(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(requestBody)
+    }, {
+      providerId: provider,
+      timeout: 25000, // 25秒超时
+      maxRetries: 2 // 最多重试2次
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API调用失败 (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    // 统一响应格式
+    return {
+      content: data.choices[0].message.content,
+      usage: {
+        prompt_tokens: data.usage?.prompt_tokens || 0,
+        completion_tokens: data.usage?.completion_tokens || 0,
+        total_tokens: data.usage?.total_tokens || 0
+      },
+      citations: data.citations || [] // Perplexity专属
+    };
+  }
+
+  /**
+   * 调用Anthropic Claude API
+   */
+  async callAnthropicAPI(endpoint, apiKey, model, messages, options) {
+    // 转换消息格式
+    const systemMessage = messages.find(msg => msg.role === 'system');
+    const userMessages = messages.filter(msg => msg.role !== 'system');
+
+    const requestBody = {
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: options.maxTokens || 4096,
+      temperature: options.temperature || 0.7,
+      messages: userMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+    };
+
+    if (systemMessage) {
+      requestBody.system = systemMessage.content;
+    }
+
+    // 🆕 v1.1: 使用apiRequest（带超时+重试+熔断器）
+    const response = await apiRequest(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify(requestBody)
+    }, {
+      providerId: 'anthropic',
+      timeout: 30000, // Claude需要更长时间（30秒）
+      maxRetries: 2
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Claude API调用失败 (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    return {
+      content: data.content[0].text,
+      usage: {
+        prompt_tokens: data.usage.input_tokens,
+        completion_tokens: data.usage.output_tokens,
+        total_tokens: data.usage.input_tokens + data.usage.output_tokens
+      }
+    };
+  }
+
+  /**
+   * 调用Google Gemini API
+   */
+  async callGoogleAPI(endpoint, apiKey, model, messages, options) {
+    // 转换消息格式为Gemini格式
+    const contents = messages.filter(msg => msg.role !== 'system').map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }]
+    }));
+
+    // System指令放在generationConfig中
+    const systemInstruction = messages.find(msg => msg.role === 'system');
+
+    const requestBody = {
+      contents: contents,
+      generationConfig: {
+        temperature: options.temperature || 0.7,
+        maxOutputTokens: options.maxTokens || 2048
+      }
+    };
+
+    if (systemInstruction) {
+      requestBody.systemInstruction = {
+        parts: [{ text: systemInstruction.content }]
+      };
+    }
+
+    // 🆕 v1.1: 使用apiRequest（带超时+重试+熔断器）
+    const response = await apiRequest(`${endpoint}?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    }, {
+      providerId: 'google',
+      timeout: 25000, // 25秒超时
+      maxRetries: 2
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API调用失败 (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    return {
+      content: data.candidates[0].content.parts[0].text,
+      usage: {
+        prompt_tokens: data.usageMetadata?.promptTokenCount || 0,
+        completion_tokens: data.usageMetadata?.candidatesTokenCount || 0,
+        total_tokens: data.usageMetadata?.totalTokenCount || 0
+      }
+    };
+  }
+
+  /**
+   * 降级到备用模型（OpenAI GPT-4o-mini）
+   * 🔒 递归深度已在options中传递，防止无限循环
+   */
+  async fallbackGenerate(messages, options) {
+    const recursionDepth = options._recursionDepth || 0;
+    console.log(`🛡️  [MultiAI] 使用备用模型: gpt-4o-mini (递归深度: ${recursionDepth})`);
+    return this.generate('gpt-4o-mini', messages, options);
+  }
+
+  /**
+   * 成本追踪
+   */
+  trackCost(modelName, usage) {
+    const modelConfig = this.models[modelName];
+    const inputCost = (usage.prompt_tokens / 1000) * modelConfig.costPer1kTokens.input;
+    const outputCost = (usage.completion_tokens / 1000) * modelConfig.costPer1kTokens.output;
+    const totalCost = inputCost + outputCost;
+
+    // 更新追踪数据
+    this.costTracking.totalCalls++;
+    this.costTracking.totalTokens.input += usage.prompt_tokens;
+    this.costTracking.totalTokens.output += usage.completion_tokens;
+    this.costTracking.totalCost += totalCost;
+
+    if (!this.costTracking.byModel[modelName]) {
+      this.costTracking.byModel[modelName] = {
+        calls: 0,
+        tokens: { input: 0, output: 0 },
+        cost: 0
+      };
+    }
+
+    this.costTracking.byModel[modelName].calls++;
+    this.costTracking.byModel[modelName].tokens.input += usage.prompt_tokens;
+    this.costTracking.byModel[modelName].tokens.output += usage.completion_tokens;
+    this.costTracking.byModel[modelName].cost += totalCost;
+
+    return totalCost;
+  }
+
+  /**
+   * 获取成本统计
+   */
+  getCostReport() {
+    return {
+      summary: {
+        totalCalls: this.costTracking.totalCalls,
+        totalTokens: this.costTracking.totalTokens.input + this.costTracking.totalTokens.output,
+        totalCost: this.costTracking.totalCost
+      },
+      byModel: this.costTracking.byModel
+    };
+  }
+}
+
+// 单例模式
+let instance = null;
+
+function getMultiAIProvider() {
+  if (!instance) {
+    instance = new MultiAIProvider();
+  }
+  return instance;
+}
+
+module.exports = {
+  MultiAIProvider,
+  getMultiAIProvider
+};

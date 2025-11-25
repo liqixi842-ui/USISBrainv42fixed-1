@@ -1,0 +1,402 @@
+/**
+ * USIS News v2.0 - ImpactRank 2.0 Scoring Engine
+ * 
+ * 7-Factor Scoring Algorithm:
+ * 1. Freshness (0-1): Time decay from publication
+ * 2. Source Quality (0-1): Based on tier (Tier 5 = 1.0, Tier 1 = 0.2)
+ * 3. Relevance (0-1): Symbol match + keyword matching
+ * 4. Impact (0-1): Detected impact keywords (earnings, M&A, etc.)
+ * 5. Novelty (0-1): How unique/new this story is
+ * 6. Corroboration (0-1): How many sources confirm this
+ * 7. Attention (0-1): Social signals, views (future)
+ * 
+ * Composite Score: Weighted sum → 0-10 scale
+ * 
+ * Modes:
+ * - Database mode (default): Full scoring with DB queries for novelty/corroboration
+ * - Stateless mode: On-demand scoring without DB (for bot queries)
+ */
+
+const { safeQuery } = require('./dbUtils');
+
+class NewsScorer {
+  constructor(options = {}) {
+    this.mode = options.mode || 'database'; // 'database' or 'stateless'
+    this.noveltyProvider = options.noveltyProvider || this.createDefaultNoveltyProvider();
+    this.persistenceAdapter = options.persistenceAdapter || this.createDefaultPersistenceAdapter();
+    
+    // Context-aware weights (can be adjusted based on market hours, user holdings, etc.)
+    this.defaultWeights = {
+      freshness: 0.15,
+      source_quality: 0.15,
+      relevance: 0.15,
+      impact: 0.35,      // BOOSTED: Impact is most important
+      novelty: 0.10,
+      corroboration: 0.05,
+      attention: 0.05
+    };
+
+    // Impact keyword patterns (ordered by priority)
+    this.impactPatterns = {
+      // TIER 1: Extreme urgency (1.0)
+      breaking: { keywords: ['breaking', 'urgent', 'emergency', 'alert', 'crisis', 'unprecedented'], weight: 1.0 },
+      bankruptcy: { keywords: ['bankruptcy', 'chapter 11', 'insolvency', 'default', 'collapse'], weight: 1.0 },
+      
+      // TIER 2: Major events (0.9-0.95)
+      merger: { keywords: ['merger', 'acquisition', 'buyout', 'takeover', 'deal worth'], weight: 0.95 },
+      market_move: { keywords: ['surge', 'plunge', 'rally', 'crash', 'soar', 'tumble', 'spike'], weight: 0.90 },
+      
+      // TIER 3: Financial results (0.85)
+      earnings: { keywords: ['earnings beat', 'revenue beat', 'profit surge', 'eps beat', 'guidance raised'], weight: 0.85 },
+      
+      // TIER 4: Regulatory/Legal (0.75-0.80)
+      regulatory: { keywords: ['sec', 'investigation', 'probe', 'enforcement', 'violation'], weight: 0.80 },
+      lawsuit: { keywords: ['lawsuit', 'litigation', 'settlement', 'fraud'], weight: 0.75 },
+      
+      // TIER 5: Product/Executive (0.65-0.70)
+      product: { keywords: ['launch', 'breakthrough', 'revolutionary', 'recall', 'fda approval'], weight: 0.70 },
+      executive: { keywords: ['ceo resign', 'cfo resign', 'ceo appoint', 'leadership change'], weight: 0.65 },
+      
+      // TIER 6: Analyst/Dividends (0.55-0.60)
+      analyst: { keywords: ['upgrade to buy', 'downgrade to sell', 'price target raised', 'price target cut'], weight: 0.60 },
+      dividend: { keywords: ['dividend increase', 'special dividend', 'buyback', 'stock split'], weight: 0.55 },
+      
+      // TIER 7: Routine (0.40-0.50)
+      contract: { keywords: ['contract win', 'partnership', 'agreement', 'collaboration'], weight: 0.50 },
+      routine: { keywords: ['update', 'announcement', 'statement', 'comment'], weight: 0.40 }
+    };
+  }
+
+  /**
+   * Create default novelty provider (uses database)
+   */
+  createDefaultNoveltyProvider() {
+    return {
+      calculateNovelty: async (article) => {
+        try {
+          const recentSimilar = await safeQuery(
+            `SELECT COUNT(*) as count FROM news_items
+             WHERE symbols && $1
+             AND published_at > NOW() - INTERVAL '6 hours'`,
+            [article.symbols || []]
+          );
+
+          const similarCount = parseInt(recentSimilar.rows[0].count);
+
+          if (similarCount === 0) return 1.0;
+          if (similarCount === 1) return 0.8;
+          if (similarCount <= 3) return 0.6;
+          if (similarCount <= 5) return 0.4;
+          return 0.2;
+        } catch (error) {
+          console.error('❌ [Scoring] Novelty calculation failed:', error.message);
+          return 0.5;
+        }
+      }
+    };
+  }
+
+  /**
+   * Create stateless novelty provider (no database)
+   */
+  createStatelessNoveltyProvider() {
+    return {
+      calculateNovelty: async (article) => {
+        // Stateless mode: return neutral baseline
+        return 0.5;
+      }
+    };
+  }
+
+  /**
+   * Create default persistence adapter (uses database)
+   */
+  createDefaultPersistenceAdapter() {
+    return {
+      storeScore: async (newsItemId, scoringResult) => {
+        try {
+          const { scores, composite_score, scoring_details } = scoringResult;
+
+          await safeQuery(
+            `INSERT INTO news_scores 
+             (news_item_id, freshness, source_quality, relevance, impact, novelty, corroboration, attention, composite_score, scoring_details)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             ON CONFLICT (news_item_id) DO UPDATE SET
+               freshness = EXCLUDED.freshness,
+               source_quality = EXCLUDED.source_quality,
+               relevance = EXCLUDED.relevance,
+               impact = EXCLUDED.impact,
+               novelty = EXCLUDED.novelty,
+               corroboration = EXCLUDED.corroboration,
+               attention = EXCLUDED.attention,
+               composite_score = EXCLUDED.composite_score,
+               scoring_details = EXCLUDED.scoring_details,
+               scored_at = NOW()`,
+            [newsItemId, scores.freshness, scores.source_quality, scores.relevance,
+             scores.impact, scores.novelty, scores.corroboration, scores.attention,
+             composite_score, JSON.stringify(scoring_details)]
+          );
+
+          return true;
+        } catch (error) {
+          console.error('❌ [Scoring] Failed to store score:', error.message);
+          return false;
+        }
+      }
+    };
+  }
+
+  /**
+   * Create stateless persistence adapter (no database)
+   */
+  createStatelessPersistenceAdapter() {
+    return {
+      storeScore: async () => {
+        // Stateless mode: no-op
+        return true;
+      }
+    };
+  }
+
+  /**
+   * Score a news article
+   * @param {Object} article - Normalized article
+   * @param {number} sourceTier - Source tier (1-5)
+   * @param {Object} context - Scoring context (market hours, user holdings, etc.)
+   * @returns {Object} Scoring result with individual factors and composite score
+   */
+  async scoreArticle(article, sourceTier, context = {}) {
+    const scores = {
+      freshness: this.calculateFreshness(article.published_at),
+      source_quality: this.calculateSourceQuality(sourceTier),
+      relevance: this.calculateRelevance(article, context.symbols || []),
+      impact: this.calculateImpact(article),
+      novelty: await this.calculateNovelty(article),
+      corroboration: context.corroboration || 0,
+      attention: 0 // Placeholder for future social signals
+    };
+
+    // Adjust weights based on context
+    const weights = this.getContextualWeights(context);
+
+    // Calculate composite score (0-10 scale)
+    const composite = this.calculateComposite(scores, weights);
+
+    return {
+      scores,
+      composite_score: composite,
+      weights_used: weights,
+      scoring_details: {
+        context: context,
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
+
+  /**
+   * Freshness: Time decay from publication
+   * 100% fresh in first 5 minutes, decays over 24 hours
+   */
+  calculateFreshness(publishedAt) {
+    const ageMs = Date.now() - new Date(publishedAt).getTime();
+    const ageMinutes = ageMs / (1000 * 60);
+
+    // Ultra-fresh: first 5 minutes = 1.0
+    if (ageMinutes < 5) return 1.0;
+    
+    // Fresh: 5-60 minutes = 0.9-0.8
+    if (ageMinutes < 60) return 0.9 - (ageMinutes - 5) / 550;
+    
+    // Recent: 1-6 hours = 0.8-0.5
+    if (ageMinutes < 360) return 0.8 - (ageMinutes - 60) / 600;
+    
+    // Aging: 6-24 hours = 0.5-0.2
+    if (ageMinutes < 1440) return 0.5 - (ageMinutes - 360) / 3600;
+    
+    // Stale: >24 hours = 0.1-0
+    if (ageMinutes < 2880) return 0.1 - (ageMinutes - 1440) / 14400;
+    
+    return 0;
+  }
+
+  /**
+   * Source Quality: Based on tier + reliability score
+   */
+  calculateSourceQuality(tier) {
+    const tierScores = {
+      5: 1.0,   // Official/regulatory
+      4: 0.85,  // Premium media
+      3: 0.65,  // Industry/aggregators
+      2: 0.40,  // Social media (verified)
+      1: 0.20   // Social media (unverified)
+    };
+
+    return tierScores[tier] || 0.5;
+  }
+
+  /**
+   * Relevance: Symbol matching + keyword relevance
+   */
+  calculateRelevance(article, userSymbols = []) {
+    let score = 0;
+
+    // Symbol match bonus (if user tracks symbols)
+    if (userSymbols.length > 0) {
+      if (article.primary_symbol && userSymbols.includes(article.primary_symbol)) {
+        score += 0.6; // Strong match
+      } else if (article.symbols && article.symbols.some(s => userSymbols.includes(s))) {
+        score += 0.4; // Partial match
+      }
+    } else {
+      // Default relevance: Check if article has financial symbols (shows it's market-relevant)
+      if (article.symbols && article.symbols.length > 0) {
+        score = 0.7; // Has market symbols = relevant financial news
+      } else {
+        score = 0.4; // Generic news
+      }
+    }
+
+    // Major index symbols boost (market-wide impact)
+    const majorIndices = ['SPY', 'QQQ', 'DIA', 'IWM'];
+    if (article.symbols && article.symbols.some(s => majorIndices.includes(s))) {
+      score += 0.2; // Market-wide news
+    }
+
+    // Title length bonus (longer titles often more specific)
+    if (article.title.length > 80) {
+      score += 0.05;
+    }
+
+    // Has detailed summary bonus
+    if (article.summary && article.summary.length > 150) {
+      score += 0.05;
+    }
+
+    return Math.min(score, 1.0);
+  }
+
+  /**
+   * Impact: Detected impact keywords
+   */
+  calculateImpact(article) {
+    const text = `${article.title} ${article.summary || ''}`.toLowerCase();
+    let maxImpact = 0;
+
+    for (const [category, config] of Object.entries(this.impactPatterns)) {
+      for (const keyword of config.keywords) {
+        if (text.includes(keyword)) {
+          maxImpact = Math.max(maxImpact, config.weight);
+          break; // One match per category
+        }
+      }
+    }
+
+    return maxImpact;
+  }
+
+  /**
+   * Novelty: How unique is this story?
+   * Based on topic diversity and recent coverage
+   * (Uses noveltyProvider adapter for stateless mode support)
+   */
+  async calculateNovelty(article) {
+    return await this.noveltyProvider.calculateNovelty(article);
+  }
+
+  /**
+   * Calculate composite score (0-10 scale)
+   */
+  calculateComposite(scores, weights) {
+    let weighted = 0;
+    
+    for (const [factor, score] of Object.entries(scores)) {
+      weighted += score * (weights[factor] || 0);
+    }
+
+    // Scale to 0-10
+    return Math.round(weighted * 100) / 10;
+  }
+
+  /**
+   * Get contextual weights based on market conditions
+   */
+  getContextualWeights(context = {}) {
+    const weights = { ...this.defaultWeights };
+
+    // During market hours: boost freshness and impact
+    if (context.isMarketHours) {
+      weights.freshness = 0.25;
+      weights.impact = 0.25;
+      weights.source_quality = 0.15;
+    }
+
+    // User has holdings: boost relevance
+    if (context.hasHoldings) {
+      weights.relevance = 0.25;
+      weights.freshness = 0.20;
+      weights.impact = 0.20;
+    }
+
+    // Normalize weights to sum to 1.0
+    const sum = Object.values(weights).reduce((a, b) => a + b, 0);
+    for (const key in weights) {
+      weights[key] = weights[key] / sum;
+    }
+
+    return weights;
+  }
+
+  /**
+   * Store scoring results in database
+   * (Uses persistenceAdapter for stateless mode support)
+   */
+  async storeScore(newsItemId, scoringResult) {
+    return await this.persistenceAdapter.storeScore(newsItemId, scoringResult);
+  }
+}
+
+// Singleton instances
+let scorerInstance = null;
+let statelessScorerInstance = null;
+
+/**
+ * Get NewsScorer instance (default: database mode)
+ * @param {Object} options - Configuration options
+ * @param {string} options.mode - 'database' or 'stateless'
+ * @returns {NewsScorer} Scorer instance
+ */
+function getScorer(options = {}) {
+  const mode = options.mode || 'database';
+  
+  if (mode === 'stateless') {
+    // Create new instance each time for stateless (no caching)
+    const tempScorer = new NewsScorer({ mode: 'database' }); // Just for method access
+    return new NewsScorer({
+      mode: 'stateless',
+      noveltyProvider: tempScorer.createStatelessNoveltyProvider(),
+      persistenceAdapter: tempScorer.createStatelessPersistenceAdapter()
+    });
+  }
+  
+  // Database mode: use singleton
+  if (!scorerInstance) {
+    scorerInstance = new NewsScorer({
+      mode: 'database'
+    });
+  }
+  return scorerInstance;
+}
+
+/**
+ * Get stateless NewsScorer (convenience function)
+ * @returns {NewsScorer} Stateless scorer instance
+ */
+function getStatelessScorer() {
+  return getScorer({ mode: 'stateless' });
+}
+
+module.exports = {
+  NewsScorer,
+  getScorer,
+  getStatelessScorer
+};
