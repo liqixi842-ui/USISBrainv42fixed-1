@@ -441,9 +441,13 @@ async function handleTicket(args, chatId, bot, message, options = {}) {
     
     console.log(`📝 [TICKET] Analysis preview: ${(ticketData.analysis || '').substring(0, 200)}...`);
     
+    // 🔍 DEBUG: 追踪双语输出问题
+    console.log(`🔍 [TICKET] Mode before formatTicketMessages: "${mode}"`);
+    
     const messages = formatTicketMessages(ticketData, mode);
     
-    console.log(`✅ [TICKET] Generated ${messages.length} message(s)`);
+    console.log(`✅ [TICKET] Generated ${messages.length} message(s) for mode "${mode}"`);
+    console.log(`   └─ Message lengths: ${messages.map(m => m.length).join(', ')} chars`);
     
     // ═══ STEP 8: 发送文字分析 ═══
     for (let i = 0; i < messages.length; i++) {
