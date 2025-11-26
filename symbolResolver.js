@@ -15,6 +15,129 @@ const {
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
 const TWELVE_DATA_KEY = process.env.TWELVE_DATA_API_KEY;
 
+// 🆕 v7.0: 中文公司名 → 股票代码映射（常用公司）
+const CHINESE_COMPANY_MAP = {
+  // 美股科技巨头
+  '苹果': 'AAPL',
+  '微软': 'MSFT',
+  '谷歌': 'GOOGL',
+  '亚马逊': 'AMZN',
+  '特斯拉': 'TSLA',
+  '英伟达': 'NVDA',
+  '脸书': 'META',
+  'meta': 'META',
+  '奈飞': 'NFLX',
+  '网飞': 'NFLX',
+  
+  // 中概股
+  '阿里': 'BABA',
+  '阿里巴巴': 'BABA',
+  '腾讯': '0700.HK',
+  '百度': 'BIDU',
+  '京东': 'JD',
+  '拼多多': 'PDD',
+  '蔚来': 'NIO',
+  '小鹏': 'XPEV',
+  '理想': 'LI',
+  '哔哩哔哩': 'BILI',
+  'B站': 'BILI',
+  '网易': 'NTES',
+  '携程': 'TCOM',
+  '新东方': 'EDU',
+  
+  // 金融
+  '摩根大通': 'JPM',
+  '高盛': 'GS',
+  '美国银行': 'BAC',
+  '富国银行': 'WFC',
+  '花旗': 'C',
+  '伯克希尔': 'BRK.B',
+  '巴菲特': 'BRK.B',
+  '贝莱德': 'BLK',
+  'visa': 'V',
+  '万事达': 'MA',
+  
+  // 消费
+  '星巴克': 'SBUX',
+  '麦当劳': 'MCD',
+  '可口可乐': 'KO',
+  '百事': 'PEP',
+  '耐克': 'NKE',
+  '沃尔玛': 'WMT',
+  '好市多': 'COST',
+  '迪士尼': 'DIS',
+  
+  // 科技/芯片
+  '英特尔': 'INTC',
+  'AMD': 'AMD',
+  '高通': 'QCOM',
+  '台积电': 'TSM',
+  '博通': 'AVGO',
+  '德州仪器': 'TXN',
+  '超威': 'AMD',
+  
+  // 医药
+  '辉瑞': 'PFE',
+  '强生': 'JNJ',
+  '默克': 'MRK',
+  '礼来': 'LLY',
+  '诺和诺德': 'NVO',
+  '艾伯维': 'ABBV',
+  
+  // 能源
+  '埃克森美孚': 'XOM',
+  '雪佛龙': 'CVX',
+  '壳牌': 'SHEL',
+  
+  // 其他
+  '波音': 'BA',
+  '洛克希德': 'LMT',
+  '3M': 'MMM',
+  'IBM': 'IBM',
+  '甲骨文': 'ORCL',
+  'salesforce': 'CRM',
+  'adobe': 'ADBE',
+  'zoom': 'ZM',
+  'uber': 'UBER',
+  '优步': 'UBER',
+  'airbnb': 'ABNB',
+  '爱彼迎': 'ABNB',
+  'spotify': 'SPOT',
+  'paypal': 'PYPL',
+  '贝宝': 'PYPL',
+  'coinbase': 'COIN',
+  'robinhood': 'HOOD',
+  '英特尔': 'INTC',
+  '思科': 'CSCO'
+};
+
+/**
+ * 🆕 v7.0: 中文公司名快速解析
+ * @param {string} input - 用户输入（可能是中文公司名）
+ * @returns {string|null} - 股票代码或null
+ */
+function resolveChineseCompanyName(input) {
+  if (!input) return null;
+  
+  const normalized = input.trim().toLowerCase();
+  
+  // 直接匹配
+  if (CHINESE_COMPANY_MAP[normalized]) {
+    console.log(`   🇨🇳 [中文映射] "${input}" → ${CHINESE_COMPANY_MAP[normalized]}`);
+    return CHINESE_COMPANY_MAP[normalized];
+  }
+  
+  // 遍历匹配（支持部分匹配）
+  for (const [name, symbol] of Object.entries(CHINESE_COMPANY_MAP)) {
+    if (normalized.includes(name) || name.includes(normalized)) {
+      console.log(`   🇨🇳 [中文映射] "${input}" → ${symbol} (匹配: ${name})`);
+      return symbol;
+    }
+  }
+  
+  return null;
+}
+
 // 🆕 数据源优先级配置（可根据需要调整）
 const DATA_SOURCE_PRIORITY = {
   // 当Twelve Data Pro可用时，优先使用它（更高限额、更多市场）
@@ -751,6 +874,7 @@ const STATIC_SYMBOL_MAP = {
   
   // 美国常见股票（英文+中文）
   'apple': 'AAPL',
+  '苹果': 'AAPL',       // 🆕 添加苹果中文映射
   'microsoft': 'MSFT',
   'tesla': 'TSLA',
   'nvidia': 'NVDA',
