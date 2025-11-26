@@ -239,6 +239,7 @@ async function generateSmartHeatmap(userText) {
         ok: true,
         buffer: result.buffer,
         source: result.provider,
+        provider: result.provider,  // 🔧 兼容 heatmap-bot 期望的字段名
         query: query,
         meta: {
           ...result.meta,
@@ -250,7 +251,7 @@ async function generateSmartHeatmap(userText) {
           analysis: analysisMetadata
         },
         elapsed_ms: elapsed,
-        caption: marketAnalysis,
+        marketAnalysis: marketAnalysis,  // 🔧 修复：使用正确的字段名
         summary: summary,
         professionalReport: professionalReport
       };
