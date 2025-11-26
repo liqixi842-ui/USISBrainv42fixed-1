@@ -155,6 +155,34 @@ function buildStockChartURL(symbol, options = {}) {
   // 标准化symbol格式
   let normalizedSymbol = symbol.toUpperCase();
   
+  // 🆕 v7.0: 自动识别后缀格式并转换为 TradingView 前缀格式
+  // .T → TSE (日本东京), .HK → HKEX (香港), .MC → BME (西班牙马德里)
+  const SUFFIX_TO_PREFIX = {
+    '.T': 'TSE',      // 日本东京证券交易所
+    '.HK': 'HKEX',    // 香港交易所
+    '.MC': 'BME',     // 西班牙马德里交易所
+    '.PA': 'EURONEXT',// 法国巴黎交易所
+    '.DE': 'XETRA',   // 德国法兰克福交易所
+    '.L': 'LSE',      // 伦敦证券交易所
+    '.MI': 'MIL',     // 意大利米兰交易所
+    '.TO': 'TSX',     // 加拿大多伦多交易所
+    '.SS': 'SSE',     // 上海证券交易所
+    '.SZ': 'SZSE',    // 深圳证券交易所
+    '.AX': 'ASX',     // 澳大利亚证券交易所
+    '.KS': 'KRX',     // 韩国证券交易所
+    '.TW': 'TWSE',    // 台湾证券交易所
+  };
+  
+  // 检查并转换后缀格式
+  for (const [suffix, prefix] of Object.entries(SUFFIX_TO_PREFIX)) {
+    if (normalizedSymbol.endsWith(suffix)) {
+      const ticker = normalizedSymbol.slice(0, -suffix.length);
+      normalizedSymbol = `${prefix}:${ticker}`;
+      console.log(`   🌍 [后缀转换] ${symbol} → ${normalizedSymbol} (${suffix} → ${prefix})`);
+      break;
+    }
+  }
+  
   // 如果没有交易所前缀，智能添加
   if (!normalizedSymbol.includes(':')) {
     if (exchangeInfo) {
