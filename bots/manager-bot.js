@@ -169,6 +169,16 @@ function parseCommand(message) {
   // Ticket commands (扩展别名)
   if (firstPart === '/ticket' || firstPart === '解票' || firstPart === '/解票' || 
       firstPart === '解析' || firstPart === '解读' || firstPart === '分析') {
+    
+    // 🆕 v7.0: 检查参数是否为中文公司名，如果是则交给 AI 处理
+    const firstArg = args[0] || '';
+    const isChineseCompanyName = /^[\u4e00-\u9fa5]{2,}$/.test(firstArg);
+    
+    if (isChineseCompanyName) {
+      console.log(`[PARSER] 检测到中文公司名参数 "${firstArg}"，转交 AI 语义理解`);
+      return { cmd: 'public', args: [cleanText], flags: {} };
+    }
+    
     cmd = 'ticket';
   }
   // Report commands (text version)
