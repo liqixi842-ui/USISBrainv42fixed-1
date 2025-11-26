@@ -110,6 +110,15 @@ function parseCommand(message) {
     const match = cleanText.match(pattern);
     if (match && match[1]) {
       const symbol = match[1].trim();
+      
+      // 🆕 v7.0: 如果参数是中文公司名，交给 AI 语义理解处理
+      // 这样可以自动识别"苹果"→AAPL, "三菱"→7201.T 等
+      const isChineseName = /^[\u4e00-\u9fa5]+$/.test(symbol);
+      if (isChineseName) {
+        console.log(`[PARSER][NL-SMART] 检测到中文公司名 "${symbol}"，转交 AI 语义理解`);
+        return { cmd: 'public', args: [cleanText], flags: {} };
+      }
+      
       console.log(`[PARSER][NL-SMART] 自然语言匹配: "${cleanText}" → ticket ${symbol}`);
       return { cmd: 'ticket', args: [symbol], flags: {} };
     }
@@ -120,7 +129,14 @@ function parseCommand(message) {
     // 提取最后一个看起来像股票代码的词
     const words = cleanText.split(/\s+/);
     const lastWord = words[words.length - 1];
-    if (/^[A-Z]{1,5}$/i.test(lastWord) || /^[\u4e00-\u9fa5]{2,6}$/.test(lastWord)) {
+    
+    // 🆕 v7.0: 中文公司名交给 AI 处理
+    if (/^[\u4e00-\u9fa5]{2,6}$/.test(lastWord)) {
+      console.log(`[PARSER][NL-SMART-2] 检测到中文公司名 "${lastWord}"，转交 AI 语义理解`);
+      return { cmd: 'public', args: [cleanText], flags: {} };
+    }
+    
+    if (/^[A-Z]{1,5}$/i.test(lastWord)) {
       console.log(`[PARSER][NL-SMART-2] 宽松匹配: "${cleanText}" → ticket ${lastWord}`);
       return { cmd: 'ticket', args: [lastWord.toUpperCase()], flags: {} };
     }
