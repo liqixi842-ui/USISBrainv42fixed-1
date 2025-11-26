@@ -97,6 +97,9 @@ function parseCommand(message) {
     return { cmd: 'public', args: [cleanText], flags: {} };
   }
   
+  // 🆕 v7.0: 已知的模式关键词（不应被识别为公司名）
+  const MODE_KEYWORDS = ['双语', '聊天版', '人话版', '完整版', '标准版', '英文', '中文'];
+  
   const nlTicketPatterns = [
     /^解[析读票].*?([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,           // 解析/解读/解票 ... SYMBOL
     /^分析.*?([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,                 // 分析 ... SYMBOL
@@ -110,6 +113,12 @@ function parseCommand(message) {
     const match = cleanText.match(pattern);
     if (match && match[1]) {
       const symbol = match[1].trim();
+      
+      // 🆕 v7.0: 跳过已知的模式关键词（双语、聊天版等）
+      if (MODE_KEYWORDS.includes(symbol)) {
+        console.log(`[PARSER][NL-SMART] "${symbol}" 是模式关键词，跳过自然语言匹配`);
+        continue; // 继续尝试下一个匹配规则，让标准命令解析处理
+      }
       
       // 🆕 v7.0: 如果参数是中文公司名，交给 AI 语义理解处理
       // 这样可以自动识别"苹果"→AAPL, "三菱"→7201.T 等
@@ -130,13 +139,17 @@ function parseCommand(message) {
     const words = cleanText.split(/\s+/);
     const lastWord = words[words.length - 1];
     
+    // 🆕 v7.0: 跳过模式关键词（双语、聊天版等），让标准命令解析处理
+    if (MODE_KEYWORDS.includes(lastWord)) {
+      console.log(`[PARSER][NL-SMART-2] "${lastWord}" 是模式关键词，跳过`);
+      // 继续往下走到标准命令解析
+    }
     // 🆕 v7.0: 中文公司名交给 AI 处理
-    if (/^[\u4e00-\u9fa5]{2,6}$/.test(lastWord)) {
+    else if (/^[\u4e00-\u9fa5]{2,6}$/.test(lastWord)) {
       console.log(`[PARSER][NL-SMART-2] 检测到中文公司名 "${lastWord}"，转交 AI 语义理解`);
       return { cmd: 'public', args: [cleanText], flags: {} };
     }
-    
-    if (/^[A-Z]{1,5}$/i.test(lastWord)) {
+    else if (/^[A-Z]{1,5}$/i.test(lastWord)) {
       console.log(`[PARSER][NL-SMART-2] 宽松匹配: "${cleanText}" → ticket ${lastWord}`);
       return { cmd: 'ticket', args: [lastWord.toUpperCase()], flags: {} };
     }
