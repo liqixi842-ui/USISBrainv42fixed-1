@@ -212,7 +212,8 @@ async function handleTicket(args, chatId, bot, message, options = {}) {
     
     console.log(`✅ [TICKET] Chart generation completed in ${chartDuration} ms`);
     console.log(`   ├─ Has chart URL: ${!!chartResult.chartUrl}`);
-    console.log(`   ├─ Has analysis: ${!!chartResult.analysis}`);
+    console.log(`   ├─ Has analysis: ${!!chartResult.chartAnalysis}`);
+    console.log(`   ├─ Analysis length: ${(chartResult.chartAnalysis || '').length} chars`);
     console.log(`   └─ Fallback mode: ${chartResult.fallback || false}\n`);
     
     // ═══ STEP 4: 更新状态消息 ═══
@@ -288,13 +289,16 @@ async function handleTicket(args, chatId, bot, message, options = {}) {
     }
     
     // ═══ STEP 7: 格式化文字分析 ═══
+    // 🔧 关键修复：使用正确的字段名 chartAnalysis（不是 analysis）
     const ticketData = {
       symbol: chartResult.symbol || symbol,
-      analysis: chartResult.analysis || '',
-      price: chartResult.price,
-      change: chartResult.change,
-      changePercent: chartResult.changePercent
+      analysis: chartResult.chartAnalysis || '',  // 🔧 修复：chartAnalysis 不是 analysis
+      price: chartResult.stockData?.currentPrice || chartResult.price,
+      change: chartResult.stockData?.change || chartResult.change,
+      changePercent: chartResult.stockData?.changePercent || chartResult.changePercent
     };
+    
+    console.log(`📝 [TICKET] Analysis preview: ${(ticketData.analysis || '').substring(0, 200)}...`);
     
     const messages = formatTicketMessages(ticketData, mode);
     
@@ -332,11 +336,11 @@ async function handleTicket(args, chatId, bot, message, options = {}) {
       type: 'ticket_result',
       symbol: symbol,
       chartUrl: chartResult.chartUrl,
-      aiText: chartResult.analysis,
+      aiText: chartResult.chartAnalysis,  // 🔧 修复字段名
       sentiment: chartResult.sentiment || null,
       quote: {
-        price: chartResult.price,
-        change: chartResult.change,
+        price: chartResult.stockData?.currentPrice || chartResult.price,
+        change: chartResult.stockData?.change || chartResult.change,
         changePercent: chartResult.changePercent
       },
       duration: totalDuration,
