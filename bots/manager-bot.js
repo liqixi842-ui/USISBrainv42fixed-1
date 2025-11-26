@@ -27,7 +27,11 @@ const { parseResearchReportCommand, parseUserIntent } = require('../semanticInte
  * @returns {Object} { cmd: string, args: string[] }
  */
 function parseCommand(message) {
-  const text = (message.text || '').trim();
+  // 🆕 v7.1: 支持字符串或消息对象
+  const rawText = typeof message === 'string' 
+    ? message 
+    : (message?.text || message?.caption || '');
+  const text = rawText.trim();
   
   // 🆕 机构研报触发器（Institutional Deep Report）
   const deepReportPatterns = ['机构研报', '机构分析', 'deep report', 'deep 报告'];
@@ -90,7 +94,10 @@ function parseCommand(message) {
   // ═══════════════════════════════════════════════════════════════════════════
   
   // 🔧 已知的模式关键词（用于区分模式 vs 公司名）
-  const MODE_KEYWORDS = ['双语', '聊天版', '人话版', '完整版', '标准版', '英文', '中文'];
+  // 🆕 v7.1: 扩展支持西语等多语言组合
+  const MODE_KEYWORDS = ['双语', '三语', '聊天版', '人话版', '完整版', '标准版', 
+                          '英文', '中文', '西语', '西班牙语',
+                          '中文和西语', '中文和英文', '英文和西语', '中文和英文和西语'];
   
   // 🔧 交易所提示关键词
   const EXCHANGE_HINTS = [
@@ -99,10 +106,23 @@ function parseCommand(message) {
     'BME', 'TSX', 'LSE', 'HKEX', '港股', '美股', 'A股', '欧股'
   ];
   
+  // ═══ STEP 0: 预处理 - 分离连写的命令和参数 ═══
+  // 处理 "解票西班牙col" → "解票 西班牙col" 这种连写情况
+  let normalizedText = cleanText;
+  const TICKET_PREFIXES = ['解票', '解析', '解读', '分析'];
+  for (const prefix of TICKET_PREFIXES) {
+    if (cleanText.startsWith(prefix) && cleanText.length > prefix.length && cleanText[prefix.length] !== ' ') {
+      // 命令和参数连写，插入空格
+      normalizedText = prefix + ' ' + cleanText.slice(prefix.length);
+      console.log(`[PARSER][NORMALIZE] 修正连写: "${cleanText}" → "${normalizedText}"`);
+      break;
+    }
+  }
+  
   // ═══ STEP 1: 检测是否为明确的结构化命令 ═══
   // 格式：命令 + 参数（如 "解票 AAPL 双语"）
   const TICKET_COMMANDS = ['解票', '/ticket', '/解票', '解析', '解读', '分析'];
-  const parts = cleanText.split(/\s+/);
+  const parts = normalizedText.split(/\s+/);
   const firstWord = parts[0];
   
   // 检查是否以票据命令开头
@@ -134,16 +154,44 @@ function parseCommand(message) {
       console.log(`[PARSER][AI-ROUTE] 中文公司名 "${symbolCandidate}"，转交 AI 语义理解`);
       return { cmd: 'public', args: [cleanText], flags: {} };
     }
+    
+    // 🆕 v7.1 STEP 1.5: 检测交易所前缀 + 股票代码的组合
+    // 例如 "西班牙col" → 提取 "col" 并标记交易所提示
+    const EXCHANGE_PREFIX_MAP = {
+      '西班牙': 'BME', '香港': 'HKEX', '中国': 'SSE', '日本': 'TSE',
+      '英国': 'LSE', '德国': 'XETRA', '法国': 'EPA', '加拿大': 'TSX',
+      '澳大利亚': 'ASX', '巴西': 'BVMF', '港股': 'HKEX', 'A股': 'SSE'
+    };
+    
+    for (const [prefix, exchange] of Object.entries(EXCHANGE_PREFIX_MAP)) {
+      if (symbolCandidate.startsWith(prefix.toUpperCase()) || parts[1].startsWith(prefix)) {
+        // 提取交易所后的股票代码
+        const tickerPart = parts[1].slice(prefix.length).toUpperCase();
+        if (tickerPart && /^[A-Z0-9]{1,10}$/.test(tickerPart)) {
+          // 格式化为 交易所:代码
+          const formattedSymbol = `${exchange}:${tickerPart}`;
+          console.log(`[PARSER][EXCHANGE-PREFIX] 交易所前缀解析: "${parts[1]}" → ${formattedSymbol}`);
+          return {
+            cmd: 'ticket',
+            args: [formattedSymbol, modeCandidate],  // 🔧 保留模式
+            flags: { exchangeHint: exchange }
+          };
+        }
+      }
+    }
   }
   
-  // ═══ STEP 2: 检测交易所提示 → AI 处理 ═══
+  // ═══ STEP 2: 检测交易所提示（未匹配 STEP 1）→ AI 处理 ═══
+  // 注意：如果已在 STEP 1.5 处理，不会到达这里
   const hasExchangeHint = EXCHANGE_HINTS.some(kw => 
     cleanText.toLowerCase().includes(kw.toLowerCase())
   );
   
   if (hasExchangeHint) {
-    console.log(`[PARSER][AI-ROUTE] 检测到交易所提示，转交 AI 处理: "${cleanText}"`);
-    return { cmd: 'public', args: [cleanText], flags: {} };
+    // 🆕 v7.1: 尝试提取模式参数，即使走 AI 路径也保留
+    const modeForAI = parts.length > 2 ? parts.slice(2).join(' ') : null;
+    console.log(`[PARSER][AI-ROUTE] 检测到交易所提示，转交 AI 处理: "${cleanText}"${modeForAI ? `, 模式: ${modeForAI}` : ''}`);
+    return { cmd: 'public', args: [cleanText], flags: { outputMode: modeForAI } };
   }
   
   // ═══ STEP 3: 自然语言模式（AI 后备） ═══
