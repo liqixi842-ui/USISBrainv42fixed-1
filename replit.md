@@ -1,5 +1,12 @@
 # Overview
-USIS Brain v6.0 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
+USIS Brain v7.1 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
+
+# Recent Changes (v7.1 - November 2025)
+- **Multi-Language Output System**: Added Spanish language formatter (formatTicketStandardES) alongside Chinese and English
+- **Flexible Language Mode Parsing**: parseLanguageMode() supports natural language inputs like "双语", "中文和西语", "三语"
+- **Exchange-Prefix Handling**: STEP 1.5 parses "西班牙col" → "BME:COL" with automatic exchange detection
+- **Command Normalization**: STEP 0 normalizes connected commands ("解票AAPL" → "解票 AAPL")
+- **AI-First Architecture Restored**: Structured command parsing runs first, AI semantic understanding as fallback only
 
 # User Preferences
 Preferred communication style: Simple, everyday language.
