@@ -22,18 +22,53 @@ const dataBroker = require('../dataBroker');
 const { STATIC_SYMBOL_MAP, lookupSymbol, lookupSymbolFromTwelveData, selectBestMatch } = require('../symbolResolver');
 
 /**
- * 🆕 智能符号解析 - 支持中文公司名、英文名、股票代码
- * 优先级：静态映射 → API查询 → 原样返回
+ * 🆕 智能符号解析 - 支持中文公司名、英文名、股票代码 + 交易所提示
+ * 优先级：静态映射 → API查询（带交易所提示）→ 原样返回
  * @param {string} input - 用户输入（如 "英伟达", "nvidia", "NVDA"）
- * @returns {Promise<{symbol: string, resolved: boolean, source: string}>}
+ * @param {string|null} exchangeHint - 交易所提示（如 "Spain", "HK", "US"）
+ * @returns {Promise<{symbol: string, resolved: boolean, source: string, exchange?: string}>}
  */
-async function resolveTicketSymbol(input) {
+async function resolveTicketSymbol(input, exchangeHint = null) {
   const normalized = input.toLowerCase().trim();
   const upper = input.toUpperCase().trim();
   
-  console.log(`🔍 [TICKET Symbol Resolver] 解析输入: "${input}"`);
+  console.log(`🔍 [TICKET Symbol Resolver] 解析输入: "${input}" (交易所提示: ${exchangeHint || '无'})`);
   
-  // Layer 1: 静态映射精确匹配（最快）
+  // 🆕 如果有交易所提示，跳过静态映射，直接用 API 查询以获取正确的交易所符号
+  if (exchangeHint) {
+    console.log(`   🌍 [优先API] 检测到交易所提示 "${exchangeHint}"，跳过静态映射`);
+    
+    try {
+      // 🔥 使用 Twelve Data（全球覆盖最广，推荐用于非美股）
+      const TWELVE_DATA_KEY = process.env.TWELVE_DATA_API_KEY;
+      if (TWELVE_DATA_KEY) {
+        const results = await lookupSymbolFromTwelveData(input, exchangeHint);
+        if (results && results.length > 0) {
+          const best = selectBestMatch(results, exchangeHint, input);
+          // 保留交易所后缀（如 COL.MC 表示西班牙）
+          const finalSymbol = best.symbol;
+          console.log(`   ✅ [Twelve Data + 交易所] ${input} → ${finalSymbol} (${best.exchange || best.description})`);
+          return { symbol: finalSymbol, resolved: true, source: 'twelvedata_exchange', exchange: best.exchange };
+        }
+      }
+      
+      // 备用：Finnhub（美股和部分国际股票）
+      const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
+      if (FINNHUB_KEY) {
+        const results = await lookupSymbol(input, exchangeHint);
+        if (results && results.length > 0) {
+          const best = selectBestMatch(results, exchangeHint, input);
+          const finalSymbol = best.symbol;
+          console.log(`   ✅ [Finnhub + 交易所] ${input} → ${finalSymbol}`);
+          return { symbol: finalSymbol, resolved: true, source: 'finnhub_exchange', exchange: best.exchange };
+        }
+      }
+    } catch (apiError) {
+      console.warn(`   ⚠️  [API查询失败] ${apiError.message}`);
+    }
+  }
+  
+  // Layer 1: 静态映射精确匹配（最快）- 仅当无交易所提示时
   if (STATIC_SYMBOL_MAP[normalized]) {
     const resolved = STATIC_SYMBOL_MAP[normalized];
     console.log(`   ✅ [静态映射] ${input} → ${resolved}`);
@@ -50,7 +85,7 @@ async function resolveTicketSymbol(input) {
   
   // Layer 3: 检查是否已经是有效的股票代码格式（纯英文+数字，1-10字符）
   const isLikelyTicker = /^[A-Z0-9.:]{1,10}$/i.test(input.trim());
-  if (isLikelyTicker) {
+  if (isLikelyTicker && !exchangeHint) {
     console.log(`   📈 [直接使用] ${upper} (看起来像股票代码)`);
     return { symbol: upper, resolved: false, source: 'passthrough' };
   }
@@ -62,9 +97,9 @@ async function resolveTicketSymbol(input) {
     // 尝试 Finnhub（优先，对英文名支持较好）
     const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
     if (FINNHUB_KEY) {
-      const results = await lookupSymbol(input, null);
+      const results = await lookupSymbol(input, exchangeHint);
       if (results && results.length > 0) {
-        const best = selectBestMatch(results, null, input);
+        const best = selectBestMatch(results, exchangeHint, input);
         // 清理前缀（如 COMMON STOCK:AAPL → AAPL）
         const cleanSymbol = best.symbol.includes(':') ? best.symbol.split(':').pop() : best.symbol;
         console.log(`   ✅ [Finnhub] ${input} → ${cleanSymbol}`);
@@ -75,9 +110,9 @@ async function resolveTicketSymbol(input) {
     // 尝试 Twelve Data（备用，全球覆盖更广）
     const TWELVE_DATA_KEY = process.env.TWELVE_DATA_API_KEY;
     if (TWELVE_DATA_KEY) {
-      const results = await lookupSymbolFromTwelveData(input, null);
+      const results = await lookupSymbolFromTwelveData(input, exchangeHint);
       if (results && results.length > 0) {
-        const best = selectBestMatch(results, null, input);
+        const best = selectBestMatch(results, exchangeHint, input);
         // 清理前缀（如 NASDAQ:AAPL → AAPL）
         const cleanSymbol = best.symbol.includes(':') ? best.symbol.split(':').pop() : best.symbol;
         console.log(`   ✅ [Twelve Data] ${input} → ${cleanSymbol}`);
@@ -99,17 +134,20 @@ async function resolveTicketSymbol(input) {
  * @param {number} chatId - Telegram 聊天室 ID
  * @param {Object} bot - Telegram Bot 实例
  * @param {Object} message - 原始 Telegram 消息对象
+ * @param {Object} options - 可选参数 { exchangeHint: string }
  * @returns {Promise<Object>} 解票结果对象
  */
-async function handleTicket(args, chatId, bot, message) {
+async function handleTicket(args, chatId, bot, message, options = {}) {
   const startTime = Date.now();
   let statusMsg = null;
+  const exchangeHint = options.exchangeHint || null;
   
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   console.log(`🎯 [TICKET] Ticket analysis request`);
   console.log(`   ├─ Args: [${args.join(', ')}]`);
   console.log(`   ├─ Chat ID: ${chatId}`);
-  console.log(`   └─ User: ${message.from?.username || 'unknown'}`);
+  console.log(`   ├─ User: ${message.from?.username || 'unknown'}`);
+  console.log(`   └─ 🌍 Exchange Hint: ${exchangeHint || '(none - default to US)'}`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
   
   try {
@@ -129,10 +167,11 @@ async function handleTicket(args, chatId, bot, message) {
     
     console.log(`✅ [TICKET] Parsed arguments:`);
     console.log(`   ├─ Raw Symbol: ${rawSymbol}`);
-    console.log(`   └─ Mode: ${mode}\n`);
+    console.log(`   ├─ Mode: ${mode}`);
+    console.log(`   └─ Exchange: ${exchangeHint || 'auto-detect'}\n`);
     
-    // ═══ STEP 1.5: 🆕 智能符号解析（中文公司名 → 股票代码）═══
-    const resolveResult = await resolveTicketSymbol(rawSymbol);
+    // ═══ STEP 1.5: 🆕 智能符号解析（中文公司名 → 股票代码 + 交易所）═══
+    const resolveResult = await resolveTicketSymbol(rawSymbol, exchangeHint);
     const symbol = resolveResult.symbol;
     
     if (resolveResult.resolved) {

@@ -81,7 +81,22 @@ function parseCommand(message) {
   const cleanText = text.replace(/@\w+/g, '').trim();
   
   // 🆕 NL-SMART: 智能自然语言解析（在严格命令匹配之前）
-  // 支持: "解析西班牙股票 COL", "分析一下NVDA", "看看苹果", "帮我解读TSLA"
+  // 支持: "分析一下NVDA", "看看苹果", "帮我解读TSLA"
+  // ⚠️ 重要：如果包含国家/交易所提示，跳过简单匹配，让 AI 处理以提取交易所信息
+  const exchangeHintKeywords = [
+    '西班牙', '香港', '中国', '日本', '英国', '德国', '法国', '加拿大', '澳大利亚', '巴西',
+    'Spain', 'HK', 'China', 'Japan', 'UK', 'Germany', 'France', 'Canada', 'Australia', 'Brazil',
+    'BME', 'TSX', 'LSE', 'HKEX', '港股', '美股', 'A股', '欧股'
+  ];
+  const hasExchangeHint = exchangeHintKeywords.some(kw => 
+    cleanText.toLowerCase().includes(kw.toLowerCase())
+  );
+  
+  if (hasExchangeHint) {
+    console.log(`[PARSER][EXCHANGE-DETECT] 检测到交易所提示，跳过简单解析，转交 AI 处理: "${cleanText}"`);
+    return { cmd: 'public', args: [cleanText], flags: {} };
+  }
+  
   const nlTicketPatterns = [
     /^解[析读票].*?([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,           // 解析/解读/解票 ... SYMBOL
     /^分析.*?([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,                 // 分析 ... SYMBOL

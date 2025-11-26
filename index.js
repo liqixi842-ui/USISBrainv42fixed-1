@@ -293,14 +293,18 @@ bot.on('message', async (message) => {
           
           if (intent && intent.intentType && intent.confidence >= 0.7) {
             console.log(`🎯 [AI] 识别意图: ${intent.intentType} (置信度: ${intent.confidence})`);
+            console.log(`🌍 [AI] 交易所提示: ${intent.exchange || '未指定'}`);
             
             // 根据 AI 理解的意图路由
             if (intent.intentType === 'STOCK_QUERY' || intent.intentType === 'stock_query') {
               const symbol = intent.entities?.find(e => e.type === 'symbol' || e.type === 'company')?.value;
               if (symbol) {
-                targetModule = 'Ticket Bot (via AI)';
+                targetModule = intent.exchange 
+                  ? `Ticket Bot (via AI + ${intent.exchange})` 
+                  : 'Ticket Bot (via AI)';
                 console.log(`🎯 [ROUTER] AI 路由 → ${targetModule} (${symbol})`);
-                result = await handleTicket([symbol], chatId, bot, message);
+                // 🔥 关键修复：传递交易所提示给 ticket-bot
+                result = await handleTicket([symbol], chatId, bot, message, { exchangeHint: intent.exchange });
                 break;
               }
             } else if (intent.intentType === 'NEWS' || intent.intentType === 'news') {
