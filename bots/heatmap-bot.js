@@ -185,7 +185,7 @@ async function handleHeatmap(args, chatId, bot, message) {
     console.log(`✅ [HEATMAP] Heatmap generated in ${generateDuration} ms`);
     console.log(`   ├─ Provider: ${heatmapResult.provider || 'unknown'}`);
     console.log(`   ├─ Buffer size: ${heatmapResult.buffer?.length || 0} bytes`);
-    console.log(`   ├─ Has caption: ${!!heatmapResult.caption}`);
+    console.log(`   ├─ Has AI analysis: ${!!heatmapResult.marketAnalysis}`);
     console.log(`   └─ Has summary: ${!!heatmapResult.summary}\n`);
     
     // ═══ STEP 4: 更新状态消息 ═══
