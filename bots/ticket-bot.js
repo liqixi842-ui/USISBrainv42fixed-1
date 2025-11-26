@@ -20,10 +20,135 @@ const { generateStockChart } = require('../stockChartService');
 const lightweightFormatter = require('../v3_dev/services/lightweightTicketFormatter');
 const dataBroker = require('../dataBroker');
 const { STATIC_SYMBOL_MAP, lookupSymbol, lookupSymbolFromTwelveData, selectBestMatch } = require('../symbolResolver');
+const fetch = require('node-fetch');
+
+// 🆕 v7.0: AI 符号解析缓存（避免重复调用 API）
+const AI_SYMBOL_CACHE = new Map();
+const AI_CACHE_TTL = 24 * 60 * 60 * 1000; // 24小时
+
+/**
+ * 🆕 v7.0: 检测输入是否需要 AI 翻译（包含非 ASCII 字符）
+ */
+function needsAITranslation(input) {
+  // 检测非 ASCII 字符（中文、日文、韩文等）
+  return /[^\x00-\x7F]/.test(input);
+}
+
+/**
+ * 🆕 v7.0: AI 智能符号解析 - 使用 GPT-4o-mini 理解任何语言的公司名
+ * @param {string} input - 用户输入（如 "苹果", "アップル", "manzana"）
+ * @param {string|null} exchangeHint - 交易所提示
+ * @returns {Promise<{symbol: string, exchange?: string, confidence: number}|null>}
+ */
+async function resolveWithAI(input, exchangeHint = null) {
+  const cacheKey = `${input.toLowerCase()}_${exchangeHint || 'auto'}`;
+  
+  // 检查缓存
+  const cached = AI_SYMBOL_CACHE.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp < AI_CACHE_TTL)) {
+    console.log(`   🧠 [AI缓存命中] "${input}" → ${cached.symbol}`);
+    return { symbol: cached.symbol, exchange: cached.exchange, confidence: 0.95, source: 'ai_cache' };
+  }
+  
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+  if (!OPENAI_API_KEY) {
+    console.log(`   ⚠️  [AI] OpenAI API key not available`);
+    return null;
+  }
+  
+  try {
+    console.log(`   🧠 [AI解析] 使用 GPT-4o-mini 理解: "${input}"`);
+    
+    const systemPrompt = `You are a stock symbol resolver. Given a company name in ANY language, return the most likely stock ticker symbol.
+
+Rules:
+1. Return ONLY a JSON object with format: {"symbol": "TICKER", "exchange": "EXCHANGE_CODE", "confidence": 0.0-1.0}
+2. For US stocks, use the standard ticker (e.g., AAPL, NVDA, TSLA)
+3. For non-US stocks, include exchange suffix if needed (e.g., 0700.HK for Tencent, COL.MC for Colonial)
+4. If exchange hint is provided, prioritize that market
+5. If you cannot identify the company, return {"symbol": null, "confidence": 0}
+6. Common mappings: 苹果=AAPL, 微软=MSFT, 谷歌=GOOGL, 英伟达=NVDA, 特斯拉=TSLA, 腾讯=0700.HK, 阿里巴巴=BABA`;
+
+    const userPrompt = exchangeHint 
+      ? `Company: "${input}" (prefer ${exchangeHint} market)`
+      : `Company: "${input}"`;
+    
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        max_tokens: 100,
+        temperature: 0.1
+      }),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeout);
+    
+    if (!response.ok) {
+      console.warn(`   ⚠️  [AI] API error: ${response.status}`);
+      return null;
+    }
+    
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content?.trim();
+    
+    if (!content) {
+      return null;
+    }
+    
+    // 解析 JSON 响应
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.warn(`   ⚠️  [AI] Invalid response format: ${content}`);
+      return null;
+    }
+    
+    const result = JSON.parse(jsonMatch[0]);
+    
+    if (result.symbol && result.confidence > 0.5) {
+      console.log(`   ✅ [AI解析成功] "${input}" → ${result.symbol} (置信度: ${result.confidence})`);
+      
+      // 缓存结果
+      AI_SYMBOL_CACHE.set(cacheKey, {
+        symbol: result.symbol,
+        exchange: result.exchange,
+        timestamp: Date.now()
+      });
+      
+      return {
+        symbol: result.symbol,
+        exchange: result.exchange,
+        confidence: result.confidence,
+        source: 'ai_gpt4o_mini'
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      console.warn(`   ⚠️  [AI] 请求超时 (8s)`);
+    } else {
+      console.warn(`   ⚠️  [AI] 解析失败: ${error.message}`);
+    }
+    return null;
+  }
+}
 
 /**
  * 🆕 智能符号解析 - 支持中文公司名、英文名、股票代码 + 交易所提示
- * 优先级：静态映射 → API查询（带交易所提示）→ 原样返回
+ * 优先级：AI理解 → 静态映射 → API查询 → 原样返回
  * @param {string} input - 用户输入（如 "英伟达", "nvidia", "NVDA"）
  * @param {string|null} exchangeHint - 交易所提示（如 "Spain", "HK", "US"）
  * @returns {Promise<{symbol: string, resolved: boolean, source: string, exchange?: string}>}
@@ -33,6 +158,22 @@ async function resolveTicketSymbol(input, exchangeHint = null) {
   const upper = input.toUpperCase().trim();
   
   console.log(`🔍 [TICKET Symbol Resolver] 解析输入: "${input}" (交易所提示: ${exchangeHint || '无'})`);
+  
+  // 🆕 v7.0: 如果输入包含非 ASCII 字符（中文/日文等），优先使用 AI 解析
+  if (needsAITranslation(input)) {
+    console.log(`   🌐 [检测] 输入包含非英文字符，启用 AI 智能解析...`);
+    
+    const aiResult = await resolveWithAI(input, exchangeHint);
+    if (aiResult && aiResult.symbol) {
+      return {
+        symbol: aiResult.symbol,
+        resolved: true,
+        source: aiResult.source || 'ai',
+        exchange: aiResult.exchange
+      };
+    }
+    console.log(`   ⚠️  [AI] 未能识别，尝试其他方法...`);
+  }
   
   // 🆕 如果有交易所提示，跳过静态映射，直接用 API 查询以获取正确的交易所符号
   if (exchangeHint) {
