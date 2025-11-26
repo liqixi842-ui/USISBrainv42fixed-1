@@ -19,7 +19,7 @@
 const { generateStockChart } = require('../stockChartService');
 const lightweightFormatter = require('../v3_dev/services/lightweightTicketFormatter');
 const dataBroker = require('../dataBroker');
-const { STATIC_SYMBOL_MAP, lookupSymbol, lookupSymbolFromTwelveData } = require('../symbolResolver');
+const { STATIC_SYMBOL_MAP, lookupSymbol, lookupSymbolFromTwelveData, selectBestMatch } = require('../symbolResolver');
 
 /**
  * 🆕 智能符号解析 - 支持中文公司名、英文名、股票代码
@@ -59,27 +59,29 @@ async function resolveTicketSymbol(input) {
   try {
     console.log(`   🌐 [API查询] 尝试查找: ${input}`);
     
-    // 尝试 Twelve Data
-    const TWELVE_DATA_KEY = process.env.TWELVE_DATA_API_KEY;
-    if (TWELVE_DATA_KEY) {
-      const results = await lookupSymbolFromTwelveData(input, null);
-      if (results && results.length > 0) {
-        const best = results[0];
-        const symbol = best.symbol || best.displaySymbol;
-        console.log(`   ✅ [Twelve Data] ${input} → ${symbol}`);
-        return { symbol, resolved: true, source: 'twelvedata' };
-      }
-    }
-    
-    // 尝试 Finnhub
+    // 尝试 Finnhub（优先，对英文名支持较好）
     const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
     if (FINNHUB_KEY) {
       const results = await lookupSymbol(input, null);
       if (results && results.length > 0) {
-        const best = results[0];
-        const symbol = best.symbol || best.displaySymbol;
-        console.log(`   ✅ [Finnhub] ${input} → ${symbol}`);
-        return { symbol, resolved: true, source: 'finnhub' };
+        const best = selectBestMatch(results, null, input);
+        // 清理前缀（如 COMMON STOCK:AAPL → AAPL）
+        const cleanSymbol = best.symbol.includes(':') ? best.symbol.split(':').pop() : best.symbol;
+        console.log(`   ✅ [Finnhub] ${input} → ${cleanSymbol}`);
+        return { symbol: cleanSymbol, resolved: true, source: 'finnhub' };
+      }
+    }
+    
+    // 尝试 Twelve Data（备用，全球覆盖更广）
+    const TWELVE_DATA_KEY = process.env.TWELVE_DATA_API_KEY;
+    if (TWELVE_DATA_KEY) {
+      const results = await lookupSymbolFromTwelveData(input, null);
+      if (results && results.length > 0) {
+        const best = selectBestMatch(results, null, input);
+        // 清理前缀（如 NASDAQ:AAPL → AAPL）
+        const cleanSymbol = best.symbol.includes(':') ? best.symbol.split(':').pop() : best.symbol;
+        console.log(`   ✅ [Twelve Data] ${input} → ${cleanSymbol}`);
+        return { symbol: cleanSymbol, resolved: true, source: 'twelvedata' };
       }
     }
   } catch (apiError) {

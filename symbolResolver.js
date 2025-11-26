@@ -896,5 +896,6 @@ module.exports = {
   resolveSymbols,
   lookupSymbol,
   lookupSymbolFromTwelveData,
+  selectBestMatch,
   STATIC_SYMBOL_MAP
 };
