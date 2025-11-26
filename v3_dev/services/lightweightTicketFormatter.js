@@ -247,6 +247,71 @@ Please adjust your strategy promptly based on how the market evolves.`;
 }
 
 /**
+ * 🇪🇸 西班牙语标准版格式化
+ */
+function formatTicketStandardES(ticketData) {
+  const symbol = ticketData.symbol || 'N/A';
+  const analysis = ticketData.analysis || '';
+  const info = extractKeyInfo(analysis);
+
+  const trendES = info.trend === '上涨' ? 'Alcista' : info.trend === '下跌' ? 'Bajista' : 'Lateral';
+  const strengthES = info.trendStrength >= 7 ? 'fuerte' : info.trendStrength <= 4 ? 'débil' : 'moderada';
+
+  const supportText = info.support !== null 
+    ? `Alrededor de $${info.support.toFixed(2)}` 
+    : 'Aún no se ha formado una zona de soporte clara';
+  
+  const resistanceText = info.resistance !== null 
+    ? `Alrededor de $${info.resistance.toFixed(2)}` 
+    : 'Aún no se ha formado una zona de resistencia clara';
+  
+  const breakoutText = (info.support !== null && info.resistance !== null)
+    ? `Una ruptura por encima de $${info.resistance.toFixed(2)} podría iniciar un nuevo tramo alcista, mientras que una caída por debajo de $${info.support.toFixed(2)} abriría espacio para más bajadas.`
+    : 'Espere a que se formen niveles clave antes de tomar decisiones de ruptura.';
+  
+  const rangeText = info.priceRange 
+    ? `entre $${info.priceRange.low.toFixed(2)} y $${info.priceRange.high.toFixed(2)}` 
+    : 'dentro del rango actual; use soporte/resistencia clave como referencia';
+  
+  const stopLossText = info.support !== null
+    ? `Para posiciones largas, considere un stop por debajo de $${info.support.toFixed(2)}`
+    : 'Establezca el stop-loss según su tolerancia al riesgo';
+
+  return `【📈 I. Identificación de Tendencia】
+• Dirección Principal: La tendencia actual es ${trendES.toLowerCase()}.
+• Evaluación de Fuerza: ${info.trendStrength}/10 (${strengthES})
+• Sostenibilidad: A corto plazo, ${info.trend === '盘整' ? 'el valor podría seguir en rango; se necesita una ruptura clara' : 'observe los niveles de soporte clave'}.
+
+【🎯 II. Niveles de Precio Clave】
+• Soporte Clave: ${supportText}
+• Resistencia Clave: ${resistanceText}
+• Señales de Ruptura: ${breakoutText}
+
+【🔧 III. Análisis de Patrones Técnicos】
+• Patrón de Velas: ${info.trend === '盘整' ? 'Las velas recientes tienen cuerpos pequeños, indicando indecisión' : 'La tendencia es clara'}.
+• Patrón del Gráfico: ${info.trend === '盘整' ? 'Sin patrón claro; el precio consolida en rango' : 'Patrón de continuación de tendencia'}.
+• Análisis de Gaps: No hay gaps significativos en este momento.
+
+【🧮 IV. Interpretación de Indicadores】
+• Medias Móviles: ${info.trend === '盘整' ? 'MA5 y MA10 se cruzan frecuentemente, reflejando volatilidad' : 'Las MAs apoyan la tendencia'}.
+• Bandas de Bollinger: El precio está ${info.trend === '盘整' ? 'cerca de la banda media, sugiriendo baja volatilidad' : 'cerca del borde de la banda'}.
+• MACD: El histograma ${info.trend === '盘整' ? 'se reduce cerca de cero, mostrando momentum débil' : 'está alineado con la tendencia'}.
+• Volumen: El volumen ${info.trend === '上涨' ? 'ha aumentado; observe si los precios al alza están respaldados por volumen' : 'se ha mantenido estable'}.
+
+【💰 V. Señales de Trading】
+• Fuerza de Señal de Compra: ${info.buySignal}/10 (${info.buySignal >= 6 ? 'moderada' : 'débil'})
+• Fuerza de Señal de Venta: ${info.sellSignal}/10 (${info.sellSignal >= 6 ? 'moderada' : 'débil'})
+• Sugerencia de Posición: ${info.trend === '盘整' ? 'Sea paciente y espere una ruptura clara antes de comprometerse' : 'Monitoree la continuación de la tendencia'}.
+
+【⚠️ VI. Evaluación de Riesgo】
+• Nivel de Riesgo Técnico: ${info.riskLevel === '低' ? '2' : info.riskLevel === '高' ? '4' : '3'} (riesgo ${info.riskLevel === '低' ? 'bajo' : info.riskLevel === '高' ? 'alto' : 'medio'})
+• Volatilidad Esperada: El precio podría continuar oscilando ${rangeText}.
+• Stop-Loss Sugerido: ${stopLossText}.
+
+Ajuste su estrategia según la evolución del mercado.`;
+}
+
+/**
  * 💬 中文人话版格式化（老交易员口吻）
  */
 function formatTicketHumanCN(ticketData) {
@@ -294,8 +359,100 @@ ${info.trend === '上涨' ? '已经拿着的人，可以按照自己成本稍微
 —— 市场节奏随时会变，这只是基于当前盘面的一个参考想法。`;
 }
 
+// 🆕 v7.1: 语言格式化器注册表（可扩展）
+const FORMATTERS = {
+  'zh': formatTicketStandardCN,
+  'cn': formatTicketStandardCN,
+  '中文': formatTicketStandardCN,
+  'en': formatTicketStandardEN,
+  '英文': formatTicketStandardEN,
+  'es': formatTicketStandardES,
+  '西语': formatTicketStandardES,
+  '西班牙语': formatTicketStandardES,
+  'human': formatTicketHumanCN,
+  '聊天版': formatTicketHumanCN,
+  '人话版': formatTicketHumanCN
+};
+
+// 🆕 v7.1: 模式预设（快捷方式）
+const MODE_PRESETS = {
+  '标准版': ['zh'],
+  '双语': ['zh', 'en'],
+  '三语': ['zh', 'en', 'es'],
+  '完整版': ['zh', 'en', 'human'],
+  '聊天版': ['human'],
+  '人话版': ['human'],
+  '中文': ['zh'],
+  '英文': ['en'],
+  '西语': ['es'],
+  '西班牙语': ['es']
+};
+
+/**
+ * 🆕 v7.1: 解析语言模式（支持自然语言输入）
+ * @param {string} modeInput - 用户输入的模式（如 "双语", "中文和西语", "英语和中文"）
+ * @returns {Array<string>} 语言代码数组
+ */
+function parseLanguageMode(modeInput) {
+  if (!modeInput) return ['zh']; // 默认中文
+  
+  const input = modeInput.toLowerCase().trim();
+  
+  // 检查预设模式
+  if (MODE_PRESETS[modeInput]) {
+    return MODE_PRESETS[modeInput];
+  }
+  
+  // 解析组合模式（如 "中文和西语", "英语和中文"）
+  const languages = [];
+  
+  // 语言关键词映射
+  const langKeywords = {
+    '中文': 'zh', '中': 'zh', 'zh': 'zh', 'cn': 'zh', 'chinese': 'zh',
+    '英文': 'en', '英语': 'en', '英': 'en', 'en': 'en', 'english': 'en',
+    '西语': 'es', '西班牙语': 'es', '西': 'es', 'es': 'es', 'spanish': 'es',
+    '人话': 'human', '聊天': 'human', 'human': 'human'
+  };
+  
+  // 检查每个语言关键词
+  for (const [keyword, code] of Object.entries(langKeywords)) {
+    if (input.includes(keyword) && !languages.includes(code)) {
+      languages.push(code);
+    }
+  }
+  
+  // 如果没有匹配到任何语言，返回默认中文
+  return languages.length > 0 ? languages : ['zh'];
+}
+
+/**
+ * 🆕 v7.1: 根据语言列表生成消息
+ * @param {Object} ticketData - 票据数据
+ * @param {Array<string>} languages - 语言代码数组
+ * @returns {Array<string>} 格式化后的消息数组
+ */
+function formatByLanguages(ticketData, languages) {
+  const messages = [];
+  
+  for (const lang of languages) {
+    const formatter = FORMATTERS[lang];
+    if (formatter) {
+      messages.push(formatter(ticketData));
+    } else {
+      console.warn(`[LightweightFormatter] 未知语言代码: ${lang}`);
+    }
+  }
+  
+  return messages.length > 0 ? messages : [formatTicketStandardCN(ticketData)];
+}
+
 module.exports = {
   formatTicketStandardCN,
   formatTicketStandardEN,
-  formatTicketHumanCN
+  formatTicketStandardES,
+  formatTicketHumanCN,
+  parseLanguageMode,
+  formatByLanguages,
+  FORMATTERS,
+  MODE_PRESETS
 };

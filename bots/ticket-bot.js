@@ -560,52 +560,34 @@ function parseTicketArgs(args) {
     };
   }
   
-  // Normalize mode
-  let normalizedMode = mode;
-  if (mode === '聊天版' || mode === '人话版') {
-    normalizedMode = '聊天版';
-  } else if (mode === '双语') {
-    normalizedMode = '双语';
-  } else if (mode === '完整版') {
-    normalizedMode = '完整版';
-  } else {
-    normalizedMode = '标准版';
-  }
-  
+  // 🆕 v7.1: 不再强制归一化模式，保留原始输入让 formatTicketMessages 处理
   return {
     valid: true,
     symbol: symbol,
-    mode: normalizedMode
+    mode: mode || '标准版'  // 保留原始模式字符串
   };
 }
 
 /**
- * 格式化解票消息（根据模式）
+ * 🆕 v7.1: 格式化解票消息（支持灵活的语言组合）
+ * 
+ * 支持的模式：
+ * - 预设模式：双语、三语、完整版、聊天版、标准版
+ * - 自然语言组合：中文和西语、英语和中文、所有语言
+ * - 单一语言：中文、英文、西语
+ * 
  * @param {Object} ticketData - 解票数据
- * @param {string} mode - 输出模式
+ * @param {string} mode - 输出模式（支持自然语言输入）
  * @returns {Array<string>} 消息数组
  */
 function formatTicketMessages(ticketData, mode) {
-  const messages = [];
+  // 使用新的语言解析器
+  const languages = lightweightFormatter.parseLanguageMode(mode);
   
-  if (mode === '双语') {
-    // Bilingual: CN + EN
-    messages.push(lightweightFormatter.formatTicketStandardCN(ticketData));
-    messages.push(lightweightFormatter.formatTicketStandardEN(ticketData));
-  } else if (mode === '聊天版') {
-    // Human voice (CN)
-    messages.push(lightweightFormatter.formatTicketHumanCN(ticketData));
-  } else if (mode === '完整版') {
-    // Complete: CN + EN + Human
-    messages.push(lightweightFormatter.formatTicketStandardCN(ticketData));
-    messages.push(lightweightFormatter.formatTicketStandardEN(ticketData));
-    messages.push(lightweightFormatter.formatTicketHumanCN(ticketData));
-  } else {
-    // Default: Standard CN only
-    messages.push(lightweightFormatter.formatTicketStandardCN(ticketData));
-  }
+  console.log(`🌍 [TICKET] 语言模式解析: "${mode}" → [${languages.join(', ')}]`);
   
-  return messages;
+  // 使用新的多语言格式化器
+  return lightweightFormatter.formatByLanguages(ticketData, languages);
 }
 
 /**
