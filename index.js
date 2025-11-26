@@ -104,6 +104,7 @@ const { handleNews } = require('./bots/news-bot.js');
 const { handleHeatmap } = require('./bots/heatmap-bot.js');
 const { handleBrief } = require('./bots/brief-bot.js');
 const { handleDeepReport } = require('./bots/deep-report-bot.js');
+const { parseUserIntent } = require('./semanticIntentAgent');
 
 const { parseCommand, handleManagerBot } = managerBot;
 
@@ -283,7 +284,56 @@ bot.on('message', async (message) => {
         result = await handleDeepReport(args, chatId, bot, message);
         break;
         
+      case 'public':
       default:
+        // 🆕 AI 语义理解 - 在放弃之前用 AI 尝试理解用户意图
+        console.log(`🧠 [ROUTER] 尝试 AI 语义理解...`);
+        try {
+          const intent = await parseUserIntent(text);
+          
+          if (intent && intent.intentType && intent.confidence >= 0.7) {
+            console.log(`🎯 [AI] 识别意图: ${intent.intentType} (置信度: ${intent.confidence})`);
+            
+            // 根据 AI 理解的意图路由
+            if (intent.intentType === 'STOCK_QUERY' || intent.intentType === 'stock_query') {
+              const symbol = intent.entities?.find(e => e.type === 'symbol' || e.type === 'company')?.value;
+              if (symbol) {
+                targetModule = 'Ticket Bot (via AI)';
+                console.log(`🎯 [ROUTER] AI 路由 → ${targetModule} (${symbol})`);
+                result = await handleTicket([symbol], chatId, bot, message);
+                break;
+              }
+            } else if (intent.intentType === 'NEWS' || intent.intentType === 'news') {
+              targetModule = 'News Bot (via AI)';
+              console.log(`🎯 [ROUTER] AI 路由 → ${targetModule}`);
+              result = await handleNews([], chatId, bot, message);
+              break;
+            } else if (intent.intentType === 'HEATMAP' || intent.intentType === 'sector_heatmap') {
+              targetModule = 'Heatmap Bot (via AI)';
+              console.log(`🎯 [ROUTER] AI 路由 → ${targetModule}`);
+              result = await handleHeatmap([], chatId, bot, message);
+              break;
+            } else if (intent.intentType === 'RESEARCH_REPORT_V5') {
+              const symbol = intent.entities?.find(e => e.type === 'symbol')?.value;
+              if (symbol) {
+                targetModule = 'Report Bot (via AI)';
+                console.log(`🎯 [ROUTER] AI 路由 → ${targetModule}`);
+                result = await handleReport([symbol], chatId, bot, message);
+                break;
+              }
+            } else if (intent.intentType === 'INSTITUTIONAL_DEEP_REPORT') {
+              const symbol = intent.entities?.find(e => e.type === 'symbol')?.value;
+              targetModule = 'Deep Report Bot (via AI)';
+              console.log(`🎯 [ROUTER] AI 路由 → ${targetModule}`);
+              result = await handleDeepReport(symbol ? [symbol] : [], chatId, bot, message);
+              break;
+            }
+          }
+        } catch (aiError) {
+          console.warn(`⚠️  [AI] 语义理解失败: ${aiError.message}`);
+        }
+        
+        // AI 也无法理解，使用 Public Bot
         targetModule = 'Public Bot (Default)';
         console.log(`🎯 [ROUTER] → ${targetModule}`);
         result = await handlePublic(message, chatId, bot);

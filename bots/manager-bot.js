@@ -6,7 +6,7 @@ const { handleHeatmap } = require('./heatmap-bot.js');
 const { handlePublic } = require('./public-bot.js');
 const { handleSupervisor } = require('./supervisor-bot.js');
 const { handleDeepReport } = require('./deep-report-bot.js');
-const { parseResearchReportCommand } = require('../semanticIntentAgent');
+const { parseResearchReportCommand, parseUserIntent } = require('../semanticIntentAgent');
 
 /**
  * USIS Brain v7.0 - Manager Bot (核心路由器)
@@ -80,6 +80,37 @@ function parseCommand(message) {
   // Remove bot username suffix if present (e.g., /ticket@botname → /ticket)
   const cleanText = text.replace(/@\w+/g, '').trim();
   
+  // 🆕 NL-SMART: 智能自然语言解析（在严格命令匹配之前）
+  // 支持: "解析西班牙股票 COL", "分析一下NVDA", "看看苹果", "帮我解读TSLA"
+  const nlTicketPatterns = [
+    /^解[析读票].*?([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,           // 解析/解读/解票 ... SYMBOL
+    /^分析.*?([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,                 // 分析 ... SYMBOL
+    /^看[看一下]*\s*([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,          // 看看 SYMBOL
+    /^帮我[解分][析读票]?\s*([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,  // 帮我解析 SYMBOL
+    /^([A-Z]{2,5})\s*怎么样/i,                                      // NVDA 怎么样
+    /^([A-Z]{2,5})\s*走势/i,                                        // TSLA 走势
+  ];
+  
+  for (const pattern of nlTicketPatterns) {
+    const match = cleanText.match(pattern);
+    if (match && match[1]) {
+      const symbol = match[1].trim();
+      console.log(`[PARSER][NL-SMART] 自然语言匹配: "${cleanText}" → ticket ${symbol}`);
+      return { cmd: 'ticket', args: [symbol], flags: {} };
+    }
+  }
+  
+  // 🆕 NL-SMART-2: 更宽松的模式 - 包含关键词 + 股票代码
+  if ((cleanText.includes('解析') || cleanText.includes('解读') || cleanText.includes('分析')) && !cleanText.startsWith('研报')) {
+    // 提取最后一个看起来像股票代码的词
+    const words = cleanText.split(/\s+/);
+    const lastWord = words[words.length - 1];
+    if (/^[A-Z]{1,5}$/i.test(lastWord) || /^[\u4e00-\u9fa5]{2,6}$/.test(lastWord)) {
+      console.log(`[PARSER][NL-SMART-2] 宽松匹配: "${cleanText}" → ticket ${lastWord}`);
+      return { cmd: 'ticket', args: [lastWord.toUpperCase()], flags: {} };
+    }
+  }
+
   // Check if message starts with / or is a known Chinese command
   const isCommand = cleanText.startsWith('/') || 
                     cleanText.startsWith('解票') || 
@@ -104,8 +135,9 @@ function parseCommand(message) {
   // Map commands (both English and Chinese)
   let cmd = null;
   
-  // Ticket commands
-  if (firstPart === '/ticket' || firstPart === '解票' || firstPart === '/解票') {
+  // Ticket commands (扩展别名)
+  if (firstPart === '/ticket' || firstPart === '解票' || firstPart === '/解票' || 
+      firstPart === '解析' || firstPart === '解读' || firstPart === '分析') {
     cmd = 'ticket';
   }
   // Report commands (text version)
