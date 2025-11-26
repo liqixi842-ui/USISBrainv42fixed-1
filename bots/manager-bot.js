@@ -80,82 +80,102 @@ function parseCommand(message) {
   // Remove bot username suffix if present (e.g., /ticket@botname → /ticket)
   const cleanText = text.replace(/@\w+/g, '').trim();
   
-  // 🆕 NL-SMART: 智能自然语言解析（在严格命令匹配之前）
-  // 支持: "分析一下NVDA", "看看苹果", "帮我解读TSLA"
-  // ⚠️ 重要：如果包含国家/交易所提示，跳过简单匹配，让 AI 处理以提取交易所信息
-  const exchangeHintKeywords = [
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 🆕 v7.1 重构：结构化命令优先，AI 语义理解后备
+  // 
+  // 设计原则：
+  // 1. 明确的结构化命令（如 "解票 AAPL 双语"）直接解析，保留所有参数
+  // 2. 模糊的自然语言（如 "帮我看看苹果"）交给 AI 语义理解
+  // 3. 中文公司名需要 AI 翻译（苹果→AAPL），统一走 AI 路径
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  // 🔧 已知的模式关键词（用于区分模式 vs 公司名）
+  const MODE_KEYWORDS = ['双语', '聊天版', '人话版', '完整版', '标准版', '英文', '中文'];
+  
+  // 🔧 交易所提示关键词
+  const EXCHANGE_HINTS = [
     '西班牙', '香港', '中国', '日本', '英国', '德国', '法国', '加拿大', '澳大利亚', '巴西',
     'Spain', 'HK', 'China', 'Japan', 'UK', 'Germany', 'France', 'Canada', 'Australia', 'Brazil',
     'BME', 'TSX', 'LSE', 'HKEX', '港股', '美股', 'A股', '欧股'
   ];
-  const hasExchangeHint = exchangeHintKeywords.some(kw => 
+  
+  // ═══ STEP 1: 检测是否为明确的结构化命令 ═══
+  // 格式：命令 + 参数（如 "解票 AAPL 双语"）
+  const TICKET_COMMANDS = ['解票', '/ticket', '/解票', '解析', '解读', '分析'];
+  const parts = cleanText.split(/\s+/);
+  const firstWord = parts[0];
+  
+  // 检查是否以票据命令开头
+  const isTicketCommand = TICKET_COMMANDS.some(cmd => 
+    firstWord === cmd || firstWord.toLowerCase() === cmd.toLowerCase()
+  );
+  
+  if (isTicketCommand && parts.length >= 2) {
+    const symbolCandidate = parts[1].toUpperCase();
+    const modeCandidate = parts[2] || '标准版';
+    
+    // 检查 symbol 是否为有效的股票代码格式（英文+数字，或带交易所前缀）
+    const isValidTicker = /^[A-Z0-9.:]{1,15}$/i.test(symbolCandidate);
+    
+    // 检查 symbol 是否为中文公司名（需要 AI 翻译）
+    const isChineseCompanyName = /^[\u4e00-\u9fa5]{2,}$/.test(symbolCandidate) && 
+                                  !MODE_KEYWORDS.includes(symbolCandidate);
+    
+    if (isValidTicker) {
+      // ✅ 明确的结构化命令，直接解析
+      console.log(`[PARSER][STRUCTURED] 结构化命令: ${firstWord} ${symbolCandidate} ${modeCandidate}`);
+      return { 
+        cmd: 'ticket', 
+        args: [symbolCandidate, modeCandidate],  // 🔧 关键：保留完整参数
+        flags: {} 
+      };
+    } else if (isChineseCompanyName) {
+      // 🧠 中文公司名，需要 AI 翻译
+      console.log(`[PARSER][AI-ROUTE] 中文公司名 "${symbolCandidate}"，转交 AI 语义理解`);
+      return { cmd: 'public', args: [cleanText], flags: {} };
+    }
+  }
+  
+  // ═══ STEP 2: 检测交易所提示 → AI 处理 ═══
+  const hasExchangeHint = EXCHANGE_HINTS.some(kw => 
     cleanText.toLowerCase().includes(kw.toLowerCase())
   );
   
   if (hasExchangeHint) {
-    console.log(`[PARSER][EXCHANGE-DETECT] 检测到交易所提示，跳过简单解析，转交 AI 处理: "${cleanText}"`);
+    console.log(`[PARSER][AI-ROUTE] 检测到交易所提示，转交 AI 处理: "${cleanText}"`);
     return { cmd: 'public', args: [cleanText], flags: {} };
   }
   
-  // 🆕 v7.0: 已知的模式关键词（不应被识别为公司名）
-  const MODE_KEYWORDS = ['双语', '聊天版', '人话版', '完整版', '标准版', '英文', '中文'];
-  
-  const nlTicketPatterns = [
-    /^解[析读票].*?([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,           // 解析/解读/解票 ... SYMBOL
-    /^分析.*?([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,                 // 分析 ... SYMBOL
-    /^看[看一下]*\s*([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,          // 看看 SYMBOL
-    /^帮我[解分][析读票]?\s*([A-Z]{1,5}|[\u4e00-\u9fa5]{2,6})$/i,  // 帮我解析 SYMBOL
-    /^([A-Z]{2,5})\s*怎么样/i,                                      // NVDA 怎么样
-    /^([A-Z]{2,5})\s*走势/i,                                        // TSLA 走势
+  // ═══ STEP 3: 自然语言模式（AI 后备） ═══
+  // 仅用于非结构化的自然语言，如 "看看苹果"、"帮我分析英伟达"
+  const nlPatterns = [
+    /^看[看一下]*\s*([\u4e00-\u9fa5]{2,6}|[A-Z]{1,5})$/i,           // 看看 苹果/NVDA
+    /^帮我[解分][析读票]?\s*([\u4e00-\u9fa5]{2,6}|[A-Z]{1,5})$/i,   // 帮我解析 苹果
+    /^([\u4e00-\u9fa5]{2,6}|[A-Z]{2,5})\s*怎么样/i,                  // 苹果/NVDA 怎么样
+    /^([\u4e00-\u9fa5]{2,6}|[A-Z]{2,5})\s*走势/i,                    // 苹果/TSLA 走势
   ];
   
-  for (const pattern of nlTicketPatterns) {
+  for (const pattern of nlPatterns) {
     const match = cleanText.match(pattern);
     if (match && match[1]) {
-      const symbol = match[1].trim();
+      const target = match[1].trim();
       
-      // 🆕 v7.0: 跳过已知的模式关键词（双语、聊天版等）
-      if (MODE_KEYWORDS.includes(symbol)) {
-        console.log(`[PARSER][NL-SMART] "${symbol}" 是模式关键词，跳过自然语言匹配`);
-        continue; // 继续尝试下一个匹配规则，让标准命令解析处理
-      }
+      // 跳过模式关键词
+      if (MODE_KEYWORDS.includes(target)) continue;
       
-      // 🆕 v7.0: 如果参数是中文公司名，交给 AI 语义理解处理
-      // 这样可以自动识别"苹果"→AAPL, "三菱"→7201.T 等
-      const isChineseName = /^[\u4e00-\u9fa5]+$/.test(symbol);
-      if (isChineseName) {
-        console.log(`[PARSER][NL-SMART] 检测到中文公司名 "${symbol}"，转交 AI 语义理解`);
+      // 中文 → AI 翻译
+      if (/^[\u4e00-\u9fa5]+$/.test(target)) {
+        console.log(`[PARSER][NL-AI] 自然语言中文 "${target}"，转交 AI`);
         return { cmd: 'public', args: [cleanText], flags: {} };
       }
       
-      console.log(`[PARSER][NL-SMART] 自然语言匹配: "${cleanText}" → ticket ${symbol}`);
-      return { cmd: 'ticket', args: [symbol], flags: {} };
-    }
-  }
-  
-  // 🆕 NL-SMART-2: 更宽松的模式 - 包含关键词 + 股票代码
-  if ((cleanText.includes('解析') || cleanText.includes('解读') || cleanText.includes('分析')) && !cleanText.startsWith('研报')) {
-    // 提取最后一个看起来像股票代码的词
-    const words = cleanText.split(/\s+/);
-    const lastWord = words[words.length - 1];
-    
-    // 🆕 v7.0: 跳过模式关键词（双语、聊天版等），让标准命令解析处理
-    if (MODE_KEYWORDS.includes(lastWord)) {
-      console.log(`[PARSER][NL-SMART-2] "${lastWord}" 是模式关键词，跳过`);
-      // 继续往下走到标准命令解析
-    }
-    // 🆕 v7.0: 中文公司名交给 AI 处理
-    else if (/^[\u4e00-\u9fa5]{2,6}$/.test(lastWord)) {
-      console.log(`[PARSER][NL-SMART-2] 检测到中文公司名 "${lastWord}"，转交 AI 语义理解`);
-      return { cmd: 'public', args: [cleanText], flags: {} };
-    }
-    else if (/^[A-Z]{1,5}$/i.test(lastWord)) {
-      console.log(`[PARSER][NL-SMART-2] 宽松匹配: "${cleanText}" → ticket ${lastWord}`);
-      return { cmd: 'ticket', args: [lastWord.toUpperCase()], flags: {} };
+      // 英文股票代码 → 直接 ticket
+      console.log(`[PARSER][NL-DIRECT] 自然语言匹配: "${cleanText}" → ticket ${target}`);
+      return { cmd: 'ticket', args: [target.toUpperCase()], flags: {} };
     }
   }
 
-  // Check if message starts with / or is a known Chinese command
+  // ═══ STEP 4: 标准命令解析 ═══
   const isCommand = cleanText.startsWith('/') || 
                     cleanText.startsWith('解票') || 
                     cleanText.startsWith('研报') ||
@@ -171,7 +191,6 @@ function parseCommand(message) {
   }
   
   // Split command and arguments
-  const parts = cleanText.split(/\s+/);
   const firstPart = parts[0].toLowerCase();
   let args = parts.slice(1);
   let flags = {};
@@ -179,19 +198,9 @@ function parseCommand(message) {
   // Map commands (both English and Chinese)
   let cmd = null;
   
-  // Ticket commands (扩展别名)
+  // Ticket commands (扩展别名) - 这里不再需要额外检查，因为 STEP 1 已处理
   if (firstPart === '/ticket' || firstPart === '解票' || firstPart === '/解票' || 
       firstPart === '解析' || firstPart === '解读' || firstPart === '分析') {
-    
-    // 🆕 v7.0: 检查参数是否为中文公司名，如果是则交给 AI 处理
-    const firstArg = args[0] || '';
-    const isChineseCompanyName = /^[\u4e00-\u9fa5]{2,}$/.test(firstArg);
-    
-    if (isChineseCompanyName) {
-      console.log(`[PARSER] 检测到中文公司名参数 "${firstArg}"，转交 AI 语义理解`);
-      return { cmd: 'public', args: [cleanText], flags: {} };
-    }
-    
     cmd = 'ticket';
   }
   // Report commands (text version)
