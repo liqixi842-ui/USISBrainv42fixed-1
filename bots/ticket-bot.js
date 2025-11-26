@@ -19,6 +19,77 @@
 const { generateStockChart } = require('../stockChartService');
 const lightweightFormatter = require('../v3_dev/services/lightweightTicketFormatter');
 const dataBroker = require('../dataBroker');
+const { STATIC_SYMBOL_MAP, lookupSymbol, lookupSymbolFromTwelveData } = require('../symbolResolver');
+
+/**
+ * 🆕 智能符号解析 - 支持中文公司名、英文名、股票代码
+ * 优先级：静态映射 → API查询 → 原样返回
+ * @param {string} input - 用户输入（如 "英伟达", "nvidia", "NVDA"）
+ * @returns {Promise<{symbol: string, resolved: boolean, source: string}>}
+ */
+async function resolveTicketSymbol(input) {
+  const normalized = input.toLowerCase().trim();
+  const upper = input.toUpperCase().trim();
+  
+  console.log(`🔍 [TICKET Symbol Resolver] 解析输入: "${input}"`);
+  
+  // Layer 1: 静态映射精确匹配（最快）
+  if (STATIC_SYMBOL_MAP[normalized]) {
+    const resolved = STATIC_SYMBOL_MAP[normalized];
+    console.log(`   ✅ [静态映射] ${input} → ${resolved}`);
+    return { symbol: resolved, resolved: true, source: 'static_exact' };
+  }
+  
+  // Layer 2: 静态映射部分匹配（支持 "苹果公司" → "苹果" → AAPL）
+  for (const [key, symbol] of Object.entries(STATIC_SYMBOL_MAP)) {
+    if ((key.includes(normalized) || normalized.includes(key)) && key.length >= 2 && normalized.length >= 2) {
+      console.log(`   ✅ [静态映射-模糊] ${input} → ${symbol} (via ${key})`);
+      return { symbol, resolved: true, source: 'static_fuzzy' };
+    }
+  }
+  
+  // Layer 3: 检查是否已经是有效的股票代码格式（纯英文+数字，1-10字符）
+  const isLikelyTicker = /^[A-Z0-9.:]{1,10}$/i.test(input.trim());
+  if (isLikelyTicker) {
+    console.log(`   📈 [直接使用] ${upper} (看起来像股票代码)`);
+    return { symbol: upper, resolved: false, source: 'passthrough' };
+  }
+  
+  // Layer 4: API 查询（对于未知的公司名）
+  try {
+    console.log(`   🌐 [API查询] 尝试查找: ${input}`);
+    
+    // 尝试 Twelve Data
+    const TWELVE_DATA_KEY = process.env.TWELVE_DATA_API_KEY;
+    if (TWELVE_DATA_KEY) {
+      const results = await lookupSymbolFromTwelveData(input, null);
+      if (results && results.length > 0) {
+        const best = results[0];
+        const symbol = best.symbol || best.displaySymbol;
+        console.log(`   ✅ [Twelve Data] ${input} → ${symbol}`);
+        return { symbol, resolved: true, source: 'twelvedata' };
+      }
+    }
+    
+    // 尝试 Finnhub
+    const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
+    if (FINNHUB_KEY) {
+      const results = await lookupSymbol(input, null);
+      if (results && results.length > 0) {
+        const best = results[0];
+        const symbol = best.symbol || best.displaySymbol;
+        console.log(`   ✅ [Finnhub] ${input} → ${symbol}`);
+        return { symbol, resolved: true, source: 'finnhub' };
+      }
+    }
+  } catch (apiError) {
+    console.warn(`   ⚠️  [API查询失败] ${apiError.message}`);
+  }
+  
+  // Layer 5: 最终回退 - 使用原始输入（大写）
+  console.log(`   ⚠️  [回退] 无法解析，使用原始输入: ${upper}`);
+  return { symbol: upper, resolved: false, source: 'fallback' };
+}
 
 /**
  * 解票主处理函数
@@ -52,16 +123,27 @@ async function handleTicket(args, chatId, bot, message) {
       };
     }
     
-    const { symbol, mode } = parseResult;
+    const { symbol: rawSymbol, mode } = parseResult;
     
     console.log(`✅ [TICKET] Parsed arguments:`);
-    console.log(`   ├─ Symbol: ${symbol}`);
+    console.log(`   ├─ Raw Symbol: ${rawSymbol}`);
     console.log(`   └─ Mode: ${mode}\n`);
     
+    // ═══ STEP 1.5: 🆕 智能符号解析（中文公司名 → 股票代码）═══
+    const resolveResult = await resolveTicketSymbol(rawSymbol);
+    const symbol = resolveResult.symbol;
+    
+    if (resolveResult.resolved) {
+      console.log(`🎯 [TICKET] Symbol resolved: ${rawSymbol} → ${symbol} (via ${resolveResult.source})`);
+    } else {
+      console.log(`📈 [TICKET] Using symbol as-is: ${symbol}`);
+    }
+    
     // ═══ STEP 2: 发送初始状态消息 ═══
+    const displayName = resolveResult.resolved ? `${rawSymbol} (${symbol})` : symbol;
     try {
       statusMsg = await bot.sendMessage(chatId, 
-        `🎯 正在解票 ${symbol}\n\n` +
+        `🎯 正在解票 ${displayName}\n\n` +
         `⏳ 正在生成图表和技术分析...\n\n` +
         `(预计 30-60 秒)`
       );
