@@ -95,7 +95,10 @@ function extractHeatmapQueryRulesOnly(text) {
     
     // 其他
     'russia|俄罗斯': { index: 'IMOEX', name: '俄罗斯IMOEX', region: 'RU' },
-    'singapore|新加坡': { index: 'STI', name: '新加坡STI', region: 'SG' }
+    'singapore|新加坡': { index: 'STI', name: '新加坡STI', region: 'SG' },
+    
+    // 🆕 加密货币
+    'crypto|虚拟货币|加密货币|数字货币|币圈|比特币|btc|eth|币': { index: 'CRYPTO', name: '加密货币', region: 'CRYPTO' }
   };
   
   // 2️⃣ 板块映射表（10+行业）
@@ -514,6 +517,14 @@ async function extractHeatmapQuery(text, debugMode = false) {
 function buildTradingViewURL(query) {
   const { index, locale, sector } = query;
   
+  // 🆕 加密货币热力图 - 使用不同的URL结构
+  if (index === 'CRYPTO') {
+    console.log('🪙 使用加密货币热力图');
+    const url = 'https://www.tradingview.com/heatmap/crypto/';
+    console.log(`🔗 [TradingView URL - Crypto] ${url}`);
+    return url;
+  }
+  
   // 日本市场使用特殊参数结构
   if (index === 'NIKKEI225') {
     console.log('🎌 使用日本市场专用参数');
@@ -579,7 +590,8 @@ function generateHeatmapSummary(query) {
     'EURO50': { zh: '欧洲斯托克50', en: 'Euro Stoxx 50' },
     'HSI': { zh: '恒生指数', en: 'Hang Seng Index' },
     'CSI300': { zh: '沪深300', en: 'CSI 300' },
-    'NIFTY50': { zh: 'Nifty 50', en: 'Nifty 50' }
+    'NIFTY50': { zh: 'Nifty 50', en: 'Nifty 50' },
+    'CRYPTO': { zh: '加密货币', en: 'Cryptocurrency' }
   };
   
   const isChinese = locale === 'zh-CN' || locale === 'auto';
