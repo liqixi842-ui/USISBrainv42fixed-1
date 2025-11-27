@@ -67,7 +67,7 @@ function extractHeatmapQueryRulesOnly(text) {
   const marketMap = {
     // 美洲
     'us|美股|美国|spx|sp500|标普': { index: 'SPX500', name: '标普500', region: 'US' },
-    'nasdaq|纳斯达克|纳指': { index: 'NAS100', name: '纳斯达克100', region: 'US' },
+    'nasdaq|纳斯达克|纳指': { index: 'NASDAQ100', name: '纳斯达克100', region: 'US' },
     'dow|道指|道琼斯': { index: 'DJI', name: '道琼斯', region: 'US' },
     'russell|罗素': { index: 'RUT', name: '罗素2000', region: 'US' },
     'tsx|加拿大': { index: 'TSX', name: '加拿大TSX', region: 'CA' },
@@ -225,7 +225,7 @@ function extractHeatmapQueryRulesOnly(text) {
   // 5️⃣ 特殊组合逻辑
   // 纳斯达克+科技股优化
   if ((parsed.sector === 'technology' || /科技/.test(norm)) && parsed.index === 'SPX500') {
-    parsed.index = 'NAS100';
+    parsed.index = 'NASDAQ100';
     parsed.region = 'US';
     parsed.rules_fired.push('optimize_tech_to_nasdaq');
     console.log(`💡 [智能优化] 科技板块 → NAS100`);
@@ -293,7 +293,7 @@ async function extractHeatmapQuery(text, debugMode = false) {
 
 {
   "region": "US | EU | CN | JP | HK | ...",
-  "index": "SPX500 | NAS100 | DJ30 | SSE | SZSE | HK50 | ...",
+  "index": "SPX500 | NASDAQ100 | DJ30 | SSE | SZSE | HK50 | ...",
   "sector": "technology | finance | energy | healthcare | all | ...",
   "locale": "auto",
   "confidence": 0~1,
@@ -308,12 +308,12 @@ async function extractHeatmapQuery(text, debugMode = false) {
 
 必须是合法 JSON，不允许出现多余文字或自然语言段落。
 如果无法判断 sector，请使用 "sector": "all"。
-如果提到"纳指/Nasdaq"，请使用 "index": "NAS100"。
+如果提到"纳指/Nasdaq"，请使用 "index": "NASDAQ100"。
 如果无法判断 region，默认 "region": "US"。
 
 映射规则：
 - 地区词汇：美股/美/美国→US，日本/日股→JP，西班牙→ES，德国→DE，法国→FR，英国→UK，欧洲→EU，香港→HK，中国/A股→CN，印度→IN
-- 指数词汇：标普/标普500/SP500/SPX→SPX500，纳指/纳斯达克/纳斯达克100/NDX/QQQ/NASDAQ→NAS100，道指/DJIA/DJ→DJ30，日经225→NIKKEI225，IBEX35→IBEX35，DAX40→DAX40，CAC40→CAC40，FTSE100→FTSE100，Euro Stoxx 50→EURO50，恒生/HSI→HK50，沪深300/CSI300→CSI300，Nifty 50→NIFTY50
+- 指数词汇：标普/标普500/SP500/SPX→SPX500，纳指/纳斯达克/纳斯达克100/NDX/QQQ/NASDAQ→NASDAQ100，道指/DJIA/DJ→DJ30，日经225→NIKKEI225，IBEX35→IBEX35，DAX40→DAX40，CAC40→CAC40，FTSE100→FTSE100，Euro Stoxx 50→EURO50，恒生/HSI→HK50，沪深300/CSI300→CSI300，Nifty 50→NIFTY50
 - 行业词汇：科技/技术→technology，金融→financials，医疗/保健→healthcare，工业/制造→industrials，能源/石油→energy，材料/原材料→materials，可选消费/零售→consumer_discretionary，必需消费/日用品→consumer_staples，通信/电信→communication_services，公用事业→utilities，房地产/地产→real_estate，所有/全部/大盘→all
 - 语言：若提及"西语/español"→es-ES，"日语/日本語"→ja-JP，"德语/Deutsch"→de-DE，"法语/français"→fr-FR，否则auto
 - 没提指数但提地区时：US默认SPX500，JP默认NIKKEI225，ES默认IBEX35，DE默认DAX40，FR默认CAC40，UK默认FTSE100，EU默认EURO50，HK默认HK50，CN默认CSI300，IN默认NIFTY50
@@ -322,7 +322,7 @@ async function extractHeatmapQuery(text, debugMode = false) {
 示例JSON输出：
 {"region":"US","index":"SPX500","sector":"technology","locale":"auto","confidence":0.95,"rationale":"用户提到美股的科技股","rules_fired":[],"raw":"美股的科技股热力图","debug":{"force":[],"selected":{"region":"US","index":"SPX500","sector":"technology"}}}
 
-{"region":"US","index":"NAS100","sector":"technology","locale":"auto","confidence":0.98,"rationale":"用户提到纳指科技股","rules_fired":[],"raw":"纳指科技股热力图","debug":{"force":[],"selected":{"region":"US","index":"NAS100","sector":"technology"}}}
+{"region":"US","index":"NASDAQ100","sector":"technology","locale":"auto","confidence":0.98,"rationale":"用户提到纳指科技股","rules_fired":[],"raw":"纳指科技股热力图","debug":{"force":[],"selected":{"region":"US","index":"NASDAQ100","sector":"technology"}}}
 
 {"region":"ES","index":"IBEX35","sector":"financials","locale":"auto","confidence":0.95,"rationale":"用户提到西班牙金融板块","rules_fired":[],"raw":"西班牙IBEX金融板块热力图","debug":{"force":[],"selected":{"region":"ES","index":"IBEX35","sector":"financials"}}}
 
@@ -366,9 +366,9 @@ async function extractHeatmapQuery(text, debugMode = false) {
 用户输入: "${text}"
 
 返回严格 JSON 格式（不要任何额外文字）：
-{"region":"US|JP|ES|...","index":"SPX500|NAS100|...","sector":"technology|financials|all|...","locale":"auto","confidence":0.0~1.0,"rationale":"...","rules_fired":[],"raw":"${text}","debug":{"force":[],"selected":{}}}
+{"region":"US|JP|ES|...","index":"SPX500|NASDAQ100|...","sector":"technology|financials|all|...","locale":"auto","confidence":0.0~1.0,"rationale":"...","rules_fired":[],"raw":"${text}","debug":{"force":[],"selected":{}}}
 
-纳指→NAS100，标普→SPX500，sector不确定用all。只返回JSON，不要markdown。`;
+纳指→NASDAQ100，标普→SPX500，sector不确定用all。只返回JSON，不要markdown。`;
 
         const retryResponse = await generateWithGPT5({
           messages: [{ role: 'user', content: retryPrompt }],
