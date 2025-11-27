@@ -133,6 +133,11 @@ async function handleHeatmap(args, chatId, bot, message) {
         shortcircuitMatch = { index: 'HSI', region: 'HK', keyword: '香港' };
         args = ['hk'];
       }
+      // 🆕 加密货币 关键词
+      else if (/币圈|虚拟货币|加密货币|数字货币|crypto|btc|eth|比特币|以太坊/i.test(text)) {
+        shortcircuitMatch = { index: 'CRYPTO', region: 'CRYPTO', keyword: '加密货币' };
+        args = ['crypto'];
+      }
       
       if (shortcircuitMatch) {
         console.log('[HEATMAP][NL-2] KEYWORD SHORTCIRCUIT matched:', shortcircuitMatch);

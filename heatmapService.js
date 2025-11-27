@@ -140,7 +140,7 @@ async function generateSmartHeatmap(userText) {
       };
       
       // 判断是否使用增强分析（重要市场）
-      const importantMarkets = ['NIKKEI225', 'SPX500', 'NASDAQ100', 'HSI', 'DAX40', 'IBEX35'];
+      const importantMarkets = ['NIKKEI225', 'SPX500', 'NASDAQ100', 'HSI', 'DAX40', 'IBEX35', 'CRYPTO'];
       const useEnhancedAnalysis = importantMarkets.includes(query.index);
       
       if (useEnhancedAnalysis) {
