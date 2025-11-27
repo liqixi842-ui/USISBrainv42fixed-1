@@ -225,16 +225,10 @@ function buildStockChartURL(symbol, options = {}) {
           console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
           console.log(`📊 [final_symbol_for_tv] "${normalizedSymbol}" → TradingView`);
           
-          const params = new URLSearchParams({
-            symbol: normalizedSymbol,
-            interval: interval,
-            theme: theme,
-            style: style,
-            timezone: timezone,
-            locale: locale
-          });
-          if (studies) params.append('studies', studies);
-          return `https://www.tradingview.com/chart/?${params.toString()}`;
+          // 🆕 v7.0: 香港股票使用 symbols 页面
+          const symbolsUrl = `https://www.tradingview.com/symbols/HKEX-${normalizedSymbol.replace('.HK', '')}/`;
+          console.log(`🔗 [TradingView URL - HK Symbols] ${symbolsUrl}`);
+          return symbolsUrl;
         }
         // 中国交易所（使用后缀格式）
         else if (hasToken(['cn', 'china', 'shanghai', 'shenzhen', 'sse', 'szse'])) {
@@ -244,16 +238,10 @@ function buildStockChartURL(symbol, options = {}) {
           console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
           console.log(`📊 [final_symbol_for_tv] "${normalizedSymbol}" → TradingView`);
           
-          const params = new URLSearchParams({
-            symbol: normalizedSymbol,
-            interval: interval,
-            theme: theme,
-            style: style,
-            timezone: timezone,
-            locale: locale
-          });
-          if (studies) params.append('studies', studies);
-          return `https://www.tradingview.com/chart/?${params.toString()}`;
+          // 🆕 v7.0: 中国股票使用 symbols 页面
+          const symbolsUrl = `https://www.tradingview.com/symbols/SSE-${normalizedSymbol.replace('.SS', '')}/`;
+          console.log(`🔗 [TradingView URL - CN Symbols] ${symbolsUrl}`);
+          return symbolsUrl;
         }
         // 美国（明确允许）
         else if (hasToken(['us', 'usa', 'united', 'states', 'nasdaq', 'nyse'])) {
@@ -277,21 +265,14 @@ function buildStockChartURL(symbol, options = {}) {
   // 📊 ChatGPT建议：记录final_symbol_for_tv
   console.log(`📊 [final_symbol_for_tv] "${normalizedSymbol}" → TradingView`);
   
-  const params = new URLSearchParams({
-    symbol: normalizedSymbol,
-    interval: interval,
-    theme: theme,
-    style: style,
-    timezone: timezone,
-    locale: locale
-  });
+  // 🆕 v7.0: 使用 symbols 页面格式，显示完整界面（含侧边栏）
+  // 格式: https://www.tradingview.com/symbols/EXCHANGE-SYMBOL/
+  // 例如: BME:COL → EXCHANGE=BME, SYMBOL=COL → /symbols/BME-COL/
+  const [exchange, ticker] = normalizedSymbol.split(':');
+  const symbolsUrl = `https://www.tradingview.com/symbols/${exchange}-${ticker}/`;
   
-  // 添加技术指标
-  if (studies) {
-    params.append('studies', studies);
-  }
-  
-  return `https://www.tradingview.com/chart/?${params.toString()}`;
+  console.log(`🔗 [TradingView URL - Symbols Page] ${symbolsUrl}`);
+  return symbolsUrl;
 }
 
 /**
