@@ -259,10 +259,12 @@ function parseCommand(message) {
   else if (firstPart === '/reportpdf' || firstPart === '研报pdf' || firstPart === '/研报pdf' || firstPart === '研报PDF') {
     cmd = 'reportpdf';
     
-    // ═══ 特殊处理：reportpdf 命令的 pro 标志解析 ═══
-    const parsed = parseReportPdfArgs(args);
+    // ═══ 特殊处理：reportpdf 命令的 pro 标志 + 机构名/分析师名解析 ═══
+    // 🆕 v7.1: 传递原始文本以支持逗号格式解析
+    const originalArgsText = parts.slice(1).join(' '); // 去掉命令本身后的文本
+    const parsed = parseReportPdfArgs(args, originalArgsText);
     
-    // ✅ 将解析后的 symbol 和 language 存入 flags，保证一致性
+    // ✅ 将解析后的 symbol、language、firm、analyst 存入 flags
     flags = {
       ...parsed.flags,
       symbol: parsed.symbol,
@@ -310,23 +312,89 @@ function parseCommand(message) {
 }
 
 /**
- * 解析 /reportpdf 命令的参数（专门处理 pro 标志）
+ * 解析 /reportpdf 命令的参数（专门处理 pro 标志 + 机构名/分析师名）
  * 
- * 支持三种用法：
- * - /reportpdf pro NVDA        → symbol=NVDA, language=en, premium=true
- * - /reportpdf NVDA pro        → symbol=NVDA, language=en, premium=true
- * - /reportpdf NVDA pro zh     → symbol=NVDA, language=zh, premium=true
+ * 支持多种用法：
+ * - /reportpdf pro NVDA                    → symbol=NVDA, language=en, premium=true
+ * - /reportpdf NVDA pro                    → symbol=NVDA, language=en, premium=true
+ * - /reportpdf NVDA pro zh                 → symbol=NVDA, language=zh, premium=true
+ * - 研报PDF NVDA, 机构名, 分析师           → symbol=NVDA, firm=机构名, analyst=分析师
+ * - 研报PDF NVDA, 机构名, 分析师, 中文     → symbol=NVDA, firm=机构名, analyst=分析师, language=zh
  * 
  * @param {Array} rawArgs - 原始参数数组
- * @returns {Object} { symbol: string, language: string, flags: { premium: boolean } }
+ * @param {string} originalText - 原始文本（用于逗号格式解析）
+ * @returns {Object} { symbol, language, flags: { premium, firm, analyst } }
  */
-function parseReportPdfArgs(rawArgs) {
+function parseReportPdfArgs(rawArgs, originalText = '') {
   const VALID_LANGUAGES = ['en', 'zh', 'es'];
   const PREMIUM_FLAGS = ['pro', 'premium'];
+  const LANGUAGE_MAP = {
+    '中文': 'zh', '中': 'zh', 'chinese': 'zh', 'zh': 'zh',
+    '英文': 'en', '英': 'en', 'english': 'en', 'en': 'en',
+    '西班牙语': 'es', '西班牙': 'es', '西': 'es', 'spanish': 'es', 'es': 'es'
+  };
   
   let symbol = null;
   let language = 'en'; // 默认英文
   let premium = false;
+  let firm = null;
+  let analyst = null;
+  
+  // 🆕 v7.1: 检查是否为逗号格式（机构名, 分析师名）
+  const fullText = originalText || rawArgs.join(' ');
+  if (fullText.includes(',') || fullText.includes('，')) {
+    console.log(`[DEBUG parseReportPdfArgs] Detected comma-style format: "${fullText}"`);
+    
+    // 解析逗号分隔的参数
+    const parts = fullText.split(/[,，]/).map(p => p.trim()).filter(p => p.length > 0);
+    
+    if (parts.length >= 1) {
+      // 第一部分：股票代码（可能带 pro 标志）
+      const firstPart = parts[0].trim();
+      const firstTokens = firstPart.split(/\s+/);
+      
+      for (const token of firstTokens) {
+        const tokenLower = token.toLowerCase();
+        if (PREMIUM_FLAGS.includes(tokenLower)) {
+          premium = true;
+        } else if (!symbol && /^[A-Z0-9.:]{1,15}$/i.test(token)) {
+          symbol = token.toUpperCase();
+        }
+      }
+    }
+    
+    if (parts.length >= 2) {
+      // 第二部分：机构名
+      firm = parts[1].trim();
+    }
+    
+    if (parts.length >= 3) {
+      // 第三部分：分析师名
+      analyst = parts[2].trim();
+    }
+    
+    if (parts.length >= 4) {
+      // 第四部分：语言
+      const langRaw = parts[3].trim().toLowerCase();
+      language = LANGUAGE_MAP[langRaw] || langRaw;
+      if (!VALID_LANGUAGES.includes(language)) {
+        language = 'en';
+      }
+    }
+    
+    console.log(`[DEBUG parseReportPdfArgs] Comma-style parsed:`);
+    console.log(`   - symbol: ${symbol}`);
+    console.log(`   - firm: ${firm}`);
+    console.log(`   - analyst: ${analyst}`);
+    console.log(`   - language: ${language}`);
+    console.log(`   - premium: ${premium}`);
+    
+    return {
+      symbol,
+      language,
+      flags: { premium, firm, analyst }
+    };
+  }
   
   console.log(`[DEBUG parseReportPdfArgs] rawArgs =`, rawArgs);
   

@@ -480,10 +480,16 @@ async function handleReportPdf(args, chatId, bot, message, flags = {}) {
       );
     }
     
+    // 🆕 v7.1: 提取机构名和分析师名
+    const firm = flags.firm || null;
+    const analyst = flags.analyst || null;
+    
     console.log(`[DEBUG report-bot] AFTER validation:`);
     console.log(`   - symbol = ${symbol} (FINAL)`);
     console.log(`   - language = ${language} (FINAL)`);
     console.log(`   - isPremium = ${isPremium} (FINAL)`);
+    console.log(`   - firm = ${firm || '(default)'}`);
+    console.log(`   - analyst = ${analyst || '(default)'}`);
     console.log(`✅ [ReportPdfBot] Parsed: symbol=${symbol}, language=${language}, premium=${isPremium}`);
     
     // ═══ STEP 1.5: Premium 模式可用性检查 ═══
@@ -512,14 +518,24 @@ async function handleReportPdf(args, chatId, bot, message, flags = {}) {
     // ═══ STEP 3: 生成 PDF（根据模式选择服务）═══
     console.log(`\n🔄 [ReportPdfBot] Generating ${isPremium ? 'PREMIUM' : 'ENHANCED'} PDF report...`);
     
+    // 🆕 v7.1: 构建 PDF 生成选项（包含机构名/分析师名）
+    const pdfOptions = {
+      firm: firm || undefined,
+      analyst: analyst || undefined
+    };
+    
     let pdfBuffer;
     if (isPremium) {
       // 使用 Premium 服务（DocRaptor + v3_dev）
       console.log(`   ├─ Mode: Premium (DocRaptor)`);
-      pdfBuffer = await generatePremiumPdf(symbol, language);
+      if (firm) console.log(`   ├─ Firm: ${firm}`);
+      if (analyst) console.log(`   ├─ Analyst: ${analyst}`);
+      pdfBuffer = await generatePremiumPdf(symbol, language, pdfOptions);
     } else {
       // Phase 7: 使用 Premium 内容 + Phase 6 增强渲染器
       console.log(`   ├─ Mode: Phase 7 Flagship (Premium Content + Charts + Consensus)`);
+      if (firm) console.log(`   ├─ Firm: ${firm}`);
+      if (analyst) console.log(`   ├─ Analyst: ${analyst}`);
       
       // 首先尝试完整的 Premium + 增强模式
       try {
@@ -527,7 +543,8 @@ async function handleReportPdf(args, chatId, bot, message, flags = {}) {
           premium: false,
           usePremium: true,         // Phase 7: 使用 v3_dev Premium 机构级内容
           includeCharts: true,      // K-line + Financial charts
-          includeConsensus: true    // Multi-model AI consensus
+          includeConsensus: true,   // Multi-model AI consensus
+          ...pdfOptions             // 🆕 v7.1: 传递机构名/分析师名
         });
         console.log(`   ├─ ✅ Phase 7 Flagship PDF generated (Premium + Enhanced)`);
       } catch (enhancedError) {
@@ -540,7 +557,8 @@ async function handleReportPdf(args, chatId, bot, message, flags = {}) {
             premium: false,
             usePremium: false,        // 降级：不使用 Premium 内容
             includeCharts: true,      // 仍然包含图表
-            includeConsensus: true    // 仍然包含多模型共识
+            includeConsensus: true,   // 仍然包含多模型共识
+            ...pdfOptions             // 🆕 v7.1: 传递机构名/分析师名
           });
           console.log(`   └─ ✅ Gracefully degraded to Enhanced PDF (no Premium)`);
         } catch (fallbackError) {
@@ -554,8 +572,9 @@ async function handleReportPdf(args, chatId, bot, message, flags = {}) {
     console.log(`✅ [ReportPdfBot] PDF generated successfully (${sizeKB} KB)\n`);
     
     // ═══ STEP 4: 发送 PDF ═══
-    const filename = generatePdfFilename(symbol, language);
-    const caption = generatePdfCaption(symbol, language);
+    // 🆕 v7.1: 传递机构名/分析师名到文件名和说明
+    const filename = generatePdfFilename(symbol, language, pdfOptions);
+    const caption = generatePdfCaption(symbol, language, pdfOptions);
     
     await sendPdfReport(chatId, pdfBuffer, filename, caption, bot);
     
