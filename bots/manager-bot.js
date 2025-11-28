@@ -57,17 +57,38 @@ function parseCommand(message) {
     };
   }
   
-  // 🆕 Task NL-1-ALT: 特判"研报, ..."逗号协议 → 直接解析为 report 命令
+  // 🆕 Task NL-1-ALT: 特判"研报, ..."逗号协议 → 区分 PDF 和 文本版
   if (text.includes('研报') && text.includes(',')) {
     try {
       const parsed = parseResearchReportCommand(text);
       if (parsed && parsed.symbol) {
+        const lowerText = text.toLowerCase();
+        const isPdfCommand = lowerText.includes('研报pdf') || lowerText.includes('reportpdf');
+        
         console.log('[PARSER][NL-1-ALT] Parsed comma-style research command:', parsed);
-        return {
-          cmd: 'report',
-          args: [parsed.symbol, parsed.lang || 'en'],
-          flags: {},
-        };
+        console.log('[PARSER][NL-1-ALT] isPdfCommand:', isPdfCommand);
+        
+        if (isPdfCommand) {
+          // 🆕 v7.1: PDF 版本 - 传递 firm/analyst 到 flags
+          return {
+            cmd: 'reportpdf',
+            args: [parsed.symbol, parsed.lang || 'en'],
+            flags: {
+              premium: true,  // 自定义机构名默认使用 premium
+              firm: parsed.firm,
+              analyst: parsed.analyst,
+              symbol: parsed.symbol,
+              language: parsed.lang || 'en'
+            },
+          };
+        } else {
+          // 文本版本
+          return {
+            cmd: 'report',
+            args: [parsed.symbol, parsed.lang || 'en'],
+            flags: {},
+          };
+        }
       }
     } catch (err) {
       console.error('[PARSER][NL-1-ALT] parseResearchReportCommand failed, fallback to normal parser:', err.message);
