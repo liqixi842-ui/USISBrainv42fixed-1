@@ -484,6 +484,17 @@ async function handleReportPdf(args, chatId, bot, message, flags = {}) {
     const firm = flags.firm || null;
     const analyst = flags.analyst || null;
     
+    // 🆕 v7.2: 当有自定义机构名或分析师名时，强制使用 Phase 6（无水印）
+    // DocRaptor 模板不支持自定义品牌，只有 Phase 6 PDFKit 渲染器支持
+    if ((firm || analyst) && isPremium) {
+      console.log(`🔄 [ReportPdfBot] Custom branding detected, forcing Phase 6 renderer (no watermarks)`);
+      console.log(`   ├─ Firm: ${firm || '(default)'}`);
+      console.log(`   ├─ Analyst: ${analyst || '(default)'}`);
+      console.log(`   └─ Reason: DocRaptor templates don't support custom branding`);
+      isPremium = false;
+      flags.premium = false;
+    }
+    
     console.log(`[DEBUG report-bot] AFTER validation:`);
     console.log(`   - symbol = ${symbol} (FINAL)`);
     console.log(`   - language = ${language} (FINAL)`);
