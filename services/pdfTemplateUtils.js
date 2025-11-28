@@ -38,10 +38,14 @@ function renderProfessionalCover(doc, report, options = {}) {
     backgroundColor = '#1a2332', // 深蓝色背景
     accentColor = '#3b82f6',     // 蓝色强调
     textColor = '#ffffff',       // 白色文字
-    logoPath = null              // 可选 logo 路径
+    logoPath = null,             // 可选 logo 路径
+    firmName = null,             // 自定义机构名
+    analystName = null           // 自定义分析师名
   } = options;
   
   console.log(`\n📘 [PDFTemplateUtils] Rendering professional cover page...`);
+  console.log(`   ├─ Firm: ${firmName || 'USIS INSTITUTIONAL RESEARCH'}`);
+  console.log(`   └─ Analyst: ${analystName || 'USIS Brain v7.0'}`);
   
   // 背景矩形（全页）
   doc.rect(0, 0, doc.page.width, doc.page.height)
@@ -56,10 +60,11 @@ function renderProfessionalCover(doc, report, options = {}) {
     }
   }
   
-  // 机构名称（顶部）
+  // 机构名称（顶部）- 支持自定义
+  const displayFirmName = firmName || 'USIS INSTITUTIONAL RESEARCH';
   doc.fontSize(14).fillColor(accentColor);
   safeSetFont(doc, 'Bold');
-  doc.text('USIS INSTITUTIONAL RESEARCH', 50, 120, { align: 'left' });
+  doc.text(displayFirmName.toUpperCase(), 50, 120, { align: 'left' });
   
   // 分隔线
   doc.moveTo(50, 150)
@@ -85,11 +90,11 @@ function renderProfessionalCover(doc, report, options = {}) {
   safeSetFont(doc, 'Bold');
   doc.text('COMPREHENSIVE ANALYSIS REPORT', 50, 380, { align: 'left' });
   
-  // 分析师信息
-  const analyst = report.analyst || 'USIS Brain v7.0 Multi-AI System';
+  // 分析师信息 - 支持自定义
+  const displayAnalyst = analystName || report.analyst || 'USIS Brain v7.0 Multi-AI System';
   doc.fontSize(12).fillColor('#94a3b8');
   safeSetFont(doc, 'Regular');
-  doc.text(`Lead Analyst: ${analyst}`, 50, 420, { align: 'left' });
+  doc.text(`Lead Analyst: ${displayAnalyst}`, 50, 420, { align: 'left' });
   
   // 评级（如果有）
   if (report.rating) {
@@ -156,12 +161,19 @@ function renderProfessionalCover(doc, report, options = {}) {
  * @param {PDFDocument} doc - PDFKit 文档对象
  * @param {Array} sections - 章节数组 [{title, page}]
  * @param {Object} options - 可选配置
+ * @param {string} options.firmName - 🆕 v7.2: 机构名（用于溢出页页眉）
+ * @param {number} options.pageNumber - 🆕 v7.2: 当前页码
  */
 function renderTableOfContents(doc, sections, options = {}) {
   const {
     title = 'Table of Contents',
-    startY = 100
+    startY = 60,  // 🆕 v7.2: 调整为60以适应页眉高度
+    firmName = null,
+    pageNumber = 2
   } = options;
+  
+  // 🆕 v7.2: 页码追踪（用于溢出页页眉）
+  let currentPageNum = pageNumber;
   
   console.log(`\n📑 [PDFTemplateUtils] Rendering table of contents (${sections.length} sections)...`);
   
@@ -185,7 +197,14 @@ function renderTableOfContents(doc, sections, options = {}) {
     // 检查是否需要分页
     if (currentY > doc.page.height - 100) {
       doc.addPage();
-      currentY = 80;
+      currentPageNum++;
+      
+      // 🆕 v7.2: 溢出页添加机构页眉
+      if (firmName) {
+        renderInstitutionalHeader(doc, { firmName, pageNumber: currentPageNum });
+      }
+      
+      currentY = 60; // 调整起始位置以适应页眉
     }
     
     // 章节编号
@@ -219,8 +238,9 @@ function renderTableOfContents(doc, sections, options = {}) {
   
   console.log(`✅ [PDFTemplateUtils] Table of contents rendered`);
   
-  // 新页面开始正文
-  doc.addPage();
+  // 🆕 v7.2: 返回最终页码供调用者使用
+  // 注意：移除了尾部 addPage()，由调用者控制分页
+  return { finalPageNumber: currentPageNum };
 }
 
 /**
@@ -260,6 +280,53 @@ function addHeader(doc, symbol, pageNumber, options = {}) {
      .strokeColor('#e2e8f0')
      .lineWidth(0.5)
      .stroke();
+  
+  // 恢复 Y 位置
+  doc.y = currentY;
+}
+
+/**
+ * 🆕 v7.2: 渲染机构级页眉栏（蓝色顶栏）- 类似 DocRaptor Premium 样式
+ * @param {PDFDocument} doc - PDFKit 文档对象
+ * @param {Object} options - 配置选项
+ * @param {string} options.firmName - 机构名称
+ * @param {boolean} options.skipCover - 是否跳过封面页（默认 true）
+ * @param {number} options.pageNumber - 当前页码
+ */
+function renderInstitutionalHeader(doc, options = {}) {
+  const {
+    firmName = 'Research',
+    skipCover = true,
+    pageNumber = 1,
+    headerHeight = 28,
+    backgroundColor = '#003366',
+    gradientEnd = '#00509E'
+  } = options;
+  
+  // 跳过封面页
+  if (skipCover && pageNumber === 1) {
+    return;
+  }
+  
+  const currentY = doc.y;
+  
+  // 蓝色渐变背景栏
+  doc.rect(0, 0, doc.page.width, headerHeight)
+     .fill(backgroundColor);
+  
+  // 底部边框线
+  doc.moveTo(0, headerHeight)
+     .lineTo(doc.page.width, headerHeight)
+     .strokeColor('#002244')
+     .lineWidth(2)
+     .stroke();
+  
+  // 页眉文字：机构名 — Equity Research
+  const headerText = `${firmName} — Equity Research`;
+  doc.fontSize(9)
+     .fillColor('#ffffff');
+  safeSetFont(doc, 'Bold');
+  doc.text(headerText, 20, 9, { align: 'left' });
   
   // 恢复 Y 位置
   doc.y = currentY;
@@ -362,5 +429,6 @@ module.exports = {
   addHeader,
   addFooter,
   addPageHeaderFooter,
+  renderInstitutionalHeader,
   extractSections
 };

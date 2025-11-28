@@ -20,7 +20,7 @@ const { getDailyKlineImage } = require('./chartImageService');
 const { generateAllFinancialCharts } = require('./financialChartService');
 const { getMultiModelViews, consolidateConsensus } = require('./multiModelConsensus');
 const { generateFullTextReport } = require('./reportTextService');
-const { renderProfessionalCover, renderTableOfContents, extractSections } = require('./pdfTemplateUtils');
+const { renderProfessionalCover, renderTableOfContents, extractSections, renderInstitutionalHeader } = require('./pdfTemplateUtils');
 const { getPremiumContent } = require('./premiumContentBridge'); // Phase 7: Premium 桥接
 const PDFDocument = require('pdfkit');
 const path = require('path');
@@ -35,6 +35,8 @@ const fs = require('fs');
  * @param {boolean} options.usePremium - 是否使用 v3_dev Premium 机构级内容（Phase 7）
  * @param {boolean} options.includeCharts - 是否包含图表（默认 true）
  * @param {boolean} options.includeConsensus - 是否包含多模型共识（默认 false）
+ * @param {string} options.firmName - 自定义机构名（v7.2+）
+ * @param {string} options.analystName - 自定义分析师名（v7.2+）
  * @returns {Promise<Buffer>} PDF Buffer
  */
 async function generateEnhancedPdf(symbol, language = 'en', options = {}) {
@@ -42,16 +44,24 @@ async function generateEnhancedPdf(symbol, language = 'en', options = {}) {
     premium = false,
     usePremium = false,
     includeCharts = true,
-    includeConsensus = false
+    includeConsensus = false,
+    firm = null,        // 🆕 v7.2: 自定义机构名（与 report-bot 保持一致）
+    analyst = null      // 🆕 v7.2: 自定义分析师名
   } = options;
   
-  console.log(`\n🚀 [Phase6Enhancer] Generating enhanced PDF`);
+  // 别名支持：firmName/analystName 也可以使用
+  const firmName = firm || options.firmName || null;
+  const analystName = analyst || options.analystName || null;
+  
+  console.log(`\n🚀 [Phase6Enhancer] Generating enhanced PDF v7.2`);
   console.log(`   ├─ Symbol: ${symbol}`);
   console.log(`   ├─ Language: ${language}`);
   console.log(`   ├─ Premium: ${premium}`);
   console.log(`   ├─ Use Premium Content: ${usePremium ? '✅ v3_dev Engine' : 'Standard'}`);
   console.log(`   ├─ Charts: ${includeCharts}`);
-  console.log(`   └─ Consensus: ${includeConsensus}\n`);
+  console.log(`   ├─ Consensus: ${includeConsensus}`);
+  console.log(`   ├─ 🏢 Firm: ${firmName || 'USIS Research (default)'}`);
+  console.log(`   └─ 👤 Analyst: ${analystName || 'USIS Brain v7.0 (default)'}\n`);
   
   const startTime = Date.now();
   
@@ -171,6 +181,11 @@ async function generateEnhancedPdf(symbol, language = 'en', options = {}) {
  * @returns {Promise<Buffer>} PDF Buffer
  */
 async function renderEnhancedPdf(symbol, language, assets, options) {
+  // 🆕 v7.2: 提取自定义参数
+  const firmName = options.firm || options.firmName || null;
+  const analystName = options.analyst || options.analystName || null;
+  const displayFirmName = firmName || 'USIS Research';
+  
   return new Promise(async (resolve, reject) => {
     try {
       // Step 1: 生成文本报告
@@ -230,25 +245,47 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
       // 注意：自定义 CJK 字体可选，当前使用 Helvetica 避免缺失字体导致崩溃
       const hasFonts = false; // 禁用自定义字体以确保稳定性
       
-      // Step 3: 渲染专业封面
+      // Step 3: 渲染专业封面（支持自定义机构名/分析师名）
       console.log(`   ├─ Rendering professional cover...`);
       renderProfessionalCover(doc, report, {
         backgroundColor: '#1a2332',
         accentColor: '#3b82f6',
-        textColor: '#ffffff'
+        textColor: '#ffffff',
+        firmName: firmName,
+        analystName: analystName
       });
+      
+      // 🆕 v7.2: 页码追踪（用于页眉）
+      let pageNumber = 1; // 封面是第1页
       
       // Step 4: 渲染目录
       console.log(`   ├─ Rendering table of contents...`);
+      pageNumber++; // 目录页 = 第2页
+      
+      // 🆕 v7.2: 目录页添加页眉（必须在 TOC 内容之前渲染）
+      renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
+      
       const sections = extractSections(report);
-      renderTableOfContents(doc, sections);
+      // 传递 firmName 以支持 TOC 溢出页的页眉
+      const tocResult = renderTableOfContents(doc, sections, { firmName: displayFirmName, pageNumber });
+      
+      // 🆕 v7.2: 同步页码（处理 TOC 溢出的情况）
+      if (tocResult && tocResult.finalPageNumber) {
+        pageNumber = tocResult.finalPageNumber;
+      }
+      
+      // 🆕 v7.2: TOC 结束后添加分页
+      doc.addPage();
       
       // Step 5: 插入 K线图表（如果有）
       if (assets.klineChart) {
         console.log(`   ├─ Inserting K-line chart...`);
         try {
+          pageNumber++;
+          renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
+          
           doc.fontSize(18).fillColor('#1a2332').font(hasFonts ? 'Bold' : 'Helvetica-Bold')
-             .text('Technical Analysis - Daily Chart', 50, 100);
+             .text('Technical Analysis - Daily Chart', 50, 60);
           doc.moveDown(1);
           
           doc.image(assets.klineChart, {
@@ -257,6 +294,7 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
           });
           
           doc.addPage();
+          // 🆕 注意：下一页的 header 在 Step 6 或 Step 7 开始时渲染
           console.log(`   ├─ ✅ K-line chart inserted`);
         } catch (error) {
           console.warn(`   ├─ ⚠️  K-line chart insertion failed: ${error.message}`);
@@ -269,8 +307,13 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
         
         if (revenue || eps || margin) {
           console.log(`   ├─ Inserting financial charts...`);
+          // 🆕 v7.2: 如果前面有 K-line 图表，当前页已经是新页面
+          // 如果没有 K-line，当前页是目录后的新页面
+          pageNumber++;
+          renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
+          
           doc.fontSize(18).fillColor('#1a2332').font(hasFonts ? 'Bold' : 'Helvetica-Bold')
-             .text('Financial Trends', 50, 100);
+             .text('Financial Trends', 50, 60);
           doc.moveDown(1);
           
           let chartY = doc.y;
@@ -294,8 +337,10 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
             }
           } else if (eps) {
             doc.addPage();
+            pageNumber++;
+            renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
             try {
-              doc.image(eps, 50, 100, { width: doc.page.width - 100 });
+              doc.image(eps, 50, 60, { width: doc.page.width - 100 });
               console.log(`   ├─ ✅ EPS chart inserted (new page)`);
             } catch (error) {
               console.warn(`   ├─ ⚠️  EPS chart failed: ${error.message}`);
@@ -304,8 +349,10 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
           
           if (margin) {
             doc.addPage();
+            pageNumber++;
+            renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
             try {
-              doc.image(margin, 50, 100, { width: doc.page.width - 100 });
+              doc.image(margin, 50, 60, { width: doc.page.width - 100 });
               console.log(`   ├─ ✅ Margin chart inserted`);
             } catch (error) {
               console.warn(`   ├─ ⚠️  Margin chart failed: ${error.message}`);
@@ -313,14 +360,19 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
           }
           
           doc.addPage();
+          // 🆕 v7.2: 财务图表后的新页面，header 在 Step 7 渲染
         }
       }
       
-      // Step 7: 渲染报告章节
+      // Step 7: 渲染报告章节（每页添加机构页眉）
       console.log(`   ├─ Rendering report sections...`);
       report.sections.forEach((section, index) => {
+        // 🆕 v7.2: 每个章节开始时渲染页眉（包括前面 addPage 创建的新页面）
+        pageNumber++;
+        renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
+        
         doc.fontSize(18).fillColor('#1a2332').font(hasFonts ? 'Bold' : 'Helvetica-Bold')
-           .text(section.title, 50, 100, { underline: false });
+           .text(section.title, 50, 60, { underline: false });
         
         doc.moveDown(1);
         
@@ -343,9 +395,11 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
       if (assets.consensus) {
         console.log(`   ├─ Inserting multi-model consensus...`);
         doc.addPage();
+        pageNumber++;
+        renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
         
         doc.fontSize(20).fillColor('#1a2332').font(hasFonts ? 'Bold' : 'Helvetica-Bold')
-           .text('VII. Multi-Model Consensus', 50, 100);
+           .text('VII. Multi-Model Consensus', 50, 60);
         
         doc.moveDown(1);
         
