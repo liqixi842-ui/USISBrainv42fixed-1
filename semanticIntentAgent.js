@@ -459,12 +459,21 @@ function parseResearchReportCommand(userText) {
     '韩语': 'ko', '韩': 'ko', 'korean': 'ko', 'ko': 'ko'
   };
   
-  // 去除命令前缀 /研报 或 研报
+  // 去除命令前缀（支持多种变体）
   let text = userText.trim();
-  if (text.startsWith('/研报')) {
-    text = text.substring(3).trim();
-  } else if (text.startsWith('研报')) {
-    text = text.substring(2).trim();
+  
+  // 🆕 v7.1: 支持 研报PDF、/研报pdf、/reportpdf 等前缀
+  const prefixes = [
+    '/研报pdf', '/研报PDF', '研报pdf', '研报PDF',
+    '/reportpdf', 'reportpdf',
+    '/研报', '研报'
+  ];
+  
+  for (const prefix of prefixes) {
+    if (text.toLowerCase().startsWith(prefix.toLowerCase())) {
+      text = text.substring(prefix.length).trim();
+      break;
+    }
   }
   
   // 去除开头的逗号或空格
