@@ -463,8 +463,12 @@ async function handleManagerBot(message, chatId, bot) {
     let result;
     
     console.log('[MANAGER_BOT][NL-1] text =', JSON.stringify(text));
+    const lowerText = text.toLowerCase();
+    
+    // 🆕 v7.1: 检测逗号格式命令 - 区分 PDF 和 文本版
     if (text.includes('研报') && text.includes(',')) {
-      console.log(`📊 [MANAGER_BOT] Detected comma-style research report command`);
+      const isPdfCommand = lowerText.includes('研报pdf') || lowerText.includes('reportpdf');
+      console.log(`📊 [MANAGER_BOT] Detected comma-style research report command (isPdf: ${isPdfCommand})`);
       
       try {
         const parsed = parseResearchReportCommand(text);
@@ -475,19 +479,32 @@ async function handleManagerBot(message, chatId, bot) {
           console.log(`   ├─ Firm: ${parsed.firm}`);
           console.log(`   ├─ Analyst: ${parsed.analyst}`);
           console.log(`   ├─ Language: ${parsed.lang}`);
-          console.log(`   └─ Routing to handleReport...`);
+          console.log(`   └─ Routing to ${isPdfCommand ? 'handleReportPdf' : 'handleReport'}...`);
           
-          // Route to handleReport with parsed parameters
-          // Note: handleReport expects args = [symbol, language]
           const args = [parsed.symbol, parsed.lang];
           
-          result = await handleReport(args, chatId, bot, message);
+          // 🆕 v7.1: 根据命令类型路由到正确的处理器
+          if (isPdfCommand) {
+            // PDF 版本 - 传递 firm/analyst 到 flags
+            const flags = {
+              premium: true,  // 自定义机构名默认使用 premium
+              firm: parsed.firm,
+              analyst: parsed.analyst,
+              symbol: parsed.symbol,
+              language: parsed.lang
+            };
+            result = await handleReportPdf(args, chatId, bot, message, flags);
+          } else {
+            // 文本版本
+            result = await handleReport(args, chatId, bot, message);
+          }
           
           const duration = Date.now() - startTime;
           console.log(`\n✅ [MANAGER_BOT] Comma-style report completed in ${duration} ms`);
           console.log(`   ├─ Symbol: ${parsed.symbol}`);
           console.log(`   ├─ Firm: ${parsed.firm}`);
           console.log(`   ├─ Analyst: ${parsed.analyst}`);
+          console.log(`   ├─ Format: ${isPdfCommand ? 'PDF' : 'Text'}`);
           console.log(`   └─ User: ${username}`);
           console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
           
