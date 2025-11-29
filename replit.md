@@ -1,7 +1,16 @@
 # Overview
-USIS Brain v7.4.1 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
+USIS Brain v7.5 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
 
-# Recent Changes (v7.4.1 - November 2025)
+# Recent Changes (v7.5 - November 2025)
+- **Morgan Stanley Format Overhaul**: Investment Thesis restructured to 400-500 word bullet-point format (down from 600-700), matching institutional sell-side standards
+- **Strict 3-Item Catalyst/Risk Limits**: All upstream processors (riskCatalystEngine, riskCatalystCleaner, reportService) now enforce maxItems=3 with no auto-fill padding
+- **Enhanced Duplicate Detection**: Pattern `\b(\w+)\s+\1\b` catches all word lengths including short words like "we we"
+- **Academic Phrase Control**: limitAcademicPhrases() now enforced in both cleanText and cleanTextLight paths (max 3 occurrences of "we believe", "going forward")
+- **Company Overview Redesigned**: Data-driven bullet structure focusing on segments, TAM, growth drivers instead of Wikipedia-style history
+- **Industry Analysis Bullets**: Prompts require specific data (TAM CAGR, capex) in bullet format
+- **Page 12 Risk Table**: Probability/Impact table format with color-coded badges
+
+# Previous Changes (v7.4.1 - November 2025)
 - **Page 6-9 Duplicate Content Fix**: Each page (Valuation Snapshot, Framework, Peer Comparison, Financial Health) now generates unique data-driven commentary with null guards
 - **Duplicate Word Detection Stabilized**: Fixed infinite loop issue with 3-pass cap and safe patterns only
 - **Analyst Mention Limiter**: limitAnalystMentions() wired into thesis generation, limits to max 3 mentions replacing extras with "our team"
