@@ -7,24 +7,51 @@
 /**
  * 去除连续重复的单词
  * 例如: "organic organic growth trajectory trajectory" → "organic growth trajectory"
- * 增强版：处理更复杂的重复模式
+ * v2.1 增强版：处理更复杂的重复模式，多轮清理（最多3轮防止无限循环）
  */
 function removeDuplicateWords(text) {
   if (!text) return text;
   
   let cleaned = text;
   
-  // Pattern 1: 直接连续重复 "word word word" → "word"
-  cleaned = cleaned.replace(/\b(\w+)(\s+\1\b)+/gi, '$1');
-  
-  // Pattern 2: 隔词重复 "addressable addressable market opportunity opportunity"
-  // 先处理一次，然后再处理一次以防嵌套
-  for (let i = 0; i < 2; i++) {
+  for (let round = 0; round < 3; round++) {
+    const before = cleaned;
+    
     cleaned = cleaned.replace(/\b(\w+)\s+\1\b/gi, '$1');
+    
+    cleaned = cleaned.replace(/\b(\w+)(\s+\1\b)+/gi, '$1');
+    
+    cleaned = cleaned.replace(/\b((\w+)\s+(\w+))\s+\2\s+\3\b/gi, '$1');
+    
+    if (cleaned === before) break;
   }
   
-  // Pattern 3: 短语重复 "growth trajectory growth trajectory" → "growth trajectory"
-  cleaned = cleaned.replace(/\b((\w+\s+){1,3})(\1)+/gi, '$1');
+  return cleaned;
+}
+
+/**
+ * 限制分析师名字引用次数
+ * 解决 "John Smith argues... John Smith believes... John Smith highlights..." 过度重复问题
+ * @param {string} text - 输入文本
+ * @param {string} analystName - 分析师名字
+ * @param {number} maxMentions - 最大引用次数（默认3次）
+ */
+function limitAnalystMentions(text, analystName, maxMentions = 3) {
+  if (!text || !analystName) return text;
+  
+  const namePattern = new RegExp(`\\b${analystName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+  const matches = text.match(namePattern);
+  
+  if (!matches || matches.length <= maxMentions) return text;
+  
+  let mentionCount = 0;
+  const cleaned = text.replace(namePattern, (match) => {
+    mentionCount++;
+    if (mentionCount <= maxMentions) {
+      return match;
+    }
+    return 'our team';
+  });
   
   return cleaned;
 }
@@ -326,5 +353,6 @@ module.exports = {
   fixFormatting,
   controlParagraphLength,
   deduplicateParagraphs,
-  reduceAnalystMentions
+  reduceAnalystMentions,
+  limitAnalystMentions
 };

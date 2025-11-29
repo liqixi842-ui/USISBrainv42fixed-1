@@ -1,7 +1,7 @@
 const { callOpenAI } = require('../aiService');
 const styleEngine = require('./styleEngine');
 const sentenceEngine = require('./sentenceEngine');
-const { cleanText } = require('./textCleanerEngine');
+const { cleanText, limitAnalystMentions } = require('./textCleanerEngine');
 
 async function generateThesis(report, analystInfo = {}) {
   // 🆕 v5.2: Extract analyst/firm parameters
@@ -201,6 +201,9 @@ ${focus.length > 0 ? `\n- 必须涵盖: ${focus.join(', ')}` : ''}
       
       // Apply text cleaning (remove duplicate words, AI clichés)
       thesis = cleanText(thesis);
+      
+      // Limit analyst name mentions to max 3 times
+      thesis = limitAnalystMentions(thesis, analyst, 3);
       
       const wordCount = thesis.split(/\s+/).length;
       console.log(`[WriterStockV3] Thesis attempt ${attempts}: ${thesis.length} chars, ${wordCount} words`);

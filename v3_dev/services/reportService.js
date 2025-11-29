@@ -4099,19 +4099,30 @@ function renderPage4(report, h) {
 
   const segmentsTable = segmentsData.map(s => `
     <tr>
-      <td>${s.name || s.segment}</td>
+      <td><strong>${s.name || s.segment}</strong></td>
       <td>${s.revenue_pct ? h.fmt(s.revenue_pct, 0, '%') : 'N/A'}</td>
       <td>${s.growth || 'N/A'}</td>
       <td>${s.margin || 'N/A'}</td>
-      <td>${s.comment || '-'}</td>
+      <td style="font-size: 11px;">${s.comment || '-'}</td>
     </tr>
   `).join('');
+
+  const companyName = report.meta?.name || report.name || 'Company';
+  const sector = report.sector || 'Technology';
+  const marketCap = report.fundamentals?.market_cap;
+  const employees = report.fundamentals?.employees;
+  
+  const hasCompanyOverview = report.company_overview && report.company_overview.length > 50;
+  
+  const overviewHtml = hasCompanyOverview
+    ? h.splitToParagraphs(report.company_overview, 2).map(p => `<p>${p}</p>`).join('')
+    : `<p>${companyName} operates in the ${sector} sector${marketCap ? `, with a market cap of ${h.fmtLarge(marketCap)}` : ''}${employees ? ` and approximately ${employees.toLocaleString()} employees` : ''}.</p>`;
 
   return `
     <div class="page">
       ${h.pageHeader(4)}
       <div class="section-title">Company & Segment Overview</div>
-      ${h.splitToParagraphs(report.company_overview, 3).map(p => `<p>${p}</p>`).join('')}
+      ${overviewHtml}
       <h3>Business Segment Breakdown</h3>
       <table>
         <thead>
@@ -4120,11 +4131,24 @@ function renderPage4(report, h) {
             <th>Revenue %</th>
             <th>Growth</th>
             <th>Margin</th>
-            <th>Comment</th>
+            <th>Key Insight</th>
           </tr>
         </thead>
         <tbody>${segmentsTable}</tbody>
       </table>
+      <h3 style="margin-top: 20px;">Segment Analysis</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        ${segmentsData.slice(0, 4).map(s => `
+          <div style="border: 1px solid #e0e0e0; padding: 8px; border-radius: 4px;">
+            <strong>${s.name || s.segment}</strong>
+            <div style="font-size: 11px; color: #666;">
+              ${s.revenue_pct ? `${s.revenue_pct}% of revenue` : ''} 
+              ${s.growth ? `| Growth: ${s.growth}` : ''} 
+              ${s.margin ? `| Margin: ${s.margin}` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
       <div class="footer">
         <span>${report.meta.brand}</span>
         <span>Page 4</span>
@@ -4165,6 +4189,26 @@ function renderPage5(report, h) {
 
 
 function renderPage6(report, h) {
+  const pe = report.valuation?.pe_ttm;
+  const ps = report.valuation?.ps_ttm;
+  const pb = report.valuation?.pb;
+  const evEbitda = report.valuation?.ev_ebitda;
+  const low52w = report.price?.low_52w;
+  const high52w = report.price?.high_52w;
+  
+  const metrics = [];
+  if (pe) metrics.push(`PE of ${h.fmt(pe, 1, 'x')}`);
+  if (ps) metrics.push(`P/S of ${h.fmt(ps, 1, 'x')}`);
+  if (evEbitda) metrics.push(`EV/EBITDA of ${h.fmt(evEbitda, 1, 'x')}`);
+  
+  const rangeText = low52w && high52w 
+    ? ` The stock trades within its 52-week range of ${h.fmtCurrency(low52w)} to ${h.fmtCurrency(high52w)}.`
+    : '';
+  
+  const valuationSummary = metrics.length > 0
+    ? `Current valuation reflects ${metrics.join(', ')}.${rangeText}`
+    : 'Valuation metrics based on current market data and peer comparisons.';
+  
   return `
     <div class="page">
       ${h.pageHeader(6)}
@@ -4188,7 +4232,7 @@ function renderPage6(report, h) {
         </tbody>
       </table>
       <h3>Valuation Commentary</h3>
-      ${h.splitToParagraphs(report.valuation_text, 3).map(p => `<p>${p}</p>`).join('')}
+      <p>${valuationSummary}</p>
       <div class="footer">
         <span>${report.meta.brand}</span>
         <span>Page 6</span>
@@ -4198,6 +4242,20 @@ function renderPage6(report, h) {
 }
 
 function renderPage7(report, h) {
+  const baseTarget = report.targets?.base?.price;
+  const bullTarget = report.targets?.bull?.price;
+  const bearTarget = report.targets?.bear?.price;
+  const currentPrice = report.price?.last;
+  
+  const parts = [];
+  if (baseTarget) parts.push(`Our base case target of ${h.fmtCurrency(baseTarget)} assumes steady execution`);
+  if (bullTarget) parts.push(`bull case of ${h.fmtCurrency(bullTarget)} requires accelerated growth`);
+  if (bearTarget) parts.push(`bear case of ${h.fmtCurrency(bearTarget)} reflects multiple contraction risk`);
+  
+  const scenarioSummary = parts.length > 0
+    ? parts.join('. ') + '.'
+    : 'Scenario analysis based on probability-weighted outcomes across growth and valuation assumptions.';
+  
   return `
     <div class="page">
       ${h.pageHeader(7)}
@@ -4224,7 +4282,7 @@ function renderPage7(report, h) {
           <tr><td>Bear Case</td><td>${h.fmtCurrency(report.targets.bear?.price)}</td><td>${h.fmt(report.targets.bear?.upside_pct || ((report.targets.bear?.price / report.price.last - 1) * 100), 1, '%')}</td><td>Slower growth, multiple contraction</td></tr>
         </tbody>
       </table>
-      ${h.splitToParagraphs(report.valuation_text, 2).map(p => `<p>${p}</p>`).join('')}
+      <p>${scenarioSummary}</p>
       <div class="footer">
         <span>${report.meta.brand}</span>
         <span>Page 7</span>
@@ -4257,6 +4315,16 @@ function renderPage8(report, h) {
     </tr>
   `).join('');
 
+  const validPeers = peers.filter(p => p.symbol !== 'N/A' && p.pe_forward);
+  const avgPeerPE = validPeers.length > 0 
+    ? (validPeers.reduce((sum, p) => sum + (p.pe_forward || 0), 0) / validPeers.length).toFixed(1)
+    : 'N/A';
+  const companyPE = report.valuation.pe_forward;
+  
+  const peerAnalysis = validPeers.length > 0
+    ? `${report.meta.symbol} trades at ${h.fmt(companyPE, 1, 'x')} forward PE vs peer average of ${avgPeerPE}x. ${companyPE > avgPeerPE ? 'Premium valuation reflects stronger growth profile.' : 'Discount valuation presents potential value opportunity.'}`
+    : 'Peer comparison data unavailable for comprehensive relative analysis.';
+
   return `
     <div class="page">
       ${h.pageHeader(8)}
@@ -4276,7 +4344,7 @@ function renderPage8(report, h) {
         <tbody>${peerRows}</tbody>
       </table>
       <h3>Comparative Analysis</h3>
-      ${h.splitToParagraphs(report.valuation_text || report.thesis_text, 2).map(p => `<p>${p}</p>`).join('')}
+      <p>${peerAnalysis}</p>
       <div class="footer">
         <span>${report.meta.brand}</span>
         <span>Page 8</span>
@@ -4286,6 +4354,27 @@ function renderPage8(report, h) {
 }
 
 function renderPage9(report, h) {
+  const revCagr = report.growth.revenue_cagr_3y;
+  const epsCagr = report.growth.eps_cagr_3y;
+  const grossMargin = report.fundamentals.gross_margin;
+  const netMargin = report.fundamentals.net_margin;
+  const roe = report.fundamentals.roe;
+  
+  const healthAssessment = [];
+  if (revCagr > 15) healthAssessment.push('strong revenue growth');
+  else if (revCagr > 5) healthAssessment.push('moderate revenue growth');
+  else if (revCagr > 0) healthAssessment.push('stable revenue');
+  
+  if (grossMargin > 50) healthAssessment.push('high gross margins');
+  else if (grossMargin > 30) healthAssessment.push('healthy margins');
+  
+  if (roe > 20) healthAssessment.push('strong capital efficiency');
+  else if (roe > 10) healthAssessment.push('adequate returns');
+  
+  const healthSummary = healthAssessment.length > 0
+    ? `Financial profile demonstrates ${healthAssessment.join(', ')}. Revenue 3Y CAGR of ${h.fmt(revCagr, 1, '%')} with net margin of ${h.fmt(netMargin, 1, '%')} and ROE of ${h.fmt(roe, 1, '%')}.`
+    : `Financial metrics reflect current operating performance. Investors should monitor margin trends and return on equity developments.`;
+  
   return `
     <div class="page">
       ${h.pageHeader(9)}
@@ -4307,7 +4396,7 @@ function renderPage9(report, h) {
         </tbody>
       </table>
       <h3>Financial Health Summary</h3>
-      ${h.splitToParagraphs(report.valuation_text || report.thesis_text, 3).map(p => `<p>${p}</p>`).join('')}
+      <p>${healthSummary}</p>
       <div class="footer">
         <span>${report.meta.brand}</span>
         <span>Page 9</span>

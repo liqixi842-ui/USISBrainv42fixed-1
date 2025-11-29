@@ -159,6 +159,12 @@ class RiskCatalystCleaner {
       console.log(`   ├─ Capped at maximum ${this.maxItems} items`);
     }
     
+    // ══════════════════════════════════════════════════════════════
+    // Step 7: Remove exaggerated projections from all items
+    // ══════════════════════════════════════════════════════════════
+    items = items.map(item => this._removeExaggeratedProjections(item)).filter(item => item.length >= 20);
+    console.log(`   ├─ After removing exaggerated projections: ${items.length} items`);
+    
     console.log(`✅ [RiskCatalystCleaner] Final count: ${items.length} ${type}s (original: ${originalCount})`);
     
     return items;
@@ -280,6 +286,41 @@ GOOD: "Margin pressure from competitive pricing dynamics in core segments"`;
       console.error(`   └─ Falling back to generic ${type}s`);
       return this._getGenericItems(type, count);
     }
+  }
+
+  /**
+   * Replace exaggerated projections with conservative wording
+   * @param {string} text - Item text
+   * @returns {string} Cleaned text with conservative phrasing
+   */
+  _removeExaggeratedProjections(text) {
+    if (!text) return text;
+    
+    let cleaned = text;
+    
+    const replacements = [
+      { pattern: /\$\d+[\.\d]*\s*(B|M|billion|million)\s*(in\s+)?(revenue|value)/gi, replacement: 'incremental revenue contribution' },
+      { pattern: /\d+[-–]\d+%\s+revenue\s+(growth|increase)/gi, replacement: 'potential revenue expansion' },
+      { pattern: /\d+[-–]\d+%\s+(margin\s+)?expansion/gi, replacement: 'margin improvement potential' },
+      { pattern: /add(ing|s)?\s+\$\d+[\.\d]*\s*(B|M)\s*(in\s+)?revenue/gi, replacement: 'could support revenue growth' },
+      { pattern: /increase\s+revenue\s+by\s+\d+[-–]?\d*%/gi, replacement: 'may drive incremental revenue' },
+      { pattern: /\d+[-–]\d+\s*(percentage\s+)?point(s)?\s+margin\s+compression/gi, replacement: 'margin pressure' },
+      { pattern: /\d+[-–]\d+\s*(percentage\s+)?point(s)?\s+margin\s+expansion/gi, replacement: 'margin improvement' },
+      { pattern: /\$\d+[\.\d]*[-–]\$?\d+[\.\d]*\s*(B|M)\s+impact/gi, replacement: 'material financial impact' },
+      { pattern: /\d+[-–]\d+%\s+upside/gi, replacement: 'upside potential' },
+      { pattern: /\d+[-–]\d+%\s+decline/gi, replacement: 'downside risk' },
+    ];
+    
+    replacements.forEach(({ pattern, replacement }) => {
+      cleaned = cleaned.replace(pattern, replacement);
+    });
+    
+    cleaned = cleaned.replace(/\s{2,}/g, ' ').trim();
+    cleaned = cleaned.replace(/could\s+,/gi, 'could');
+    cleaned = cleaned.replace(/may\s+,/gi, 'may');
+    cleaned = cleaned.replace(/\s+\./g, '.');
+    
+    return cleaned;
   }
 
   /**
