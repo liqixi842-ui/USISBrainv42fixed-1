@@ -8,7 +8,13 @@ USIS Brain v7.5 is an institutional-grade Multi-AI Financial Analysis System des
 - **Academic Phrase Control**: limitAcademicPhrases() now enforced in both cleanText and cleanTextLight paths (max 3 occurrences of "we believe", "going forward")
 - **Company Overview Redesigned**: Data-driven bullet structure focusing on segments, TAM, growth drivers instead of Wikipedia-style history
 - **Industry Analysis Bullets**: Prompts require specific data (TAM CAGR, capex) in bullet format
-- **Page 12 Risk Table**: Probability/Impact table format with color-coded badges
+- **Page 10 Risk Table**: Probability/Impact/Horizon table format with color-coded badges
+- **Valuation Enhanced (Page 5)**: Added 5Y percentile calculation, PEG ratio, Growth-Valuation Assessment, Rate Sensitivity Analysis table with stock duration sensitivity
+- **Financial Health Enhanced (Page 7)**: Added FCF Conversion rate, Capital Structure & Allocation table (Debt/Equity, Interest Coverage, Capex Intensity, Capital Return Policy) with safe null guards
+- **Technical Analysis Enhanced (Page 11)**: Technical Summary table with Trend Bias, Momentum, Volatility, 52W Position columns; Key Technical Levels table with support/resistance
+- **Trade Setup Enhanced (Page 11)**: Breakout/Pullback/Mean Reversion scenarios with R/R ratio calculation, Trigger Signals, Time Windows
+- **Action Plan Enhanced (Page 12)**: Conviction/Timing/Why Now summary table at top; all fallbacks pass through cleanText+limitAnalystMentions pipeline
+- **Peer Comparison Fixed**: Uses aggregate peer average for premium/discount calculation instead of just first peer
 
 # Previous Changes (v7.4.1 - November 2025)
 - **Page 6-9 Duplicate Content Fix**: Each page (Valuation Snapshot, Framework, Peer Comparison, Financial Health) now generates unique data-driven commentary with null guards
