@@ -1,7 +1,20 @@
 # Overview
 USIS Brain v7.5 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
 
-# Recent Changes (v7.5 - November 2025)
+# Recent Changes (v7.5.1 - November 2025)
+- **Modular Pipeline Architecture**: 7-stage pipeline replaces monolithic report generation (v3_dev/services/pipeline/)
+- **DataFetcher Module**: 3-tier API cascade (Finnhub → TwelveData → AlphaVantage) with standardized JSON output
+- **DataValidator Module**: Rules engine enforces data quality (prices≥60, revenue≥8, eps≥8, peers≥3)
+- **ChartDataCollector + ChartEngine**: Transforms raw data to 6 QuickChart chart types with EMA overlays
+- **LanguageNormalizer Module**: Wraps textCleanerEngine for sell-side style enforcement across all 11 report sections
+- **QA/Check Module**: Detects placeholders, undefined values, NaN with auto-fix and reporting
+- **PipelineOrchestrator**: Unified 7-stage execution with timing metrics for each stage
+- **LLM Prompt Template**: Standardized Morgan Stanley-style prompts for consistent AI output
+- **Health Monitoring**: /v3/health/pipeline endpoint tracks API status and consecutive failures
+- **Pipeline Endpoints**: /v3/pipeline/:symbol returns structured JSON with data_validation, charts, qa fields
+- **Structured Response Format**: All pipeline output includes _meta with timing, sources_used, errors
+
+# Previous Changes (v7.5 - November 2025)
 - **Morgan Stanley Format Overhaul**: Investment Thesis restructured to 400-500 word bullet-point format (down from 600-700), matching institutional sell-side standards
 - **Strict 3-Item Catalyst/Risk Limits**: All upstream processors (riskCatalystEngine, riskCatalystCleaner, reportService) now enforce maxItems=3 with no auto-fill padding
 - **Enhanced Duplicate Detection**: Pattern `\b(\w+)\s+\1\b` catches all word lengths including short words like "we we"
