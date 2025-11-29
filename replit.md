@@ -35,6 +35,13 @@ The v6.0 pipeline processes user input via language detection, semantic intent p
   - **Data Engine**: Retry logic (exponential backoff, 3 attempts), data validation with completeness scoring, 90-day price coverage and 5-year revenue/EPS requirements.
   - **Chart Engine**: 8 chart types including RSI (14-period) and MACD (12/26/9) with QuickChart API integration and null-URL filtering.
   - **QA Gate**: Final QA pass with auto-fix for undefined placeholders (replaced with company name), numeric overflow limiting (1-2 decimals), duplicate token removal, broken sentence repair, and chart availability validation before PDF export.
+  - **Mandatory QA Gating**: Abort-on-failure gating with strict thresholds:
+    - `MAX_PLACEHOLDERS: 0` - Zero tolerance for undefined/placeholder values
+    - `MIN_CHART_SUCCESS_RATE: 70%` - At least 70% of charts must render successfully
+    - `MAX_DUPLICATE_TOKEN_RATE: 1%` - Less than 1% consecutive duplicate tokens
+    - `MIN_CHARTS_REQUIRED: 1` - Reports require at least one chart
+  - **Publish Decision States**: `BLOCKED` (critical violations, no PDF), `STAGING` (requires review), `APPROVED` (auto-publish allowed)
+  - **Diagnostics JSON**: Full metrics output including placeholder_rate, chart_success_rate, duplicate_token_rate, violations list, and decision status
 
 ## AI Models
 The system orchestrates 6 AI models:
