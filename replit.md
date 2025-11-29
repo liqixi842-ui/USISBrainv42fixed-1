@@ -1,5 +1,5 @@
 # Overview
-USIS Brain v7.5 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
+USIS Brain v7.7 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
 
 # User Preferences
 Preferred communication style: Simple, everyday language.
@@ -31,6 +31,10 @@ The v6.0 pipeline processes user input via language detection, semantic intent p
 - **PDF Renderer**: Uses `services/puppeteerPdfRenderer.js` for watermark-free PDF generation with `v3_dev`'s `buildResearchReport` + `buildHtmlFromReport` for a complete 20-page institutional layout. Includes dynamic Chromium detection and fallback safety to PDFKit.
 - **V6 Renderer Refactor**: New modular `services/v6Renderer.js` with 20 dedicated page renderers matching v3_dev structure and a `buildV6ReportData` schema for data normalization. Implements an exact V6 20-page layout with specific page components like an 8-Card KPI Grid and Valuation Framework Waterfall.
 - **Multi-Language Output System**: Supports Spanish, Chinese, and English language formatting with flexible language mode parsing and automatic exchange detection. AI-first architecture with structured command parsing and AI semantic understanding as fallback.
+- **V7.7 Research Report Pipeline**: 8-stage modular pipeline (Fetch → Validate → CollectCharts → GenerateCharts → Render → Enhance → Normalize → QA) with:
+  - **Data Engine**: Retry logic (exponential backoff, 3 attempts), data validation with completeness scoring, 90-day price coverage and 5-year revenue/EPS requirements.
+  - **Chart Engine**: 8 chart types including RSI (14-period) and MACD (12/26/9) with QuickChart API integration and null-URL filtering.
+  - **QA Gate**: Final QA pass with auto-fix for undefined placeholders (replaced with company name), numeric overflow limiting (1-2 decimals), duplicate token removal, broken sentence repair, and chart availability validation before PDF export.
 
 ## AI Models
 The system orchestrates 6 AI models:
