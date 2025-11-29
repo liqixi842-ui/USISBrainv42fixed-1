@@ -29,12 +29,19 @@ class ChartDataCollector {
       revenue_trend: null,
       eps_trend: null,
       margin_trend: null,
-      pe_band: null
+      pe_band: null,
+      rsi: null,
+      macd: null
     };
 
     if (data.prices && data.prices.length >= 60) {
       charts.price_line = this._preparePriceData(data.prices);
       charts.volume_bars = this._prepareVolumeData(data.prices);
+    }
+
+    if (data.prices && data.prices.length >= 26) {
+      charts.rsi = this._prepareRSIData(data.prices);
+      charts.macd = this._prepareMACDData(data.prices);
     }
 
     if (data.revenue_quarters && data.revenue_quarters.length >= 4) {
@@ -53,15 +60,19 @@ class ChartDataCollector {
       charts.pe_band = this._preparePEBand(data.fundamentals);
     }
 
+    const chartCount = 8;
     const prepared = Object.entries(charts).filter(([_, v]) => v !== null).length;
-    console.log(`[ChartDataCollector] Prepared ${prepared} chart datasets`);
+    console.log(`[ChartDataCollector] Prepared ${prepared}/${chartCount} chart datasets`);
     
     return {
       ticker: data.ticker,
       charts,
       _meta: {
         charts_prepared: prepared,
-        charts_skipped: 6 - prepared
+        charts_skipped: chartCount - prepared,
+        charts_available: Object.fromEntries(
+          Object.entries(charts).map(([k, v]) => [k, v !== null])
+        )
       }
     };
   }
@@ -189,6 +200,117 @@ class ChartDataCollector {
     }
     
     return emaData;
+  }
+
+  _prepareRSIData(prices) {
+    const closes = prices.map(p => typeof p.close === 'number' ? p.close : parseFloat(p.close));
+    const dates = prices.map(p => p.date);
+    const period = 14;
+    
+    if (closes.length < period + 1) return null;
+    
+    const rsiValues = [];
+    let gains = 0;
+    let losses = 0;
+    
+    for (let i = 1; i <= period; i++) {
+      const change = closes[i] - closes[i - 1];
+      if (change > 0) gains += change;
+      else losses += Math.abs(change);
+    }
+    
+    let avgGain = gains / period;
+    let avgLoss = losses / period;
+    
+    for (let i = 0; i < period; i++) {
+      rsiValues.push(null);
+    }
+    
+    for (let i = period; i < closes.length; i++) {
+      const change = closes[i] - closes[i - 1];
+      const currentGain = change > 0 ? change : 0;
+      const currentLoss = change < 0 ? Math.abs(change) : 0;
+      
+      avgGain = (avgGain * (period - 1) + currentGain) / period;
+      avgLoss = (avgLoss * (period - 1) + currentLoss) / period;
+      
+      const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+      const rsi = 100 - (100 / (1 + rs));
+      rsiValues.push(parseFloat(rsi.toFixed(2)));
+    }
+    
+    return {
+      type: 'line',
+      title: 'RSI (14-period)',
+      labels: dates,
+      values: rsiValues,
+      data_points: rsiValues.filter(v => v !== null).length,
+      current_rsi: rsiValues[rsiValues.length - 1],
+      overbought_threshold: 70,
+      oversold_threshold: 30
+    };
+  }
+
+  _prepareMACDData(prices) {
+    const closes = prices.map(p => typeof p.close === 'number' ? p.close : parseFloat(p.close));
+    const dates = prices.map(p => p.date);
+    
+    if (closes.length < 26) return null;
+    
+    const ema12 = this._calculateEMA(closes, 12);
+    const ema26 = this._calculateEMA(closes, 26);
+    
+    const macdLine = [];
+    for (let i = 0; i < closes.length; i++) {
+      if (ema12[i] === null || ema26[i] === null) {
+        macdLine.push(null);
+      } else {
+        macdLine.push(parseFloat((ema12[i] - ema26[i]).toFixed(4)));
+      }
+    }
+    
+    const validMacd = macdLine.filter(v => v !== null);
+    const signalLine = [];
+    const signalPeriod = 9;
+    
+    let signalEma = validMacd.slice(0, signalPeriod).reduce((a, b) => a + b, 0) / signalPeriod;
+    let signalIdx = 0;
+    
+    for (let i = 0; i < macdLine.length; i++) {
+      if (macdLine[i] === null) {
+        signalLine.push(null);
+      } else {
+        if (signalIdx < signalPeriod - 1) {
+          signalLine.push(null);
+        } else {
+          signalEma = macdLine[i] * (2 / (signalPeriod + 1)) + signalEma * (1 - 2 / (signalPeriod + 1));
+          signalLine.push(parseFloat(signalEma.toFixed(4)));
+        }
+        signalIdx++;
+      }
+    }
+    
+    const histogram = [];
+    for (let i = 0; i < macdLine.length; i++) {
+      if (macdLine[i] === null || signalLine[i] === null) {
+        histogram.push(null);
+      } else {
+        histogram.push(parseFloat((macdLine[i] - signalLine[i]).toFixed(4)));
+      }
+    }
+    
+    return {
+      type: 'combo',
+      title: 'MACD (12, 26, 9)',
+      labels: dates,
+      macd_line: macdLine,
+      signal_line: signalLine,
+      histogram: histogram,
+      data_points: histogram.filter(v => v !== null).length,
+      current_macd: macdLine[macdLine.length - 1],
+      current_signal: signalLine[signalLine.length - 1],
+      current_histogram: histogram[histogram.length - 1]
+    };
   }
 }
 

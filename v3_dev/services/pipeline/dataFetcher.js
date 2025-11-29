@@ -33,6 +33,33 @@ class DataFetcher {
     
     this.sourcesUsed = [];
     this.errors = [];
+    
+    this.MAX_RETRIES = 2;
+    this.RETRY_DELAY_MS = 1000;
+    this.MIN_PRICE_POINTS = 60;
+    this.MIN_REVENUE_QUARTERS = 8;
+    this.MIN_EPS_QUARTERS = 8;
+  }
+
+  async _retryFetch(url, options = {}, retries = this.MAX_RETRIES) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const res = await fetch(url, { timeout: 10000, ...options });
+        if (!res.ok && attempt < retries) {
+          await this._delay(this.RETRY_DELAY_MS * (attempt + 1));
+          continue;
+        }
+        return await res.json();
+      } catch (error) {
+        if (attempt === retries) throw error;
+        await this._delay(this.RETRY_DELAY_MS * (attempt + 1));
+      }
+    }
+    throw new Error('Max retries exceeded');
+  }
+
+  _delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   async fetch(symbol) {
@@ -81,9 +108,60 @@ class DataFetcher {
     result._meta.errors = this.errors;
     result._meta.fetch_time_ms = Date.now() - startTime;
 
+    const validation = this._validateDataCompleteness(result);
+    result._meta.data_quality = validation;
+    
+    if (!validation.prices_sufficient) {
+      console.log(`[DataFetcher] WARNING: Only ${result.prices.length} price points (need ${this.MIN_PRICE_POINTS})`);
+    }
+    if (!validation.financials_sufficient) {
+      console.log(`[DataFetcher] WARNING: Revenue=${result.revenue_quarters.length}, EPS=${result.eps_quarters.length} quarters`);
+    }
+
     console.log(`[DataFetcher] Completed in ${result._meta.fetch_time_ms}ms. Sources: ${result._meta.sources_used.join(', ')}`);
+    console.log(`[DataFetcher] Data quality: prices=${validation.prices_sufficient}, financials=${validation.financials_sufficient}`);
     
     return result;
+  }
+
+  _validateDataCompleteness(data) {
+    return {
+      prices_sufficient: data.prices.length >= this.MIN_PRICE_POINTS,
+      prices_count: data.prices.length,
+      prices_target: this.MIN_PRICE_POINTS,
+      revenue_sufficient: data.revenue_quarters.length >= this.MIN_REVENUE_QUARTERS,
+      revenue_count: data.revenue_quarters.length,
+      eps_sufficient: data.eps_quarters.length >= this.MIN_EPS_QUARTERS,
+      eps_count: data.eps_quarters.length,
+      financials_sufficient: data.revenue_quarters.length >= this.MIN_REVENUE_QUARTERS && 
+                             data.eps_quarters.length >= this.MIN_EPS_QUARTERS,
+      peers_available: data.peers.length >= 3,
+      peers_count: data.peers.length,
+      overall_quality: this._calculateQualityScore(data)
+    };
+  }
+
+  _calculateQualityScore(data) {
+    let score = 0;
+    if (data.prices.length >= 90) score += 25;
+    else if (data.prices.length >= 60) score += 15;
+    else if (data.prices.length >= 30) score += 5;
+    
+    if (data.revenue_quarters.length >= 20) score += 25;
+    else if (data.revenue_quarters.length >= 8) score += 15;
+    else if (data.revenue_quarters.length >= 4) score += 5;
+    
+    if (data.eps_quarters.length >= 20) score += 25;
+    else if (data.eps_quarters.length >= 8) score += 15;
+    else if (data.eps_quarters.length >= 4) score += 5;
+    
+    if (data.peers.length >= 5) score += 15;
+    else if (data.peers.length >= 3) score += 10;
+    
+    if (data.fundamentals?.gross_margin) score += 5;
+    if (data.fundamentals?.pe_ttm) score += 5;
+    
+    return score;
   }
 
   async _fetchPrices(symbol) {

@@ -131,26 +131,39 @@ class PipelineOrchestrator {
 
       console.log(`\n[Stage 8/8] QA/Check`);
       const qaStart = Date.now();
-      const qaResult = qaChecker.check(result.report);
+      
+      const companyName = result.report.company_name || 
+                          validatedData.data?.profile?.name ||
+                          rawData?.profile?.name ||
+                          options.companyName || 
+                          symbol.toUpperCase();
+      
+      const finalQAResult = qaChecker.runFinalQA(result.report, {
+        companyName: companyName,
+        symbol: symbol.toUpperCase()
+      });
+      
       result._meta.timing.qa_check = Date.now() - qaStart;
       result._meta.stages_completed.push('qa_check');
       
+      result.report = finalQAResult.report;
+      result.charts = finalQAResult.report.charts || result.charts;
+      
       result.qa = {
-        placeholders_found: qaResult.placeholders_found,
-        duplicate_words: qaResult.duplicate_words,
-        nan_values: qaResult.nan_values,
-        chart_errors: qaResult.chart_errors,
-        passed: qaResult.passed
+        placeholders_found: finalQAResult.qa_result.placeholders_found,
+        duplicate_words: finalQAResult.qa_result.duplicate_words,
+        nan_values: finalQAResult.qa_result.nan_values,
+        chart_errors: finalQAResult.qa_result.chart_errors,
+        formatting_issues: finalQAResult.qa_result.formatting_issues,
+        passed: finalQAResult.qa_result.passed,
+        ready_for_pdf: finalQAResult.ready_for_pdf,
+        chart_debug: result.report._chart_debug || null
       };
-
-      if (!qaResult.passed) {
-        console.log(`[Pipeline] Applying auto-fixes...`);
-        result.report = qaChecker.autoFix(result.report);
-      }
 
       console.log(`\n${'═'.repeat(60)}`);
       console.log(`[Pipeline] ✅ Completed in ${Date.now() - startTime}ms`);
-      console.log(`[Pipeline] Status: ${result.status}, QA Passed: ${qaResult.passed}`);
+      console.log(`[Pipeline] Status: ${result.status}, QA Passed: ${finalQAResult.qa_result.passed}`);
+      console.log(`[Pipeline] Ready for PDF: ${finalQAResult.ready_for_pdf}`);
       console.log(`${'═'.repeat(60)}\n`);
 
     } catch (error) {

@@ -41,7 +41,9 @@ class ChartEngine {
       { key: 'revenue_trend', name: 'revenue_trend', generator: this._generateRevenueChart.bind(this) },
       { key: 'eps_trend', name: 'eps_trend', generator: this._generateEpsChart.bind(this) },
       { key: 'margin_trend', name: 'margin_analysis', generator: this._generateMarginChart.bind(this) },
-      { key: 'pe_band', name: 'pe_valuation', generator: this._generatePEBandChart.bind(this) }
+      { key: 'pe_band', name: 'pe_valuation', generator: this._generatePEBandChart.bind(this) },
+      { key: 'rsi', name: 'rsi_indicator', generator: this._generateRSIChart.bind(this) },
+      { key: 'macd', name: 'macd_indicator', generator: this._generateMACDChart.bind(this) }
     ];
 
     for (const { key, name, generator } of chartTypes) {
@@ -289,14 +291,139 @@ class ChartEngine {
     return chart.getUrl();
   }
 
+  async _generateRSIChart(data) {
+    const chart = new QuickChart();
+    chart.setWidth(this.chartWidth);
+    chart.setHeight(280);
+    chart.setBackgroundColor(this.backgroundColor);
+    
+    const labels = this._sampleLabels(data.labels, 30);
+    const rsiData = this._sampleData(data.values, 30);
+    
+    chart.setConfig({
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            label: 'RSI',
+            data: rsiData,
+            borderColor: '#8b5cf6',
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false
+          },
+          {
+            label: 'Overbought (70)',
+            data: Array(labels.length).fill(70),
+            borderColor: '#ef4444',
+            borderWidth: 1,
+            borderDash: [5, 5],
+            pointRadius: 0,
+            fill: false
+          },
+          {
+            label: 'Oversold (30)',
+            data: Array(labels.length).fill(30),
+            borderColor: '#22c55e',
+            borderWidth: 1,
+            borderDash: [5, 5],
+            pointRadius: 0,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        title: { display: true, text: 'RSI (14-period)', fontSize: 14 },
+        legend: { position: 'bottom' },
+        scales: {
+          yAxes: [{ 
+            ticks: { 
+              min: 0, 
+              max: 100,
+              stepSize: 20
+            } 
+          }],
+          xAxes: [{ ticks: { maxTicksLimit: 10 } }]
+        }
+      }
+    });
+
+    return chart.getUrl();
+  }
+
+  async _generateMACDChart(data) {
+    const chart = new QuickChart();
+    chart.setWidth(this.chartWidth);
+    chart.setHeight(280);
+    chart.setBackgroundColor(this.backgroundColor);
+    
+    const labels = this._sampleLabels(data.labels, 30);
+    const macdLine = this._sampleData(data.macd_line, 30);
+    const signalLine = this._sampleData(data.signal_line, 30);
+    const histogram = this._sampleData(data.histogram, 30);
+    
+    const histColors = histogram.map(v => v >= 0 ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)');
+    
+    chart.setConfig({
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          {
+            type: 'line',
+            label: 'MACD',
+            data: macdLine,
+            borderColor: '#2563eb',
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false,
+            yAxisID: 'y-axis-1'
+          },
+          {
+            type: 'line',
+            label: 'Signal',
+            data: signalLine,
+            borderColor: '#f97316',
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: false,
+            yAxisID: 'y-axis-1'
+          },
+          {
+            type: 'bar',
+            label: 'Histogram',
+            data: histogram,
+            backgroundColor: histColors,
+            yAxisID: 'y-axis-1'
+          }
+        ]
+      },
+      options: {
+        title: { display: true, text: 'MACD (12, 26, 9)', fontSize: 14 },
+        legend: { position: 'bottom' },
+        scales: {
+          yAxes: [{ 
+            id: 'y-axis-1',
+            position: 'left',
+            ticks: { beginAtZero: true }
+          }],
+          xAxes: [{ ticks: { maxTicksLimit: 10 } }]
+        }
+      }
+    });
+
+    return chart.getUrl();
+  }
+
   _sampleLabels(labels, maxPoints) {
-    if (labels.length <= maxPoints) return labels;
+    if (!labels || labels.length <= maxPoints) return labels || [];
     const step = Math.ceil(labels.length / maxPoints);
     return labels.filter((_, i) => i % step === 0);
   }
 
   _sampleData(data, maxPoints) {
-    if (data.length <= maxPoints) return data;
+    if (!data || data.length <= maxPoints) return data || [];
     const step = Math.ceil(data.length / maxPoints);
     return data.filter((_, i) => i % step === 0);
   }

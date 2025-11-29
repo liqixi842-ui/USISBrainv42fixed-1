@@ -27,7 +27,7 @@
 class QAChecker {
   constructor() {
     this.placeholderPatterns = [
-      /undefined/gi,
+      /\bundefined\b/gi,
       /\{[A-Z_]+\}/g,
       /\[PLACEHOLDER\]/gi,
       /TODO:/gi,
@@ -39,6 +39,16 @@ class QAChecker {
     this.duplicatePattern = /\b(\w{3,})\s+\1\b/gi;
     
     this.excessiveDecimalPattern = /\d+\.\d{4,}/g;
+    
+    this.numericOverflowPattern = /(\d+\.\d{8,})/g;
+    
+    this.brokenSentencePatterns = [
+      /\.\s*\./g,
+      /,\s*,/g,
+      /\s+,/g,
+      /^\s*,/gm,
+      /\s{3,}/g
+    ];
   }
 
   check(reportObject) {
@@ -157,24 +167,49 @@ class QAChecker {
     }
   }
 
-  autoFix(reportObject) {
+  autoFix(reportObject, options = {}) {
     console.log(`[QAChecker] Applying auto-fixes...`);
     
+    const { companyName = null, symbol = null } = options;
     const fixed = JSON.parse(JSON.stringify(reportObject));
     let fixCount = 0;
 
     const fixString = (str) => {
       let result = str;
       
-      for (const pattern of this.placeholderPatterns) {
+      if (companyName) {
+        result = result.replace(/\bundefined\b(?!\s*=|\s*:)/gi, companyName);
+      } else {
+        result = result.replace(/\bundefined\b(?!\s*=|\s*:)/gi, 'the company');
+      }
+      
+      for (const pattern of this.placeholderPatterns.slice(1)) {
         result = result.replace(pattern, 'N/A');
       }
       
       result = result.replace(this.duplicatePattern, '$1');
       
       result = result.replace(this.excessiveDecimalPattern, (match) => {
+        return parseFloat(match).toFixed(1);
+      });
+      
+      result = result.replace(this.numericOverflowPattern, (match) => {
         return parseFloat(match).toFixed(2);
       });
+      
+      for (const pattern of this.brokenSentencePatterns) {
+        if (pattern.source === '\\.\\s*\\.') {
+          result = result.replace(pattern, '.');
+        } else if (pattern.source === ',\\s*,') {
+          result = result.replace(pattern, ',');
+        } else if (pattern.source === '\\s+,') {
+          result = result.replace(pattern, ',');
+        } else if (pattern.source === '\\s{3,}') {
+          result = result.replace(pattern, ' ');
+        }
+      }
+      
+      result = result.replace(/\s+/g, ' ').trim();
       
       if (result !== str) fixCount++;
       return result;
@@ -222,6 +257,71 @@ class QAChecker {
     lines.push(`  • Fields Checked: ${checkResult.checked_fields}`);
     
     return lines.join('\n');
+  }
+
+  filterValidCharts(charts) {
+    if (!charts || !Array.isArray(charts)) return [];
+    
+    const validCharts = charts.filter(chart => {
+      if (!chart) return false;
+      if (chart.url === null || chart.url === undefined) return false;
+      if (chart.error) return false;
+      return true;
+    });
+    
+    const skipped = charts.length - validCharts.length;
+    if (skipped > 0) {
+      console.log(`[QAChecker] Filtered out ${skipped} unavailable charts from PDF output`);
+    }
+    
+    return validCharts;
+  }
+
+  getChartDebugInfo(charts) {
+    if (!charts || !Array.isArray(charts)) return { available: 0, unavailable: 0, details: [] };
+    
+    const details = charts.map(chart => ({
+      name: chart.name,
+      available: chart.url !== null && !chart.error,
+      data_points: chart.data_points || 0,
+      error: chart.error || null
+    }));
+    
+    return {
+      available: details.filter(d => d.available).length,
+      unavailable: details.filter(d => !d.available).length,
+      details
+    };
+  }
+
+  runFinalQA(reportObject, options = {}) {
+    console.log(`[QAChecker] Running final QA pass before PDF generation...`);
+    
+    const checkResult = this.check(reportObject);
+    
+    let fixedReport = reportObject;
+    if (!checkResult.passed || checkResult.formatting_issues > 0) {
+      fixedReport = this.autoFix(reportObject, options);
+      console.log(`[QAChecker] Auto-fixes applied`);
+    }
+    
+    if (fixedReport.charts) {
+      const chartDebug = this.getChartDebugInfo(fixedReport.charts);
+      fixedReport._chart_debug = chartDebug;
+      
+      fixedReport.charts = this.filterValidCharts(fixedReport.charts);
+      console.log(`[QAChecker] ${fixedReport.charts.length} charts passed validation`);
+    }
+    
+    const finalCheck = this.check(fixedReport);
+    
+    return {
+      report: fixedReport,
+      qa_result: finalCheck,
+      summary: this.generateQASummary(finalCheck),
+      ready_for_pdf: finalCheck.passed || 
+                     (finalCheck.placeholders_found === 0 && finalCheck.nan_values === 0)
+    };
   }
 }
 
