@@ -1,7 +1,14 @@
 # Overview
-USIS Brain v7.1 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
+USIS Brain v7.3 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
 
-# Recent Changes (v7.2 - November 2025)
+# Recent Changes (v7.3 - November 2025)
+- **Puppeteer PDF Renderer**: New `services/puppeteerPdfRenderer.js` replaces DocRaptor for watermark-free PDF generation
+- **V3_dev HTML Template Integration**: Uses v3_dev's `buildResearchReport` + `buildHtmlFromReport` for complete 20-page institutional layout
+- **Dynamic Chromium Detection**: `findChromiumPath()` auto-detects Chromium via PATH, env var, or Nix store fallback
+- **Fallback Safety**: phase6Enhancer falls back to PDFKit renderer if Puppeteer fails, ensuring report generation continuity
+- **Test Verified**: Successfully generates 806KB, 20-page institutional PDFs for stock analysis
+
+# Previous Changes (v7.2 - November 2025)
 - **V6 Renderer Refactor Complete**: New modular `services/v6Renderer.js` with 20 dedicated page renderers matching v3_dev structure
 - **buildV6ReportData Schema**: Complete V6 data normalization including kpi (16 metrics), consensus block, valuation_framework with drivers, glossary, rating_definitions, analyst_view
 - **Exact V6 20-Page Layout**: Cover → Key Takeaways+KPI → Investment Thesis → Segments → Industry/Macro → Valuation Snapshot → Valuation Framework → Peers → Financials → Financial Trends → Catalysts → Risks → Technical Analysis → Strategy → Detailed Metrics → Methodology → Disclosures → Glossary → Rating Definitions → Analyst View
