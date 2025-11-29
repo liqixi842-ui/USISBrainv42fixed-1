@@ -88,13 +88,28 @@ async function getPremiumContent(symbol, language = 'en', options = {}) {
       peers: report.peers,
       charts: report.charts,
       
+      // 🆕 v7.2: 保留原始价格和估值数据供 V6 组件使用
+      price: report.price,
+      valuation: report.valuation,
+      
       // === 元数据 ===
       meta: {
         source: 'v3_dev Premium Engine',
         model: report.meta?.model || 'Multi-AI',
         version: 'v7.0',
         generated_at: new Date().toISOString(),
-        language
+        language,
+        
+        // 🆕 v7.2: V6 组件需要的关键数据
+        keyMessages: extractKeyMessagesFromReport(report),
+        keyRisks: extractKeyRisksFromReport(report),
+        metrics: extractMetricsFromReport(report),
+        
+        // 保留原始 Premium 数据引用
+        price: report.price,
+        valuation: report.valuation,
+        fundamentals: report.fundamentals,
+        targetPrice: report.targets?.base?.price || null
       }
     };
 
@@ -225,6 +240,120 @@ function generateConclusions(report) {
   conclusion += `Investors should monitor key catalysts and risk factors outlined in this report.`;
 
   return conclusion;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🆕 v7.2: V6 组件数据提取函数
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 从 Premium 报告中提取 Key Messages（用于 V6 Key Takeaways）
+ */
+function extractKeyMessagesFromReport(report) {
+  const messages = [];
+  
+  // 添加评级和目标价信息
+  if (report.rating && report.symbol) {
+    const price = report.price?.last;
+    const target = report.targets?.base?.price;
+    if (price && target) {
+      const upside = ((target - price) / price * 100).toFixed(1);
+      messages.push(`${report.symbol} rated ${report.rating} with $${target} target (${upside}% ${upside > 0 ? 'upside' : 'downside'}).`);
+    }
+  }
+  
+  // 从 summary_text 提取关键句
+  if (report.summary_text) {
+    const summaryLines = report.summary_text
+      .split(/[.!?]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 30 && s.length < 200);
+    messages.push(...summaryLines.slice(0, 2));
+  }
+  
+  // 从 investment_thesis 或 thesis_text 提取
+  const thesis = report.investment_thesis || report.thesis_text;
+  if (thesis && messages.length < 3) {
+    const thesisLines = thesis
+      .split(/[.!?]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 30 && s.length < 200);
+    if (thesisLines.length > 0) {
+      messages.push(thesisLines[0]);
+    }
+  }
+  
+  // 从 catalysts 添加关键催化剂
+  const catalysts = report.catalysts_text;
+  if (Array.isArray(catalysts) && catalysts.length > 0) {
+    const topCatalyst = typeof catalysts[0] === 'string' ? catalysts[0] : catalysts[0]?.text;
+    if (topCatalyst && topCatalyst.length > 20) {
+      messages.push(topCatalyst.substring(0, 150) + (topCatalyst.length > 150 ? '...' : ''));
+    }
+  }
+  
+  return messages.slice(0, 4);
+}
+
+/**
+ * 从 Premium 报告中提取 Key Risks（用于 V6 Key Takeaways）
+ */
+function extractKeyRisksFromReport(report) {
+  const risks = [];
+  
+  // 从 risks_text 提取
+  const riskSource = report.risks_text;
+  
+  if (Array.isArray(riskSource)) {
+    riskSource.slice(0, 4).forEach(risk => {
+      const text = typeof risk === 'string' ? risk : risk?.text;
+      if (text && text.length > 20) {
+        risks.push(text.substring(0, 150) + (text.length > 150 ? '...' : ''));
+      }
+    });
+  } else if (typeof riskSource === 'string') {
+    const riskLines = riskSource
+      .split(/[.!?]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 30 && s.length < 200);
+    risks.push(...riskLines.slice(0, 4));
+  }
+  
+  return risks.slice(0, 4);
+}
+
+/**
+ * 从 Premium 报告中提取关键指标（用于 V6 Key Metrics）
+ */
+function extractMetricsFromReport(report) {
+  const valuation = report.valuation || {};
+  const price = report.price || {};
+  const fundamentals = report.fundamentals || {};
+  
+  return {
+    // 估值指标
+    pe_ttm: valuation.pe_ttm || null,
+    pe_fwd: valuation.pe_forward || valuation.pe_fwd || null,
+    ps_ttm: valuation.ps_ttm || null,
+    pb_ttm: valuation.pb || valuation.pb_ttm || null,
+    
+    // 价格指标
+    beta: price.beta || null,
+    high_52w: price.high_52w || null,
+    low_52w: price.low_52w || null,
+    
+    // 基本面指标
+    div_yield: fundamentals.dividend_yield || valuation.dividend_yield || null,
+    roe: fundamentals.roe || null,
+    roa: fundamentals.roa || null,
+    
+    // 增长指标
+    eps_growth: fundamentals.eps_growth || null,
+    revenue_growth: fundamentals.revenue_growth || null,
+    
+    // 市值
+    market_cap: valuation.market_cap || null
+  };
 }
 
 module.exports = {

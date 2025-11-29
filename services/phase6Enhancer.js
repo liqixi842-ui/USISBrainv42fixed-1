@@ -259,6 +259,7 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
           name: premiumContent.name,
           rating: premiumContent.rating,
           targetPrice: premiumContent.targetPrice,
+          target_price: premiumContent.targetPrice, // 兼容两种命名
           analyst: premiumContent.analyst,
           date: premiumContent.date,
           sections: [
@@ -269,6 +270,16 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
             { title: 'V. Catalysts & Opportunities', content: formatCatalysts(premiumContent.catalysts) },
             { title: 'VI. Risks & Conclusions', content: formatRisks(premiumContent.risks) + '\n\n' + premiumContent.conclusions }
           ],
+          
+          // 🆕 v7.2: 保留 V6 组件需要的关键数据
+          price: premiumContent.price || premiumContent.priceData,
+          valuation: premiumContent.valuation || premiumContent.valuation_metrics,
+          fundamentals: premiumContent.fundamentals,
+          catalysts: premiumContent.catalysts,
+          risks: premiumContent.risks,
+          summary_text: premiumContent.summary,
+          investment_thesis: premiumContent.thesis,
+          
           meta: premiumContent.meta
         };
         console.log(`   ├─ ✅ Premium report ready (${report.sections.length} sections, v3_dev)`);
