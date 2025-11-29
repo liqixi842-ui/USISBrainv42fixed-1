@@ -38,7 +38,29 @@ class LanguageNormalizer {
       'at this point in time',
       'for all intents and purposes',
       'in the near term',
-      'looking ahead'
+      'looking ahead',
+      'it is important to note',
+      'one could argue that',
+      'there is no doubt that',
+      'it goes without saying',
+      'needless to say',
+      'as everyone knows',
+      'for what it\'s worth',
+      'having said that',
+      'that being said',
+      'all things considered',
+      'when all is said and done',
+      'at the present time',
+      'in today\'s market',
+      'in the current environment',
+      'as we move forward',
+      'in this context',
+      'taking everything into account',
+      'from our perspective',
+      'in summary',
+      'to summarize',
+      'in conclusion',
+      'to conclude'
     ];
     
     this.wordReplacements = {
@@ -198,6 +220,78 @@ class LanguageNormalizer {
     
     let result = text;
     result = result.replace(/\b(\w{3,})\s+\1\b/gi, '$1');
+    result = result.replace(/\s+/g, ' ').trim();
+    
+    return result;
+  }
+
+  enforceSellSideStyle(text) {
+    if (!text || typeof text !== 'string') return '';
+    
+    let result = text;
+    
+    result = result.replace(/\b(\w{3,})\s+\1\b/gi, '$1');
+    
+    for (const phrase of this.forbiddenPhrases) {
+      const regex = new RegExp(phrase, 'gi');
+      result = result.replace(regex, '');
+    }
+    
+    for (const [from, to] of Object.entries(this.wordReplacements)) {
+      const regex = new RegExp(`\\b${from}\\b`, 'gi');
+      result = result.replace(regex, to);
+    }
+    
+    result = result.replace(/\d+\.\d{4,}/g, (match) => parseFloat(match).toFixed(2));
+    result = result.replace(/(\d+\.\d{2,})%/g, (match, num) => parseFloat(num).toFixed(1) + '%');
+    
+    const sentences = result.split(/(?<=[.!?])\s+/);
+    const shortSentences = sentences.map(sentence => {
+      const words = sentence.split(' ');
+      if (words.length > this.maxWordsPerSentence) {
+        return words.slice(0, this.maxWordsPerSentence).join(' ') + '.';
+      }
+      return sentence;
+    });
+    
+    const paragraphs = [];
+    let currentPara = [];
+    
+    for (const sentence of shortSentences) {
+      currentPara.push(sentence);
+      if (currentPara.length >= this.maxLinesPerParagraph) {
+        paragraphs.push(currentPara.join(' '));
+        currentPara = [];
+      }
+    }
+    
+    if (currentPara.length > 0) {
+      paragraphs.push(currentPara.join(' '));
+    }
+    
+    result = paragraphs.join('\n\n');
+    
+    result = result.replace(/\s+/g, ' ').replace(/\n\n+/g, '\n\n').trim();
+    result = result.replace(/\s+([.,;:!?])/g, '$1');
+    result = result.replace(/([.,;:!?])([^\s\n])/g, '$1 $2');
+    
+    return result;
+  }
+
+  runFinalPass(text) {
+    if (!text || typeof text !== 'string') return text;
+    
+    let result = text;
+    
+    result = result.replace(/\b(\w{3,})\s+\1\b/gi, '$1');
+    
+    result = result.replace(/\d+\.\d{6,}/g, (match) => parseFloat(match).toFixed(2));
+    
+    for (const phrase of this.forbiddenPhrases) {
+      const regex = new RegExp(phrase, 'gi');
+      result = result.replace(regex, '');
+    }
+    
     result = result.replace(/\s+/g, ' ').trim();
     
     return result;

@@ -129,7 +129,7 @@ class PipelineOrchestrator {
       result._meta.timing.normalize = Date.now() - normalizeStart;
       result._meta.stages_completed.push('normalize');
 
-      console.log(`\n[Stage 8/8] QA/Check`);
+      console.log(`\n[Stage 8/8] QA/Check + Mandatory Gating`);
       const qaStart = Date.now();
       
       const companyName = result.report.company_name || 
@@ -138,10 +138,24 @@ class PipelineOrchestrator {
                           options.companyName || 
                           symbol.toUpperCase();
       
+      result.report.data_timestamp = new Date().toISOString();
+      result.report.data_fetch_time = result._meta.timing.fetch + 'ms';
+      
       const finalQAResult = qaChecker.runFinalQA(result.report, {
         companyName: companyName,
         symbol: symbol.toUpperCase()
       });
+      
+      const chartStats = {
+        total: chartsResult.charts?.length || 0,
+        successful: chartsResult.charts?.filter(c => c.url && !c.error).length || 0
+      };
+      
+      const gatingResult = qaChecker.runMandatoryGating(
+        finalQAResult.report,
+        chartStats,
+        { companyName, symbol: symbol.toUpperCase() }
+      );
       
       result._meta.timing.qa_check = Date.now() - qaStart;
       result._meta.stages_completed.push('qa_check');
@@ -159,11 +173,30 @@ class PipelineOrchestrator {
         ready_for_pdf: finalQAResult.ready_for_pdf,
         chart_debug: result.report._chart_debug || null
       };
+      
+      result.gating = gatingResult;
+      result.diagnostics = qaChecker.generateDiagnosticsJSON(result, gatingResult);
+      
+      if (gatingResult.decision.should_abort) {
+        result.status = 'blocked';
+        result.publish_allowed = false;
+        result.staging_mode = false;
+        console.log(`\n🛑 [Pipeline] BLOCKED - Report failed mandatory QA gating`);
+      } else if (gatingResult.decision.staging_required) {
+        result.status = 'staging';
+        result.publish_allowed = false;
+        result.staging_mode = true;
+        console.log(`\n⚠️  [Pipeline] STAGING - Report requires manual review before publishing`);
+      } else {
+        result.status = 'approved';
+        result.publish_allowed = true;
+        result.staging_mode = false;
+      }
 
       console.log(`\n${'═'.repeat(60)}`);
       console.log(`[Pipeline] ✅ Completed in ${Date.now() - startTime}ms`);
-      console.log(`[Pipeline] Status: ${result.status}, QA Passed: ${finalQAResult.qa_result.passed}`);
-      console.log(`[Pipeline] Ready for PDF: ${finalQAResult.ready_for_pdf}`);
+      console.log(`[Pipeline] Status: ${result.status}, QA Passed: ${gatingResult.qa_pass}`);
+      console.log(`[Pipeline] Publish Allowed: ${result.publish_allowed}`);
       console.log(`${'═'.repeat(60)}\n`);
 
     } catch (error) {
