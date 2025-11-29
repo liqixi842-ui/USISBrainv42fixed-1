@@ -61,27 +61,38 @@ async function getPremiumContent(symbol, language = 'en', options = {}) {
       upside: report.targets?.base?.upside_pct || null,
       analyst: analyst,
       date: new Date().toISOString(),
+      horizon: report.horizon || '12M',
+      targets: report.targets,
 
       // === 六大章节内容 (Institutional Grade) ===
       
       // I. Executive Summary
       summary: report.summary_text || 'Premium analysis in progress',
       
-      // II. Investment Thesis
-      thesis: report.thesis_text || 'Investment thesis analysis unavailable',
+      // II. Investment Thesis - 优先使用 investment_thesis（SellSideWriter 增强版）
+      thesis: report.investment_thesis || report.thesis_text || 'Investment thesis analysis unavailable',
       
       // III. Valuation Analysis
       valuation: report.valuation_text || 'Valuation analysis unavailable',
       
-      // IV. Industry & Segments (合并)
+      // IV. Company Overview - 使用 SellSideWriter 增强版
+      companyOverview: report.company_overview || 'Company overview analysis in progress.',
+      
+      // V. Industry & Segments (合并)
       industry: combineIndustryAnalysis(report),
+      macro: report.macro_text || 'Macro environment analysis in progress.',
       
-      // V. Catalysts (机遇)
-      catalysts: normalizeCatalysts(report.catalysts_text),
+      // VI. Catalysts (机遇) - 支持数组和文本两种格式
+      catalysts: report.catalysts || normalizeCatalysts(report.catalysts_text),
       
-      // VI. Risks & Conclusions (合并)
-      risks: normalizeRisks(report.risks_text),
+      // VII. Risks & Conclusions (合并)
+      risks: report.risks || normalizeRisks(report.risks_text),
       conclusions: report.action_text || generateConclusions(report),
+      
+      // VIII. Additional SellSideWriter fields
+      valuationCommentary: report.valuation_commentary || null,
+      financialHealthSummary: report.financial_health_summary || null,
+      peerComparisonCommentary: report.peer_comparison_commentary || null,
 
       // === 数据引用（供图表使用）===
       priceData: report.price,
@@ -90,6 +101,15 @@ async function getPremiumContent(symbol, language = 'en', options = {}) {
       growth: report.growth,
       peers: report.peers,
       charts: report.charts,
+      segments: report.segments,
+      
+      // Technical indicators
+      technicalIndicators: report.technical?.indicators || null,
+      technicalCommentary: report.technical?.commentary || null,
+      techSupportResistance: report.technical?.support_resistance || null,
+      
+      // Strategy fields
+      strategy: report.strategy || null,
       
       // 🆕 v7.2: 保留原始价格和估值数据供 V6 组件使用
       // 注意：使用不同的字段名避免与章节文本字段冲突

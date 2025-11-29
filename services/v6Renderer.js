@@ -146,11 +146,13 @@ function buildV6ReportData(premiumContent, options = {}) {
     peers: pc.peers || generateDefaultPeers(pc.symbol),
     
     summary_text: pc.summary || 'Executive summary in progress.',
-    investment_thesis: pc.thesis || 'Investment thesis analysis in progress.',
-    valuation_text: typeof pc.valuation === 'string' ? pc.valuation : 'Valuation analysis in progress.',
+    investment_thesis: pc.thesis || pc.investment_thesis || 'Investment thesis analysis in progress.',
+    valuation_text: pc.valuationCommentary || (typeof pc.valuation === 'string' ? pc.valuation : 'Valuation analysis in progress.'),
     industry_text: pc.industry || 'Industry analysis in progress.',
     macro_text: pc.macro || 'Macro environment analysis in progress.',
-    company_overview: pc.companyOverview || 'Company overview analysis in progress.',
+    company_overview: pc.companyOverview || pc.company_overview || 'Company overview analysis in progress.',
+    financial_health_summary: pc.financialHealthSummary || null,
+    peer_comparison_commentary: pc.peerComparisonCommentary || null,
     
     key_messages: extractArrayField(pc.keyMessages || meta.keyMessages, 4, 'Key investment consideration'),
     key_risks: extractArrayField(pc.keyRisks || meta.keyRisks, 4, 'Risk factor to monitor'),
