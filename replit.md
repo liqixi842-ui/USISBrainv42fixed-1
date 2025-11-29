@@ -1,7 +1,14 @@
 # Overview
-USIS Brain v7.3 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
+USIS Brain v7.4.1 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
 
-# Recent Changes (v7.4 - November 2025)
+# Recent Changes (v7.4.1 - November 2025)
+- **Page 6-9 Duplicate Content Fix**: Each page (Valuation Snapshot, Framework, Peer Comparison, Financial Health) now generates unique data-driven commentary with null guards
+- **Duplicate Word Detection Stabilized**: Fixed infinite loop issue with 3-pass cap and safe patterns only
+- **Analyst Mention Limiter**: limitAnalystMentions() wired into thesis generation, limits to max 3 mentions replacing extras with "our team"
+- **Conservative Catalyst/Risk Phrasing**: Exaggerated projections replaced (not deleted) with professional wording (e.g., "15-20% growth" → "potential expansion")
+- **Business Overview Restored**: Full company_overview narrative preserved when available, structured segment table added
+
+# Previous Changes (v7.4 - November 2025)
 - **Report Quality Improvements**: Major text quality enhancements addressing AI-generated content issues
 - **textCleanerEngine v2.0**: Enhanced duplicate word detection, 20+ AI cliché removals, paragraph length control (max 180 words), cross-paragraph deduplication
 - **Concise Prompts**: Thesis reduced from 900-1000 to 600-700 words, valuation from 700 to 450-500 words, with strict anti-duplication rules
