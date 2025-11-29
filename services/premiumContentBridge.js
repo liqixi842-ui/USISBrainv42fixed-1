@@ -46,7 +46,10 @@ async function getPremiumContent(symbol, language = 'en', options = {}) {
     console.log(`✅ [PremiumBridge] Premium report generated`);
     console.log(`   ├─ Rating: ${report.rating}`);
     console.log(`   ├─ Target: ${report.targets?.base?.price || 'N/A'}`);
-    console.log(`   └─ Sections: ${Object.keys(report).length} fields`);
+    console.log(`   ├─ Sections: ${Object.keys(report).length} fields`);
+    console.log(`   ├─ 📊 Price data: ${JSON.stringify(report.price || {}).substring(0, 100)}`);
+    console.log(`   ├─ 📊 Valuation data: ${JSON.stringify(report.valuation || {}).substring(0, 100)}`);
+    console.log(`   └─ 📊 Fundamentals data: ${JSON.stringify(report.fundamentals || {}).substring(0, 100)}`);
 
     // 归一化数据结构为 Phase 6 模板格式
     const normalizedContent = {
@@ -89,8 +92,9 @@ async function getPremiumContent(symbol, language = 'en', options = {}) {
       charts: report.charts,
       
       // 🆕 v7.2: 保留原始价格和估值数据供 V6 组件使用
+      // 注意：使用不同的字段名避免与章节文本字段冲突
       price: report.price,
-      valuation: report.valuation,
+      valuationData: report.valuation, // 估值指标对象（不是文本字段）
       
       // === 元数据 ===
       meta: {
@@ -101,9 +105,21 @@ async function getPremiumContent(symbol, language = 'en', options = {}) {
         language,
         
         // 🆕 v7.2: V6 组件需要的关键数据
-        keyMessages: extractKeyMessagesFromReport(report),
-        keyRisks: extractKeyRisksFromReport(report),
-        metrics: extractMetricsFromReport(report),
+        keyMessages: (() => {
+          const messages = extractKeyMessagesFromReport(report);
+          console.log(`   📊 [PremiumBridge] Extracted keyMessages: ${messages.length} items`);
+          return messages;
+        })(),
+        keyRisks: (() => {
+          const risks = extractKeyRisksFromReport(report);
+          console.log(`   📊 [PremiumBridge] Extracted keyRisks: ${risks.length} items`);
+          return risks;
+        })(),
+        metrics: (() => {
+          const metrics = extractMetricsFromReport(report);
+          console.log(`   📊 [PremiumBridge] Extracted metrics: ${JSON.stringify(metrics).substring(0, 150)}`);
+          return metrics;
+        })(),
         
         // 保留原始 Premium 数据引用
         price: report.price,
@@ -329,30 +345,41 @@ function extractMetricsFromReport(report) {
   const valuation = report.valuation || {};
   const price = report.price || {};
   const fundamentals = report.fundamentals || {};
+  const growth = report.growth || {};
+  
+  // 辅助函数：安全提取数值（多源fallback）
+  const safeNum = (...sources) => {
+    for (const v of sources) {
+      if (v !== null && v !== undefined && !isNaN(v) && v !== 'N/A') {
+        return Number(v);
+      }
+    }
+    return null;
+  };
   
   return {
     // 估值指标
-    pe_ttm: valuation.pe_ttm || null,
-    pe_fwd: valuation.pe_forward || valuation.pe_fwd || null,
-    ps_ttm: valuation.ps_ttm || null,
-    pb_ttm: valuation.pb || valuation.pb_ttm || null,
+    pe_ttm: safeNum(valuation.pe_ttm, valuation.peTTM),
+    pe_fwd: safeNum(valuation.pe_forward, valuation.pe_fwd, valuation.forwardPE),
+    ps_ttm: safeNum(valuation.ps_ttm, valuation.psTTM),
+    pb_ttm: safeNum(valuation.pb, valuation.pb_ttm, valuation.pbTTM),
     
     // 价格指标
-    beta: price.beta || null,
-    high_52w: price.high_52w || null,
-    low_52w: price.low_52w || null,
+    beta: safeNum(price.beta, valuation.beta),
+    high_52w: safeNum(price.high_52w, price.yearHigh, price.fiftyTwoWeekHigh),
+    low_52w: safeNum(price.low_52w, price.yearLow, price.fiftyTwoWeekLow),
     
     // 基本面指标
-    div_yield: fundamentals.dividend_yield || valuation.dividend_yield || null,
-    roe: fundamentals.roe || null,
-    roa: fundamentals.roa || null,
+    div_yield: safeNum(valuation.dividend_yield, fundamentals.dividend_yield, valuation.dividendYield),
+    roe: safeNum(fundamentals.roe, valuation.roe),
+    roa: safeNum(fundamentals.roa, valuation.roa),
     
     // 增长指标
-    eps_growth: fundamentals.eps_growth || null,
-    revenue_growth: fundamentals.revenue_growth || null,
+    eps_growth: safeNum(growth.eps_yoy_latest, fundamentals.eps_growth, growth.eps_3y_cagr),
+    revenue_growth: safeNum(growth.revenue_yoy_latest, fundamentals.revenue_growth, growth.revenue_3y_cagr),
     
     // 市值
-    market_cap: valuation.market_cap || null
+    market_cap: safeNum(valuation.market_cap, price.marketCap)
   };
 }
 

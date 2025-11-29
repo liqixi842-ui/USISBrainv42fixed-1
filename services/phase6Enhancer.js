@@ -265,15 +265,16 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
           sections: [
             { title: 'I. Executive Summary', content: premiumContent.summary },
             { title: 'II. Investment Thesis', content: premiumContent.thesis },
-            { title: 'III. Valuation Analysis', content: premiumContent.valuation },
+            { title: 'III. Valuation Analysis', content: premiumContent.valuation },  // 文本字段
             { title: 'IV. Industry & Competitive Landscape', content: premiumContent.industry },
             { title: 'V. Catalysts & Opportunities', content: formatCatalysts(premiumContent.catalysts) },
             { title: 'VI. Risks & Conclusions', content: formatRisks(premiumContent.risks) + '\n\n' + premiumContent.conclusions }
           ],
           
           // 🆕 v7.2: 保留 V6 组件需要的关键数据
+          // 注意：使用 valuationData（对象）而不是 valuation（文本字段）
           price: premiumContent.price || premiumContent.priceData,
-          valuation: premiumContent.valuation || premiumContent.valuation_metrics,
+          valuation: premiumContent.valuationData || premiumContent.valuation_metrics,  // 估值指标对象
           fundamentals: premiumContent.fundamentals,
           catalysts: premiumContent.catalysts,
           risks: premiumContent.risks,
@@ -344,9 +345,22 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
       // ═══════════════════════════════════════════════════════════════
       pages.advance(); // 创建新页面 + 渲染页眉
       
+      // 🔍 调试：显示报告数据状态
+      console.log(`   ├─ 📊 V6 Data Debug:`);
+      console.log(`   │   ├─ report.meta exists: ${!!report.meta}`);
+      console.log(`   │   ├─ meta.keyMessages: ${report.meta?.keyMessages?.length || 0} items`);
+      console.log(`   │   ├─ meta.keyRisks: ${report.meta?.keyRisks?.length || 0} items`);
+      console.log(`   │   ├─ meta.metrics: ${JSON.stringify(report.meta?.metrics || {}).substring(0, 100)}`);
+      console.log(`   │   ├─ report.price: ${JSON.stringify(report.price || {}).substring(0, 80)}`);
+      console.log(`   │   ├─ report.valuation: ${JSON.stringify(report.valuation || {}).substring(0, 80)}`);
+      console.log(`   │   └─ report.fundamentals: ${JSON.stringify(report.fundamentals || {}).substring(0, 80)}`);
+      
       // 提取 Key Messages 和 Key Risks（带增强的默认值保护）
       const keyMessages = extractKeyMessages(report);
       const keyRisks = extractKeyRisks(report);
+      
+      console.log(`   │   ├─ Extracted keyMessages: ${keyMessages.length} items`);
+      console.log(`   │   └─ Extracted keyRisks: ${keyRisks.length} items`);
       
       // 渲染 Key Takeaways（两列布局）
       let summaryY = renderKeyTakeawaysSection(doc, {
@@ -356,6 +370,7 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
       
       // 提取并渲染 Key Metrics
       const metricsData = extractMetrics(report);
+      console.log(`   │   └─ Extracted metrics: ${JSON.stringify(metricsData).substring(0, 150)}`);
       summaryY = renderKeyMetricsRow(doc, metricsData, { startY: summaryY + 20 });
       
       // 🆕 v7.2: 仅在有真实数据时渲染 Our View vs Consensus
@@ -755,43 +770,44 @@ function getDefaultKeyRisks() {
 function extractMetrics(report) {
   if (!report) return getDefaultMetrics();
   
-  // 🆕 v7.2: 使用可选链安全访问嵌套属性
+  // 🆕 v7.2: 优先使用 meta.metrics（已预处理的 Premium 数据），然后回退到原始数据
+  const metaMetrics = report.meta?.metrics || {};
   const valuation = report.valuation || report.meta?.valuation || {};
   const price = report.price || report.meta?.price || {};
   const fundamentals = report.fundamentals || report.meta?.fundamentals || {};
-  const metaMetrics = report.meta?.metrics || {};
   
-  // 辅助函数：安全提取数值
+  // 辅助函数：安全提取数值（优先使用 metaMetrics）
   const safeNum = (...sources) => {
     for (const v of sources) {
-      if (v !== null && v !== undefined && !isNaN(v)) return v;
+      if (v !== null && v !== undefined && !isNaN(v) && v !== 'N/A') return Number(v);
     }
     return null;
   };
   
   return {
+    // 🆕 v7.2: 优先使用 metaMetrics（已从 Premium 报告预提取）
     // 估值指标
-    pe_ttm: safeNum(valuation.pe_ttm, valuation.peTTM, metaMetrics.pe_ttm),
-    pe_fwd: safeNum(valuation.pe_fwd, valuation.peFwd, valuation.forwardPE, metaMetrics.pe_fwd),
-    ps_ttm: safeNum(valuation.ps_ttm, valuation.psTTM, metaMetrics.ps_ttm),
-    pb_ttm: safeNum(valuation.pb_ttm, valuation.pbTTM, metaMetrics.pb_ttm),
+    pe_ttm: safeNum(metaMetrics.pe_ttm, valuation.pe_ttm, valuation.peTTM),
+    pe_fwd: safeNum(metaMetrics.pe_fwd, valuation.pe_fwd, valuation.pe_forward, valuation.forwardPE),
+    ps_ttm: safeNum(metaMetrics.ps_ttm, valuation.ps_ttm, valuation.psTTM),
+    pb_ttm: safeNum(metaMetrics.pb_ttm, valuation.pb_ttm, valuation.pb, valuation.pbTTM),
     
     // 价格指标
-    beta: safeNum(price.beta, valuation.beta, metaMetrics.beta),
-    high_52w: safeNum(price.high_52w, price.yearHigh, metaMetrics.high_52w),
-    low_52w: safeNum(price.low_52w, price.yearLow, metaMetrics.low_52w),
+    beta: safeNum(metaMetrics.beta, price.beta, valuation.beta),
+    high_52w: safeNum(metaMetrics.high_52w, price.high_52w, price.yearHigh),
+    low_52w: safeNum(metaMetrics.low_52w, price.low_52w, price.yearLow),
     
     // 基本面指标
-    div_yield: safeNum(fundamentals.dividend_yield, valuation.dividendYield, metaMetrics.div_yield),
-    roe: safeNum(fundamentals.roe, valuation.roe, metaMetrics.roe),
-    roa: safeNum(fundamentals.roa, metaMetrics.roa),
+    div_yield: safeNum(metaMetrics.div_yield, valuation.dividend_yield, fundamentals.dividend_yield),
+    roe: safeNum(metaMetrics.roe, fundamentals.roe, valuation.roe),
+    roa: safeNum(metaMetrics.roa, fundamentals.roa),
     
     // 增长指标
-    eps_growth: safeNum(fundamentals.eps_growth, metaMetrics.eps_growth),
-    revenue_growth: safeNum(fundamentals.revenue_growth, metaMetrics.revenue_growth),
+    eps_growth: safeNum(metaMetrics.eps_growth, fundamentals.eps_growth),
+    revenue_growth: safeNum(metaMetrics.revenue_growth, fundamentals.revenue_growth),
     
     // 市值
-    market_cap: safeNum(valuation.market_cap, price.marketCap, metaMetrics.market_cap)
+    market_cap: safeNum(metaMetrics.market_cap, valuation.market_cap, price.marketCap)
   };
 }
 
