@@ -292,41 +292,74 @@ ${focus.length > 0 ? `\n- 必须涵盖: ${focus.join(', ')}` : ''}
     let fallback;
     
     if (assetType === 'equity') {
-      // Equity-specific fallback (company language)
-      const metricsStatement = revenue
-        ? `The company generates annual revenue of ${revenue}${margin ? ` with EBITDA margins of ${margin}%` : ''}${roe ? ` and ROE of ${roe}%` : ''}, reflecting operational discipline and capital efficiency.`
-        : 'The company demonstrates operational discipline and capital efficiency.';
+      // 🔧 v7.5 FIX: Bullet-point format with minimal analyst mentions (max 2)
+      const revenueVal = report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : null;
+      const marginVal = report.fundamentals?.ebitda_margin || margin;
+      const roeVal = report.fundamentals?.roe || roe;
       
-      fallback = `In ${analyst}'s view, ${subjectName} ${ratingStatement} based on three core factors: sustainable competitive advantages, execution momentum, and valuation framework. ${metricsStatement}
+      fallback = `We rate ${subjectName} ${rating} with a ${targetPrice ? `$${targetPrice} price target` : 'constructive view'} based on competitive positioning, execution track record, and valuation framework.
 
-${analyst} argues that the company's market position creates durable barriers to entry through scale economies, technology leadership, and customer relationships. The business model demonstrates network effects and switching costs that protect market share against competitive pressures. Management has demonstrated consistent ability to allocate capital toward high-return projects while maintaining balance sheet flexibility.
+**Investment Case:**
+• Market position: ${subjectName} maintains leadership through scale advantages, technology differentiation, and customer switching costs
+• Revenue profile: ${revenueVal ? `Annual revenue of ${revenueVal}` : 'Revenue base'}${marginVal ? ` with ${marginVal}% EBITDA margins` : ''} demonstrates operating leverage
+${roeVal ? `• Capital efficiency: ROE of ${roeVal}% reflects disciplined capital allocation and reinvestment returns` : '• Capital efficiency: Management maintains disciplined approach to capital allocation'}
+• Moat durability: Network effects and distribution advantages create barriers to competitive entry
 
-From an operational perspective, ${analyst} highlights that the company has delivered consistent margin expansion through operating leverage and cost discipline. The management team's track record of navigating market cycles and executing strategic initiatives supports our confidence in forward estimates. Industry positioning provides secular tailwinds that should support above-market growth over the intermediate term.
+**Valuation:**
+${valuationStatement}• Multiple framework: Current valuation incorporates near-term execution while leaving upside from structural growth drivers
+• Risk-reward: Probability-weighted scenarios favor long-term positioning given margin expansion trajectory
 
-${valuationStatement}According to ${analyst}, the risk-reward framework favors long-term investors given structural growth drivers and margin expansion opportunities. As ${analyst} notes, current valuation incorporates near-term headwinds while underappreciating the durability of competitive advantages and the compounding nature of market position. We maintain conviction in the investment thesis based on fundamental analysis, industry positioning, and management's proven execution capability.`;
+**Key Risk:**
+• Execution dependency on market cycle timing and competitive dynamics`;
     } else if (assetType === 'index' || assetType === 'etf') {
-      // Index/ETF-specific fallback
-      const vehicleType = assetType === 'index' ? 'index' : 'exchange-traded fund';
-      fallback = `In ${analyst}'s view, ${subjectName} ${ratingStatement} based on three core factors: diversification profile, structural positioning, and cost efficiency.
+      // 🔧 v7.5 FIX: Index/ETF fallback in bullet format with minimal analyst mentions
+      const vehicleType = assetType === 'index' ? 'Index' : 'ETF';
+      
+      fallback = `We maintain a ${rating} view on ${subjectName} based on diversification profile, structural positioning, and cost efficiency.
 
-${analyst} argues that this ${vehicleType} provides investors with broad market exposure across multiple sectors and constituents, offering systematic risk mitigation relative to single-stock holdings. The benchmark methodology ensures rules-based rebalancing and transparent constituent selection, reducing idiosyncratic risks associated with active management decisions.
+**Investment Case:**
+• Broad exposure: ${vehicleType} provides systematic market access across multiple sectors and constituents
+• Risk mitigation: Diversification reduces idiosyncratic single-stock risk vs individual holdings
+• ${assetType === 'etf' ? 'Cost efficiency: Low expense ratio and high liquidity optimize total cost of ownership' : 'Methodology: Rules-based rebalancing ensures transparent constituent selection'}
+• Factor alignment: Sector weights match long-term economic growth drivers
 
-From a structural perspective, ${analyst} highlights that the ${vehicleType}'s sector weights and factor exposures align with long-term economic growth drivers. ${assetType === 'etf' ? 'The fund\'s low expense ratio and high liquidity make it a cost-effective vehicle for gaining market exposure.' : 'The index construction rules provide transparent, repeatable methodology for tracking market performance.'} Historical performance demonstrates resilience across market cycles, with consistent tracking of underlying fundamentals.
+**Structural Positioning:**
+${valuationStatement}• Tracking: Historical performance demonstrates consistent benchmark replication
+• Cycle resilience: Performance across market environments supports strategic allocation
 
-${valuationStatement}According to ${analyst}, the risk-reward framework favors investors seeking diversified equity exposure with minimal tracking error and operational complexity. As ${analyst} notes, current valuations reflect market consensus while providing exposure to structural growth themes across constituent holdings.`;
+**Key Risk:**
+• Market beta exposure limits downside protection during broad equity declines`;
     } else if (assetType === 'crypto') {
-      // Crypto-specific fallback
-      fallback = `In ${analyst}'s view, ${subjectName} ${ratingStatement} based on three core factors: network fundamentals, adoption trajectory, and protocol economics.
+      // 🔧 v7.5 FIX: Crypto fallback in bullet format with minimal analyst mentions
+      fallback = `We maintain a ${rating} view on ${subjectName} based on network fundamentals, adoption trajectory, and protocol economics.
 
-${analyst} argues that the digital asset's decentralized architecture creates a permissionless value transfer network, reducing reliance on centralized intermediaries. The protocol's security model, supported by distributed consensus mechanisms, has demonstrated resilience against attacks while maintaining operational continuity. Network effects and growing developer ecosystem activity reinforce the asset's positioning within the broader blockchain landscape.
+**Investment Case:**
+• Decentralization: Permissionless architecture reduces reliance on centralized intermediaries
+• Security: Distributed consensus mechanisms demonstrate resilience against attacks
+• Network effects: Growing developer ecosystem reinforces competitive positioning
+• Adoption metrics: On-chain activity (addresses, volumes) indicates network health
 
-From a fundamental perspective, ${analyst} highlights that on-chain metrics including active addresses, transaction volumes, and hash rate trends provide insight into network health and adoption dynamics. The asset's monetary policy and supply dynamics are transparent and programmatically enforced, offering predictable issuance schedules relative to fiat alternatives.
+**Valuation Framework:**
+${valuationStatement}• Supply dynamics: Programmatic monetary policy provides transparent issuance schedule
+• Institutional interest: Growing allocation from traditional finance validates asset class
 
-${valuationStatement}According to ${analyst}, the risk-reward framework reflects both the asset's structural innovation and inherent volatility associated with emerging technology adoption. As ${analyst} notes, regulatory developments and institutional participation remain key variables influencing long-term valuation trajectories.`;
+**Key Risks:**
+• Regulatory uncertainty and volatility inherent in emerging technology adoption`;
     } else {
-      // Generic fallback for unknown asset types
-      fallback = `In ${analyst}'s view, ${subjectName} ${ratingStatement} based on fundamental analysis, market positioning, and structural factors. ${analyst} highlights that the investment opportunity reflects a balanced assessment of growth potential and risk considerations. According to ${analyst}, the current valuation framework incorporates both near-term catalysts and long-term strategic positioning.`;
+      // 🔧 v7.5 FIX: Generic fallback in bullet format
+      fallback = `We maintain a ${rating} view on ${subjectName} based on fundamental analysis and market positioning.
+
+**Investment Case:**
+• Growth potential balanced against risk considerations
+• Valuation framework incorporates near-term catalysts and strategic positioning
+
+**Key Risk:**
+• Execution and market environment dependencies`;
     }
+    
+    // 🔧 v7.5 FIX: Pass fallback through cleaning pipeline to ensure no duplicate words/phrases
+    fallback = cleanText(fallback);
+    fallback = limitAnalystMentions(fallback, analyst, 2); // Limit to 2 mentions in fallback
     
     console.log(`⚠️  [WriterStockV3] Generated asset-aware fallback thesis (${assetType}): ${fallback.length} chars (${fallback.split(/\s+/).length} words)`);
     return fallback;
@@ -593,6 +626,9 @@ ${segmentBullets}
 • Balanced growth potential with risk management
 • Appropriate for asset class objectives`;
     }
+    
+    // 🔧 v7.5 FIX: Pass fallback through cleaning pipeline
+    fallback = cleanText(fallback);
     
     console.log(`⚠️  [WriterStockV3] Generated asset-aware fallback overview (${assetType}): ${fallback.length} chars (${fallback.split(/\s+/).length} words)`);
     return fallback;

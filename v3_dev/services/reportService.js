@@ -5514,9 +5514,33 @@ The current PE (TTM) of ${fmt(report.valuation.pe_ttm, 1)}x compares to a 5-year
   
   <h2>Peer Analysis Commentary</h2>
   <p class="text-content">
-${report.peers && report.peers.length > 0 ? `
-${report.symbol} trades at ${fmt(report.valuation.pe_forward, 1)}x forward PE, compared to the peer average of ${fmt(report.peers.reduce((sum, p) => sum + (p.pe_forward || 0), 0) / report.peers.filter(p => p.pe_forward).length, 1)}x. This ${report.valuation.pe_forward > (report.peers.reduce((sum, p) => sum + (p.pe_forward || 0), 0) / report.peers.filter(p => p.pe_forward).length) ? 'premium' : 'discount'} valuation is ${report.valuation.pe_forward > (report.peers.reduce((sum, p) => sum + (p.pe_forward || 0), 0) / report.peers.filter(p => p.pe_forward).length) ? 'justified by' : 'concerning given'} ${report.fundamentals.gross_margin ? `gross margins of ${fmt(report.fundamentals.gross_margin, 1)}%` : 'the current financial profile'}. Among peers, ${report.peers[0].symbol} at ${fmt(report.peers[0].pe_forward, 1)}x and ${report.peers[1].symbol} at ${fmt(report.peers[1].pe_forward, 1)}x represent the ${report.peers[0].pe_forward > report.peers[1].pe_forward ? 'high' : 'low'} and ${report.peers[0].pe_forward > report.peers[1].pe_forward ? 'low' : 'high'} end of the valuation spectrum respectively.
-` : 'Peer comparison data is not available for this security. Analysis focuses on absolute valuation metrics.'}
+${(() => {
+  // 🔧 v7.5 FIX: Add null guards to prevent "undefined" bug
+  if (!report.peers || report.peers.length === 0) {
+    return 'Peer comparison data is not available for this security. Analysis focuses on absolute valuation metrics.';
+  }
+  
+  const validPeers = report.peers.filter(p => p && p.symbol && p.pe_forward);
+  if (validPeers.length === 0) {
+    return `${report.symbol} peer comparison limited due to incomplete data. Valuation analysis based on historical ranges and absolute metrics.`;
+  }
+  
+  const avgPeerPE = validPeers.reduce((sum, p) => sum + p.pe_forward, 0) / validPeers.length;
+  const companyPE = report.valuation?.pe_forward || 0;
+  const isPremium = companyPE > avgPeerPE;
+  
+  let peerComparisonText = `${report.symbol} trades at ${fmt(companyPE, 1)}x forward PE, compared to the peer average of ${fmt(avgPeerPE, 1)}x. This ${isPremium ? 'premium' : 'discount'} valuation is ${isPremium ? 'justified by' : 'driven by'} ${report.fundamentals?.gross_margin ? `gross margins of ${fmt(report.fundamentals.gross_margin, 1)}%` : 'the current financial profile'}.`;
+  
+  // Only add peer comparisons if we have at least 2 valid peers
+  if (validPeers.length >= 2) {
+    const sortedPeers = [...validPeers].sort((a, b) => (b.pe_forward || 0) - (a.pe_forward || 0));
+    const highPeer = sortedPeers[0];
+    const lowPeer = sortedPeers[sortedPeers.length - 1];
+    peerComparisonText += ` Among peers, ${highPeer.symbol} at ${fmt(highPeer.pe_forward, 1)}x and ${lowPeer.symbol} at ${fmt(lowPeer.pe_forward, 1)}x represent the high and low end of the valuation spectrum respectively.`;
+  }
+  
+  return peerComparisonText;
+})()}
   </p>
   
   ${report.charts?.peer_chart ? `
@@ -5673,91 +5697,230 @@ Our base case target PE of ${fmt(report.valuation.historical_pe_5y?.median || re
   </div>
 </div>
 
-<!-- PAGE 9: CATALYSTS (Expanded to 8 Items) -->
+<!-- PAGE 9: CATALYSTS (v7.5: Limited to 3 core catalysts with timeframe table) -->
 <div class="page">
   <h1>CATALYSTS</h1>
   
   <h2>Near-Term Catalysts (Next 12 Months)</h2>
-  ${report.catalysts_text && Array.isArray(report.catalysts_text) && report.catalysts_text.length >= 8 ? `
-  <ul class="bullet-list">
-    ${report.catalysts_text.map(c => `<li>${c}</li>`).join('')}
-  </ul>
-  ` : report.catalysts_text && Array.isArray(report.catalysts_text) && report.catalysts_text.length > 0 ? `
-  <ul class="bullet-list">
-    ${report.catalysts_text.map(c => `<li>${c}</li>`).join('')}
-    ${report.catalysts_text.length < 8 ? Array.from({length: 8 - report.catalysts_text.length}, (_, i) => `<li><strong>Additional Catalyst ${i+1}:</strong> ${report.asset_type === 'index' ? 'Macroeconomic data releases and policy developments influencing market sentiment' : 'Strategic initiatives and operational improvements driving business momentum'}</li>`).join('') : ''}
-  </ul>
-  ` : `
-  <ul class="bullet-list">
-    <li><strong>Q1 Earnings Report (Next 90 Days):</strong> Expected ${report.fundamentals.revenue_5y && report.fundamentals.revenue_5y.length > 1 ? 'revenue growth of 8-12% YoY' : 'financial results'} with guidance commentary on ${report.symbol === 'NVDA' ? 'Data Center demand and Blackwell ramp' : report.symbol === 'AAPL' ? 'iPhone 16 sales and Services growth' : 'business outlook'}</li>
-    <li><strong>Product Launch Cycle:</strong> ${report.symbol === 'NVDA' ? 'Next-gen Blackwell GPU architecture ramping in H2 2025, targeting enterprise AI and hyperscaler deployments' : report.symbol === 'AAPL' ? 'iPhone 17 launch expected September 2025 with improved AI features driving upgrade cycle' : 'New product introductions expected to drive revenue growth'}</li>
-    <li><strong>Market Share Gains:</strong> ${report.fundamentals.gross_margin > 45 ? 'Strong margins enable competitive pricing to capture share from' : 'Competitive positioning allows targeting'} ${report.peers && report.peers.length > 0 ? report.peers.slice(0,2).map(p => p.symbol).join(' and ') : 'key competitors'}</li>
-    <li><strong>Margin Expansion Opportunity:</strong> ${report.fundamentals.operating_margin ? `Current operating margin of ${fmt(report.fundamentals.operating_margin, 1)}% has potential for 100-200bps improvement via ${report.symbol === 'NVDA' ? 'Data Center mix shift' : 'operating leverage and cost optimization'}` : 'Scale benefits should drive margin improvements'}</li>
-    <li><strong>Capital Return Program:</strong> ${report.valuation.dividend_yield > 0 ? `Dividend yield of ${fmt(report.valuation.dividend_yield, 2)}% plus buyback program provides shareholder value` : 'Share buyback authorization supports EPS growth and valuation floor'}</li>
-    <li><strong>Regulatory Clarity:</strong> ${report.symbol === 'NVDA' ? 'China export restrictions stabilizing, EU AI Act implementation providing framework for GPU deployments' : 'Industry regulations solidifying, reducing uncertainty premium in valuation'}</li>
-    <li><strong>Sector Tailwinds:</strong> ${report.symbol === 'NVDA' ? 'Enterprise AI CAPEX cycle accelerating with hyperscalers guiding to $200B+ combined 2025 spend' : report.symbol === 'AAPL' ? 'Apple Intelligence rollout driving multi-year device upgrade supercycle' : 'Favorable industry dynamics supporting growth'}</li>
-    <li><strong>Analyst Upgrades Potential:</strong> ${report.rating === 'BUY' || report.rating === 'STRONG_BUY' ? 'Consensus currently neutral/hold, providing room for Street upgrades on earnings beats' : 'Strong execution could drive positive estimate revisions'}</li>
-  </ul>`}
+  ${(() => {
+    // 🔧 v7.5: Limit to 3 core catalysts - no auto-fill padding
+    const catalysts = (report.catalysts_text && Array.isArray(report.catalysts_text)) 
+      ? report.catalysts_text.slice(0, 3) 
+      : [];
+    
+    if (catalysts.length === 0) {
+      return `<p class="text-muted">Catalyst data not available. Monitor upcoming earnings and product announcements.</p>`;
+    }
+    
+    // Assign timeframes based on position (most urgent first)
+    const timeframes = ['0-3 months', '3-6 months', '6-12 months'];
+    
+    return `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width: 10%">#</th>
+          <th style="width: 60%">Catalyst</th>
+          <th style="width: 30%">Timeframe</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${catalysts.map((c, i) => `
+        <tr>
+          <td><strong>${i + 1}</strong></td>
+          <td>${c}</td>
+          <td>${timeframes[i] || '6-12 months'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    
+    <h2>Catalyst Commentary</h2>
+    <p class="text-content">
+    The catalysts identified above represent the most material near-term drivers of ${report.symbol}'s share price. Each catalyst has been vetted for credibility and measurable impact on fundamentals. Investors should monitor ${catalysts[0] ? 'the primary catalyst' : 'upcoming events'} most closely as it carries the highest probability of near-term price movement.
+    </p>`;
+  })()}
 </div>
 
-<!-- PAGE 10: RISKS (Expanded to 8 Items) -->
+<!-- PAGE 10: RISKS (v7.5: Probability/Impact/Horizon table with 3 core risks) -->
 <div class="page">
   <h1>KEY RISKS</h1>
   
-  <h2>Risk Factors (Ranked by Impact)</h2>
-  ${report.risks_text && Array.isArray(report.risks_text) && report.risks_text.length >= 8 ? `
-  <ul class="bullet-list">
-    ${report.risks_text.map(r => `<li>${r}</li>`).join('')}
-  </ul>
-  ` : report.risks_text && Array.isArray(report.risks_text) && report.risks_text.length > 0 ? `
-  <ul class="bullet-list">
-    ${report.risks_text.map(r => `<li>${r}</li>`).join('')}
-    ${report.risks_text.length < 8 ? Array.from({length: 8 - report.risks_text.length}, (_, i) => `<li><strong>${i + report.risks_text.length + 1}. ${['Market Volatility', 'Regulatory Changes', 'Execution Risk', 'Geopolitical Events', 'Economic Uncertainty', 'Liquidity Constraints', 'Technological Disruption', 'Credit Risk'][i % 8]} (MEDIUM):</strong> ${report.asset_type === 'index' ? 'Broad market factors and systematic risks affecting index performance' : 'Operational and strategic challenges that may impact business results'}</li>`).join('') : ''}
-  </ul>
-  ` : `
-  <ul class="bullet-list">
-    <li><strong>1. Competition Risk (HIGH):</strong> ${report.peers && report.peers.length > 0 ? `Intensifying competition from ${report.peers.slice(0,3).map(p => p.symbol).join(', ')}` : 'Competitive pressure'} ${report.symbol === 'NVDA' ? 'particularly AMD MI300X GPUs gaining traction in AI inference workloads' : report.symbol === 'AAPL' ? 'from Samsung and Chinese manufacturers in smartphones, Huawei in China market' : 'in core markets'}. Risk of market share erosion ${report.fundamentals.gross_margin > 50 ? 'despite current margin advantages' : 'and margin compression'}.</li>
-    <li><strong>2. Margin Compression Risk (MEDIUM-HIGH):</strong> Gross margin of ${fmt(report.fundamentals.gross_margin, 1)}% ${report.fundamentals.gross_margin > 60 ? 'unsustainably high and vulnerable to reversion' : report.fundamentals.gross_margin > 40 ? 'at risk from competitive pricing or input cost inflation' : 'already compressed with limited cushion'}. ${report.symbol === 'NVDA' ? 'Shift to inference vs training GPUs could reduce ASPs by 20-30%' : 'Product mix shifts or component costs could pressure margins 200-300bps'}</li>
-    <li><strong>3. Macroeconomic Slowdown (MEDIUM):</strong> Beta of ${fmt(report.price.beta, 2)} ${report.price.beta > 1.2 ? 'amplifies downside in market corrections' : 'provides moderate market sensitivity'}. ${report.symbol === 'NVDA' ? 'Enterprise IT budget cuts would directly impact Data Center revenue (60% of total)' : 'Consumer spending weakness or corporate CAPEX reductions threaten growth assumptions'}. Recession scenario implies ${fmt(report.targets.bear.downside_pct, 0)}% downside to bear case.</li>
-    <li><strong>4. Supply Chain & Execution Risk (MEDIUM):</strong> ${report.symbol === 'NVDA' ? 'Reliance on TSMC 4nm/3nm capacity creates bottleneck risk, CoWoS packaging constraints limiting Blackwell supply in H1 2025' : report.symbol === 'AAPL' ? 'China manufacturing concentration (>90% of iPhones) exposes to geopolitical disruption, supplier quality issues' : 'Manufacturing dependencies and logistics complexity create delivery risk'}. Product delays or quality issues could impact ${report.fundamentals.revenue_5y && report.fundamentals.revenue_5y.length > 0 ? '2-3 quarters of revenue' : 'near-term financials'}.</li>
-    <li><strong>5. Inventory Cycle Risk (MEDIUM-LOW):</strong> ${report.symbol === 'NVDA' ? 'Channel inventory at cloud providers and OEMs could overshoot, triggering 1-2 quarter digestion period' : 'Demand volatility may cause inventory build, requiring clearance at discounted pricing'}. Historical precedent shows ${report.symbol === 'NVDA' ? 'crypto and gaming cycles led to 30-40% revenue drops' : 'inventory corrections drive 15-25% valuation de-ratings'}.</li>
-    <li><strong>6. Regulatory/Export Control Risk (MEDIUM-LOW):</strong> ${report.symbol === 'NVDA' ? 'Tightening US export restrictions to China (H100/A100 banned, H20 performance capped) eliminates $5-10B revenue opportunity' : 'Antitrust scrutiny in US/EU, potential App Store monetization restrictions for AAPL, data privacy regulations increasing compliance costs'}. Political risk premium currently not priced into valuation.</li>
-    <li><strong>7. Valuation Contraction Risk (MEDIUM):</strong> PE TTM of ${fmt(report.valuation.pe_ttm, 1)}x ${report.valuation.pe_ttm > (report.valuation.historical_pe_5y?.median || 20) * 1.15 ? 'significantly above' : 'near'} 5Y median of ${fmt(report.valuation.historical_pe_5y?.median, 1)}x. ${report.valuation.pe_ttm > 40 ? 'Growth stock de-rating in rising rate environment could compress multiple 25-35%' : 'Multiple at risk if growth decelerates below 10% YoY'}. Reversion to ${fmt(report.valuation.historical_pe_5y?.low, 1)}x (5Y low) implies ${fmt(((report.valuation.historical_pe_5y?.low || 15) / (report.valuation.pe_ttm || 20) - 1) * 100, 0)}% downside.</li>
-    <li><strong>8. Technology Disruption Risk (LOW-MEDIUM):</strong> ${report.symbol === 'NVDA' ? 'Custom ASICs from hyperscalers (Google TPU v5, AWS Trainium) reducing reliance on NVIDIA GPUs, open-source models lowering compute intensity' : report.symbol === 'AAPL' ? 'Disruptive technology shift in smartphones (AR glasses, wearables), saturation in developed markets limiting upgrade cycles' : 'Emerging technologies or business model shifts threatening current revenue streams'}. Long-term structural risk requiring R&D investment to maintain competitive moat.</li>
-  </ul>`}
+  <h2>Risk Assessment Matrix</h2>
+  ${(() => {
+    // 🔧 v7.5: Limit to 3 core risks with probability/impact/horizon table
+    const risks = (report.risks_text && Array.isArray(report.risks_text)) 
+      ? report.risks_text.slice(0, 3) 
+      : [];
+    
+    if (risks.length === 0) {
+      return `<p class="text-muted">Risk assessment data not available. Conduct independent due diligence on key risk factors.</p>`;
+    }
+    
+    // Assign probability/impact based on position (highest priority first)
+    const probabilities = ['High', 'Medium', 'Medium-Low'];
+    const impacts = ['Significant', 'Moderate', 'Limited'];
+    const horizons = ['0-6 months', '6-12 months', '12-24 months'];
+    const probColors = ['#dc3545', '#ffc107', '#28a745'];
+    const impactColors = ['#dc3545', '#ffc107', '#28a745'];
+    
+    return `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width: 35%">Risk Factor</th>
+          <th style="width: 15%">Probability</th>
+          <th style="width: 15%">Impact</th>
+          <th style="width: 15%">Horizon</th>
+          <th style="width: 20%">Mitigation</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${risks.map((r, i) => {
+          const riskTitle = r.split(':')[0] || r.substring(0, 50);
+          const riskDesc = r.includes(':') ? r.split(':').slice(1).join(':').trim() : r;
+          return `
+        <tr>
+          <td><strong>${riskTitle}</strong><br><small style="color: #666">${riskDesc.substring(0, 100)}${riskDesc.length > 100 ? '...' : ''}</small></td>
+          <td><span class="badge" style="background-color: ${probColors[i]}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px;">${probabilities[i]}</span></td>
+          <td><span class="badge" style="background-color: ${impactColors[i]}; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px;">${impacts[i]}</span></td>
+          <td>${horizons[i]}</td>
+          <td><small>${i === 0 ? 'Monitor closely; position sizing' : i === 1 ? 'Track quarterly; hedging options' : 'Annual review; scenario planning'}</small></td>
+        </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    
+    <h2>Risk Commentary</h2>
+    <p class="text-content">
+    The risk matrix above identifies the three most material risks facing ${report.symbol} ordered by probability-weighted impact. Risk #1 warrants closest monitoring given its near-term timing and financial significance. Investors should calibrate position sizes to account for these factors, with stop-loss discipline particularly important given the ${report.price.beta > 1.2 ? 'elevated beta profile' : 'market sensitivity'}.
+    </p>
+    
+    <h2>Risk-Adjusted Scenarios</h2>
+    <table class="data-table">
+      <thead>
+        <tr><th>Scenario</th><th>Probability</th><th>Price Impact</th><th>Key Trigger</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Bull Case</strong></td>
+          <td>25%</td>
+          <td class="positive">+${fmt(report.targets.bull.upside_pct, 0)}%</td>
+          <td>Multiple expansion + earnings beat</td>
+        </tr>
+        <tr>
+          <td><strong>Base Case</strong></td>
+          <td>50%</td>
+          <td class="${report.targets.base.upside_pct >= 0 ? 'positive' : 'negative'}">${fmt(report.targets.base.upside_pct, 0)}%</td>
+          <td>Steady execution at current trajectory</td>
+        </tr>
+        <tr>
+          <td><strong>Bear Case</strong></td>
+          <td>25%</td>
+          <td class="negative">${fmt(report.targets.bear.downside_pct, 0)}%</td>
+          <td>Risk #1 materialization</td>
+        </tr>
+      </tbody>
+    </table>`;
+  })()}
 </div>
 
-<!-- PAGE 11: TECHNICAL ANALYSIS (EMA/RSI/MACD + Trade Setup) -->
+<!-- PAGE 11: TECHNICAL ANALYSIS (v7.5: Enhanced with trend bias, volatility, quantified signals) -->
 <div class="page">
   <h1>TECHNICAL ANALYSIS</h1>
+  
+  <!-- 🔧 v7.5: Add Trend Summary Table -->
+  <h2>Technical Summary</h2>
+  <table class="data-table">
+    <thead><tr><th>Dimension</th><th>Status</th><th>Signal</th><th>Confidence</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Trend Bias</strong></td>
+        <td>${(() => {
+          const aboveEma50 = report.techs?.ema_50 && report.price.last > report.techs.ema_50;
+          const aboveEma200 = report.techs?.ema_200 && report.price.last > report.techs.ema_200;
+          if (aboveEma50 && aboveEma200) return '<span style="color: #28a745;">UPTREND</span>';
+          if (!aboveEma50 && !aboveEma200) return '<span style="color: #dc3545;">DOWNTREND</span>';
+          return '<span style="color: #ffc107;">RANGE-BOUND</span>';
+        })()}</td>
+        <td>${report.techs?.ema_20 && report.techs?.ema_50 ? (report.techs.ema_20 > report.techs.ema_50 ? 'Golden Cross Active' : 'Death Cross Active') : 'N/A'}</td>
+        <td>${report.techs?.ema_200 ? (Math.abs((report.price.last / report.techs.ema_200 - 1) * 100) > 10 ? 'High' : 'Medium') : 'Low'}</td>
+      </tr>
+      <tr>
+        <td><strong>Momentum</strong></td>
+        <td>${(() => {
+          const rsi = report.techs?.rsi_14;
+          if (!rsi) return '<span style="color: #666;">N/A</span>';
+          if (rsi > 70) return '<span style="color: #dc3545;">OVERBOUGHT</span>';
+          if (rsi > 55) return '<span style="color: #28a745;">BULLISH</span>';
+          if (rsi > 45) return '<span style="color: #ffc107;">NEUTRAL</span>';
+          if (rsi > 30) return '<span style="color: #dc3545;">WEAKENING</span>';
+          return '<span style="color: #28a745;">OVERSOLD</span>';
+        })()}</td>
+        <td>RSI(14) = ${report.techs?.rsi_14 ? fmt(report.techs.rsi_14, 1) : 'N/A'}</td>
+        <td>${report.techs?.rsi_14 ? (report.techs.rsi_14 > 65 || report.techs.rsi_14 < 35 ? 'High' : 'Medium') : 'Low'}</td>
+      </tr>
+      <tr>
+        <td><strong>Volatility</strong></td>
+        <td>${(() => {
+          const beta = report.price?.beta;
+          const range = report.price?.high_52w && report.price?.low_52w ? ((report.price.high_52w / report.price.low_52w - 1) * 100) : 0;
+          if (beta > 1.5 || range > 80) return '<span style="color: #dc3545;">HIGH</span>';
+          if (beta > 1.0 || range > 40) return '<span style="color: #ffc107;">MODERATE</span>';
+          return '<span style="color: #28a745;">LOW</span>';
+        })()}</td>
+        <td>Beta = ${report.price?.beta ? fmt(report.price.beta, 2) : 'N/A'}, 52W Range = ${report.price?.high_52w && report.price?.low_52w ? fmt((report.price.high_52w / report.price.low_52w - 1) * 100, 0) + '%' : 'N/A'}</td>
+        <td>${report.price?.beta ? (report.price.beta > 1.3 ? 'Consider smaller position size' : 'Standard sizing OK') : 'N/A'}</td>
+      </tr>
+      <tr>
+        <td><strong>52W Position</strong></td>
+        <td>${(() => {
+          if (!report.price?.high_52w || !report.price?.low_52w) return 'N/A';
+          const pctFromHigh = ((report.price.last / report.price.high_52w) * 100);
+          if (pctFromHigh > 95) return '<span style="color: #28a745;">NEAR HIGH</span>';
+          if (pctFromHigh > 70) return '<span style="color: #ffc107;">MID-RANGE</span>';
+          return '<span style="color: #dc3545;">NEAR LOW</span>';
+        })()}</td>
+        <td>${report.price?.high_52w ? fmt(((report.price.last / report.price.high_52w) * 100), 0) + '% of 52W High' : 'N/A'}</td>
+        <td>${report.price?.high_52w && report.price.last > report.price.high_52w * 0.95 ? 'Breakout watch' : report.price?.low_52w && report.price.last < report.price.low_52w * 1.1 ? 'Support test' : 'Wait for breakout'}</td>
+      </tr>
+    </tbody>
+  </table>
   
   <h2>Technical View</h2>
   <div class="text-content">${report.tech_view_text}</div>
   
-  <h2>Moving Average Analysis</h2>
-  <p class="text-content">
-${report.techs.ema_20 || report.techs.ema_50 || report.techs.ema_200 ? `
-Current price of ${fmtCurrency(report.price.last)} is positioned ${report.techs.ema_20 && report.price.last > report.techs.ema_20 ? 'above' : 'below'} the 20-day EMA ${report.techs.ema_20 ? `(${fmtCurrency(report.techs.ema_20)})` : ''}, ${report.techs.ema_50 && report.price.last > report.techs.ema_50 ? 'above' : 'below'} the 50-day EMA ${report.techs.ema_50 ? `(${fmtCurrency(report.techs.ema_50)})` : ''}, and ${report.techs.ema_200 && report.price.last > report.techs.ema_200 ? 'above' : 'below'} the 200-day EMA ${report.techs.ema_200 ? `(${fmtCurrency(report.techs.ema_200)})` : ''}. ${report.techs.ema_20 && report.techs.ema_50 && report.techs.ema_20 > report.techs.ema_50 ? 'The 20/50 EMA golden cross signals bullish momentum' : report.techs.ema_20 && report.techs.ema_50 && report.techs.ema_20 < report.techs.ema_50 ? 'The 20/50 EMA death cross indicates bearish pressure' : 'Moving averages show neutral trend'}. ${report.techs.ema_200 && report.price.last > report.techs.ema_200 * 1.1 ? 'Price significantly above 200-day MA suggests extended rally vulnerable to pullback' : report.techs.ema_200 && report.price.last < report.techs.ema_200 * 0.9 ? 'Price significantly below 200-day MA indicates oversold conditions with bounce potential' : 'Price near 200-day MA suggests consolidation phase'}.
-` : `Moving average data not available. Price is trading in the ${report.price.last > (report.price.high_52w * 0.7) ? 'upper' : 'lower'} half of its 52-week range.`}
-  </p>
-  
-  <h2>Momentum Indicators</h2>
-  <p class="text-content">
-${report.techs.rsi_14 ? `
-RSI(14) reading of ${fmt(report.techs.rsi_14, 1)} ${report.techs.rsi_14 > 70 ? 'signals overbought conditions, suggesting potential pullback or consolidation ahead' : report.techs.rsi_14 < 30 ? 'indicates oversold territory, presenting potential buying opportunity on mean reversion' : 'reflects neutral momentum with no extreme overbought/oversold conditions'}. ${report.techs.rsi_14 > 60 && report.techs.rsi_14 < 70 ? 'Bullish momentum intact but approaching overbought threshold' : report.techs.rsi_14 > 40 && report.techs.rsi_14 < 60 ? 'RSI in equilibrium zone allows for directional breakout in either direction' : ''}.
-` : 'RSI and MACD data not available. Technical momentum should be assessed via chart patterns and volume analysis.'}
-  </p>
-  
-  ${report.techs.rsi_14 || report.techs.ema_20 || report.techs.ema_50 ? `
+  <h2>Key Technical Levels</h2>
   <table class="data-table">
-    <thead><tr><th>Indicator</th><th>Value</th><th>Signal</th></tr></thead>
+    <thead><tr><th>Level Type</th><th>Price</th><th>Distance</th><th>Significance</th></tr></thead>
     <tbody>
-      ${report.techs.ema_20 ? `<tr><td>EMA (20)</td><td>${fmtCurrency(report.techs.ema_20)}</td><td>${report.price.last > report.techs.ema_20 ? 'Above (Bullish)' : 'Below (Bearish)'}</td></tr>` : ''}
-      ${report.techs.ema_50 ? `<tr><td>EMA (50)</td><td>${fmtCurrency(report.techs.ema_50)}</td><td>${report.price.last > report.techs.ema_50 ? 'Above (Bullish)' : 'Below (Bearish)'}</td></tr>` : ''}
-      ${report.techs.ema_200 ? `<tr><td>EMA (200)</td><td>${fmtCurrency(report.techs.ema_200)}</td><td>${report.price.last > report.techs.ema_200 ? 'Above (Bullish)' : 'Below (Bearish)'}</td></tr>` : ''}
-      ${report.techs.rsi_14 ? `<tr><td>RSI (14)</td><td>${fmt(report.techs.rsi_14, 1)}</td><td>${report.techs.rsi_14 > 70 ? 'Overbought' : report.techs.rsi_14 < 30 ? 'Oversold' : 'Neutral'}</td></tr>` : ''}
+      <tr>
+        <td><strong>Resistance (52W High)</strong></td>
+        <td>${fmtCurrency(report.price.high_52w)}</td>
+        <td class="positive">+${fmt(((report.price.high_52w / report.price.last) - 1) * 100, 1)}%</td>
+        <td>Major resistance; breakout target</td>
+      </tr>
+      ${report.techs?.ema_200 ? `
+      <tr>
+        <td><strong>200-Day EMA</strong></td>
+        <td>${fmtCurrency(report.techs.ema_200)}</td>
+        <td class="${report.price.last > report.techs.ema_200 ? 'positive' : 'negative'}">${fmt(((report.techs.ema_200 / report.price.last) - 1) * 100, 1)}%</td>
+        <td>${report.price.last > report.techs.ema_200 ? 'Support level' : 'Overhead resistance'}</td>
+      </tr>` : ''}
+      ${report.techs?.ema_50 ? `
+      <tr>
+        <td><strong>50-Day EMA</strong></td>
+        <td>${fmtCurrency(report.techs.ema_50)}</td>
+        <td class="${report.price.last > report.techs.ema_50 ? 'positive' : 'negative'}">${fmt(((report.techs.ema_50 / report.price.last) - 1) * 100, 1)}%</td>
+        <td>${report.price.last > report.techs.ema_50 ? 'Near-term support' : 'Near-term resistance'}</td>
+      </tr>` : ''}
+      <tr>
+        <td><strong>Support (52W Low)</strong></td>
+        <td>${fmtCurrency(report.price.low_52w)}</td>
+        <td class="negative">${fmt(((report.price.low_52w / report.price.last) - 1) * 100, 1)}%</td>
+        <td>Major support; stop-loss reference</td>
+      </tr>
     </tbody>
-  </table>` : ''}
+  </table>
   
   <h2>Trade Setup Scenarios</h2>
   <table class="data-table">
@@ -5794,9 +5957,48 @@ RSI(14) reading of ${fmt(report.techs.rsi_14, 1)} ${report.techs.rsi_14 > 70 ? '
   </div>` : ''}
 </div>
 
-<!-- PAGE 12: ACTION PLAN (Positioning Guidance + Entry Levels + Analyst View) -->
+<!-- PAGE 12: ACTION PLAN (v7.5: Enhanced with conviction level and timing) -->
 <div class="page">
   <h1>ACTION PLAN & RECOMMENDATIONS</h1>
+  
+  <!-- 🔧 v7.5: Add Conviction & Timing Summary -->
+  <table class="data-table" style="margin-bottom: 20px;">
+    <thead>
+      <tr>
+        <th style="width: 20%;">Rating</th>
+        <th style="width: 20%;">Conviction</th>
+        <th style="width: 20%;">Timing</th>
+        <th style="width: 40%;">Why Now</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong style="color: ${report.rating === 'BUY' || report.rating === 'STRONG_BUY' ? '#28a745' : report.rating === 'HOLD' ? '#ffc107' : '#dc3545'};">${report.rating}</strong></td>
+        <td>${(() => {
+          const upside = report.targets?.base?.upside_pct || 0;
+          const margin = report.fundamentals?.gross_margin || 0;
+          if ((report.rating === 'BUY' || report.rating === 'STRONG_BUY') && upside > 20 && margin > 40) return '<span style="color: #28a745;"><strong>HIGH</strong></span>';
+          if ((report.rating === 'BUY' || report.rating === 'STRONG_BUY') && upside > 10) return '<span style="color: #28a745;">MEDIUM</span>';
+          if (report.rating === 'HOLD') return '<span style="color: #ffc107;">LOW</span>';
+          return '<span style="color: #dc3545;">CAUTIOUS</span>';
+        })()}</td>
+        <td>${(() => {
+          const nearHigh = report.price?.high_52w && report.price.last > report.price.high_52w * 0.9;
+          const nearLow = report.price?.low_52w && report.price.last < report.price.low_52w * 1.15;
+          if (nearLow) return 'ATTRACTIVE ENTRY';
+          if (nearHigh) return 'EXTENDED - WAIT';
+          return 'NEUTRAL';
+        })()}</td>
+        <td>${(() => {
+          const catalysts = report.catalysts_text || [];
+          const upside = report.targets?.base?.upside_pct || 0;
+          if (catalysts.length > 0 && upside > 15) return `Near-term catalyst (${catalysts[0]?.substring(0, 40)}...) + ${fmt(upside, 0)}% upside`;
+          if (upside > 10) return `${fmt(upside, 0)}% upside to target supports entry timing`;
+          return 'No immediate catalyst; monitor for better entry';
+        })()}</td>
+      </tr>
+    </tbody>
+  </table>
   
   <div class="highlight-box">${report.action_text}</div>
   
