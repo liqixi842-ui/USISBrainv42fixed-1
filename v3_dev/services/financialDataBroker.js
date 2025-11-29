@@ -366,45 +366,71 @@ class FinancialDataBroker {
   }
 
   async _getHistoryFinnhub(symbol) {
-    const res = await fetch(
-      `https://finnhub.io/api/v1/stock/financials?symbol=${symbol}&statement=ic&freq=annual&token=${this.FINNHUB_API_KEY}`,
-      { timeout: 10000 }
-    );
+    try {
+      const res = await fetch(
+        `https://finnhub.io/api/v1/stock/financials-reported?symbol=${symbol}&token=${this.FINNHUB_API_KEY}`,
+        { timeout: 10000 }
+      );
 
-    if (!res.ok) return { revenue_5y: [], eps_5y: [] };
-
-    const data = await res.json();
-    const financials = data.financials || [];
-
-    const revenue_5y = [];
-    const eps_5y = [];
-
-    // Get last 5 years (reverse to oldest → newest)
-    const last5 = financials.slice(0, 5).reverse();
-
-    for (const period of last5) {
-      const year = period.year || period.period;
-      const revenue = period.revenue || null;
-      const eps = period.eps || period.epsBasic || null;
-
-      if (year && revenue) {
-        revenue_5y.push({ year, value: revenue });
+      if (!res.ok) {
+        console.log(`[FinancialDataBroker] Finnhub API error: ${res.status}`);
+        return { revenue_5y: [], eps_5y: [] };
       }
-      if (year && eps) {
-        eps_5y.push({ year, value: eps });
+
+      const data = await res.json();
+      
+      if (!data.data || !Array.isArray(data.data)) {
+        console.log(`[FinancialDataBroker] Finnhub: No reported financials data`);
+        return { revenue_5y: [], eps_5y: [] };
       }
-    }
 
-    // Get TTM from most recent period
-    if (financials.length > 0) {
-      const latest = financials[0];
-      this._cachedFinancials = {
-        revenue_ttm: latest.revenue || null,
-        eps_ttm: latest.eps || latest.epsBasic || null
-      };
-    }
+      const revenue_5y = [];
+      const eps_5y = [];
 
-    return { revenue_5y, eps_5y };
+      const annualReports = data.data
+        .filter(r => r.form === '10-K' || r.form === '20-F')
+        .slice(0, 5);
+
+      for (const report of annualReports) {
+        const year = report.year || (report.endDate ? parseInt(report.endDate.split('-')[0]) : null);
+        
+        let revenue = null;
+        let eps = null;
+        
+        if (report.report && report.report.ic) {
+          const incomeStatement = Array.isArray(report.report.ic) ? report.report.ic : [];
+          
+          for (const item of incomeStatement) {
+            if (item.concept === 'us-gaap_Revenues' || 
+                item.concept === 'us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax' ||
+                item.concept === 'us-gaap_SalesRevenueNet') {
+              revenue = item.value;
+            }
+            if (item.concept === 'us-gaap_EarningsPerShareDiluted' || 
+                item.concept === 'us-gaap_EarningsPerShareBasic') {
+              eps = item.value;
+            }
+          }
+        }
+
+        if (year && revenue) {
+          revenue_5y.push({ year: parseInt(year), value: revenue });
+        }
+        if (year && eps) {
+          eps_5y.push({ year: parseInt(year), value: eps });
+        }
+      }
+
+      revenue_5y.sort((a, b) => a.year - b.year);
+      eps_5y.sort((a, b) => a.year - b.year);
+
+      console.log(`[FinancialDataBroker] Finnhub parsed: ${revenue_5y.length} revenue, ${eps_5y.length} EPS points`);
+      return { revenue_5y, eps_5y };
+      
+    } catch (error) {
+      console.log(`[FinancialDataBroker] Finnhub history error: ${error.message}`);
+      return { revenue_5y: [], eps_5y: [] };
+    }
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -451,7 +477,7 @@ class FinancialDataBroker {
     
     try {
       const res = await fetch(
-        `https://api.twelvedata.com/income_statement?symbol=${symbol}&apikey=${this.TWELVE_DATA_API_KEY}`,
+        `https://api.twelvedata.com/income_statement?symbol=${symbol}&period=annual&apikey=${this.TWELVE_DATA_API_KEY}`,
         { timeout: 10000 }
       );
 
@@ -462,7 +488,9 @@ class FinancialDataBroker {
 
       const data = await res.json();
       
-      if (data.status === 'error' || !data.income_statement) {
+      const statements = data.income_statement || data.income || [];
+      
+      if (data.status === 'error' || statements.length === 0) {
         console.log(`[FinancialDataBroker] Twelve Data: ${data.message || 'No income statement data'}`);
         return { revenue_5y: [], eps_5y: [] };
       }
@@ -470,13 +498,12 @@ class FinancialDataBroker {
       const revenue_5y = [];
       const eps_5y = [];
 
-      // Get last 5 years from annual income statements (already sorted newest to oldest)
-      const annualReports = data.income_statement.slice(0, 5).reverse(); // Reverse to oldest → newest
+      const annualReports = statements.slice(0, 5).reverse();
 
       for (const report of annualReports) {
         const year = report.fiscal_date ? parseInt(report.fiscal_date.split('-')[0]) : report.year;
-        const revenue = parseFloat(report.sales) || null; // Twelve Data uses "sales" not "revenue"
-        const eps = parseFloat(report.eps_diluted) || parseFloat(report.eps_basic) || null;
+        const revenue = parseFloat(report.sales) || parseFloat(report.revenue) || parseFloat(report.total_revenue) || null;
+        const eps = parseFloat(report.eps_diluted) || parseFloat(report.eps_basic) || parseFloat(report.eps) || null;
 
         if (year && revenue) {
           revenue_5y.push({ year, value: revenue });
