@@ -46,6 +46,7 @@ const {
   formatLargeNumber
 } = require('./pdfTemplateUtils');
 const { getPremiumContent } = require('./premiumContentBridge'); // Phase 7: Premium 桥接
+const { renderV6InstitutionalPdf, buildV6ReportData } = require('./v6Renderer'); // V6 20-page renderer
 const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs');
@@ -245,7 +246,7 @@ async function generateEnhancedPdf(symbol, language = 'en', options = {}) {
 }
 
 /**
- * 渲染增强版 PDF（使用 PDFKit + Phase 6 增强）
+ * 渲染增强版 PDF（使用 PDFKit + V6 20页机构级布局）
  * @param {string} symbol - 股票代码
  * @param {string} language - 语言
  * @param {Object} assets - 生成的资源（图表、共识）
@@ -253,338 +254,68 @@ async function generateEnhancedPdf(symbol, language = 'en', options = {}) {
  * @returns {Promise<Buffer>} PDF Buffer
  */
 async function renderEnhancedPdf(symbol, language, assets, options) {
-  // 🆕 v7.2: 提取自定义参数
   const firmName = options.firm || options.firmName || null;
   const analystName = options.analyst || options.analystName || null;
   const displayFirmName = firmName || 'USIS Research';
   
   return new Promise(async (resolve, reject) => {
     try {
-      // Step 1: 生成文本报告
-      let report;
+      console.log(`\n📄 [Phase6Enhancer] Using V6 Institutional 20-page layout...`);
+      
+      let premiumContent;
       
       if (options.usePremium) {
-        // Phase 7: 使用 Premium 机构级内容
         console.log(`   ├─ Fetching Premium content (v3_dev Engine)...`);
-        const premiumContent = await getPremiumContent(symbol, language, options);
-        
-        // 转换 Premium 内容为标准报告格式
-        report = {
-          symbol: premiumContent.symbol,
-          name: premiumContent.name,
-          rating: premiumContent.rating,
-          targetPrice: premiumContent.targetPrice,
-          target_price: premiumContent.targetPrice, // 兼容两种命名
-          analyst: premiumContent.analyst,
-          date: premiumContent.date,
-          sections: [
-            { title: 'I. Executive Summary', content: premiumContent.summary },
-            { title: 'II. Investment Thesis', content: premiumContent.thesis },
-            { title: 'III. Valuation Analysis', content: premiumContent.valuation },  // 文本字段
-            { title: 'IV. Industry & Competitive Landscape', content: premiumContent.industry },
-            { title: 'V. Catalysts & Opportunities', content: formatCatalysts(premiumContent.catalysts) },
-            { title: 'VI. Risks & Conclusions', content: formatRisks(premiumContent.risks) + '\n\n' + premiumContent.conclusions }
-          ],
-          
-          // 🆕 v7.2: 保留 V6 组件需要的关键数据
-          // 注意：使用 valuationData（对象）而不是 valuation（文本字段）
-          price: premiumContent.price || premiumContent.priceData,
-          valuation: premiumContent.valuationData || premiumContent.valuation_metrics,  // 估值指标对象
-          fundamentals: premiumContent.fundamentals,
-          catalysts: premiumContent.catalysts,
-          risks: premiumContent.risks,
-          summary_text: premiumContent.summary,
-          investment_thesis: premiumContent.thesis,
-          
-          meta: premiumContent.meta
-        };
-        console.log(`   ├─ ✅ Premium report ready (${report.sections.length} sections, v3_dev)`);
+        premiumContent = await getPremiumContent(symbol, language, options);
+        console.log(`   ├─ ✅ Premium content ready`);
       } else {
-        // 标准模式：使用基础文本报告服务
         console.log(`   ├─ Generating text report...`);
-        report = await generateFullTextReport(symbol, language, options);
-        console.log(`   ├─ ✅ Text report ready (${report.sections.length} sections)`);
+        const report = await generateFullTextReport(symbol, language, options);
+        premiumContent = {
+          symbol: report.symbol,
+          name: report.name,
+          rating: report.rating,
+          targetPrice: report.targetPrice,
+          summary: report.summary_text || report.sections?.find(s => s.title.includes('Summary'))?.content,
+          thesis: report.investment_thesis || report.sections?.find(s => s.title.includes('Thesis'))?.content,
+          valuation: report.valuation_text || report.sections?.find(s => s.title.includes('Valuation'))?.content,
+          industry: report.industry_text || report.sections?.find(s => s.title.includes('Industry'))?.content,
+          catalysts: report.catalysts || [],
+          risks: report.risks || [],
+          price: report.price,
+          valuationData: report.valuation,
+          fundamentals: report.fundamentals,
+          growth: report.growth,
+          segments: report.segments,
+          peers: report.peers,
+          targets: report.targets,
+          meta: report.meta || { brand: displayFirmName, firm: displayFirmName, analyst: analystName || 'USIS Brain' }
+        };
+        console.log(`   ├─ ✅ Text report converted`);
       }
       
-      // Step 2: 创建 PDF 文档
       const doc = new PDFDocument({
         size: 'A4',
         margins: { top: 50, bottom: 50, left: 60, right: 60 },
         info: {
-          Title: `${symbol} · Enhanced Equity Research Report`,
-          Author: 'USIS Brain v7.0 Multi-AI Research System (Phase 6)',
+          Title: `${symbol} · V6 Institutional Equity Research Report`,
+          Author: 'USIS Brain v7.0 Multi-AI Research System',
           Subject: `Institutional research report for ${symbol}`,
-          Keywords: 'research, equity, analysis, institutional, enhanced',
+          Keywords: 'research, equity, analysis, institutional, V6',
           CreationDate: new Date()
         }
       });
       
-      // Buffer 收集器
       const chunks = [];
       doc.on('data', chunk => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
       
-      // 使用内置字体（最安全的选择）
-      // 注意：自定义 CJK 字体可选，当前使用 Helvetica 避免缺失字体导致崩溃
-      const hasFonts = false; // 禁用自定义字体以确保稳定性
-      
-      // Step 3: 渲染专业封面（支持自定义机构名/分析师名）
-      console.log(`   ├─ Rendering professional cover...`);
-      renderProfessionalCover(doc, report, {
-        backgroundColor: '#1a2332',
-        accentColor: '#3b82f6',
-        textColor: '#ffffff',
-        firmName: firmName,
-        analystName: analystName
+      renderV6InstitutionalPdf(doc, premiumContent, assets, {
+        firmName: displayFirmName,
+        analystName: analystName || premiumContent.meta?.analyst || 'USIS Brain'
       });
       
-      // 🆕 v7.2: 使用集中化页码控制器
-      const pages = createPageController(doc, { firmName: displayFirmName, initialPage: 1 });
-      
-      // Step 4: 渲染目录
-      console.log(`   ├─ Rendering table of contents...`);
-      pages.increment(); // 目录页 = 第2页
-      pages.syncHeader(); // 渲染目录页眉
-      
-      const sections = extractSections(report);
-      const tocResult = renderTableOfContents(doc, sections, { firmName: displayFirmName, pageNumber: pages.current });
-      
-      // 同步页码（处理 TOC 溢出的情况）
-      if (tocResult && tocResult.finalPageNumber) {
-        pages.set(tocResult.finalPageNumber);
-      }
-      
-      // ═══════════════════════════════════════════════════════════════
-      // 🆕 v7.2: 插入 V6 风格的机构级摘要页（Key Takeaways + Key Metrics）
-      // ═══════════════════════════════════════════════════════════════
-      pages.advance(); // 创建新页面 + 渲染页眉
-      
-      // 🔍 调试：显示报告数据状态
-      console.log(`   ├─ 📊 V6 Data Debug:`);
-      console.log(`   │   ├─ report.meta exists: ${!!report.meta}`);
-      console.log(`   │   ├─ meta.keyMessages: ${report.meta?.keyMessages?.length || 0} items`);
-      console.log(`   │   ├─ meta.keyRisks: ${report.meta?.keyRisks?.length || 0} items`);
-      console.log(`   │   ├─ meta.metrics: ${JSON.stringify(report.meta?.metrics || {}).substring(0, 100)}`);
-      console.log(`   │   ├─ report.price: ${JSON.stringify(report.price || {}).substring(0, 80)}`);
-      console.log(`   │   ├─ report.valuation: ${JSON.stringify(report.valuation || {}).substring(0, 80)}`);
-      console.log(`   │   └─ report.fundamentals: ${JSON.stringify(report.fundamentals || {}).substring(0, 80)}`);
-      
-      // 提取 Key Messages 和 Key Risks（带增强的默认值保护）
-      const keyMessages = extractKeyMessages(report);
-      const keyRisks = extractKeyRisks(report);
-      
-      console.log(`   │   ├─ Extracted keyMessages: ${keyMessages.length} items`);
-      console.log(`   │   └─ Extracted keyRisks: ${keyRisks.length} items`);
-      
-      // 渲染 Key Takeaways（两列布局）
-      let summaryY = renderKeyTakeawaysSection(doc, {
-        messages: keyMessages,
-        risks: keyRisks
-      }, { startY: 60 });
-      
-      // 提取并渲染 Key Metrics
-      const metricsData = extractMetrics(report);
-      console.log(`   │   └─ Extracted metrics: ${JSON.stringify(metricsData).substring(0, 150)}`);
-      summaryY = renderKeyMetricsRow(doc, metricsData, { startY: summaryY + 20 });
-      
-      // 🆕 v7.2: 仅在有真实数据时渲染 Our View vs Consensus
-      // 需要同时满足：1) 有评级或目标价 2) 至少有一个关键指标有值
-      const ourRating = report?.rating;
-      const ourTarget = report?.target_price || report?.targetPrice || report?.meta?.targetPrice;
-      const ourRoe = metricsData?.roe;
-      const ourEpsGrowth = metricsData?.eps_growth;
-      
-      // 检查是否有任何实质性的 "Our View" 数据
-      const hasOurViewData = ourRating || ourTarget || ourRoe !== null || ourEpsGrowth !== null;
-      
-      if (hasOurViewData) {
-        const consensusData = {
-          ourView: {
-            rating: ourRating || null,
-            targetPrice: ourTarget || null,
-            roe: ourRoe,
-            epsGrowth: ourEpsGrowth
-          },
-          consensus: { rating: 'N/A', targetPrice: 'N/A', roe: 'N/A', epsGrowth: 'N/A' }
-        };
-        renderConsensusTable(doc, consensusData, { startY: summaryY + 10 });
-      }
-      
-      console.log(`   ├─ ✅ Page 3: Key Takeaways + Metrics rendered (V6 style)`);
-      
-      // ═══════════════════════════════════════════════════════════════
-      // 🆕 V6 完整20页机构级布局
-      // ═══════════════════════════════════════════════════════════════
-      
-      // Page 4: Technical Analysis - K线图表（V6固定页面，始终创建）
-      pages.advance();
-      console.log(`   ├─ Page 4: Technical Analysis - Daily Chart`);
-      doc.fontSize(18).fillColor('#1a2332').font('Helvetica-Bold')
-         .text('Technical Analysis - Daily Chart', 50, 60);
-      if (assets.klineChart) {
-        try {
-          doc.moveDown(1);
-          doc.image(assets.klineChart, {
-            fit: [doc.page.width - 120, 350],
-            align: 'center'
-          });
-        } catch (error) {
-          console.warn(`   ├─ ⚠️  K-line chart failed: ${error.message}`);
-          renderChartFrame(doc, { startY: 90, title: 'Price Chart', placeholder: 'Technical chart currently unavailable', height: 300 });
-        }
-      } else {
-        renderChartFrame(doc, { startY: 90, title: 'Price Chart', placeholder: 'Technical chart generation pending', height: 300 });
-      }
-      
-      // Page 5: Financial Trends - 财务图表
-      pages.advance();
-      console.log(`   ├─ Page 5: Financial Trends`);
-      doc.fontSize(18).fillColor('#1a2332').font('Helvetica-Bold')
-         .text('Financial Trends', 50, 60);
-      
-      if (assets.financialCharts?.revenue) {
-        try {
-          doc.image(assets.financialCharts.revenue, 50, 100, { width: doc.page.width - 100, height: 200 });
-        } catch (e) {
-          renderChartFrame(doc, { startY: 100, title: 'Revenue Trend', placeholder: 'Revenue chart unavailable', height: 200 });
-        }
-      } else {
-        renderChartFrame(doc, { startY: 100, title: 'Revenue Trend', placeholder: 'Revenue chart unavailable', height: 200 });
-      }
-      
-      if (assets.financialCharts?.eps) {
-        try {
-          doc.image(assets.financialCharts.eps, 50, 330, { width: doc.page.width - 100, height: 200 });
-        } catch (e) {
-          renderChartFrame(doc, { startY: 330, title: 'EPS Trend', placeholder: 'EPS chart unavailable', height: 200 });
-        }
-      } else {
-        renderChartFrame(doc, { startY: 330, title: 'EPS Trend', placeholder: 'EPS chart unavailable', height: 200 });
-      }
-      
-      // Page 6: Executive Summary
-      pages.advance();
-      console.log(`   ├─ Page 6: Executive Summary`);
-      renderSectionWithText(doc, 'I. Executive Summary', report.summary_text || findSectionContent(report, 'summary'));
-      
-      // Page 7: Investment Thesis
-      pages.advance();
-      console.log(`   ├─ Page 7: Investment Thesis`);
-      renderSectionWithText(doc, 'II. Investment Thesis', report.investment_thesis || report.thesis_text || findSectionContent(report, 'thesis'));
-      
-      // Page 8: Valuation Analysis
-      pages.advance();
-      console.log(`   ├─ Page 8: Valuation Analysis`);
-      renderSectionWithText(doc, 'III. Valuation Analysis', report.valuation_text || findSectionContent(report, 'valuation'));
-      
-      // Page 9: Valuation Snapshot Table
-      pages.advance();
-      console.log(`   ├─ Page 9: Valuation Snapshot`);
-      renderValuationSnapshot(doc, { startY: 60, valuation: report.valuation || {}, price: report.price || {} });
-      renderScenarioTargets(doc, { startY: 280, targets: report.targets || {}, price: report.price || {} });
-      
-      // Page 10: Segment Overview
-      pages.advance();
-      console.log(`   ├─ Page 10: Company & Segment Overview`);
-      doc.fontSize(18).fillColor('#1a2332').font('Helvetica-Bold').text('Company & Segment Overview', 50, 60);
-      let segY = 90;
-      const companyOverview = report.company_overview || findSectionContent(report, 'company') || 'Company overview analysis in progress.';
-      doc.fontSize(10).fillColor('#374151').font('Helvetica').text(companyOverview.substring(0, 600), 50, segY, { width: doc.page.width - 100 });
-      segY = renderSegmentTable(doc, { startY: 280, segments: report.segments || [] });
-      
-      // Page 11: Industry & Macro Environment
-      pages.advance();
-      console.log(`   ├─ Page 11: Industry & Macro Environment`);
-      const industryText = report.industry_text || findSectionContent(report, 'industry') || '';
-      const macroText = report.macro_text || findSectionContent(report, 'macro') || '';
-      const industryItems = splitTextToItems(industryText, 4);
-      const macroItems = splitTextToItems(macroText, 4);
-      renderTwoColumnSection(doc, {
-        startY: 60,
-        sectionTitle: 'Industry & Macro Environment',
-        leftTitle: 'Industry Trends',
-        rightTitle: 'Macro Factors',
-        leftItems: industryItems,
-        rightItems: macroItems
-      });
-      
-      // Page 12: Peer Comparison
-      pages.advance();
-      console.log(`   ├─ Page 12: Peer Comparison`);
-      renderPeerComparison(doc, { startY: 60, peers: report.peers || generateDefaultPeers(report.symbol), symbol: report.symbol });
-      let peerY = 260;
-      doc.fontSize(12).fillColor('#1a2332').font('Helvetica-Bold').text('Comparative Analysis', 50, peerY);
-      doc.fontSize(10).fillColor('#374151').font('Helvetica');
-      const peerComment = report.peer_analysis || 'The company trades at a premium/discount relative to peers based on growth and profitability metrics.';
-      doc.text(peerComment.substring(0, 500), 50, peerY + 20, { width: doc.page.width - 100 });
-      
-      // Page 13: Financial Overview
-      pages.advance();
-      console.log(`   ├─ Page 13: Financial Overview`);
-      renderFinancialsOverview(doc, { startY: 60, fundamentals: report.fundamentals || {}, growth: report.growth || {} });
-      
-      // Page 14: Key Catalysts
-      pages.advance();
-      console.log(`   ├─ Page 14: Key Catalysts`);
-      const catalystItems = extractCatalystItems(report);
-      renderBulletList(doc, { startY: 60, title: 'Key Catalysts', items: catalystItems, maxItems: 8, itemPrefix: 'Catalyst' });
-      
-      // Page 15: Key Risks
-      pages.advance();
-      console.log(`   ├─ Page 15: Key Risks`);
-      const riskItems = extractRiskItems(report);
-      renderBulletList(doc, { startY: 60, title: 'Key Risks', items: riskItems, maxItems: 8, itemPrefix: 'Risk' });
-      
-      // Page 16: Technical Analysis
-      pages.advance();
-      console.log(`   ├─ Page 16: Technical Analysis`);
-      doc.fontSize(18).fillColor('#1a2332').font('Helvetica-Bold').text('Technical Analysis', 50, 60);
-      renderTechnicalIndicators(doc, { startY: 95, indicators: report.tech_indicators_table || [] });
-      doc.fontSize(12).fillColor('#1a2332').font('Helvetica-Bold').text('Technical Commentary', 50, 300);
-      const techCommentary = report.tech_commentary || report.tech_view_text || 'Technical indicators suggest monitoring key support and resistance levels for entry/exit timing.';
-      doc.fontSize(10).fillColor('#374151').font('Helvetica').text(techCommentary.substring(0, 800), 50, 320, { width: doc.page.width - 100 });
-      
-      // Page 17: Investment Strategy
-      pages.advance();
-      console.log(`   ├─ Page 17: Investment Strategy`);
-      renderInvestmentStrategy(doc, { startY: 60, price: report.price || {}, targets: report.targets || {} });
-      doc.fontSize(12).fillColor('#1a2332').font('Helvetica-Bold').text('Action Recommendations', 50, 300);
-      const actionText = report.action_text || 'Position sizing should reflect individual risk tolerance and portfolio construction goals.';
-      doc.fontSize(10).fillColor('#374151').font('Helvetica').text(actionText.substring(0, 600), 50, 320, { width: doc.page.width - 100 });
-      
-      // Page 18: Multi-Model Consensus（V6固定页面，始终创建）
-      pages.advance();
-      console.log(`   ├─ Page 18: Multi-Model Consensus`);
-      doc.fontSize(18).fillColor('#1a2332').font('Helvetica-Bold').text('Multi-Model AI Consensus', 50, 60);
-      if (assets.consensus && assets.consensus.consensus) {
-        const cleanConsensusText = assets.consensus.consensus
-          .replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1').replace(/^#+\s+/gm, '').trim();
-        doc.fontSize(10).fillColor('#374151').font('Helvetica').text(cleanConsensusText.substring(0, 2000), 50, 90, { width: doc.page.width - 100 });
-      } else {
-        doc.fontSize(10).fillColor('#374151').font('Helvetica');
-        doc.text('This section presents the synthesized analysis from multiple AI models, combining insights from:', 50, 90, { width: doc.page.width - 100 });
-        doc.moveDown(0.5);
-        const defaultModels = ['GPT-4o (OpenAI)', 'Claude 3.5 Sonnet (Anthropic)', 'DeepSeek V3', 'Gemini 2.5 Flash'];
-        defaultModels.forEach((model, i) => {
-          doc.text(`• ${model}`, 70, 130 + i * 20);
-        });
-        doc.text('Multi-model consensus analysis is generated when multiple AI providers are available and enabled.', 50, 250, { width: doc.page.width - 100 });
-      }
-      
-      // Page 19: Industry & Competitive Landscape (extended)
-      pages.advance();
-      console.log(`   ├─ Page 19: Industry & Competitive Landscape`);
-      renderSectionWithText(doc, 'IV. Industry & Competitive Landscape', findSectionContent(report, 'industry') || findSectionContent(report, 'competitive') || 'Industry analysis in progress.');
-      
-      // Page 20: Disclosures & Legal
-      pages.advance();
-      console.log(`   ├─ Page 20: Important Disclosures`);
-      renderDisclosuresPage(doc, { startY: 60, firmName: displayFirmName });
-      renderPageFooter(doc, { pageNumber: pages.current, brand: displayFirmName });
-      
-      // 完成 PDF
-      console.log(`   └─ ✅ V6 Institutional PDF Complete (${pages.current} pages)`);
       doc.end();
       
     } catch (error) {

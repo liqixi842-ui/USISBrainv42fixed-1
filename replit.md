@@ -2,11 +2,14 @@
 USIS Brain v7.1 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
 
 # Recent Changes (v7.2 - November 2025)
-- **V6+V7 PDF Merger Complete**: Full 20-page institutional layout merged with watermark-free PDFKit renderer
-- **Fixed 20-Page Structure**: Pages 4-20 now unconditionally created with placeholder content when data unavailable
-- **15+ PDFKit Layout Primitives**: renderGenericTable, renderTwoColumnSection, renderChartFrame, renderBulletList, renderValuationSnapshot, renderPeerComparison, renderFinancialsOverview, renderSegmentTable, renderInvestmentStrategy, renderScenarioTargets, renderTechnicalIndicators, renderPageFooter, renderDisclosuresPage
-- **V6 Page Layout**: Cover, TOC, Key Takeaways, Technical Chart, Financial Trends, Executive Summary, Investment Thesis, Valuation Analysis, Valuation Snapshot, Segment Overview, Industry/Macro, Peer Comparison, Financial Overview, Catalysts, Risks, Technical Analysis, Investment Strategy, Multi-Model Consensus, Industry Landscape, Disclosures
-- **Institutional PDF Headers**: Professional page headers displaying "{Firm Name} — Equity Research" on every page except cover
+- **V6 Renderer Refactor Complete**: New modular `services/v6Renderer.js` with 20 dedicated page renderers matching v3_dev structure
+- **buildV6ReportData Schema**: Complete V6 data normalization including kpi (16 metrics), consensus block, valuation_framework with drivers, glossary, rating_definitions, analyst_view
+- **Exact V6 20-Page Layout**: Cover → Key Takeaways+KPI → Investment Thesis → Segments → Industry/Macro → Valuation Snapshot → Valuation Framework → Peers → Financials → Financial Trends → Catalysts → Risks → Technical Analysis → Strategy → Detailed Metrics → Methodology → Disclosures → Glossary → Rating Definitions → Analyst View
+- **Page Controller Flow**: renderPage() helper ensures renderInstitutionalHeader and renderPageFooter on pages 2-20
+- **8-Card KPI Grid**: Page 2 renders 2x4 KPI cards (PE TTM/Fwd, P/S, P/B, EV/EBITDA, Div Yield, ROE, Beta) plus consensus quick stats
+- **Valuation Framework Waterfall**: Page 7 includes value drivers table with impact indicators
+- **Complete Appendices**: Pages 15-20 render detailed metrics, methodology, disclosures, glossary entries, rating definitions with color coding, and analyst certification
+- **Assets Wiring**: klineChart and financialCharts properly passed through renderV6InstitutionalPdf to page renderers
 - **Custom Firm/Analyst Names**: `研报PDF SYMBOL, FirmName, AnalystName, language` command supports custom branding
 - **Default Branding**: Falls back to "USIS Research" and "USIS Brain v7.0 Multi-AI System" when not specified
 
