@@ -2,7 +2,7 @@ modules = ["nodejs-20", "postgresql-16"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["glib", "nss", "nspr", "dbus", "atk", "at-spi2-atk", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libXxcb", "libxkbcommon", "alsa-lib", "mesa", "cups", "try", "mmh", "pm2"]
+packages = ["glib", "nss", "nspr", "dbus", "atk", "at-spi2-atk", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libXxcb", "libxkbcommon", "alsa-lib", "mesa", "cups", "try", "mmh", "pm2", "xorg.libxcb", "xorg.libXcursor", "xorg.libXi", "xorg.libXrender", "xorg.libXtst", "xorg.libxshmfence", "cairo", "expat", "gtk3", "libdrm", "pango", "chromium"]
 
 [deployment]
 deploymentTarget = "gce"

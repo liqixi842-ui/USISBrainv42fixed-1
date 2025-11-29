@@ -46,7 +46,8 @@ const {
   formatLargeNumber
 } = require('./pdfTemplateUtils');
 const { getPremiumContent } = require('./premiumContentBridge'); // Phase 7: Premium 桥接
-const { renderV6InstitutionalPdf, buildV6ReportData } = require('./v6Renderer'); // V6 20-page renderer
+const { renderV6InstitutionalPdf, buildV6ReportData } = require('./v6Renderer'); // V6 20-page renderer (legacy PDFKit)
+const { generateV6PdfWithPuppeteer } = require('./puppeteerPdfRenderer'); // V6 Puppeteer renderer
 const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs');
@@ -246,21 +247,52 @@ async function generateEnhancedPdf(symbol, language = 'en', options = {}) {
 }
 
 /**
- * 渲染增强版 PDF（使用 PDFKit + V6 20页机构级布局）
+ * 渲染增强版 PDF（使用 Puppeteer + v3_dev HTML 模板）
+ * V7.3: 改用 Puppeteer 渲染 v3_dev 的 20 页 HTML 模板（无水印）
  * @param {string} symbol - 股票代码
  * @param {string} language - 语言
- * @param {Object} assets - 生成的资源（图表、共识）
+ * @param {Object} assets - 生成的资源（图表、共识）- 暂时未使用，将来可扩展
  * @param {Object} options - 可选参数
  * @returns {Promise<Buffer>} PDF Buffer
  */
 async function renderEnhancedPdf(symbol, language, assets, options) {
+  const firmName = options.firm || options.firmName || 'USIS Research';
+  const analystName = options.analyst || options.analystName || 'USIS Brain v7.0 Multi-AI System';
+  
+  console.log(`\n📄 [Phase6Enhancer] Using V6 Puppeteer HTML-to-PDF renderer...`);
+  console.log(`   ├─ Firm: ${firmName}`);
+  console.log(`   ├─ Analyst: ${analystName}`);
+  console.log(`   └─ Template: v3_dev 20-page institutional HTML\n`);
+  
+  try {
+    const pdfBuffer = await generateV6PdfWithPuppeteer(symbol, language, {
+      firmName: firmName,
+      analystName: analystName,
+      assetType: 'equity'
+    });
+    
+    return pdfBuffer;
+    
+  } catch (error) {
+    console.error(`❌ [Phase6Enhancer] Puppeteer PDF failed: ${error.message}`);
+    console.warn(`⚠️  [Phase6Enhancer] Falling back to legacy PDFKit renderer...`);
+    
+    return renderEnhancedPdfLegacy(symbol, language, assets, options);
+  }
+}
+
+/**
+ * Legacy PDFKit 渲染器（备用方案）
+ * @deprecated 使用 renderEnhancedPdf (Puppeteer) 代替
+ */
+async function renderEnhancedPdfLegacy(symbol, language, assets, options) {
   const firmName = options.firm || options.firmName || null;
   const analystName = options.analyst || options.analystName || null;
   const displayFirmName = firmName || 'USIS Research';
   
   return new Promise(async (resolve, reject) => {
     try {
-      console.log(`\n📄 [Phase6Enhancer] Using V6 Institutional 20-page layout...`);
+      console.log(`\n📄 [Phase6Enhancer Legacy] Using PDFKit V6 layout...`);
       
       let premiumContent;
       
