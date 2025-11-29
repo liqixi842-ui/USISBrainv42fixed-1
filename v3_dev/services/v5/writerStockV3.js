@@ -53,26 +53,39 @@ Financial Data:
 - PE: ${report.valuation?.pe_ttm || 'N/A'}x
 - Margin: ${report.fundamentals?.profit_margin || 'N/A'}%
 
-Write a CONCISE 600-700 word institutional investment thesis:
+Write a CONCISE 400-500 word investment thesis in MORGAN STANLEY BULLET FORMAT:
 
-**SELL-SIDE STYLE REQUIREMENTS:**
-- Write like Morgan Stanley/Goldman Sachs research notes
-- Each paragraph: 3-5 sentences MAX (no long blocks of text)
-- Use short, punchy sentences with specific data
-- Include 2-3 analyst attributions (not more): "${analyst} notes...", "We believe..."
-- Every claim must cite a specific number from the data above
+**FORMAT REQUIREMENTS (CRITICAL):**
+- Start with a 2-3 sentence summary paragraph (rating + price target + key thesis)
+- Then use BULLET POINTS for all key arguments (not narrative paragraphs)
+- Each bullet: 1-2 sentences MAX with specific data
+- Total: 5-8 key bullets organized by theme
 
-**Structure (3 sections, each ~200 words):**
-1. **Investment Rationale** - Why buy/hold/sell NOW? Key thesis in 3-4 sentences, then 2-3 supporting points
-2. **Competitive Position** - Market share, moat, key differentiators (cite margins, growth vs peers)
-3. **Financial Framework** - Valuation support, earnings trajectory, capital allocation
+**Structure:**
+1. **Summary** (2-3 sentences): Rating, price target, core thesis
+2. **Investment Case** (3-4 bullets):
+   • Market position: Share %, competitive moat
+   • Growth drivers: Specific catalysts with timeline
+   • Margin trajectory: From X% to Y%
+3. **Valuation** (2-3 bullets):
+   • Current multiple vs historical/peers
+   • Target derivation: DCF/comps basis
+4. **Key Risk** (1 bullet): Single most important risk
+
+**EXAMPLE FORMAT:**
+"We rate ${subjectName} BUY with a $XXX target (XX% upside). The company dominates [market] with XX% share.
+
+• Market leadership: #1 position in [segment] with XX% share vs XX% for nearest competitor
+• Growth visibility: [Product] cycle to drive XX% revenue CAGR through 2026
+• Margin expansion: Operating margin improving from XX% to XX% on scale benefits
+• Valuation: XXx forward P/E represents XX% discount to 5-year average"
 
 **STRICT PROHIBITIONS:**
-- NO filler phrases: "with this in mind", "considering these factors", "given this backdrop"
-- NO repetitive words: ensure each word appears only once in close proximity
-- NO excessive analyst mentions (max 3 total)
-- NO marketing language: exciting, amazing, unprecedented, game-changing, revolutionary
-- NO paragraphs longer than 5 sentences
+- NO narrative paragraphs after the summary (use bullets only)
+- NO filler phrases: "we believe", "going forward", "given this backdrop"
+- NO duplicate words in close proximity
+- NO vague statements without specific numbers
+- NO marketing language: exciting, unprecedented, revolutionary
 ${focus.length > 0 ? `\n- MUST address: ${focus.join(', ')}` : ''}
 
 Thesis:`,
@@ -94,23 +107,30 @@ Datos financieros:
 - PER: ${report.valuation?.pe_ttm || 'N/A'}x
 - Margen: ${report.fundamentals?.profit_margin || 'N/A'}%
 
-Escribe una tesis CONCISA de 600-700 palabras:
+Escribe una tesis CONCISA de 400-500 palabras en FORMATO BULLET MORGAN STANLEY:
 
-**ESTILO SELL-SIDE:**
-- Escribe como Morgan Stanley/Goldman Sachs
-- Cada párrafo: 3-5 oraciones MÁXIMO
-- Incluye 2-3 menciones del analista (no más)
-- Cada afirmación debe citar un dato específico
+**FORMATO (CRÍTICO):**
+- Resumen inicial: 2-3 oraciones (rating + precio objetivo + tesis central)
+- Luego PUNTOS con viñetas para todos los argumentos (no párrafos narrativos)
+- Cada viñeta: 1-2 oraciones MAX con datos específicos
+- Total: 5-8 viñetas organizadas por tema
 
-**Estructura (3 secciones, ~200 palabras cada una):**
-1. **Fundamento** - ¿Por qué comprar/mantener/vender AHORA?
-2. **Posición Competitiva** - Cuota de mercado, diferenciadores
-3. **Marco Financiero** - Valoración, trayectoria de beneficios
+**Estructura:**
+1. **Resumen** (2-3 oraciones): Rating, precio objetivo, tesis central
+2. **Caso de Inversión** (3-4 viñetas):
+   • Posición de mercado: % cuota, foso competitivo
+   • Motores de crecimiento: Catalizadores con horizonte temporal
+   • Trayectoria de márgenes: De X% a Y%
+3. **Valoración** (2-3 viñetas):
+   • Múltiplo actual vs histórico/pares
+   • Derivación del objetivo: Base DCF/comparables
+4. **Riesgo Clave** (1 viñeta): El riesgo más importante
 
 **PROHIBIDO:**
-- Frases de relleno: "con esto en mente", "considerando estos factores"
-- Palabras repetitivas en proximidad
-- Más de 3 menciones del analista
+- Párrafos narrativos después del resumen (solo viñetas)
+- Frases de relleno: "creemos que", "en el futuro", "dado este contexto"
+- Palabras duplicadas en proximidad
+- Afirmaciones vagas sin números específicos
 - Lenguaje de marketing: emocionante, increíble, revolucionario
 ${focus.length > 0 ? `\n- DEBE abordar: ${focus.join(', ')}` : ''}
 
@@ -133,23 +153,30 @@ Tesis:`,
 - PE: ${report.valuation?.pe_ttm || 'N/A'}x
 - 利润率: ${report.fundamentals?.profit_margin || 'N/A'}%
 
-撰写一篇简洁的 600-700 字投资逻辑：
+撰写一篇简洁的 400-500 字投资逻辑，使用摩根士丹利要点格式：
 
-**卖方风格要求：**
-- 参照摩根士丹利/高盛研报风格
-- 每段落 3-5 句话，不超过 6 句
-- 分析师引用 2-3 次（不超过 3 次）
-- 每个论点必须引用具体数据
+**格式要求（关键）：**
+- 开头 2-3 句话总结（评级 + 目标价 + 核心逻辑）
+- 然后用要点列表呈现所有论点（不要叙述性段落）
+- 每个要点：1-2 句话 MAX，含具体数据
+- 总计：5-8 个要点，按主题组织
 
-**结构（3 部分，每部分约 200 字）：**
-1. **投资理由** - 为什么现在买入/持有/卖出？
-2. **竞争地位** - 市场份额、护城河、核心优势
-3. **财务框架** - 估值支撑、盈利趋势
+**结构：**
+1. **摘要**（2-3 句）：评级、目标价、核心逻辑
+2. **投资理由**（3-4 个要点）：
+   • 市场地位：份额%、竞争壁垒
+   • 增长动力：具体催化剂及时间表
+   • 利润率趋势：从 X% 到 Y%
+3. **估值**（2-3 个要点）：
+   • 当前倍数 vs 历史/同业
+   • 目标价推导：DCF/可比公司基础
+4. **核心风险**（1 个要点）：最重要的风险
 
 **禁止内容：**
-- 过渡性套话："综上所述"、"考虑到这些因素"、"在此背景下"
+- 摘要后的叙述性段落（只用要点）
+- 套话："我们认为"、"展望未来"、"在此背景下"
 - 相邻词语重复
-- 超过 3 次分析师引用
+- 无数据支撑的模糊表述
 - 营销语言：激动人心、爆发式、史无前例
 ${focus.length > 0 ? `\n- 必须涵盖: ${focus.join(', ')}` : ''}
 
@@ -159,8 +186,8 @@ ${focus.length > 0 ? `\n- 必须涵盖: ${focus.join(', ')}` : ''}
   try {
     let thesis = '';
     let attempts = 0;
-    const MIN_WORD_COUNT = 600; // 🔧 v7.4: Reduced to match new concise prompt (600-700 words)
-    const ABSOLUTE_MIN = 450; // Fallback threshold for concise reports
+    const MIN_WORD_COUNT = 400; // 🔧 v7.5: Reduced to match bullet-point format (400-500 words)
+    const ABSOLUTE_MIN = 300; // Fallback threshold for concise bullet-point reports
     
     // 🆕 v5.2: Asset-type and language-aware system prompt
     let roleDesc;
@@ -375,59 +402,58 @@ async function generateOverview(report, analystInfo = {}) {
     subjectLabel = localize('asset', 'activo', '资产');
   }
 
-  const prompt = `You are writing a ${subjectLabel} / vehicle overview for ${subjectName} as ${analyst}, lead analyst at ${firm}.
+  const prompt = `Write an INVESTOR-FOCUSED segment analysis for ${subjectName} as ${analyst} at ${firm}.
+
+**CRITICAL: This is NOT a Wikipedia article. Do NOT include:**
+- Company founding date or history ("founded in 1993...")
+- Generic geographic footprint ("global presence across...")
+- Mission statements or company vision
+
+**FOCUS ON WHAT INVESTORS NEED TO KNOW:**
 
 Name: ${subjectName}
 Asset Type: ${assetType.toUpperCase()}
-Business Model / Structure: ${businessModel}
-Segments / Exposures: ${segmentsLine}${industryNote}
+Segments: ${segmentsLine}${industryNote}
 
-Financial / Network Profile (if applicable):
-- Market Cap / AUM: $${report.valuation?.market_cap ? (report.valuation.market_cap / 1e9).toFixed(1) + 'B' : 'N/A'}
-- Revenue (if company): $${report.fundamentals?.revenue ? (report.fundamentals.revenue / 1e9).toFixed(1) + 'B' : 'N/A'}
-- EBITDA Margin (if company): ${report.fundamentals?.ebitda_margin || 'N/A'}%
-- ROE (if company): ${report.fundamentals?.roe || 'N/A'}%
+Financials:
+- Revenue: $${report.fundamentals?.revenue ? (report.fundamentals.revenue / 1e9).toFixed(1) + 'B' : 'N/A'}
+- EBITDA Margin: ${report.fundamentals?.ebitda_margin || 'N/A'}%
+- YoY Growth: ${report.fundamentals?.revenue_growth || 'N/A'}%
 
-Write an 800-900 word overview with **asset-appropriate structure** and **ANALYST VOICE**:
+Write 500-600 words in DATA-DRIVEN FORMAT:
 
-**CRITICAL - Analyst Voice Requirements:**
-- Include AT LEAST 2 explicit analyst references using ${analyst}'s name:
-  * "${analyst} highlights that ..."
-  * "As ${analyst} notes, ..."
-  * "${analyst} observes that ..."
-- Make it sound like ${analyst} is explaining the ${subjectLabel} and its role in client portfolios
+**Structure (use bullet points, not narrative):**
 
-**Structure:**
-1. High-level overview (250 words)
-   - What this ${subjectLabel} is and how it works
-   - Revenue model OR value accrual / index methodology
-   - Geographic / sector / user-base footprint
+1. **Revenue Mix by Segment** (200 words)
+   • Segment A: $XB (XX% of revenue, +XX% YoY)
+   • Segment B: $XB (XX% of revenue, +XX% YoY)
+   • Which segment is the growth engine? What's driving it?
 
-2. Exposures / Components (400 words)
-   - For equity: classic business segments (with exact percentages if available)
-   - For index/ETF: sector and factor weights, top constituents
-   - For crypto: mining / transactions / use cases / ecosystem participants
-   - Include at least 1 analyst observation about the mix and its implications
+2. **TAM & Market Position** (150 words)
+   • Total addressable market size and growth rate
+   • Company's current market share vs top 2-3 competitors
+   • Key structural advantage or moat
 
-3. Execution & Governance / Design (200-250 words)
-   - For companies: execution track record, management quality, capital allocation
-   - For index/ETF: index construction rules, rebalancing, sponsor and liquidity
-   - For crypto: protocol governance, developer ecosystem, security track record
+3. **Unit Economics / Key Drivers** (150 words)
+   • For tech: ASP trends, volume growth, attach rates
+   • For consumer: same-store sales, customer acquisition cost
+   • For industrials: capacity utilization, order book, backlog
+   • Use specific numbers, not generic statements
 
-**Requirements:**
-- Mix "we" (research team) with explicit ${analyst} attributions
-- Quantify exposures and key metrics where available
-- **PROHIBITED**: exciting, innovative, leading, cutting-edge, state-of-the-art
-- **MINIMUM LENGTH**: 800 words (do NOT write less than 700 words)
-- No marketing language or superlatives
+**FORMAT REQUIREMENTS:**
+- Use bullet points throughout (not paragraphs)
+- Every bullet must contain at least one specific number
+- Max 2 analyst mentions: "${analyst} notes..." or "We highlight..."
+- NO company history, founding dates, or Wikipedia content
+- NO generic statements like "well-positioned" or "strong presence"
 
 Overview:`;
 
   try {
     let overview = '';
     let attempts = 0;
-    const MIN_WORD_COUNT = 800; // 🔧 Architect fix: Match prompt requirement (800-900 words)
-    const ABSOLUTE_MIN = 500; // Fallback threshold
+    const MIN_WORD_COUNT = 500; // 🔧 v7.5: Match investor-focused format (500-600 words)
+    const ABSOLUTE_MIN = 350; // Fallback threshold for concise format
     
     // 🆕 v5.2: Asset-type and language-aware system prompt
     let roleDesc;
@@ -493,59 +519,79 @@ Overview:`;
     
   } catch (error) {
     console.error('[WriterStockV3] ❌ Overview generation failed:', error.message);
-    // 🔧 v5.2 FIX: Generate data-driven fallback instead of returning empty string
-    const existingContent = report.company_overview || report.segment_text || '';
-    if (existingContent && existingContent.length > 300) {
-      console.log(`⚠️  [WriterStockV3] Using existing overview: ${existingContent.length} chars`);
-      return existingContent;
-    }
     
-    // 🆕 v5.2: Asset-type aware fallback overview generation
+    // 🔧 v7.5: Generate INVESTOR-FOCUSED bullet-point fallback (not Wikipedia-style narrative)
     const subjectName = report.company_name || report.symbol;
     const revenue = report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A';
-    const employees = report.employees || 'N/A';
+    const revenueGrowth = report.fundamentals?.revenue_growth || 'N/A';
+    const margin = report.fundamentals?.ebitda_margin || report.fundamentals?.profit_margin || 'N/A';
     const marketCap = report.valuation?.market_cap ? `$${(report.valuation.market_cap / 1e9).toFixed(1)}B` : 'N/A';
     
     let fallback;
     
     if (assetType === 'equity') {
-      // Equity-specific fallback (company language)
-      const companyBusinessModel = report.business_model || 'a diversified operating company';
-      const segmentInfo = rawSegments.length > 0
-        ? rawSegments.slice(0, 3).map(s => `${s.name} (${s.revenue_pct}% of revenue)`).join(', ')
-        : 'multiple business segments';
+      // Equity-specific fallback in BULLET FORMAT (not narrative)
+      const segmentBullets = rawSegments.length > 0
+        ? rawSegments.slice(0, 3).map(s => `• ${s.name}: ${s.revenue_pct}% of revenue`).join('\n')
+        : '• Segment breakdown not available';
       
-      fallback = `${subjectName} operates as ${companyBusinessModel} with ${revenue} in annual revenue and a market capitalization of ${marketCap}. The organization employs approximately ${employees} people globally across its operational footprint.
+      fallback = `**Revenue Mix by Segment**
+${segmentBullets}
+• Total Revenue: ${revenue} (YoY growth: ${revenueGrowth}%)
+• EBITDA Margin: ${margin}%
 
-${analyst} highlights that the company's business model centers on ${segmentInfo}. This diversified structure provides both revenue stability and growth optionality across economic cycles. The segment mix reflects strategic capital allocation decisions and management's assessment of market opportunities across different customer segments and geographic regions.
+**Market Position**
+• Market Cap: ${marketCap}
+• Competitive positioning based on scale advantages and customer relationships
+• Barriers to entry from proprietary technology and distribution networks
 
-The operational framework emphasizes margin discipline, R&D investment, and customer retention. ${analyst} notes that management has established track records in capital efficiency, reflected in consistent cash generation and return on invested capital metrics that exceed industry medians. The company maintains competitive positioning through proprietary technology, distribution advantages, and brand equity accumulated over multiple product cycles.
-
-From an organizational perspective, ${analyst} observes that leadership continuity and execution culture support sustained performance through market volatility. The management team demonstrates ability to adapt strategy while maintaining financial discipline. The balance sheet structure provides flexibility for both organic growth investments and inorganic opportunities, while maintaining appropriate leverage ratios for the sector and credit rating objectives.`;
+**Key Drivers**
+• Volume growth and pricing power in core segments
+• Operating leverage from fixed cost absorption
+• Capital efficiency metrics tracking industry medians`;
     } else if (assetType === 'index' || assetType === 'etf') {
-      // Index/ETF-specific fallback
-      const vehicleType = assetType === 'index' ? 'equity index' : 'exchange-traded fund';
-      const constituents = assetType === 'index' ? 'constituent companies' : 'underlying holdings';
+      // Index/ETF-specific fallback in BULLET FORMAT
+      const vehicleType = assetType === 'index' ? 'Equity Index' : 'ETF';
       
-      fallback = `${subjectName} is a ${vehicleType} with ${marketCap} in total ${assetType === 'index' ? 'market capitalization of constituents' : 'assets under management'}. ${analyst} highlights that this ${vehicleType} provides investors with diversified exposure to ${assetType === 'index' ? 'the broader equity market' : 'a benchmark index'} through a rules-based methodology.
+      fallback = `**${vehicleType} Overview**
+• Total Market Cap/AUM: ${marketCap}
+• Structure: ${assetType === 'index' ? 'Market-cap weighted index' : 'Passive replication ETF'}
+• Rebalancing: Quarterly with predefined eligibility criteria
 
-The ${vehicleType} employs a ${assetType === 'index' ? 'market-capitalization weighting scheme' : 'passive replication strategy'}, ensuring that ${constituents} are represented according to their relative market values. ${analyst} notes that this approach minimizes idiosyncratic risk while capturing broad market returns. The index methodology includes periodic rebalancing to maintain target exposures and ensure constituent eligibility based on predefined criteria including market capitalization, liquidity, and sector classification.
+**Sector Exposures**
+• Technology, Healthcare, Financials, Consumer sectors
+• Top holdings concentrated in large-cap leaders
+• Geographic focus primarily US-listed equities
 
-Sector exposures typically span technology, healthcare, financials, consumer discretionary, industrials, and other major economic sectors, providing comprehensive market coverage. ${analyst} observes that the ${vehicleType}'s construction rules ensure transparency and replicability, key attributes valued by institutional investors. ${assetType === 'etf' ? 'The fund\'s expense ratio and tracking error remain competitive within its category, contributing to cost-efficient market access.' : 'The index serves as a benchmark for performance measurement and as the basis for derivative products and passive investment vehicles.'}
-
-Historical performance demonstrates correlation with underlying economic fundamentals and corporate earnings growth. The ${vehicleType} has navigated multiple market cycles, providing investors with systematic equity exposure while avoiding concentration risks associated with individual securities or narrow sector bets.`;
+**Key Characteristics**
+• Diversified exposure minimizing single-stock risk
+• Rules-based methodology ensures transparency
+• Correlation with economic fundamentals and earnings growth`;
     } else if (assetType === 'crypto') {
-      // Crypto-specific fallback
-      fallback = `${subjectName} is a decentralized digital asset operating on a blockchain network with ${marketCap} in total market capitalization. ${analyst} highlights that this cryptocurrency functions as both a medium of exchange and a store of value within its ecosystem, supported by cryptographic security and distributed consensus mechanisms.
+      // Crypto-specific fallback in BULLET FORMAT
+      fallback = `**Network Overview**
+• Market Cap: ${marketCap}
+• Protocol: Decentralized blockchain network
+• Security: Distributed consensus mechanism
 
-The protocol's architecture enables permissionless transactions across a global network of nodes, eliminating reliance on centralized intermediaries. ${analyst} notes that network security is maintained through distributed validators or miners who confirm transactions and extend the blockchain, receiving protocol rewards in return. This economic model aligns participant incentives with network integrity and operational continuity.
+**Use Cases**
+• Store of value and medium of exchange
+• DeFi applications and smart contracts
+• Peer-to-peer permissionless transactions
 
-The digital asset's monetary policy follows a predetermined issuance schedule, providing transparent supply dynamics relative to fiat alternatives. ${analyst} observes that on-chain metrics including transaction volumes, active addresses, and network hash rate offer insight into adoption trends and fundamental demand. The asset supports various use cases including peer-to-peer transfers, decentralized finance applications, and smart contract functionality depending on protocol capabilities.
-
-Development activity and governance structures determine protocol evolution, with open-source codebases enabling community participation and technical audits. The ecosystem encompasses exchanges, custodians, wallets, and infrastructure providers that facilitate access and liquidity. Regulatory frameworks continue to evolve across jurisdictions, influencing institutional adoption and market structure development.`;
+**Key Metrics**
+• On-chain volume and active addresses indicate adoption
+• Predetermined monetary policy provides supply transparency
+• Development activity signals ecosystem health`;
     } else {
-      // Generic fallback for unknown asset types
-      fallback = `${subjectName} represents an investment vehicle with ${marketCap} in market capitalization. ${analyst} highlights the asset's role in providing portfolio exposure based on its underlying structure and investment mandate. ${analyst} observes that the investment framework balances growth potential with risk management considerations appropriate for the asset class.`;
+      // Generic fallback in BULLET FORMAT
+      fallback = `**Asset Overview**
+• Market Cap: ${marketCap}
+• Structure: Investment vehicle providing portfolio exposure
+
+**Key Characteristics**
+• Balanced growth potential with risk management
+• Appropriate for asset class objectives`;
     }
     
     console.log(`⚠️  [WriterStockV3] Generated asset-aware fallback overview (${assetType}): ${fallback.length} chars (${fallback.split(/\s+/).length} words)`);
@@ -667,36 +713,41 @@ async function generateIndustry(report, analystInfo = {}) {
   
   const analyst = report._analystInfo?.analyst || analystInfo.analyst || 'the research team';
   
-  const prompt = `You are a Barclays equity analyst writing industry analysis for ${report.symbol} in ${report.sector || 'Technology'} sector.
+  const prompt = `Write DATA-DRIVEN industry analysis for ${report.symbol} in ${report.sector || 'Technology'} sector.
 
-Industry Context:
+**CRITICAL: Every statement must include a specific number or data point.**
+
+Industry Data:
 - Sector: ${report.sector || 'Technology'}
 - Industry Growth: ${report.industry?.growth_rate || 'N/A'}%
-- TAM: ${report.industry?.tam ? `$${(report.industry.tam / 1e9).toFixed(0)}B` : 'Multi-billion dollar opportunity'}
+- TAM: ${report.industry?.tam ? `$${(report.industry.tam / 1e9).toFixed(0)}B` : 'Estimate required'}
 
-Write 600 word industry analysis:
+Write 400 words using BULLET POINTS with specific data:
 
-**Structure:**
-1. Industry Dynamics (200 words)
-   - TAM and growth trajectory
-   - Key secular trends
-   - Technology disruption
+**Structure (bullets only, no paragraphs):**
 
-2. Competitive Landscape (250 words)
-   - Market structure
-   - Leading players
-   - Share shifts
+1. **Market Size & Growth** (5-6 bullets)
+   • TAM: $XXB growing at XX% CAGR through 2028
+   • Segment breakdown: [largest segment] = $XXB (XX% of total)
+   • Key growth driver: [specific trend] adding $XXB annually
+   • Regional mix: US XX%, Europe XX%, Asia XX%
 
-3. Industry Outlook (150 words)
-   - 12-24 month catalysts
-   - Regulatory developments
-   - Technology inflections
+2. **Competitive Dynamics** (4-5 bullets)
+   • Market concentration: Top 3 players = XX% share
+   • Leader: [Company A] at XX% share vs [Company B] at XX%
+   • Share shifts: +/- X% change over past 12 months
+   • Barriers to entry: [specific factor]
 
-**Requirements:**
-- Institutional tone
-- Quantify market sizes
-- "We see", "Industry checks indicate"
-- No generic statements
+3. **Industry Catalysts** (3-4 bullets)
+   • Near-term (6-12 months): [specific event/trend]
+   • Medium-term (12-24 months): [regulatory/tech shift]
+   • Spending trends: Enterprise/Consumer capex +XX% YoY
+
+**PROHIBITED:**
+- Narrative paragraphs (use bullets only)
+- Generic statements like "favorable trends" or "strong positioning"
+- Statements without specific numbers
+- Marketing language
 
 Industry Analysis:`;
 

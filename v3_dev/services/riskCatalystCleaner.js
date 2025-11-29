@@ -24,9 +24,9 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 class RiskCatalystCleaner {
   constructor() {
-    this.minItems = 5;
-    this.maxItems = 8;
-    this.minLength = 30; // Increased from 20 to 30 to filter out short placeholders
+    this.minItems = 3;  // 🔧 v7.5: Reduced from 5 to 3 (institutional standard)
+    this.maxItems = 3;  // 🔧 v7.5: Reduced from 8 to 3 (no more than 3 core catalysts/risks)
+    this.minLength = 30; // Minimum chars per bullet
     this.similarityThreshold = 0.7;
   }
 
@@ -135,28 +135,14 @@ class RiskCatalystCleaner {
     console.log(`   ├─ After deduplication (>${this.similarityThreshold} similarity): ${items.length} items`);
     
     // ══════════════════════════════════════════════════════════════
-    // Step 5: Auto-fill to minimum 5 items if needed
-    // ══════════════════════════════════════════════════════════════
-    if (items.length < this.minItems) {
-      console.log(`   ├─ Below minimum (${this.minItems}), generating ${this.minItems - items.length} additional items...`);
-      
-      const generated = await this._generateAdditionalItems(
-        items,
-        type,
-        this.minItems - items.length,
-        report
-      );
-      
-      items = [...items, ...generated];
-      console.log(`   ├─ After GPT-4o-mini generation: ${items.length} items`);
-    }
-    
-    // ══════════════════════════════════════════════════════════════
-    // Step 6: Cap at maximum 8 items
+    // Step 5: Cap at maximum 3 items (no auto-fill - institutional standard)
+    // 🔧 v7.5: Disabled auto-fill to avoid generic placeholder content
     // ══════════════════════════════════════════════════════════════
     if (items.length > this.maxItems) {
       items = items.slice(0, this.maxItems);
       console.log(`   ├─ Capped at maximum ${this.maxItems} items`);
+    } else {
+      console.log(`   ├─ ${items.length} items (no auto-fill, keeping as-is)`);
     }
     
     // ══════════════════════════════════════════════════════════════

@@ -7,24 +7,36 @@
 /**
  * 去除连续重复的单词
  * 例如: "organic organic growth trajectory trajectory" → "organic growth trajectory"
- * v2.1 增强版：处理更复杂的重复模式，多轮清理（最多3轮防止无限循环）
+ * v2.3 增强版：捕获所有长度的重复词，包括 "we we", "the the"
  */
 function removeDuplicateWords(text) {
   if (!text) return text;
   
   let cleaned = text;
   
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < 5; round++) {
     const before = cleaned;
     
+    // Pattern 1: 直接重复 ANY word (including short ones like "we we", "the the")
     cleaned = cleaned.replace(/\b(\w+)\s+\1\b/gi, '$1');
     
-    cleaned = cleaned.replace(/\b(\w+)(\s+\1\b)+/gi, '$1');
+    // Pattern 2: 多次重复 "word word word" → "word"
+    cleaned = cleaned.replace(/\b(\w+)(\s+\1)+\b/gi, '$1');
     
-    cleaned = cleaned.replace(/\b((\w+)\s+(\w+))\s+\2\s+\3\b/gi, '$1');
+    // Pattern 3: 跨标点重复 "word, word" → "word"
+    cleaned = cleaned.replace(/\b(\w+)[,;]\s*\1\b/gi, '$1');
+    
+    // Pattern 4: 短语重复 "word1 word2 word1 word2" → "word1 word2"
+    cleaned = cleaned.replace(/\b((\w{2,})\s+(\w{2,}))\s+\2\s+\3\b/gi, '$1');
+    
+    // Pattern 5: 跨换行重复
+    cleaned = cleaned.replace(/\b(\w+)\s*\n\s*\1\b/gi, '$1');
     
     if (cleaned === before) break;
   }
+  
+  // 清理多余空格
+  cleaned = cleaned.replace(/\s{2,}/g, ' ');
   
   return cleaned;
 }
@@ -52,6 +64,73 @@ function limitAnalystMentions(text, analystName, maxMentions = 3) {
     }
     return 'our team';
   });
+  
+  return cleaned;
+}
+
+/**
+ * 限制 "we believe" 等学术性短语
+ * 每篇报告最多出现2次，其余替换为更简洁的表达
+ */
+function limitAcademicPhrases(text) {
+  if (!text) return text;
+  
+  let cleaned = text;
+  
+  // "We believe" family - limit to 2 occurrences
+  const believePatterns = [
+    { pattern: /\bWe believe (that )?/gi, replacement: '' },
+    { pattern: /\bWe think (that )?/gi, replacement: '' },
+    { pattern: /\bWe expect (that )?/gi, replacement: 'We expect ' },
+    { pattern: /\bWe anticipate (that )?/gi, replacement: '' },
+    { pattern: /\bWe view /gi, replacement: '' },
+    { pattern: /\bWe see /gi, replacement: '' },
+  ];
+  
+  // Count total "we believe" type phrases
+  let believeCount = 0;
+  believePatterns.forEach(({ pattern }) => {
+    const matches = cleaned.match(pattern);
+    if (matches) believeCount += matches.length;
+  });
+  
+  // If more than 2, remove most of them
+  if (believeCount > 2) {
+    let kept = 0;
+    believePatterns.forEach(({ pattern, replacement }) => {
+      cleaned = cleaned.replace(pattern, (match) => {
+        kept++;
+        if (kept <= 2) return match;
+        return replacement;
+      });
+    });
+  }
+  
+  // Remove verbose connecting phrases
+  const verbosePatterns = [
+    /\bIn addition to (this|that),?\s*/gi,
+    /\bFurthermore,?\s*/gi,
+    /\bMoreover,?\s*/gi,
+    /\bAdditionally,?\s*/gi,
+    /\bConsequently,?\s*/gi,
+    /\bAccordingly,?\s*/gi,
+    /\bThus,?\s*/gi,
+    /\bHence,?\s*/gi,
+    /\bTherefore,?\s*/gi,
+    /\bAs such,?\s*/gi,
+    /\bGoing forward,?\s*/gi,
+    /\bLooking ahead,?\s*/gi,
+    /\bIn the coming (quarters?|years?),?\s*/gi,
+    /\bOver the (medium|long)[- ]term,?\s*/gi,
+    /\bOn a go-forward basis,?\s*/gi,
+  ];
+  
+  verbosePatterns.forEach(pattern => {
+    cleaned = cleaned.replace(pattern, '');
+  });
+  
+  // Capitalize first letter after removal if needed
+  cleaned = cleaned.replace(/\.\s+([a-z])/g, (match, letter) => '. ' + letter.toUpperCase());
   
   return cleaned;
 }
@@ -324,7 +403,10 @@ function cleanText(text, options = {}) {
     cleaned = reduceAnalystMentions(cleaned, maxAnalystMentions);
   }
   
-  // 步骤6：修复格式问题
+  // 步骤6：限制学术性短语（we believe等）
+  cleaned = limitAcademicPhrases(cleaned);
+  
+  // 步骤7：修复格式问题
   cleaned = fixFormatting(cleaned);
   
   return cleaned;
@@ -333,6 +415,7 @@ function cleanText(text, options = {}) {
 /**
  * 轻量版清理：仅处理重复和格式
  * 用于不需要段落控制的场景
+ * 🔧 v7.5: Now includes limitAcademicPhrases for consistent enforcement
  */
 function cleanTextLight(text) {
   if (!text || typeof text !== 'string') return text;
@@ -340,6 +423,7 @@ function cleanTextLight(text) {
   let cleaned = text;
   cleaned = removeDuplicateWords(cleaned);
   cleaned = removeAICliches(cleaned);
+  cleaned = limitAcademicPhrases(cleaned); // 🔧 v7.5: Enforce across all paths
   cleaned = fixFormatting(cleaned);
   
   return cleaned;
@@ -354,5 +438,6 @@ module.exports = {
   controlParagraphLength,
   deduplicateParagraphs,
   reduceAnalystMentions,
-  limitAnalystMentions
+  limitAnalystMentions,
+  limitAcademicPhrases
 };

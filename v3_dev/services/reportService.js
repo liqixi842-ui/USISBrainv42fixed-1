@@ -314,25 +314,19 @@ async function refineNarrativeText(report) {
     return corrected;
   };
   
-  // Catalysts: Ensure 6-8 items, remove ALL invented dollar projections
+  // Catalysts: Limit to 3 core catalysts (institutional standard)
   let refinedCatalysts = Array.isArray(originalTexts.catalysts) ? originalTexts.catalysts : [];
   refinedCatalysts = refinedCatalysts.map(c => applyTasteCorrection(applyStrictTruthCorrection(c)));
   refinedCatalysts = refinedCatalysts.filter(c => c.trim().length > 30); // Remove gutted catalysts
-  // Ensure between 6-8 catalysts
-  while (refinedCatalysts.length < 6) {
-    refinedCatalysts.push('Continued operational execution in core business segments.');
-  }
-  refinedCatalysts = refinedCatalysts.slice(0, 8);
+  // 🔧 v7.5: Limit to 3 catalysts (institutional standard - no auto-fill)
+  refinedCatalysts = refinedCatalysts.slice(0, 3);
   
-  // Risks: Ensure 6-8 items, remove ALL invented dollar projections
+  // Risks: Limit to 3 core risks (institutional standard)
   let refinedRisks = Array.isArray(originalTexts.risks) ? originalTexts.risks : [];
   refinedRisks = refinedRisks.map(r => applyTasteCorrection(applyStrictTruthCorrection(r)));
   refinedRisks = refinedRisks.filter(r => r.trim().length > 30); // Remove gutted risks
-  // Ensure between 6-8 risks
-  while (refinedRisks.length < 6) {
-    refinedRisks.push('General market volatility and macroeconomic uncertainty.');
-  }
-  refinedRisks = refinedRisks.slice(0, 8);
+  // 🔧 v7.5: Limit to 3 risks (institutional standard - no auto-fill)
+  refinedRisks = refinedRisks.slice(0, 3);
   
   // Technical: Must reference RSI, support/resistance
   let refinedTechnical = applyTasteCorrection(applyTruthCorrection(originalTexts.technical));
@@ -4440,17 +4434,36 @@ function renderPage10(report, h) {
 }
 
 function renderPage11(report, h) {
-  const catalysts = h.splitToBullets(report.catalysts_text, 8);
-  const catalystItems = catalysts.map((c, i) => {
-    const shortC = c.substring(0, 300);
-    return `<li><strong>Catalyst ${i + 1}:</strong> ${shortC}${c.length > 300 ? '...' : ''}</li>`;
+  const catalysts = h.splitToBullets(report.catalysts_text, 3); // Limit to 3 core catalysts
+  
+  const catalystRows = catalysts.map((c, i) => {
+    const shortC = c.substring(0, 200);
+    const timeframe = i === 0 ? 'Near-term (6-12mo)' : i === 1 ? 'Medium-term (12-24mo)' : 'Long-term (24mo+)';
+    return `
+      <tr>
+        <td style="font-weight: bold; width: 20%;">Catalyst ${i + 1}</td>
+        <td style="width: 15%;">${timeframe}</td>
+        <td>${shortC}${c.length > 200 ? '...' : ''}</td>
+      </tr>`;
   }).join('');
 
   return `
     <div class="page">
       ${h.pageHeader(11)}
       <div class="section-title">Key Catalysts</div>
-      <ul style="line-height: 1.6;">${catalystItems}</ul>
+      <p style="margin-bottom: 15px; font-size: 12px; color: #666;">Focus on 3 highest-conviction near-to-medium term catalysts.</p>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #f5f5f5;">
+            <th style="text-align: left; padding: 10px;">Catalyst</th>
+            <th style="text-align: left; padding: 10px;">Timeframe</th>
+            <th style="text-align: left; padding: 10px;">Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${catalystRows}
+        </tbody>
+      </table>
       <div class="footer">
         <span>${report.meta.brand}</span>
         <span>Page 11</span>
@@ -4460,17 +4473,51 @@ function renderPage11(report, h) {
 }
 
 function renderPage12(report, h) {
-  const risks = h.splitToBullets(report.risks_text, 8);
-  const riskItems = risks.map((r, i) => {
-    const shortR = r.substring(0, 300);
-    return `<li><strong>Risk ${i + 1}:</strong> ${shortR}${r.length > 300 ? '...' : ''}</li>`;
-  }).join('');
+  const risks = h.splitToBullets(report.risks_text, 3); // Limit to 3 core risks
+  
+  // Assign probability and impact based on position (first risk = highest priority)
+  const riskData = risks.map((r, i) => {
+    const shortR = r.substring(0, 180);
+    const probLevels = ['High', 'Medium', 'Low'];
+    const impactLevels = ['High', 'Medium', 'Low'];
+    return {
+      risk: shortR + (r.length > 180 ? '...' : ''),
+      probability: probLevels[Math.min(i, 2)],
+      impact: impactLevels[i === 0 ? 0 : 1], // First risk = high impact
+      probColor: i === 0 ? '#dc3545' : i === 1 ? '#ffc107' : '#28a745',
+      impactColor: i === 0 ? '#dc3545' : '#ffc107'
+    };
+  });
+
+  const riskRows = riskData.map((r, i) => `
+    <tr>
+      <td style="font-weight: bold; width: 8%;">R${i + 1}</td>
+      <td style="width: 40%;">${r.risk}</td>
+      <td style="width: 12%; text-align: center;"><span style="background: ${r.probColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">${r.probability}</span></td>
+      <td style="width: 12%; text-align: center;"><span style="background: ${r.impactColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 11px;">${r.impact}</span></td>
+    </tr>`).join('');
 
   return `
     <div class="page">
       ${h.pageHeader(12)}
       <div class="section-title">Key Risks</div>
-      <ul style="line-height: 1.6;">${riskItems}</ul>
+      <p style="margin-bottom: 15px; font-size: 12px; color: #666;">Probability × Impact assessment of top 3 material risks.</p>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #f5f5f5;">
+            <th style="text-align: left; padding: 10px;">#</th>
+            <th style="text-align: left; padding: 10px;">Risk Factor</th>
+            <th style="text-align: center; padding: 10px;">Probability</th>
+            <th style="text-align: center; padding: 10px;">Impact</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${riskRows}
+        </tbody>
+      </table>
+      <div style="margin-top: 20px; padding: 10px; background: #f9f9f9; border-radius: 4px; font-size: 11px;">
+        <strong>Mitigation:</strong> Monitor quarterly for changes in risk profile. Key watch items include regulatory developments and competitive dynamics.
+      </div>
       <div class="footer">
         <span>${report.meta.brand}</span>
         <span>Page 12</span>

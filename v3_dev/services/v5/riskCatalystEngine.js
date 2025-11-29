@@ -135,14 +135,14 @@ async function processRisksAndCatalysts(report) {
   console.log(`[RiskCatalystEngine v2] Processing ${report.symbol}`);
   console.log(`════════════════════════════════════════════════════════════════`);
   
-  // Process risks
+  // Process risks - 🔧 v7.5: Limit to 3 items (institutional standard)
   if (report.risks_text && Array.isArray(report.risks_text)) {
-    report.risks_text = await processItems(report.risks_text, report.symbol, true, 6, 8);
+    report.risks_text = await processItems(report.risks_text, report.symbol, true, 3, 3);
   }
   
-  // Process catalysts
+  // Process catalysts - 🔧 v7.5: Limit to 3 items (institutional standard)
   if (report.catalysts_text && Array.isArray(report.catalysts_text)) {
-    report.catalysts_text = await processItems(report.catalysts_text, report.symbol, false, 6, 8);
+    report.catalysts_text = await processItems(report.catalysts_text, report.symbol, false, 3, 3);
   }
   
   return report;
