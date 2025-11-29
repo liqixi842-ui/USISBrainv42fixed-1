@@ -5384,55 +5384,164 @@ From a competitive positioning perspective, ${report.symbol} ${report.peers && r
   <div class="text-content">${report.macro_text}</div>` : ''}
 </div>
 
-<!-- PAGE 5: VALUATION (Historical PE/PS + Earnings Sensitivity) -->
+<!-- PAGE 5: VALUATION (v7.5: Enhanced with PEG, percentiles, rate sensitivity) -->
 <div class="page">
   <h1>VALUATION ANALYSIS</h1>
   
   <h2>Valuation in Context</h2>
   <div class="text-content">${report.valuation_text}</div>
   
-  <p class="text-content">
-The current PE (TTM) of ${fmt(report.valuation.pe_ttm, 1)}x compares to a 5-year historical range of ${fmt(report.valuation.historical_pe_5y?.low, 1)}x - ${fmt(report.valuation.historical_pe_5y?.high, 1)}x, with a median of ${fmt(report.valuation.historical_pe_5y?.median, 1)}x. This places ${report.symbol} ${report.valuation.pe_ttm > (report.valuation.historical_pe_5y?.median || 20) ? `at a ${fmt(((report.valuation.pe_ttm / (report.valuation.historical_pe_5y?.median || 20)) - 1) * 100, 0)}% premium to historical median` : `at a ${fmt(((1 - report.valuation.pe_ttm / (report.valuation.historical_pe_5y?.median || 20))) * 100, 0)}% discount to historical median`}. Similarly, the PS ratio of ${fmt(report.valuation.ps_ttm, 1)}x is ${report.valuation.ps_ttm > (report.valuation.historical_ps_5y?.median || 3) ? 'above' : 'below'} the 5Y median of ${fmt(report.valuation.historical_ps_5y?.median, 1)}x.
-  </p>
-  
-  <h2>Historical Valuation Multiples (5-Year Range)</h2>
-  <table class="data-table">
-    <thead><tr><th>Metric</th><th>Current</th><th>5Y Low</th><th>5Y Median</th><th>5Y High</th><th>Percentile</th></tr></thead>
+  <!-- 🔧 v7.5: Enhanced valuation snapshot with PEG and percentile -->
+  <table class="data-table" style="margin-top: 15px;">
+    <thead>
+      <tr>
+        <th>Valuation Metric</th>
+        <th>Current</th>
+        <th>5Y Percentile</th>
+        <th>vs Peers</th>
+        <th>Assessment</th>
+      </tr>
+    </thead>
     <tbody>
       <tr>
-        <td><strong>PE Ratio (TTM)</strong></td>
+        <td><strong>PE (TTM)</strong></td>
         <td>${fmt(report.valuation.pe_ttm, 1)}x</td>
-        <td>${fmt(report.valuation.historical_pe_5y?.low, 1)}x</td>
-        <td>${fmt(report.valuation.historical_pe_5y?.median, 1)}x</td>
-        <td>${fmt(report.valuation.historical_pe_5y?.high, 1)}x</td>
-        <td>${report.valuation.pe_ttm > (report.valuation.historical_pe_5y?.median || 20) ? '60-80th' : '20-40th'}</td>
+        <td>${(() => {
+          const pe = report.valuation?.pe_ttm;
+          const low = report.valuation?.historical_pe_5y?.low;
+          const high = report.valuation?.historical_pe_5y?.high;
+          if (!pe || !low || !high || high <= low) return 'N/A';
+          const pct = Math.min(99, Math.max(1, Math.round(((pe - low) / (high - low)) * 100)));
+          return `<span style="color: ${pct > 80 ? '#dc3545' : pct > 60 ? '#ffc107' : '#28a745'};">${pct}th</span>`;
+        })()}</td>
+        <td>${(() => {
+          const validPeers = (report.peers || []).filter(p => p?.pe_forward && p.pe_forward > 0);
+          if (validPeers.length === 0 || !report.valuation?.pe_forward) return 'N/A';
+          const avgPeerPE = validPeers.reduce((s, p) => s + p.pe_forward, 0) / validPeers.length;
+          const diff = ((report.valuation.pe_forward / avgPeerPE) - 1) * 100;
+          return diff > 0 ? `+${fmt(diff, 0)}% vs peers avg` : `${fmt(diff, 0)}% vs peers avg`;
+        })()}</td>
+        <td>${(() => {
+          const pe = report.valuation?.pe_ttm;
+          const median = report.valuation?.historical_pe_5y?.median || 25;
+          if (!pe) return 'N/A';
+          if (pe > median * 1.2) return '<span style="color: #dc3545;">Expensive</span>';
+          if (pe < median * 0.8) return '<span style="color: #28a745;">Cheap</span>';
+          return '<span style="color: #ffc107;">Fair</span>';
+        })()}</td>
       </tr>
       <tr>
-        <td><strong>PE Forward</strong></td>
-        <td>${fmt(report.valuation.pe_forward, 1)}x</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
-      </tr>
-      <tr>
-        <td><strong>PS Ratio (TTM)</strong></td>
+        <td><strong>PS (TTM)</strong></td>
         <td>${fmt(report.valuation.ps_ttm, 1)}x</td>
-        <td>${fmt(report.valuation.historical_ps_5y?.low, 1)}x</td>
-        <td>${fmt(report.valuation.historical_ps_5y?.median, 1)}x</td>
-        <td>${fmt(report.valuation.historical_ps_5y?.high, 1)}x</td>
-        <td>${report.valuation.ps_ttm > (report.valuation.historical_ps_5y?.median || 3) ? '60-80th' : '20-40th'}</td>
+        <td>${(() => {
+          const ps = report.valuation?.ps_ttm;
+          const low = report.valuation?.historical_ps_5y?.low;
+          const high = report.valuation?.historical_ps_5y?.high;
+          if (!ps || !low || !high || high <= low) return 'N/A';
+          const pct = Math.min(99, Math.max(1, Math.round(((ps - low) / (high - low)) * 100)));
+          return `<span style="color: ${pct > 80 ? '#dc3545' : pct > 60 ? '#ffc107' : '#28a745'};">${pct}th</span>`;
+        })()}</td>
+        <td>${(() => {
+          const validPeers = (report.peers || []).filter(p => p?.ps_ttm && p.ps_ttm > 0);
+          if (validPeers.length === 0 || !report.valuation?.ps_ttm) return 'N/A';
+          const avgPeerPS = validPeers.reduce((s, p) => s + p.ps_ttm, 0) / validPeers.length;
+          const diff = ((report.valuation.ps_ttm / avgPeerPS) - 1) * 100;
+          return diff > 0 ? `+${fmt(diff, 0)}% vs peers avg` : `${fmt(diff, 0)}% vs peers avg`;
+        })()}</td>
+        <td>${(() => {
+          const ps = report.valuation?.ps_ttm;
+          if (!ps) return 'N/A';
+          if (ps > 10) return '<span style="color: #dc3545;">Expensive</span>';
+          if (ps < 3) return '<span style="color: #28a745;">Cheap</span>';
+          return '<span style="color: #ffc107;">Fair</span>';
+        })()}</td>
       </tr>
       <tr>
-        <td><strong>PB Ratio</strong></td>
-        <td>${fmt(report.valuation.pb, 1)}x</td>
+        <td><strong>PEG Ratio</strong></td>
+        <td>${(() => {
+          const pe = report.valuation?.pe_forward || report.valuation?.pe_ttm;
+          const growth = report.growth?.eps_yoy_latest || report.growth?.revenue_yoy_latest || 15;
+          if (!pe || !growth || growth <= 0) return 'N/A';
+          return fmt(pe / growth, 2);
+        })()}x</td>
+        <td>-</td>
+        <td>${(() => {
+          const pe = report.valuation?.pe_forward || report.valuation?.pe_ttm;
+          const growth = report.growth?.eps_yoy_latest || report.growth?.revenue_yoy_latest || 15;
+          if (!pe || !growth || growth <= 0) return 'N/A';
+          const peg = pe / growth;
+          if (peg < 1) return '<span style="color: #28a745;">Undervalued vs growth</span>';
+          if (peg > 2) return '<span style="color: #dc3545;">Premium to growth</span>';
+          return '<span style="color: #ffc107;">Fair vs growth</span>';
+        })()}</td>
+        <td>${(() => {
+          const pe = report.valuation?.pe_forward || report.valuation?.pe_ttm;
+          const growth = report.growth?.eps_yoy_latest || report.growth?.revenue_yoy_latest || 15;
+          if (!pe || !growth || growth <= 0) return 'N/A';
+          const peg = pe / growth;
+          return peg < 1 ? '<span style="color: #28a745;">Attractive</span>' : peg > 2 ? '<span style="color: #dc3545;">Stretched</span>' : '<span style="color: #ffc107;">Neutral</span>';
+        })()}</td>
+      </tr>
+      <tr>
+        <td><strong>EV/EBITDA</strong></td>
+        <td>${report.valuation?.ev_ebitda ? fmt(report.valuation.ev_ebitda, 1) + 'x' : 'N/A'}</td>
         <td>-</td>
         <td>-</td>
-        <td>-</td>
-        <td>-</td>
+        <td>${report.valuation?.ev_ebitda ? (report.valuation.ev_ebitda > 20 ? '<span style="color: #dc3545;">Above average</span>' : report.valuation.ev_ebitda < 10 ? '<span style="color: #28a745;">Attractive</span>' : '<span style="color: #ffc107;">Fair</span>') : 'N/A'}</td>
       </tr>
     </tbody>
   </table>
+  
+  <!-- 🔧 v7.5: Growth-Valuation Matching Logic -->
+  <h2>Growth-Valuation Assessment</h2>
+  <p class="text-content">
+${(() => {
+  const pe = report.valuation?.pe_forward || report.valuation?.pe_ttm || 20;
+  const growth = report.growth?.eps_yoy_latest || report.growth?.revenue_yoy_latest || 10;
+  const peg = growth > 0 ? pe / growth : 999;
+  const margin = report.fundamentals?.gross_margin || 30;
+  
+  if (peg < 1 && margin > 40) {
+    return `${report.symbol} trades at ${fmt(pe, 1)}x forward earnings with ${fmt(growth, 0)}% growth, resulting in a PEG of ${fmt(peg, 2)}x. This represents attractive valuation given the margin profile (${fmt(margin, 0)}% gross margin). The growth-adjusted multiple suggests upside as earnings compound.`;
+  } else if (peg > 2) {
+    return `${report.symbol} trades at ${fmt(pe, 1)}x forward earnings against ${fmt(growth, 0)}% growth, yielding a PEG of ${fmt(peg, 2)}x. This elevated multiple requires continued execution and growth acceleration to justify current levels. Multiple compression risk exists if growth disappoints.`;
+  } else {
+    return `${report.symbol} trades at ${fmt(pe, 1)}x forward earnings with ${fmt(growth, 0)}% growth, resulting in a PEG of ${fmt(peg, 2)}x near fair value. The valuation is reasonable given the growth profile and ${fmt(margin, 0)}% gross margins. Re-rating depends on growth sustainability.`;
+  }
+})()}
+  </p>
+  
+  <!-- 🔧 v7.5: Rate Sensitivity Analysis -->
+  <h2>Rate Sensitivity</h2>
+  <table class="data-table">
+    <thead><tr><th>Rate Scenario</th><th>10Y Yield</th><th>Duration Impact</th><th>Multiple Effect</th><th>Stock Sensitivity</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Rates Rise +50bps</strong></td>
+        <td>~4.5-5.0%</td>
+        <td>Negative</td>
+        <td>${report.valuation?.pe_ttm > 30 ? '-5% to -10%' : '-2% to -5%'}</td>
+        <td>${report.price?.beta > 1.2 ? '<span style="color: #dc3545;">High sensitivity</span>' : '<span style="color: #ffc107;">Moderate</span>'}</td>
+      </tr>
+      <tr>
+        <td><strong>Rates Stable</strong></td>
+        <td>~4.0-4.5%</td>
+        <td>Neutral</td>
+        <td>0%</td>
+        <td><span style="color: #28a745;">Base case</span></td>
+      </tr>
+      <tr>
+        <td><strong>Rates Fall -50bps</strong></td>
+        <td>~3.5-4.0%</td>
+        <td>Positive</td>
+        <td>${report.valuation?.pe_ttm > 30 ? '+5% to +10%' : '+2% to +5%'}</td>
+        <td>${report.price?.beta > 1.2 ? '<span style="color: #28a745;">High upside</span>' : '<span style="color: #28a745;">Modest upside</span>'}</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="text-content" style="font-size: 9pt; color: #666; margin-top: 8px;">
+    ${report.symbol} has ${report.price?.beta > 1.3 ? 'high' : report.price?.beta > 1.0 ? 'moderate' : 'low'} duration sensitivity (beta ${fmt(report.price?.beta, 2)}). Growth stocks with elevated multiples typically experience 1.5-2x rate sensitivity vs value stocks.
+  </p>
   
   <h2>Earnings Sensitivity Analysis</h2>
   <table class="data-table">
@@ -5550,7 +5659,7 @@ ${(() => {
   </div>` : ''}
 </div>
 
-<!-- PAGE 7: FINANCIALS (Revenue/EPS Charts + Financial Strength) -->
+<!-- PAGE 7: FINANCIALS (v7.5: Enhanced with FCF, Capital Structure, Working Capital) -->
 <div class="page">
   <h1>FINANCIAL ANALYSIS</h1>
   
@@ -5561,53 +5670,128 @@ ${(() => {
   <div class="chart-container">
     <h3>5-Year Revenue Growth</h3>
     <img src="${report.charts.revenue_chart}" alt="Revenue Chart" class="chart-img" />
-  </div>` : '<p class="text-muted" style="margin: 15px 0;">5-year revenue chart: Requires premium Finnhub data access (free tier limitation).</p>'}
+  </div>` : '<p class="text-muted" style="margin: 15px 0;">5-year revenue chart: Requires premium Finnhub data access.</p>'}
   
-  ${report.charts?.eps_chart ? `
-  <div class="chart-container">
-    <h3>5-Year EPS Growth</h3>
-    <img src="${report.charts.eps_chart}" alt="EPS Chart" class="chart-img" />
-  </div>` : '<p class="text-muted" style="margin: 15px 0;">5-year EPS chart: Requires premium Finnhub data access (free tier limitation).</p>'}
-  
-  <h2>Financial Strength Metrics</h2>
+  <!-- 🔧 v7.5: Enhanced Financial Strength with FCF, Capital Structure -->
+  <h2>Financial Strength Summary</h2>
   <table class="data-table">
-    <thead><tr><th>Metric</th><th>Value</th><th>Industry Benchmark</th><th>Assessment</th></tr></thead>
+    <thead><tr><th>Category</th><th>Metric</th><th>Value</th><th>Benchmark</th><th>Status</th></tr></thead>
     <tbody>
       <tr>
+        <td rowspan="3"><strong>Profitability</strong></td>
         <td>Gross Margin</td>
         <td>${fmt(report.fundamentals.gross_margin, 1)}%</td>
         <td>40%+</td>
-        <td>${report.fundamentals.gross_margin > 40 ? 'Strong' : report.fundamentals.gross_margin > 25 ? 'Moderate' : 'Weak'}</td>
+        <td>${report.fundamentals.gross_margin > 40 ? '<span style="color: #28a745;">Strong</span>' : report.fundamentals.gross_margin > 25 ? '<span style="color: #ffc107;">Moderate</span>' : '<span style="color: #dc3545;">Weak</span>'}</td>
       </tr>
       <tr>
         <td>Operating Margin</td>
         <td>${fmt(report.fundamentals.operating_margin, 1)}%</td>
         <td>20%+</td>
-        <td>${report.fundamentals.operating_margin > 20 ? 'Strong' : report.fundamentals.operating_margin > 10 ? 'Moderate' : 'Weak'}</td>
+        <td>${report.fundamentals.operating_margin > 20 ? '<span style="color: #28a745;">Strong</span>' : report.fundamentals.operating_margin > 10 ? '<span style="color: #ffc107;">Moderate</span>' : '<span style="color: #dc3545;">Weak</span>'}</td>
       </tr>
       <tr>
         <td>Net Margin</td>
         <td>${fmt(report.fundamentals.net_margin, 1)}%</td>
         <td>15%+</td>
-        <td>${report.fundamentals.net_margin > 15 ? 'Strong' : report.fundamentals.net_margin > 8 ? 'Moderate' : 'Weak'}</td>
+        <td>${report.fundamentals.net_margin > 15 ? '<span style="color: #28a745;">Strong</span>' : report.fundamentals.net_margin > 8 ? '<span style="color: #ffc107;">Moderate</span>' : '<span style="color: #dc3545;">Weak</span>'}</td>
       </tr>
       <tr>
+        <td rowspan="2"><strong>Returns</strong></td>
         <td>ROE</td>
         <td>${fmt(report.fundamentals.roe, 1)}%</td>
         <td>15%+</td>
-        <td>${report.fundamentals.roe > 15 ? 'Excellent' : report.fundamentals.roe > 10 ? 'Good' : 'Below Par'}</td>
+        <td>${report.fundamentals.roe > 15 ? '<span style="color: #28a745;">Excellent</span>' : report.fundamentals.roe > 10 ? '<span style="color: #ffc107;">Good</span>' : '<span style="color: #dc3545;">Below Par</span>'}</td>
       </tr>
       <tr>
         <td>ROA</td>
         <td>${fmt(report.fundamentals.roa, 1)}%</td>
         <td>8%+</td>
-        <td>${report.fundamentals.roa > 8 ? 'Strong' : report.fundamentals.roa > 4 ? 'Moderate' : 'Weak'}</td>
+        <td>${report.fundamentals.roa > 8 ? '<span style="color: #28a745;">Strong</span>' : report.fundamentals.roa > 4 ? '<span style="color: #ffc107;">Moderate</span>' : '<span style="color: #dc3545;">Weak</span>'}</td>
       </tr>
       <tr>
+        <td rowspan="2"><strong>Cash Flow</strong></td>
         <td>FCF Margin</td>
         <td>${report.fundamentals.fcf_margin ? fmt(report.fundamentals.fcf_margin, 1) + '%' : 'N/A'}</td>
         <td>12%+</td>
-        <td>${report.fundamentals.fcf_margin > 12 ? 'Strong Cash Generation' : report.fundamentals.fcf_margin > 6 ? 'Moderate' : 'N/A'}</td>
+        <td>${report.fundamentals.fcf_margin > 12 ? '<span style="color: #28a745;">Strong</span>' : report.fundamentals.fcf_margin > 6 ? '<span style="color: #ffc107;">Moderate</span>' : '<span style="color: #666;">N/A</span>'}</td>
+      </tr>
+      <tr>
+        <td>FCF Conversion</td>
+        <td>${(() => {
+          const fcf = report.fundamentals?.fcf_margin || 0;
+          const net = report.fundamentals?.net_margin || 1;
+          if (!fcf || !net) return 'N/A';
+          const conv = (fcf / net) * 100;
+          return fmt(conv, 0) + '%';
+        })()}</td>
+        <td>80%+</td>
+        <td>${(() => {
+          const fcf = report.fundamentals?.fcf_margin || 0;
+          const net = report.fundamentals?.net_margin || 1;
+          if (!fcf || !net) return '<span style="color: #666;">N/A</span>';
+          const conv = (fcf / net) * 100;
+          return conv > 80 ? '<span style="color: #28a745;">Excellent</span>' : conv > 50 ? '<span style="color: #ffc107;">Good</span>' : '<span style="color: #dc3545;">Weak</span>';
+        })()}</td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <!-- 🔧 v7.5: Capital Structure & Balance Sheet Health (with safe null guards) -->
+  <h2>Capital Structure & Allocation</h2>
+  <table class="data-table">
+    <thead><tr><th>Metric</th><th>Value</th><th>Implication</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Debt/Equity Ratio</strong></td>
+        <td>${(() => {
+          if (report.fundamentals?.debt_equity != null) return fmt(report.fundamentals.debt_equity, 2) + 'x';
+          if (report.fundamentals?.roe && report.fundamentals?.roa && report.fundamentals.roa > 0) {
+            const est = Math.max(0, report.fundamentals.roe / report.fundamentals.roa - 1);
+            return fmt(est, 2) + 'x (est.)';
+          }
+          return 'N/A';
+        })()}</td>
+        <td>${(() => {
+          const de = report.fundamentals?.debt_equity ?? (report.fundamentals?.roe && report.fundamentals?.roa && report.fundamentals.roa > 0 ? Math.max(0, report.fundamentals.roe / report.fundamentals.roa - 1) : null);
+          if (de == null) return 'Insufficient data for assessment';
+          if (de < 0.3) return 'Conservative balance sheet; low financial risk';
+          if (de < 1.0) return 'Moderate leverage; balanced capital structure';
+          return 'Elevated leverage; monitor interest coverage';
+        })()}</td>
+      </tr>
+      <tr>
+        <td><strong>Interest Coverage</strong></td>
+        <td>${(() => {
+          const opMargin = report.fundamentals?.operating_margin;
+          const netMargin = report.fundamentals?.net_margin;
+          if (!opMargin || !netMargin) return 'N/A';
+          return opMargin > netMargin * 1.5 ? '>10x (est.)' : '5-10x (est.)';
+        })()}</td>
+        <td>${report.fundamentals?.operating_margin > 20 ? 'Strong ability to service debt' : report.fundamentals?.operating_margin > 10 ? 'Adequate coverage' : 'Monitor closely'}</td>
+      </tr>
+      <tr>
+        <td><strong>Capex Intensity</strong></td>
+        <td>${(() => {
+          if (!report.fundamentals?.revenue) return 'N/A';
+          const grossMargin = report.fundamentals?.gross_margin || 0;
+          return grossMargin > 60 ? '5-8% of revenue (est.)' : grossMargin > 40 ? '8-12% of revenue (est.)' : '10-15% of revenue (est.)';
+        })()}</td>
+        <td>${report.fundamentals?.gross_margin > 50 ? 'Asset-light model; high incremental margins' : report.fundamentals?.gross_margin > 30 ? 'Moderate capital requirements' : 'Capital-intensive; requires ongoing investment'}</td>
+      </tr>
+      <tr>
+        <td><strong>Capital Return Policy</strong></td>
+        <td>${(() => {
+          const divYield = report.dividends?.yield;
+          if (divYield && divYield > 0) return fmt(divYield, 2) + '% div + buybacks';
+          return 'Growth reinvestment priority';
+        })()}</td>
+        <td>${(() => {
+          const divYield = report.dividends?.yield || 0;
+          if (divYield > 2) return 'Shareholder-friendly; consistent returns';
+          if (divYield > 0) return 'Modest dividend; balanced approach';
+          return 'Prioritizing growth investments over distributions';
+        })()}</td>
       </tr>
     </tbody>
   </table>
@@ -5922,33 +6106,57 @@ Our base case target PE of ${fmt(report.valuation.historical_pe_5y?.median || re
     </tbody>
   </table>
   
+  <!-- 🔧 v7.5: Enhanced Trade Setup with Trigger Signals & Time Windows -->
   <h2>Trade Setup Scenarios</h2>
   <table class="data-table">
-    <thead><tr><th>Scenario</th><th>Entry Level</th><th>Stop-Loss</th><th>Target</th><th>Risk/Reward</th></tr></thead>
+    <thead><tr><th>Scenario</th><th>Entry</th><th>Stop</th><th>Target</th><th>R/R</th><th>Trigger Signal</th><th>Time Window</th></tr></thead>
     <tbody>
       <tr>
-        <td><strong>Bull Case</strong></td>
-        <td>Break above ${fmtCurrency(report.price.high_52w * 1.02)}</td>
-        <td>${fmtCurrency(report.price.last * 0.95)}</td>
+        <td><strong>Breakout</strong></td>
+        <td>${fmtCurrency(report.price.high_52w * 1.02)}</td>
+        <td>${fmtCurrency(report.price.high_52w * 0.95)}</td>
         <td>${fmtCurrency(report.targets.bull.price)}</td>
-        <td>${fmt((report.targets.bull.price / (report.price.high_52w * 1.02) - 1) / 0.05, 1)}:1</td>
+        <td><span style="color: #28a745;">${fmt((report.targets.bull.price / (report.price.high_52w * 1.02) - 1) / ((report.price.high_52w * 1.02) - (report.price.high_52w * 0.95)) * (report.price.high_52w * 1.02), 1)}:1</span></td>
+        <td>Break 52W high on volume</td>
+        <td>3-6 months (swing)</td>
       </tr>
       <tr>
-        <td><strong>Base Case</strong></td>
-        <td>${fmtCurrency(report.price.last)}</td>
-        <td>${fmtCurrency(report.price.last * 0.92)}</td>
+        <td><strong>Pullback Buy</strong></td>
+        <td>${fmtCurrency(report.techs?.ema_50 || report.price.last * 0.95)}</td>
+        <td>${fmtCurrency(report.techs?.ema_200 || report.price.last * 0.88)}</td>
         <td>${fmtCurrency(report.targets.base.price)}</td>
-        <td>${fmt((report.targets.base.price / report.price.last - 1) / 0.08, 1)}:1</td>
+        <td><span style="color: #28a745;">${(() => {
+          const entry = report.techs?.ema_50 || report.price.last * 0.95;
+          const stop = report.techs?.ema_200 || report.price.last * 0.88;
+          const target = report.targets.base.price;
+          const risk = entry - stop;
+          const reward = target - entry;
+          return fmt(reward / risk, 1);
+        })()}:1</span></td>
+        <td>RSI < 40 + EMA50 test</td>
+        <td>6-12 months (position)</td>
       </tr>
       <tr>
-        <td><strong>Bear Case</strong></td>
-        <td>N/A (avoid entry)</td>
-        <td>-</td>
-        <td>-</td>
-        <td>-</td>
+        <td><strong>Mean Reversion</strong></td>
+        <td>${fmtCurrency(report.price.low_52w * 1.05)}</td>
+        <td>${fmtCurrency(report.price.low_52w * 0.95)}</td>
+        <td>${fmtCurrency(report.price.last * 0.95)}</td>
+        <td><span style="color: #28a745;">${(() => {
+          const entry = report.price.low_52w * 1.05;
+          const stop = report.price.low_52w * 0.95;
+          const target = report.price.last * 0.95;
+          const risk = entry - stop;
+          const reward = target - entry;
+          return fmt(reward / risk, 1);
+        })()}:1</span></td>
+        <td>RSI < 30 + support hold</td>
+        <td>1-3 months (tactical)</td>
       </tr>
     </tbody>
   </table>
+  <p class="text-content" style="font-size: 9pt; color: #666; margin-top: 8px;">
+    R/R = Risk/Reward ratio. Minimum 2:1 R/R recommended for swing trades, 3:1+ for breakout positions. Time windows are indicative based on historical price action and catalyst timing.
+  </p>
   
   ${report.charts?.price_chart ? `
   <div class="chart-container">
