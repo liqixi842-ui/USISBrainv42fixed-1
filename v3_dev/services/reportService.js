@@ -1951,10 +1951,10 @@ Use ONLY the data provided. No hallucinations. Cite specific numbers.`;
       },
       body: JSON.stringify({
         model: 'claude-3-5-sonnet-latest',
-        max_tokens: 2000,
+        max_tokens: 8000,
         messages: [{ role: 'user', content: prompt }]
       }),
-      timeout: 30000
+      timeout: 60000
     });
 
     if (!response.ok) {
@@ -2006,9 +2006,9 @@ Use institutional tone. Cite specific data when available.`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.6, maxOutputTokens: 2000 }
+          generationConfig: { temperature: 0.6, maxOutputTokens: 8000 }
         }),
-        timeout: 30000
+        timeout: 60000
       }
     );
 
@@ -2064,10 +2064,10 @@ Use ONLY provided data. No hallucinations.`;
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 2000,
+        max_tokens: 8000,
         temperature: 0.5
       }),
-      timeout: 30000
+      timeout: 60000
     });
 
     if (!response.ok) {
@@ -2123,10 +2123,10 @@ Cite specific peer names and numbers.`;
       body: JSON.stringify({
         model: 'mistral-large-latest',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 2000,
+        max_tokens: 8000,
         temperature: 0.6
       }),
-      timeout: 30000
+      timeout: 60000
     });
 
     if (!response.ok) {

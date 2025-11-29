@@ -578,7 +578,7 @@ STYLE:
           { role: 'user', content: userPrompt }
         ],
         temperature: 0.6,
-        max_tokens: 1200
+        max_tokens: 4000
       })
     });
 
