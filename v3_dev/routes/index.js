@@ -5,6 +5,9 @@ const router = express.Router();
 // Import report routes
 const reportRouter = require('./report');
 
+// Import pipeline modules
+const pipeline = require('../services/pipeline');
+
 // Test route
 router.get('/test', (req, res) => {
   res.json({
@@ -25,6 +28,53 @@ router.get('/health', (req, res) => {
     uptime: process.uptime(),
     timestamp: new Date().toISOString()
   });
+});
+
+// Pipeline health check endpoint (Step 10)
+router.get('/health/pipeline', async (req, res) => {
+  try {
+    const apiStatus = await pipeline.checkHealth();
+    const pipelineStatus = pipeline.getStatus();
+    
+    res.json({
+      status: 'ok',
+      pipeline: pipelineStatus,
+      api_health: apiStatus,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Pipeline daily report endpoint
+router.get('/health/pipeline/report', (req, res) => {
+  const report = pipeline.getDailyReport();
+  res.type('text/plain').send(report);
+});
+
+// Pipeline direct execution endpoint (returns structured JSON)
+router.get('/pipeline/:symbol', async (req, res) => {
+  const { symbol } = req.params;
+  
+  console.log(`\n📊 [Pipeline] Direct execution for ${symbol}`);
+  
+  try {
+    const result = await pipeline.generateReport(symbol);
+    
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      ticker: symbol,
+      status: 'error',
+      errors: [error.message],
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Mount report routes at /v3/report/*
