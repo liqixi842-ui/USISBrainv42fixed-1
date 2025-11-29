@@ -2,10 +2,12 @@
 USIS Brain v7.1 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
 
 # Recent Changes (v7.2 - November 2025)
-- **Institutional PDF Headers**: Added professional page headers displaying "{Firm Name} — Equity Research" on every page except cover
+- **V6+V7 PDF Merger Complete**: Full 20-page institutional layout merged with watermark-free PDFKit renderer
+- **Fixed 20-Page Structure**: Pages 4-20 now unconditionally created with placeholder content when data unavailable
+- **15+ PDFKit Layout Primitives**: renderGenericTable, renderTwoColumnSection, renderChartFrame, renderBulletList, renderValuationSnapshot, renderPeerComparison, renderFinancialsOverview, renderSegmentTable, renderInvestmentStrategy, renderScenarioTargets, renderTechnicalIndicators, renderPageFooter, renderDisclosuresPage
+- **V6 Page Layout**: Cover, TOC, Key Takeaways, Technical Chart, Financial Trends, Executive Summary, Investment Thesis, Valuation Analysis, Valuation Snapshot, Segment Overview, Industry/Macro, Peer Comparison, Financial Overview, Catalysts, Risks, Technical Analysis, Investment Strategy, Multi-Model Consensus, Industry Landscape, Disclosures
+- **Institutional PDF Headers**: Professional page headers displaying "{Firm Name} — Equity Research" on every page except cover
 - **Custom Firm/Analyst Names**: `研报PDF SYMBOL, FirmName, AnalystName, language` command supports custom branding
-- **Phase 6 PDFKit Enhanced**: Merged V6 (DocRaptor layout) and V7 (PDFKit content) advantages into unified renderer
-- **Page Number Tracking**: Comprehensive system ensures headers on all pages including TOC overflow
 - **Default Branding**: Falls back to "USIS Research" and "USIS Brain v7.0 Multi-AI System" when not specified
 
 # Previous Changes (v7.1 - November 2025)

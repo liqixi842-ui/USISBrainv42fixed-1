@@ -681,6 +681,516 @@ function renderSectionDivider(doc, title, options = {}) {
   return startY + 40;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// 🆕 V6 完整布局组件 - 机构级20页报告支持
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 通用表格渲染器（带交替行颜色）
+ * @param {PDFDocument} doc - PDFKit 文档对象
+ * @param {Object} config - 表格配置
+ */
+function renderGenericTable(doc, config = {}) {
+  const {
+    startY = 60,
+    headers = [],
+    rows = [],
+    columnWidths = null,
+    title = null,
+    showBorder = true
+  } = config;
+  
+  let currentY = startY;
+  const tableX = 50;
+  const tableWidth = doc.page.width - 100;
+  const numCols = headers.length || (rows[0] ? rows[0].length : 1);
+  const colWidths = columnWidths || Array(numCols).fill(tableWidth / numCols);
+  const rowHeight = 22;
+  
+  // 标题（如果提供）
+  if (title) {
+    doc.fontSize(14).fillColor('#1a2332');
+    safeSetFont(doc, 'Bold');
+    doc.text(title, tableX, currentY);
+    currentY += 25;
+  }
+  
+  // 表头
+  if (headers.length > 0) {
+    doc.rect(tableX, currentY, tableWidth, rowHeight + 2).fillColor('#1a2332').fill();
+    doc.fontSize(9).fillColor('#ffffff');
+    safeSetFont(doc, 'Bold');
+    
+    let colX = tableX;
+    headers.forEach((header, i) => {
+      doc.text(header, colX + 8, currentY + 6, { width: colWidths[i] - 16, align: i === 0 ? 'left' : 'center' });
+      colX += colWidths[i];
+    });
+    currentY += rowHeight + 2;
+  }
+  
+  // 数据行
+  rows.forEach((row, rowIndex) => {
+    const bgColor = rowIndex % 2 === 0 ? '#ffffff' : '#f8fafc';
+    doc.rect(tableX, currentY, tableWidth, rowHeight).fillColor(bgColor).fill();
+    
+    doc.fontSize(9).fillColor('#374151');
+    safeSetFont(doc, 'Regular');
+    
+    let colX = tableX;
+    row.forEach((cell, i) => {
+      const cellValue = cell === null || cell === undefined ? 'N/A' : String(cell);
+      doc.text(cellValue, colX + 8, currentY + 6, { width: colWidths[i] - 16, align: i === 0 ? 'left' : 'center' });
+      colX += colWidths[i];
+    });
+    currentY += rowHeight;
+  });
+  
+  // 边框
+  if (showBorder) {
+    doc.rect(tableX, startY + (title ? 25 : 0), tableWidth, currentY - startY - (title ? 25 : 0))
+       .strokeColor('#e2e8f0').lineWidth(1).stroke();
+  }
+  
+  return currentY + 15;
+}
+
+/**
+ * 两列布局渲染器
+ * @param {PDFDocument} doc - PDFKit 文档对象
+ * @param {Object} config - 配置
+ */
+function renderTwoColumnSection(doc, config = {}) {
+  const {
+    startY = 60,
+    leftTitle = '',
+    rightTitle = '',
+    leftItems = [],
+    rightItems = [],
+    sectionTitle = null
+  } = config;
+  
+  let currentY = startY;
+  const columnWidth = (doc.page.width - 120) / 2;
+  const leftX = 50;
+  const rightX = 50 + columnWidth + 20;
+  
+  // 主标题（如果提供）
+  if (sectionTitle) {
+    doc.fontSize(18).fillColor('#1a2332');
+    safeSetFont(doc, 'Bold');
+    doc.text(sectionTitle, 50, currentY);
+    
+    doc.moveTo(50, currentY + 25).lineTo(doc.page.width - 50, currentY + 25)
+       .strokeColor('#3b82f6').lineWidth(2).stroke();
+    currentY += 45;
+  }
+  
+  // 左列标题
+  doc.fontSize(12).fillColor('#3b82f6');
+  safeSetFont(doc, 'Bold');
+  doc.text(leftTitle, leftX, currentY);
+  doc.text(rightTitle, rightX, currentY);
+  currentY += 25;
+  
+  // 计算最大行数
+  const maxItems = Math.max(leftItems.length, rightItems.length);
+  const itemHeight = 40;
+  
+  // 渲染左右列内容
+  for (let i = 0; i < Math.min(maxItems, 6); i++) {
+    const itemY = currentY + i * itemHeight;
+    
+    // 左列
+    if (leftItems[i]) {
+      doc.fontSize(9).fillColor('#374151');
+      safeSetFont(doc, 'Regular');
+      const text = typeof leftItems[i] === 'string' ? leftItems[i] : leftItems[i].text || '';
+      doc.text(`• ${text.substring(0, 150)}${text.length > 150 ? '...' : ''}`, leftX, itemY, { width: columnWidth - 10 });
+    }
+    
+    // 右列
+    if (rightItems[i]) {
+      doc.fontSize(9).fillColor('#374151');
+      safeSetFont(doc, 'Regular');
+      const text = typeof rightItems[i] === 'string' ? rightItems[i] : rightItems[i].text || '';
+      doc.text(`• ${text.substring(0, 150)}${text.length > 150 ? '...' : ''}`, rightX, itemY, { width: columnWidth - 10 });
+    }
+  }
+  
+  return currentY + Math.min(maxItems, 6) * itemHeight + 20;
+}
+
+/**
+ * 图表/图像框架渲染器
+ * @param {PDFDocument} doc - PDFKit 文档对象
+ * @param {Object} config - 配置
+ */
+function renderChartFrame(doc, config = {}) {
+  const {
+    startY = 60,
+    title = 'Chart',
+    imageData = null,
+    imagePath = null,
+    width = null,
+    height = 200,
+    placeholder = 'Chart data currently unavailable'
+  } = config;
+  
+  let currentY = startY;
+  const chartWidth = width || (doc.page.width - 100);
+  const chartX = 50;
+  
+  // 标题
+  doc.fontSize(12).fillColor('#1a2332');
+  safeSetFont(doc, 'Bold');
+  doc.text(title, chartX, currentY);
+  currentY += 20;
+  
+  // 尝试渲染图像
+  let imageRendered = false;
+  
+  if (imageData || imagePath) {
+    try {
+      const imgSource = imageData || imagePath;
+      
+      // 如果是 base64 数据 URL
+      if (typeof imgSource === 'string' && imgSource.startsWith('data:')) {
+        const base64Data = imgSource.split(',')[1];
+        const buffer = Buffer.from(base64Data, 'base64');
+        doc.image(buffer, chartX, currentY, { width: chartWidth, height: height });
+        imageRendered = true;
+      } 
+      // 如果是 URL
+      else if (typeof imgSource === 'string' && (imgSource.startsWith('http') || imgSource.startsWith('/'))) {
+        doc.image(imgSource, chartX, currentY, { width: chartWidth, height: height });
+        imageRendered = true;
+      }
+    } catch (error) {
+      console.warn(`⚠️  Chart image render failed: ${error.message}`);
+    }
+  }
+  
+  // 占位符（如果图像渲染失败）
+  if (!imageRendered) {
+    doc.rect(chartX, currentY, chartWidth, height)
+       .fillColor('#f8fafc').fill();
+    doc.rect(chartX, currentY, chartWidth, height)
+       .strokeColor('#e2e8f0').lineWidth(1).stroke();
+    
+    doc.fontSize(11).fillColor('#94a3b8');
+    safeSetFont(doc, 'Regular');
+    doc.text(placeholder, chartX, currentY + height / 2 - 10, { width: chartWidth, align: 'center' });
+  }
+  
+  return currentY + height + 20;
+}
+
+/**
+ * 项目符号列表渲染器
+ * @param {PDFDocument} doc - PDFKit 文档对象
+ * @param {Object} config - 配置
+ */
+function renderBulletList(doc, config = {}) {
+  const {
+    startY = 60,
+    title = null,
+    items = [],
+    maxItems = 8,
+    numbered = false,
+    itemPrefix = null
+  } = config;
+  
+  let currentY = startY;
+  
+  // 标题
+  if (title) {
+    doc.fontSize(14).fillColor('#1a2332');
+    safeSetFont(doc, 'Bold');
+    doc.text(title, 50, currentY);
+    currentY += 25;
+  }
+  
+  // 列表项
+  doc.fontSize(10).fillColor('#374151');
+  safeSetFont(doc, 'Regular');
+  
+  items.slice(0, maxItems).forEach((item, i) => {
+    const text = typeof item === 'string' ? item : (item.text || item.description || '');
+    const prefix = numbered ? `${i + 1}. ` : (itemPrefix ? `${itemPrefix} ${i + 1}: ` : '• ');
+    const displayText = `${prefix}${text.substring(0, 350)}${text.length > 350 ? '...' : ''}`;
+    
+    doc.text(displayText, 50, currentY, { width: doc.page.width - 100 });
+    currentY += doc.heightOfString(displayText, { width: doc.page.width - 100 }) + 8;
+  });
+  
+  return currentY + 15;
+}
+
+/**
+ * 估值快照表格
+ */
+function renderValuationSnapshot(doc, config = {}) {
+  const { startY = 60, valuation = {}, price = {} } = config;
+  
+  const rows = [
+    ['Price', formatMetricValue(price.last, '$'), `${formatMetricValue(price.low_52w, '$')} - ${formatMetricValue(price.high_52w, '$')}`],
+    ['PE (TTM)', formatMetricValue(valuation.pe_ttm, 'x'), '-'],
+    ['PE (Forward)', formatMetricValue(valuation.pe_forward, 'x'), '-'],
+    ['P/S (TTM)', formatMetricValue(valuation.ps_ttm, 'x'), '-'],
+    ['P/B', formatMetricValue(valuation.pb, 'x'), '-'],
+    ['Dividend Yield', formatMetricValue(valuation.dividend_yield, '%'), '-'],
+    ['EV/EBITDA', formatMetricValue(valuation.ev_ebitda, 'x'), '-']
+  ];
+  
+  return renderGenericTable(doc, {
+    startY,
+    title: 'Valuation Snapshot',
+    headers: ['Metric', 'Current', '52W Range'],
+    rows,
+    columnWidths: [200, 140, 155]
+  });
+}
+
+/**
+ * 同行比较表格
+ */
+function renderPeerComparison(doc, config = {}) {
+  const { startY = 60, peers = [], symbol = '' } = config;
+  
+  const rows = peers.slice(0, 6).map(p => [
+    p.name || p.symbol,
+    p.symbol,
+    formatLargeNumber(p.market_cap),
+    formatMetricValue(p.pe_forward, 'x'),
+    formatMetricValue(p.ps_ttm, 'x'),
+    formatMetricValue(p.roe, '%'),
+    p.comment || '-'
+  ]);
+  
+  return renderGenericTable(doc, {
+    startY,
+    title: 'Peer Comparison',
+    headers: ['Name', 'Ticker', 'Market Cap', 'PE (Fwd)', 'P/S', 'ROE', 'Comment'],
+    rows,
+    columnWidths: [110, 50, 70, 60, 50, 50, 105]
+  });
+}
+
+/**
+ * 财务概览表格
+ */
+function renderFinancialsOverview(doc, config = {}) {
+  const { startY = 60, fundamentals = {}, growth = {} } = config;
+  
+  const latestRevenue = fundamentals.revenue_5y?.[fundamentals.revenue_5y?.length - 1]?.value;
+  const latestEPS = fundamentals.eps_5y?.[fundamentals.eps_5y?.length - 1]?.value;
+  
+  const rows = [
+    ['Revenue (TTM)', formatLargeNumber(latestRevenue)],
+    ['Revenue 3Y CAGR', formatMetricValue(growth.revenue_cagr_3y, '%')],
+    ['EPS (TTM)', formatMetricValue(latestEPS, '$')],
+    ['EPS 3Y CAGR', formatMetricValue(growth.eps_cagr_3y, '%')],
+    ['Gross Margin', formatMetricValue(fundamentals.gross_margin, '%')],
+    ['Operating Margin', formatMetricValue(fundamentals.operating_margin, '%')],
+    ['Net Margin', formatMetricValue(fundamentals.net_margin, '%')],
+    ['ROE', formatMetricValue(fundamentals.roe, '%')],
+    ['ROA', formatMetricValue(fundamentals.roa, '%')]
+  ];
+  
+  return renderGenericTable(doc, {
+    startY,
+    title: 'Financial Overview',
+    headers: ['Metric', 'Value'],
+    rows,
+    columnWidths: [250, 245]
+  });
+}
+
+/**
+ * 业务分部表格
+ */
+function renderSegmentTable(doc, config = {}) {
+  const { startY = 60, segments = [] } = config;
+  
+  const defaultSegments = [
+    { name: 'Primary Segment', revenue_pct: 60, growth: 'N/A', margin: 'N/A', comment: 'Main business' },
+    { name: 'Secondary Segment', revenue_pct: 30, growth: 'N/A', margin: 'N/A', comment: 'Supporting business' },
+    { name: 'Other', revenue_pct: 10, growth: 'N/A', margin: 'N/A', comment: 'Other operations' }
+  ];
+  
+  const displaySegments = segments.length > 0 ? segments : defaultSegments;
+  
+  const rows = displaySegments.slice(0, 6).map(s => [
+    s.name || s.segment,
+    formatMetricValue(s.revenue_pct, '%'),
+    s.growth || 'N/A',
+    s.margin || 'N/A',
+    s.comment || '-'
+  ]);
+  
+  return renderGenericTable(doc, {
+    startY,
+    title: 'Business Segment Breakdown',
+    headers: ['Segment', 'Revenue %', 'Growth', 'Margin', 'Comment'],
+    rows,
+    columnWidths: [130, 80, 80, 80, 125]
+  });
+}
+
+/**
+ * 投资策略表格
+ */
+function renderInvestmentStrategy(doc, config = {}) {
+  const { startY = 60, price = {}, targets = {} } = config;
+  
+  const currentPrice = price.last || 100;
+  const baseTarget = targets.base?.price || currentPrice * 1.1;
+  const bullTarget = targets.bull?.price || baseTarget * 1.15;
+  
+  const rows = [
+    ['Aggressive', `${formatMetricValue(currentPrice * 0.95, '$')} - ${formatMetricValue(currentPrice, '$')}`, formatMetricValue(bullTarget, '$'), formatMetricValue(currentPrice * 0.90, '$'), '5-10%', 'Higher risk tolerance'],
+    ['Balanced', `${formatMetricValue(currentPrice * 0.97, '$')} - ${formatMetricValue(currentPrice * 1.02, '$')}`, formatMetricValue(baseTarget, '$'), formatMetricValue(currentPrice * 0.93, '$'), '3-7%', 'Core holding'],
+    ['Conservative', `Below ${formatMetricValue(currentPrice * 0.95, '$')}`, formatMetricValue(baseTarget * 0.9, '$'), formatMetricValue(currentPrice * 0.88, '$'), '2-5%', 'Wait for pullback']
+  ];
+  
+  return renderGenericTable(doc, {
+    startY,
+    title: 'Investment Strategy',
+    headers: ['Profile', 'Entry Range', 'Target', 'Stop Loss', 'Position', 'Notes'],
+    rows,
+    columnWidths: [75, 100, 70, 70, 55, 125]
+  });
+}
+
+/**
+ * 场景分析表格
+ */
+function renderScenarioTargets(doc, config = {}) {
+  const { startY = 60, targets = {}, price = {} } = config;
+  
+  const currentPrice = price.last || 100;
+  
+  const rows = [
+    ['Bull Case', formatMetricValue(targets.bull?.price, '$'), formatMetricValue(targets.bull?.upside_pct, '%'), 'Accelerated growth, multiple expansion'],
+    ['Base Case', formatMetricValue(targets.base?.price, '$'), formatMetricValue(targets.base?.upside_pct, '%'), 'Steady execution, in-line growth'],
+    ['Bear Case', formatMetricValue(targets.bear?.price, '$'), formatMetricValue(targets.bear?.upside_pct || ((targets.bear?.price / currentPrice - 1) * 100), '%'), 'Slower growth, multiple contraction']
+  ];
+  
+  return renderGenericTable(doc, {
+    startY,
+    title: 'Scenario Targets',
+    headers: ['Scenario', 'Target Price', 'Upside/Downside', 'Assumptions'],
+    rows,
+    columnWidths: [100, 100, 100, 195]
+  });
+}
+
+/**
+ * 技术指标表格
+ */
+function renderTechnicalIndicators(doc, config = {}) {
+  const { startY = 60, indicators = [] } = config;
+  
+  const defaultIndicators = [
+    { indicator: 'RSI (14)', value: 'N/A', signal: 'Neutral' },
+    { indicator: 'MACD', value: 'N/A', signal: 'Neutral' },
+    { indicator: 'EMA 20', value: 'N/A', signal: 'Neutral' },
+    { indicator: 'EMA 50', value: 'N/A', signal: 'Neutral' }
+  ];
+  
+  const displayIndicators = indicators.length > 0 ? indicators : defaultIndicators;
+  
+  const rows = displayIndicators.map(i => [i.indicator, i.value, i.signal]);
+  
+  return renderGenericTable(doc, {
+    startY,
+    title: 'Technical Indicators',
+    headers: ['Indicator', 'Value', 'Signal'],
+    rows,
+    columnWidths: [165, 165, 165]
+  });
+}
+
+/**
+ * 格式化指标值
+ */
+function formatMetricValue(value, suffix = '') {
+  if (value === null || value === undefined || isNaN(value)) return 'N/A';
+  if (suffix === '$') return `$${Number(value).toFixed(2)}`;
+  if (suffix === '%') return `${Number(value).toFixed(1)}%`;
+  if (suffix === 'x') return `${Number(value).toFixed(2)}x`;
+  return Number(value).toFixed(2);
+}
+
+/**
+ * 格式化大数字
+ */
+function formatLargeNumber(value) {
+  if (value === null || value === undefined || isNaN(value)) return 'N/A';
+  const num = Number(value);
+  if (num >= 1e12) return `$${(num / 1e12).toFixed(2)}T`;
+  if (num >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
+  if (num >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
+  return `$${num.toFixed(0)}`;
+}
+
+/**
+ * 渲染页脚（简化版）
+ */
+function renderPageFooter(doc, config = {}) {
+  const { pageNumber = 1, brand = 'USIS Research' } = config;
+  
+  // 分隔线
+  doc.moveTo(50, doc.page.height - 60)
+     .lineTo(doc.page.width - 50, doc.page.height - 60)
+     .strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+  
+  // 品牌名
+  doc.fontSize(8).fillColor('#94a3b8');
+  safeSetFont(doc, 'Regular');
+  doc.text(brand, 50, doc.page.height - 50);
+  
+  // 页码
+  doc.text(`Page ${pageNumber}`, doc.page.width - 100, doc.page.height - 50, { align: 'right' });
+}
+
+/**
+ * 渲染法律免责声明页
+ */
+function renderDisclosuresPage(doc, config = {}) {
+  const { startY = 60, firmName = 'USIS Research' } = config;
+  
+  let currentY = startY;
+  
+  // 标题
+  doc.fontSize(18).fillColor('#1a2332');
+  safeSetFont(doc, 'Bold');
+  doc.text('Important Disclosures', 50, currentY);
+  currentY += 35;
+  
+  const disclosures = [
+    `This research report is published by ${firmName} for informational purposes only and is not intended to constitute investment advice.`,
+    'The information contained herein has been obtained from sources believed to be reliable but is not guaranteed as to accuracy or completeness.',
+    'Past performance is not indicative of future results. The value of investments and the income from them may fluctuate.',
+    'Any opinions expressed are subject to change without notice and do not constitute a recommendation to buy or sell any security.',
+    'This report may contain forward-looking statements that involve risks and uncertainties. Actual results may differ materially.',
+    'The analyst(s) responsible for this report certify that the views expressed accurately reflect their personal views about the subject securities.',
+    'Investors should consider this report as only a single factor in making their investment decision.',
+    'This document is for the exclusive use of the recipient and may not be reproduced or redistributed without prior written consent.'
+  ];
+  
+  doc.fontSize(9).fillColor('#374151');
+  safeSetFont(doc, 'Regular');
+  
+  disclosures.forEach((text, i) => {
+    doc.text(`${i + 1}. ${text}`, 50, currentY, { width: doc.page.width - 100 });
+    currentY += doc.heightOfString(text, { width: doc.page.width - 100 }) + 12;
+  });
+  
+  return currentY + 20;
+}
+
 module.exports = {
   renderProfessionalCover,
   renderTableOfContents,
@@ -694,5 +1204,20 @@ module.exports = {
   renderConsensusTable,
   renderSectionDivider,
   renderMetricCard,
-  formatMetric
+  formatMetric,
+  renderGenericTable,
+  renderTwoColumnSection,
+  renderChartFrame,
+  renderBulletList,
+  renderValuationSnapshot,
+  renderPeerComparison,
+  renderFinancialsOverview,
+  renderSegmentTable,
+  renderInvestmentStrategy,
+  renderScenarioTargets,
+  renderTechnicalIndicators,
+  formatMetricValue,
+  formatLargeNumber,
+  renderPageFooter,
+  renderDisclosuresPage
 };
