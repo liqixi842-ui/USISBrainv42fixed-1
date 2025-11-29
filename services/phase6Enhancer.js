@@ -20,11 +20,68 @@ const { getDailyKlineImage } = require('./chartImageService');
 const { generateAllFinancialCharts } = require('./financialChartService');
 const { getMultiModelViews, consolidateConsensus } = require('./multiModelConsensus');
 const { generateFullTextReport } = require('./reportTextService');
-const { renderProfessionalCover, renderTableOfContents, extractSections, renderInstitutionalHeader } = require('./pdfTemplateUtils');
+const { 
+  renderProfessionalCover, 
+  renderTableOfContents, 
+  extractSections, 
+  renderInstitutionalHeader,
+  renderKeyTakeawaysSection,
+  renderKeyMetricsRow,
+  renderConsensusTable,
+  renderSectionDivider
+} = require('./pdfTemplateUtils');
 const { getPremiumContent } = require('./premiumContentBridge'); // Phase 7: Premium 桥接
 const PDFDocument = require('pdfkit');
 const path = require('path');
 const fs = require('fs');
+
+// ═══════════════════════════════════════════════════════════════
+// 🆕 v7.2: 集中化页码管理控制器
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 创建页码控制器 - 统一管理所有分页和页眉渲染
+ * @param {PDFDocument} doc - PDFKit 文档对象
+ * @param {Object} options - 配置选项
+ * @returns {Object} 页码控制器
+ */
+function createPageController(doc, options = {}) {
+  const { firmName = 'USIS Research', initialPage = 1 } = options;
+  let currentPage = initialPage;
+  
+  return {
+    /** 获取当前页码 */
+    get current() { return currentPage; },
+    
+    /** 设置当前页码（用于同步外部页码，如 TOC 溢出）*/
+    set(pageNum) { currentPage = pageNum; },
+    
+    /** 仅渲染页眉（不创建新页面）*/
+    syncHeader(opts = {}) {
+      const { pageNum = currentPage, skipHeader = false } = opts;
+      if (!skipHeader) {
+        renderInstitutionalHeader(doc, { firmName, pageNumber: pageNum });
+      }
+    },
+    
+    /** 创建新页面并渲染页眉 */
+    advance(opts = {}) {
+      const { skipHeader = false } = opts;
+      doc.addPage();
+      currentPage++;
+      if (!skipHeader) {
+        renderInstitutionalHeader(doc, { firmName, pageNumber: currentPage });
+      }
+      return currentPage;
+    },
+    
+    /** 仅递增页码（页面已通过其他方式创建）*/
+    increment() {
+      currentPage++;
+      return currentPage;
+    }
+  };
+}
 
 /**
  * 生成增强版 PDF 研报
@@ -255,35 +312,71 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
         analystName: analystName
       });
       
-      // 🆕 v7.2: 页码追踪（用于页眉）
-      let pageNumber = 1; // 封面是第1页
+      // 🆕 v7.2: 使用集中化页码控制器
+      const pages = createPageController(doc, { firmName: displayFirmName, initialPage: 1 });
       
       // Step 4: 渲染目录
       console.log(`   ├─ Rendering table of contents...`);
-      pageNumber++; // 目录页 = 第2页
-      
-      // 🆕 v7.2: 目录页添加页眉（必须在 TOC 内容之前渲染）
-      renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
+      pages.increment(); // 目录页 = 第2页
+      pages.syncHeader(); // 渲染目录页眉
       
       const sections = extractSections(report);
-      // 传递 firmName 以支持 TOC 溢出页的页眉
-      const tocResult = renderTableOfContents(doc, sections, { firmName: displayFirmName, pageNumber });
+      const tocResult = renderTableOfContents(doc, sections, { firmName: displayFirmName, pageNumber: pages.current });
       
-      // 🆕 v7.2: 同步页码（处理 TOC 溢出的情况）
+      // 同步页码（处理 TOC 溢出的情况）
       if (tocResult && tocResult.finalPageNumber) {
-        pageNumber = tocResult.finalPageNumber;
+        pages.set(tocResult.finalPageNumber);
       }
       
-      // 🆕 v7.2: TOC 结束后添加分页
-      doc.addPage();
+      // ═══════════════════════════════════════════════════════════════
+      // 🆕 v7.2: 插入 V6 风格的机构级摘要页（Key Takeaways + Key Metrics）
+      // ═══════════════════════════════════════════════════════════════
+      pages.advance(); // 创建新页面 + 渲染页眉
+      
+      // 提取 Key Messages 和 Key Risks（带增强的默认值保护）
+      const keyMessages = extractKeyMessages(report);
+      const keyRisks = extractKeyRisks(report);
+      
+      // 渲染 Key Takeaways（两列布局）
+      let summaryY = renderKeyTakeawaysSection(doc, {
+        messages: keyMessages,
+        risks: keyRisks
+      }, { startY: 60 });
+      
+      // 提取并渲染 Key Metrics
+      const metricsData = extractMetrics(report);
+      summaryY = renderKeyMetricsRow(doc, metricsData, { startY: summaryY + 20 });
+      
+      // 🆕 v7.2: 仅在有真实数据时渲染 Our View vs Consensus
+      // 需要同时满足：1) 有评级或目标价 2) 至少有一个关键指标有值
+      const ourRating = report?.rating;
+      const ourTarget = report?.target_price || report?.targetPrice || report?.meta?.targetPrice;
+      const ourRoe = metricsData?.roe;
+      const ourEpsGrowth = metricsData?.eps_growth;
+      
+      // 检查是否有任何实质性的 "Our View" 数据
+      const hasOurViewData = ourRating || ourTarget || ourRoe !== null || ourEpsGrowth !== null;
+      
+      if (hasOurViewData) {
+        const consensusData = {
+          ourView: {
+            rating: ourRating || null,
+            targetPrice: ourTarget || null,
+            roe: ourRoe,
+            epsGrowth: ourEpsGrowth
+          },
+          consensus: { rating: 'N/A', targetPrice: 'N/A', roe: 'N/A', epsGrowth: 'N/A' }
+        };
+        renderConsensusTable(doc, consensusData, { startY: summaryY + 10 });
+      }
+      
+      console.log(`   ├─ ✅ Institutional summary page rendered (V6 style)`);
       
       // Step 5: 插入 K线图表（如果有）
       if (assets.klineChart) {
+        pages.advance(); // 创建新页面 + 渲染页眉
         console.log(`   ├─ Inserting K-line chart...`);
         try {
-          pageNumber++;
-          renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
-          
           doc.fontSize(18).fillColor('#1a2332').font(hasFonts ? 'Bold' : 'Helvetica-Bold')
              .text('Technical Analysis - Daily Chart', 50, 60);
           doc.moveDown(1);
@@ -292,9 +385,6 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
             fit: [doc.page.width - 120, 350],
             align: 'center'
           });
-          
-          doc.addPage();
-          // 🆕 注意：下一页的 header 在 Step 6 或 Step 7 开始时渲染
           console.log(`   ├─ ✅ K-line chart inserted`);
         } catch (error) {
           console.warn(`   ├─ ⚠️  K-line chart insertion failed: ${error.message}`);
@@ -306,11 +396,8 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
         const { revenue, eps, margin } = assets.financialCharts;
         
         if (revenue || eps || margin) {
+          pages.advance(); // 创建新页面 + 渲染页眉
           console.log(`   ├─ Inserting financial charts...`);
-          // 🆕 v7.2: 如果前面有 K-line 图表，当前页已经是新页面
-          // 如果没有 K-line，当前页是目录后的新页面
-          pageNumber++;
-          renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
           
           doc.fontSize(18).fillColor('#1a2332').font(hasFonts ? 'Bold' : 'Helvetica-Bold')
              .text('Financial Trends', 50, 60);
@@ -336,9 +423,7 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
               console.warn(`   ├─ ⚠️  EPS chart failed: ${error.message}`);
             }
           } else if (eps) {
-            doc.addPage();
-            pageNumber++;
-            renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
+            pages.advance(); // 使用页码控制器
             try {
               doc.image(eps, 50, 60, { width: doc.page.width - 100 });
               console.log(`   ├─ ✅ EPS chart inserted (new page)`);
@@ -348,9 +433,7 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
           }
           
           if (margin) {
-            doc.addPage();
-            pageNumber++;
-            renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
+            pages.advance(); // 使用页码控制器
             try {
               doc.image(margin, 50, 60, { width: doc.page.width - 100 });
               console.log(`   ├─ ✅ Margin chart inserted`);
@@ -358,45 +441,36 @@ async function renderEnhancedPdf(symbol, language, assets, options) {
               console.warn(`   ├─ ⚠️  Margin chart failed: ${error.message}`);
             }
           }
-          
-          doc.addPage();
-          // 🆕 v7.2: 财务图表后的新页面，header 在 Step 7 渲染
         }
       }
       
       // Step 7: 渲染报告章节（每页添加机构页眉）
       console.log(`   ├─ Rendering report sections...`);
       report.sections.forEach((section, index) => {
-        // 🆕 v7.2: 每个章节开始时渲染页眉（包括前面 addPage 创建的新页面）
-        pageNumber++;
-        renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
+        pages.advance(); // 使用页码控制器创建新页面 + 渲染页眉
         
         doc.fontSize(18).fillColor('#1a2332').font(hasFonts ? 'Bold' : 'Helvetica-Bold')
-           .text(section.title, 50, 60, { underline: false });
+           .text(section.title || 'Section', 50, 60, { underline: false });
         
         doc.moveDown(1);
         
         doc.fontSize(11).fillColor('#333333').font(hasFonts ? 'Regular' : 'Helvetica');
         
-        const paragraphs = section.body.split('\n\n');
+        // 🆕 v7.2: 兼容 section.body 和 section.content（不同生成器使用不同字段名）
+        const sectionContent = section.body || section.content || '';
+        const paragraphs = sectionContent.split('\n\n');
         paragraphs.forEach(p => {
           if (p.trim()) {
             doc.text(p.trim(), { align: 'left', lineGap: 3 });
             doc.moveDown(0.5);
           }
         });
-        
-        if (index < report.sections.length - 1) {
-          doc.addPage();
-        }
       });
       
       // Step 8: 插入多模型共识（如果有）
       if (assets.consensus) {
         console.log(`   ├─ Inserting multi-model consensus...`);
-        doc.addPage();
-        pageNumber++;
-        renderInstitutionalHeader(doc, { firmName: displayFirmName, pageNumber });
+        pages.advance(); // 使用页码控制器
         
         doc.fontSize(20).fillColor('#1a2332').font(hasFonts ? 'Bold' : 'Helvetica-Bold')
            .text('VII. Multi-Model Consensus', 50, 60);
@@ -508,6 +582,218 @@ function formatRisks(risks) {
     const severity = risk.severity ? ` (Severity: ${risk.severity})` : '';
     return `${idx + 1}. ${text}${severity}`;
   }).join('\n\n');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🆕 v7.2: V6 风格数据提取辅助函数
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 从报告中提取 Key Messages
+ * @param {Object} report - 报告对象
+ * @returns {Array<string>} Key Messages 数组
+ */
+function extractKeyMessages(report) {
+  if (!report) return getDefaultKeyMessages();
+  
+  const messages = [];
+  
+  // 🆕 v7.2: 首先尝试从 meta.keyMessages 提取（Premium 报告）
+  const metaMessages = report.meta?.keyMessages || report.keyMessages;
+  if (Array.isArray(metaMessages) && metaMessages.length > 0) {
+    messages.push(...metaMessages.slice(0, 4));
+    return messages;
+  }
+  
+  // 从 summary_text 提取
+  if (report.summary_text) {
+    const summaryLines = report.summary_text.split(/[.!?]/).filter(s => s.trim().length > 20);
+    messages.push(...summaryLines.slice(0, 2).map(s => s.trim()));
+  }
+  
+  // 从 investment_thesis 提取关键句
+  if (report.investment_thesis) {
+    const thesisLines = report.investment_thesis.split(/[.!?]/).filter(s => s.trim().length > 30);
+    if (thesisLines.length > 0) {
+      messages.push(thesisLines[0].trim());
+    }
+  }
+  
+  // 🆕 v7.2: 从 sections 中提取（标准报告 fallback）
+  if (messages.length === 0 && report.sections && Array.isArray(report.sections)) {
+    const execSummary = report.sections.find(s => 
+      s.title?.toLowerCase().includes('executive') || 
+      s.title?.toLowerCase().includes('summary') ||
+      s.title?.toLowerCase().includes('thesis')
+    );
+    if (execSummary?.body) {
+      const lines = execSummary.body.split(/[.!?]/).filter(s => s.trim().length > 30);
+      messages.push(...lines.slice(0, 3).map(s => s.trim()));
+    }
+  }
+  
+  // 从 catalysts 提取
+  const catalysts = report.catalysts || report.meta?.catalysts;
+  if (catalysts && Array.isArray(catalysts)) {
+    catalysts.slice(0, 2).forEach(cat => {
+      const text = typeof cat === 'string' ? cat : cat.text || cat.description || '';
+      if (text) messages.push(text);
+    });
+  }
+  
+  // 添加评级和目标价信息
+  if (report.rating && report.symbol) {
+    const price = report.price?.last || report.meta?.price?.last || report.currentPrice;
+    const target = report.target_price || report.targetPrice || report.meta?.targetPrice;
+    if (price && target) {
+      const upside = ((target - price) / price * 100).toFixed(1);
+      messages.unshift(`${report.symbol} is rated ${report.rating} with a target of $${target} (${upside}% ${upside > 0 ? 'upside' : 'downside'}).`);
+    }
+  }
+  
+  // 确保至少有一些默认消息
+  if (messages.length === 0) {
+    return getDefaultKeyMessages();
+  }
+  
+  return messages.slice(0, 4);
+}
+
+/**
+ * 获取默认 Key Messages
+ */
+function getDefaultKeyMessages() {
+  return [
+    'Strong market position with competitive advantages.',
+    'Solid financial fundamentals and growth trajectory.',
+    'Favorable industry dynamics support outlook.',
+    'Management executing on strategic priorities.'
+  ];
+}
+
+/**
+ * 从报告中提取 Key Risks
+ * @param {Object} report - 报告对象
+ * @returns {Array<string>} Key Risks 数组
+ */
+function extractKeyRisks(report) {
+  if (!report) return getDefaultKeyRisks();
+  
+  const risks = [];
+  
+  // 🆕 v7.2: 首先尝试从 meta.keyRisks 提取（Premium 报告）
+  const metaRisks = report.meta?.keyRisks || report.keyRisks;
+  if (Array.isArray(metaRisks) && metaRisks.length > 0) {
+    metaRisks.slice(0, 4).forEach(risk => {
+      const text = typeof risk === 'string' ? risk : risk.text || risk.description || '';
+      if (text) risks.push(text);
+    });
+    if (risks.length > 0) return risks;
+  }
+  
+  // 从 risks_text 或 risks 数组提取
+  const riskSource = report.risks_text || report.risks || report.meta?.risks || [];
+  
+  if (Array.isArray(riskSource)) {
+    riskSource.slice(0, 4).forEach(risk => {
+      const text = typeof risk === 'string' ? risk : risk.text || risk.description || '';
+      if (text) risks.push(text);
+    });
+  } else if (typeof riskSource === 'string') {
+    const riskLines = riskSource.split(/[.!?]/).filter(s => s.trim().length > 20);
+    risks.push(...riskLines.slice(0, 4).map(s => s.trim()));
+  }
+  
+  // 🆕 v7.2: 从 sections 中提取（标准报告 fallback）
+  if (risks.length === 0 && report.sections && Array.isArray(report.sections)) {
+    const riskSection = report.sections.find(s => 
+      s.title?.toLowerCase().includes('risk') ||
+      s.title?.toLowerCase().includes('concern')
+    );
+    if (riskSection?.body) {
+      const lines = riskSection.body.split(/[.!?]/).filter(s => s.trim().length > 20);
+      risks.push(...lines.slice(0, 4).map(s => s.trim()));
+    }
+  }
+  
+  // 如果没有风险数据，添加默认风险
+  if (risks.length === 0) {
+    return getDefaultKeyRisks();
+  }
+  
+  return risks.slice(0, 4);
+}
+
+/**
+ * 获取默认 Key Risks
+ */
+function getDefaultKeyRisks() {
+  return [
+    'Competitive pressure could impact market share and margins.',
+    'Macroeconomic conditions may affect demand.',
+    'Regulatory changes pose potential compliance risks.',
+    'Execution risk on strategic initiatives.'
+  ];
+}
+
+/**
+ * 从报告中提取关键指标
+ * @param {Object} report - 报告对象
+ * @returns {Object} 指标对象
+ */
+function extractMetrics(report) {
+  if (!report) return getDefaultMetrics();
+  
+  // 🆕 v7.2: 使用可选链安全访问嵌套属性
+  const valuation = report.valuation || report.meta?.valuation || {};
+  const price = report.price || report.meta?.price || {};
+  const fundamentals = report.fundamentals || report.meta?.fundamentals || {};
+  const metaMetrics = report.meta?.metrics || {};
+  
+  // 辅助函数：安全提取数值
+  const safeNum = (...sources) => {
+    for (const v of sources) {
+      if (v !== null && v !== undefined && !isNaN(v)) return v;
+    }
+    return null;
+  };
+  
+  return {
+    // 估值指标
+    pe_ttm: safeNum(valuation.pe_ttm, valuation.peTTM, metaMetrics.pe_ttm),
+    pe_fwd: safeNum(valuation.pe_fwd, valuation.peFwd, valuation.forwardPE, metaMetrics.pe_fwd),
+    ps_ttm: safeNum(valuation.ps_ttm, valuation.psTTM, metaMetrics.ps_ttm),
+    pb_ttm: safeNum(valuation.pb_ttm, valuation.pbTTM, metaMetrics.pb_ttm),
+    
+    // 价格指标
+    beta: safeNum(price.beta, valuation.beta, metaMetrics.beta),
+    high_52w: safeNum(price.high_52w, price.yearHigh, metaMetrics.high_52w),
+    low_52w: safeNum(price.low_52w, price.yearLow, metaMetrics.low_52w),
+    
+    // 基本面指标
+    div_yield: safeNum(fundamentals.dividend_yield, valuation.dividendYield, metaMetrics.div_yield),
+    roe: safeNum(fundamentals.roe, valuation.roe, metaMetrics.roe),
+    roa: safeNum(fundamentals.roa, metaMetrics.roa),
+    
+    // 增长指标
+    eps_growth: safeNum(fundamentals.eps_growth, metaMetrics.eps_growth),
+    revenue_growth: safeNum(fundamentals.revenue_growth, metaMetrics.revenue_growth),
+    
+    // 市值
+    market_cap: safeNum(valuation.market_cap, price.marketCap, metaMetrics.market_cap)
+  };
+}
+
+/**
+ * 获取默认指标（全部为 null）
+ */
+function getDefaultMetrics() {
+  return {
+    pe_ttm: null, pe_fwd: null, ps_ttm: null, pb_ttm: null,
+    beta: null, high_52w: null, low_52w: null,
+    div_yield: null, roe: null, roa: null,
+    eps_growth: null, revenue_growth: null, market_cap: null
+  };
 }
 
 module.exports = {

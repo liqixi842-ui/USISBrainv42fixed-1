@@ -423,6 +423,264 @@ function extractSections(report) {
   return sections;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// 🆕 v7.2: V6 机构级排版组件（从 DocRaptor 移植到 PDFKit）
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * 渲染 Key Takeaways 部分 - 两列布局（Key Messages | Key Risks）
+ * @param {PDFDocument} doc - PDFKit 文档对象
+ * @param {Object} data - 数据对象 { messages: [], risks: [] }
+ * @param {Object} options - 配置选项
+ */
+function renderKeyTakeawaysSection(doc, data = {}, options = {}) {
+  const { startY = 60 } = options;
+  const messages = data.messages || [];
+  const risks = data.risks || [];
+  
+  console.log(`📊 [PDFTemplateUtils] Rendering Key Takeaways section...`);
+  
+  // 标题
+  doc.fontSize(18).fillColor('#1a2332');
+  safeSetFont(doc, 'Bold');
+  doc.text('Key Takeaways', 50, startY);
+  
+  // 分隔线
+  doc.moveTo(50, startY + 25)
+     .lineTo(doc.page.width - 50, startY + 25)
+     .strokeColor('#3b82f6')
+     .lineWidth(2)
+     .stroke();
+  
+  const columnWidth = (doc.page.width - 120) / 2;
+  const leftX = 50;
+  const rightX = 50 + columnWidth + 20;
+  let currentY = startY + 45;
+  
+  // 左列标题：Key Messages
+  doc.fontSize(12).fillColor('#3b82f6');
+  safeSetFont(doc, 'Bold');
+  doc.text('Key Messages', leftX, currentY);
+  
+  // 右列标题：Key Risks
+  doc.text('Key Risks', rightX, currentY);
+  
+  currentY += 25;
+  
+  // 左列内容：Messages
+  doc.fontSize(9).fillColor('#374151');
+  safeSetFont(doc, 'Regular');
+  messages.slice(0, 4).forEach((msg, i) => {
+    const bullet = `• ${msg.substring(0, 120)}${msg.length > 120 ? '...' : ''}`;
+    doc.text(bullet, leftX, currentY + i * 35, { width: columnWidth - 10 });
+  });
+  
+  // 右列内容：Risks
+  risks.slice(0, 4).forEach((risk, i) => {
+    const riskText = typeof risk === 'string' ? risk : (risk.description || risk.text || '');
+    const bullet = `• ${riskText.substring(0, 120)}${riskText.length > 120 ? '...' : ''}`;
+    doc.text(bullet, rightX, currentY + i * 35, { width: columnWidth - 10 });
+  });
+  
+  console.log(`   └─ ✅ Key Takeaways rendered (${messages.length} messages, ${risks.length} risks)`);
+  
+  return currentY + 160; // 返回结束 Y 位置
+}
+
+/**
+ * 渲染 Key Metrics 数据卡片行
+ * @param {PDFDocument} doc - PDFKit 文档对象
+ * @param {Object} metrics - 指标数据
+ * @param {Object} options - 配置选项
+ */
+function renderKeyMetricsRow(doc, metrics = {}, options = {}) {
+  const { startY = 60 } = options;
+  
+  console.log(`📊 [PDFTemplateUtils] Rendering Key Metrics row...`);
+  
+  // 标题
+  doc.fontSize(18).fillColor('#1a2332');
+  safeSetFont(doc, 'Bold');
+  doc.text('Key Metrics', 50, startY);
+  
+  // 分隔线
+  doc.moveTo(50, startY + 25)
+     .lineTo(doc.page.width - 50, startY + 25)
+     .strokeColor('#3b82f6')
+     .lineWidth(2)
+     .stroke();
+  
+  // 定义指标数据
+  const metricsData = [
+    { label: 'PE (TTM)', value: formatMetric(metrics.pe_ttm, 'x') },
+    { label: 'PE (FWD)', value: formatMetric(metrics.pe_fwd, 'x') },
+    { label: 'P/S', value: formatMetric(metrics.ps_ttm, 'x') },
+    { label: 'BETA', value: formatMetric(metrics.beta, '') }
+  ];
+  
+  const metricsData2 = [
+    { label: '52W HIGH', value: formatMetric(metrics.high_52w, '$', true) },
+    { label: '52W LOW', value: formatMetric(metrics.low_52w, '$', true) },
+    { label: 'DIV YIELD', value: formatMetric(metrics.div_yield, '%') },
+    { label: 'ROE', value: formatMetric(metrics.roe, '%') }
+  ];
+  
+  const cardWidth = (doc.page.width - 140) / 4;
+  const cardHeight = 50;
+  let currentY = startY + 40;
+  
+  // 第一行卡片
+  metricsData.forEach((item, i) => {
+    const x = 50 + i * (cardWidth + 15);
+    renderMetricCard(doc, x, currentY, cardWidth, cardHeight, item.label, item.value);
+  });
+  
+  currentY += cardHeight + 15;
+  
+  // 第二行卡片
+  metricsData2.forEach((item, i) => {
+    const x = 50 + i * (cardWidth + 15);
+    renderMetricCard(doc, x, currentY, cardWidth, cardHeight, item.label, item.value);
+  });
+  
+  console.log(`   └─ ✅ Key Metrics rendered (8 cards)`);
+  
+  return currentY + cardHeight + 20;
+}
+
+/**
+ * 渲染单个指标卡片
+ */
+function renderMetricCard(doc, x, y, width, height, label, value) {
+  // 卡片背景
+  doc.rect(x, y, width, height)
+     .fillColor('#f8fafc')
+     .fill();
+  
+  // 卡片边框
+  doc.rect(x, y, width, height)
+     .strokeColor('#e2e8f0')
+     .lineWidth(1)
+     .stroke();
+  
+  // 标签
+  doc.fontSize(8).fillColor('#64748b');
+  safeSetFont(doc, 'Regular');
+  doc.text(label, x + 8, y + 8, { width: width - 16, align: 'center' });
+  
+  // 值
+  doc.fontSize(14).fillColor('#1a2332');
+  safeSetFont(doc, 'Bold');
+  doc.text(value, x + 8, y + 25, { width: width - 16, align: 'center' });
+}
+
+/**
+ * 格式化指标值
+ */
+function formatMetric(value, suffix = '', isCurrency = false) {
+  if (value === null || value === undefined || isNaN(value)) return 'N/A';
+  if (isCurrency) {
+    return `$${Number(value).toFixed(2)}`;
+  }
+  return `${Number(value).toFixed(2)}${suffix}`;
+}
+
+/**
+ * 渲染 Our View vs Consensus 对比表
+ * @param {PDFDocument} doc - PDFKit 文档对象
+ * @param {Object} data - 数据对象 { ourView: {}, consensus: {} }
+ * @param {Object} options - 配置选项
+ */
+function renderConsensusTable(doc, data = {}, options = {}) {
+  const { startY = 60 } = options;
+  const ourView = data.ourView || {};
+  const consensus = data.consensus || {};
+  
+  console.log(`📊 [PDFTemplateUtils] Rendering Consensus table...`);
+  
+  // 标题
+  doc.fontSize(14).fillColor('#1a2332');
+  safeSetFont(doc, 'Bold');
+  doc.text('Our View vs Consensus', 50, startY);
+  
+  // 表格数据
+  const rows = [
+    { metric: 'EPS Growth (Next 12M)', our: formatMetric(ourView.epsGrowth, '%'), cons: consensus.epsGrowth || 'N/A' },
+    { metric: 'ROE', our: formatMetric(ourView.roe, '%'), cons: consensus.roe || 'N/A' },
+    { metric: 'Rating', our: ourView.rating || 'N/A', cons: consensus.rating || 'N/A' },
+    { metric: 'Target Price', our: formatMetric(ourView.targetPrice, '$', true), cons: consensus.targetPrice || 'N/A' }
+  ];
+  
+  const tableX = 50;
+  const tableWidth = doc.page.width - 100;
+  const colWidths = [tableWidth * 0.5, tableWidth * 0.25, tableWidth * 0.25];
+  let currentY = startY + 25;
+  
+  // 表头
+  doc.fontSize(9).fillColor('#64748b');
+  safeSetFont(doc, 'Bold');
+  doc.rect(tableX, currentY, tableWidth, 20).fillColor('#f1f5f9').fill();
+  doc.fillColor('#64748b');
+  doc.text('Metric', tableX + 10, currentY + 6, { width: colWidths[0] - 20 });
+  doc.text('Our View', tableX + colWidths[0] + 10, currentY + 6, { width: colWidths[1] - 20, align: 'center' });
+  doc.text('Consensus', tableX + colWidths[0] + colWidths[1] + 10, currentY + 6, { width: colWidths[2] - 20, align: 'center' });
+  
+  currentY += 20;
+  
+  // 表格行
+  rows.forEach((row, i) => {
+    const bgColor = i % 2 === 0 ? '#ffffff' : '#f8fafc';
+    doc.rect(tableX, currentY, tableWidth, 22).fillColor(bgColor).fill();
+    
+    doc.fontSize(9).fillColor('#374151');
+    safeSetFont(doc, 'Regular');
+    doc.text(row.metric, tableX + 10, currentY + 6, { width: colWidths[0] - 20 });
+    doc.text(row.our, tableX + colWidths[0] + 10, currentY + 6, { width: colWidths[1] - 20, align: 'center' });
+    doc.text(row.cons, tableX + colWidths[0] + colWidths[1] + 10, currentY + 6, { width: colWidths[2] - 20, align: 'center' });
+    
+    currentY += 22;
+  });
+  
+  // 表格边框
+  doc.rect(tableX, startY + 25, tableWidth, currentY - startY - 25)
+     .strokeColor('#e2e8f0')
+     .lineWidth(1)
+     .stroke();
+  
+  console.log(`   └─ ✅ Consensus table rendered`);
+  
+  return currentY + 10;
+}
+
+/**
+ * 渲染样式化章节分隔标题
+ * @param {PDFDocument} doc - PDFKit 文档对象
+ * @param {string} title - 章节标题
+ * @param {Object} options - 配置选项
+ */
+function renderSectionDivider(doc, title, options = {}) {
+  const { startY = 60, sectionNumber = null } = options;
+  
+  // 蓝色背景条
+  doc.rect(50, startY, doc.page.width - 100, 30)
+     .fillColor('#1a2332')
+     .fill();
+  
+  // 章节编号（如果提供）
+  if (sectionNumber) {
+    doc.fontSize(11).fillColor('#3b82f6');
+    safeSetFont(doc, 'Bold');
+    doc.text(sectionNumber, 60, startY + 9);
+  }
+  
+  // 章节标题
+  doc.fontSize(12).fillColor('#ffffff');
+  safeSetFont(doc, 'Bold');
+  doc.text(title, sectionNumber ? 90 : 60, startY + 9);
+  
+  return startY + 40;
+}
+
 module.exports = {
   renderProfessionalCover,
   renderTableOfContents,
@@ -430,5 +688,11 @@ module.exports = {
   addFooter,
   addPageHeaderFooter,
   renderInstitutionalHeader,
-  extractSections
+  extractSections,
+  renderKeyTakeawaysSection,
+  renderKeyMetricsRow,
+  renderConsensusTable,
+  renderSectionDivider,
+  renderMetricCard,
+  formatMetric
 };
