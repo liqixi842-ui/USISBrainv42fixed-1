@@ -220,10 +220,10 @@ function generateDefaultPeers(symbol) {
 
 function generateDefaultValuationDrivers() {
   return [
-    { driver: 'Revenue Growth', impact: '+', description: 'Sustainable top-line growth trajectory' },
-    { driver: 'Margin Expansion', impact: '+', description: 'Operating leverage and efficiency gains' },
-    { driver: 'Multiple Re-rating', impact: '~', description: 'Valuation multiples vs historical range' },
-    { driver: 'Capital Allocation', impact: '+', description: 'Shareholder returns and reinvestment' }
+    { driver: 'Revenue Growth', impact: '+', value_delta: '+5%', price_impact: '+$8.50', description: 'Sustainable top-line growth trajectory' },
+    { driver: 'Margin Expansion', impact: '+', value_delta: '+3%', price_impact: '+$4.20', description: 'Operating leverage and efficiency gains' },
+    { driver: 'Multiple Re-rating', impact: '~', value_delta: '0%', price_impact: '$0.00', description: 'Valuation multiples vs historical range' },
+    { driver: 'Capital Allocation', impact: '+', value_delta: '+2%', price_impact: '+$2.80', description: 'Shareholder returns and reinvestment' }
   ];
 }
 
@@ -478,17 +478,19 @@ function renderV6Page7(doc, report, h, assets, options) {
   doc.text(report.valuation_framework.narrative, 50, 88, { width: doc.page.width - 100 });
   
   let y = 150;
-  doc.fontSize(12).fillColor('#1a2332').font('Helvetica-Bold').text('Value Drivers', 50, y);
+  doc.fontSize(12).fillColor('#1a2332').font('Helvetica-Bold').text('Value Drivers Waterfall', 50, y);
   y += 20;
   
-  const driverHeaders = ['Driver', 'Impact', 'Description'];
+  const driverHeaders = ['Driver', 'Impact', 'Value Delta', 'Price Impact', 'Description'];
   const driverRows = report.valuation_framework.drivers.map(d => [
     d.driver,
     d.impact,
-    d.description
+    d.value_delta || 'N/A',
+    d.price_impact || 'N/A',
+    (d.description || '').substring(0, 30)
   ]);
   
-  renderGenericTable(doc, { startY: y, headers: driverHeaders, rows: driverRows, colWidths: [130, 60, 260] });
+  renderGenericTable(doc, { startY: y, headers: driverHeaders, rows: driverRows, colWidths: [100, 50, 70, 80, 150] });
   
   y = 320;
   doc.fontSize(12).fillColor('#1a2332').font('Helvetica-Bold').text('Scenario Targets', 50, y);
@@ -496,9 +498,9 @@ function renderV6Page7(doc, report, h, assets, options) {
   
   const scenHeaders = ['Scenario', 'Target Price', 'Upside', 'Rationale'];
   const scenRows = [
-    ['Bull Case', h.fmtCurrency(report.targets.bull.price), h.fmt(report.targets.bull.upside_pct, 1, '%'), report.targets.bull.rationale?.substring(0, 50) || '-'],
-    ['Base Case', h.fmtCurrency(report.targets.base.price), h.fmt(report.targets.base.upside_pct, 1, '%'), report.targets.base.rationale?.substring(0, 50) || '-'],
-    ['Bear Case', h.fmtCurrency(report.targets.bear.price), h.fmt(report.targets.bear.upside_pct, 1, '%'), report.targets.bear.rationale?.substring(0, 50) || '-']
+    ['Bull Case', h.fmtCurrency(report.targets.bull.price), h.fmt(report.targets.bull.upside_pct, 1, '%'), (report.targets.bull.rationale || '-').substring(0, 50)],
+    ['Base Case', h.fmtCurrency(report.targets.base.price), h.fmt(report.targets.base.upside_pct, 1, '%'), (report.targets.base.rationale || '-').substring(0, 50)],
+    ['Bear Case', h.fmtCurrency(report.targets.bear.price), h.fmt(report.targets.bear.upside_pct, 1, '%'), (report.targets.bear.rationale || '-').substring(0, 50)]
   ];
   
   renderGenericTable(doc, { startY: y, headers: scenHeaders, rows: scenRows, colWidths: [80, 90, 70, 210] });
@@ -686,77 +688,116 @@ function renderV6Page14(doc, report, h, assets, options) {
 function renderV6Page15(doc, report, h, assets, options) {
   doc.fontSize(16).fillColor('#1a2332').font('Helvetica-Bold').text('Appendix – Detailed Metrics', 50, 60);
   
-  const leftMetrics = [
-    ['Latest Price', h.fmtCurrency(report.price.last)],
-    ['52W High', h.fmtCurrency(report.price.high_52w)],
-    ['52W Low', h.fmtCurrency(report.price.low_52w)],
-    ['Beta', h.fmt(report.price.beta, 3)],
-    ['Market Cap', h.fmtLarge(report.valuation.market_cap)],
-    ['PE (TTM)', h.fmt(report.valuation.pe_ttm, 2, 'x')],
-    ['PE (Forward)', h.fmt(report.valuation.pe_forward, 2, 'x')],
-    ['P/S (TTM)', h.fmt(report.valuation.ps_ttm, 2, 'x')],
-    ['P/B', h.fmt(report.valuation.pb, 2, 'x')],
-    ['EV/EBITDA', h.fmt(report.valuation.ev_ebitda, 2, 'x')]
-  ];
+  const metricsFromAppendix = report.appendix?.detailed_metrics || [];
+  const hasStructuredMetrics = metricsFromAppendix.length > 0 && metricsFromAppendix[0]?.category;
   
-  const rightMetrics = [
-    ['Gross Margin', h.fmt(report.fundamentals.gross_margin, 2, '%')],
-    ['Operating Margin', h.fmt(report.fundamentals.operating_margin, 2, '%')],
-    ['Net Margin', h.fmt(report.fundamentals.net_margin, 2, '%')],
-    ['ROE', h.fmt(report.fundamentals.roe, 2, '%')],
-    ['ROA', h.fmt(report.fundamentals.roa, 2, '%')],
-    ['ROIC', h.fmt(report.fundamentals.roic, 2, '%')],
-    ['Debt/Equity', h.fmt(report.fundamentals.debt_to_equity, 2, 'x')],
-    ['Current Ratio', h.fmt(report.fundamentals.current_ratio, 2, 'x')],
-    ['Revenue CAGR (3Y)', h.fmt(report.growth.revenue_cagr_3y, 1, '%')],
-    ['EPS CAGR (3Y)', h.fmt(report.growth.eps_cagr_3y, 1, '%')]
-  ];
-  
-  doc.fontSize(11).fillColor('#1a2332').font('Helvetica-Bold').text('Valuation Metrics', 50, 90);
-  let y = 108;
-  doc.fontSize(8).fillColor('#374151').font('Helvetica');
-  leftMetrics.forEach(([label, value]) => {
-    doc.text(`${label}:`, 50, y, { continued: true, width: 130 });
-    doc.text(` ${value}`);
-    y += 14;
-  });
-  
-  doc.fontSize(11).fillColor('#1a2332').font('Helvetica-Bold').text('Profitability & Growth', 280, 90);
-  y = 108;
-  rightMetrics.forEach(([label, value]) => {
+  if (hasStructuredMetrics) {
+    let y = 90;
+    metricsFromAppendix.forEach(cat => {
+      doc.fontSize(11).fillColor('#1a2332').font('Helvetica-Bold').text(cat.category, 50, y);
+      y += 16;
+      doc.fontSize(8).fillColor('#374151').font('Helvetica');
+      const metricsList = Array.isArray(cat.metrics) ? cat.metrics : [];
+      metricsList.forEach(metric => {
+        const metricName = typeof metric === 'string' ? metric : metric.name;
+        const metricValue = typeof metric === 'object' ? (metric.value || 'N/A') : 'N/A';
+        doc.text(`• ${metricName}: ${metricValue}`, 60, y, { width: doc.page.width - 120 });
+        y += 12;
+      });
+      y += 8;
+    });
+  } else {
+    const leftMetrics = [
+      ['Latest Price', h.fmtCurrency(report.price.last)],
+      ['52W High', h.fmtCurrency(report.price.high_52w)],
+      ['52W Low', h.fmtCurrency(report.price.low_52w)],
+      ['Beta', h.fmt(report.price.beta, 3)],
+      ['Market Cap', h.fmtLarge(report.valuation.market_cap)],
+      ['PE (TTM)', h.fmt(report.valuation.pe_ttm, 2, 'x')],
+      ['PE (Forward)', h.fmt(report.valuation.pe_forward, 2, 'x')],
+      ['P/S (TTM)', h.fmt(report.valuation.ps_ttm, 2, 'x')],
+      ['P/B', h.fmt(report.valuation.pb, 2, 'x')],
+      ['EV/EBITDA', h.fmt(report.valuation.ev_ebitda, 2, 'x')]
+    ];
+    
+    const rightMetrics = [
+      ['Gross Margin', h.fmt(report.fundamentals.gross_margin, 2, '%')],
+      ['Operating Margin', h.fmt(report.fundamentals.operating_margin, 2, '%')],
+      ['Net Margin', h.fmt(report.fundamentals.net_margin, 2, '%')],
+      ['ROE', h.fmt(report.fundamentals.roe, 2, '%')],
+      ['ROA', h.fmt(report.fundamentals.roa, 2, '%')],
+      ['ROIC', h.fmt(report.fundamentals.roic, 2, '%')],
+      ['Debt/Equity', h.fmt(report.fundamentals.debt_to_equity, 2, 'x')],
+      ['Current Ratio', h.fmt(report.fundamentals.current_ratio, 2, 'x')],
+      ['Revenue CAGR (3Y)', h.fmt(report.growth.revenue_cagr_3y, 1, '%')],
+      ['EPS CAGR (3Y)', h.fmt(report.growth.eps_cagr_3y, 1, '%')]
+    ];
+    
+    doc.fontSize(11).fillColor('#1a2332').font('Helvetica-Bold').text('Valuation Metrics', 50, 90);
+    let y = 108;
     doc.fontSize(8).fillColor('#374151').font('Helvetica');
-    doc.text(`${label}:`, 280, y, { continued: true, width: 130 });
-    doc.text(` ${value}`);
-    y += 14;
-  });
+    leftMetrics.forEach(([label, value]) => {
+      doc.text(`${label}:`, 50, y, { continued: true, width: 130 });
+      doc.text(` ${value}`);
+      y += 14;
+    });
+    
+    doc.fontSize(11).fillColor('#1a2332').font('Helvetica-Bold').text('Profitability & Growth', 280, 90);
+    y = 108;
+    rightMetrics.forEach(([label, value]) => {
+      doc.fontSize(8).fillColor('#374151').font('Helvetica');
+      doc.text(`${label}:`, 280, y, { continued: true, width: 130 });
+      doc.text(` ${value}`);
+      y += 14;
+    });
+  }
 }
 
 function renderV6Page16(doc, report, h, assets, options) {
   doc.fontSize(16).fillColor('#1a2332').font('Helvetica-Bold').text('Appendix – Methodology', 50, 60);
   
-  const sections = [
-    { title: 'Data Sources', text: 'This report integrates real-time financial data from multiple authoritative sources including Finnhub, Twelve Data, and Alpha Vantage. Market quotes, fundamental metrics, and historical financials are verified across providers to ensure accuracy.' },
-    { title: 'Multi-Model AI Analysis', text: 'Our research platform employs a multi-model AI architecture where specialist models analyze different aspects of the investment thesis in parallel. This approach combines deep learning insights with traditional financial analysis.' },
-    { title: 'Valuation Methodology', text: `The valuation framework applies multiple methodologies including PE multiples analysis, DCF modeling (where applicable), and peer-relative valuation. Price targets reflect ${report.horizon || '12-month'} forward expectations.` },
-    { title: 'Technical Analysis', text: 'Technical indicators are calculated using standard methodologies. RSI uses 14-period lookback, MACD uses 12/26/9 settings, and moving averages are simple (SMA) unless otherwise specified.' },
-    { title: 'Risk Assessment', text: 'Risks are evaluated across multiple dimensions including business model, competitive dynamics, financial health, regulatory environment, and macroeconomic sensitivity.' }
-  ];
+  const customMethodology = report.appendix?.methodology;
+  const hasCustomMethodology = customMethodology && typeof customMethodology === 'string' && customMethodology.length > 100;
   
-  let y = 88;
-  sections.forEach(section => {
-    doc.fontSize(11).fillColor('#1a2332').font('Helvetica-Bold').text(section.title, 50, y);
+  if (hasCustomMethodology) {
+    let y = 88;
+    doc.fontSize(11).fillColor('#1a2332').font('Helvetica-Bold').text('Research Methodology', 50, y);
     y += 16;
-    doc.fontSize(9).fillColor('#374151').font('Helvetica').text(section.text, 50, y, { width: doc.page.width - 100 });
-    y = doc.y + 12;
-  });
-  
-  y += 10;
-  doc.fontSize(11).fillColor('#1a2332').font('Helvetica-Bold').text('Model Information', 50, y);
-  y += 16;
-  doc.fontSize(9).fillColor('#374151').font('Helvetica');
-  doc.text(`Version: ${report.meta.version}`, 50, y);
-  doc.text(`Model: ${report.meta.model}`, 50, y + 14);
-  doc.text(`Generated: ${report.meta.reportDate}`, 50, y + 28);
+    doc.fontSize(9).fillColor('#374151').font('Helvetica');
+    doc.text(customMethodology.substring(0, 1500), 50, y, { width: doc.page.width - 100 });
+    y = doc.y + 20;
+    
+    doc.fontSize(11).fillColor('#1a2332').font('Helvetica-Bold').text('Model Information', 50, y);
+    y += 16;
+    doc.fontSize(9).fillColor('#374151').font('Helvetica');
+    doc.text(`Version: ${report.meta.version}`, 50, y);
+    doc.text(`Model: ${report.meta.model}`, 50, y + 14);
+    doc.text(`Generated: ${report.meta.reportDate}`, 50, y + 28);
+  } else {
+    const sections = [
+      { title: 'Data Sources', text: 'This report integrates real-time financial data from multiple authoritative sources including Finnhub, Twelve Data, and Alpha Vantage. Market quotes, fundamental metrics, and historical financials are verified across providers to ensure accuracy.' },
+      { title: 'Multi-Model AI Analysis', text: 'Our research platform employs a multi-model AI architecture where specialist models analyze different aspects of the investment thesis in parallel. This approach combines deep learning insights with traditional financial analysis.' },
+      { title: 'Valuation Methodology', text: `The valuation framework applies multiple methodologies including PE multiples analysis, DCF modeling (where applicable), and peer-relative valuation. Price targets reflect ${report.horizon || '12-month'} forward expectations.` },
+      { title: 'Technical Analysis', text: 'Technical indicators are calculated using standard methodologies. RSI uses 14-period lookback, MACD uses 12/26/9 settings, and moving averages are simple (SMA) unless otherwise specified.' },
+      { title: 'Risk Assessment', text: 'Risks are evaluated across multiple dimensions including business model, competitive dynamics, financial health, regulatory environment, and macroeconomic sensitivity.' }
+    ];
+    
+    let y = 88;
+    sections.forEach(section => {
+      doc.fontSize(11).fillColor('#1a2332').font('Helvetica-Bold').text(section.title, 50, y);
+      y += 16;
+      doc.fontSize(9).fillColor('#374151').font('Helvetica').text(section.text, 50, y, { width: doc.page.width - 100 });
+      y = doc.y + 12;
+    });
+    
+    y += 10;
+    doc.fontSize(11).fillColor('#1a2332').font('Helvetica-Bold').text('Model Information', 50, y);
+    y += 16;
+    doc.fontSize(9).fillColor('#374151').font('Helvetica');
+    doc.text(`Version: ${report.meta.version}`, 50, y);
+    doc.text(`Model: ${report.meta.model}`, 50, y + 14);
+    doc.text(`Generated: ${report.meta.reportDate}`, 50, y + 28);
+  }
 }
 
 function renderV6Page17(doc, report, h, assets, options) {
@@ -764,22 +805,36 @@ function renderV6Page17(doc, report, h, assets, options) {
   
   doc.fontSize(16).fillColor('#1a2332').font('Helvetica-Bold').text('Important Disclosures', 50, 60);
   
-  const disclosures = [
-    { title: 'Important Information', text: `This research report is provided for informational purposes only and does not constitute an offer or solicitation to buy or sell any securities. ${firmName} makes no representation or warranty as to accuracy or completeness.` },
-    { title: 'Not Investment Advice', text: 'This report is not intended to provide investment advice and should not be relied upon as such. Investors should conduct their own due diligence and consult with qualified financial advisors.' },
-    { title: 'Risk Disclosure', text: 'All investments carry risk, including potential loss of principal. Securities mentioned may be volatile. Price targets and ratings are subject to change without notice.' },
-    { title: 'Forward-Looking Statements', text: 'This report may contain forward-looking statements that are inherently uncertain. Actual results may differ materially from forecasts.' },
-    { title: 'Data Sources', text: `Financial data is sourced from third-party providers. While we endeavor to ensure accuracy, ${firmName} is not responsible for errors in third-party data.` },
-    { title: 'Conflicts of Interest', text: `${firmName} may have business relationships with companies covered. Analysts may hold positions in securities mentioned.` },
-    { title: 'Copyright', text: `© ${new Date().getFullYear()} ${firmName}. All rights reserved. Reproduction without consent is prohibited.` }
-  ];
+  const customDisclosures = report.appendix?.disclosures;
+  const hasCustomDisclosures = Array.isArray(customDisclosures) && customDisclosures.length > 0;
   
-  let y = 88;
-  disclosures.forEach(d => {
-    doc.fontSize(8).font('Helvetica-Bold').fillColor('#1a2332').text(`${d.title}: `, 50, y, { continued: true });
-    doc.font('Helvetica').fillColor('#374151').text(d.text, { width: doc.page.width - 100 });
-    y = doc.y + 8;
-  });
+  if (hasCustomDisclosures) {
+    let y = 88;
+    customDisclosures.forEach((disclosure, i) => {
+      const disclosureText = typeof disclosure === 'string' ? disclosure : (disclosure.text || disclosure.description || '');
+      const disclosureTitle = typeof disclosure === 'object' && disclosure.title ? disclosure.title : `Disclosure ${i + 1}`;
+      doc.fontSize(8).font('Helvetica-Bold').fillColor('#1a2332').text(`${disclosureTitle}: `, 50, y, { continued: true });
+      doc.font('Helvetica').fillColor('#374151').text(disclosureText.substring(0, 400), { width: doc.page.width - 100 });
+      y = doc.y + 8;
+    });
+  } else {
+    const disclosures = [
+      { title: 'Important Information', text: `This research report is provided for informational purposes only and does not constitute an offer or solicitation to buy or sell any securities. ${firmName} makes no representation or warranty as to accuracy or completeness.` },
+      { title: 'Not Investment Advice', text: 'This report is not intended to provide investment advice and should not be relied upon as such. Investors should conduct their own due diligence and consult with qualified financial advisors.' },
+      { title: 'Risk Disclosure', text: 'All investments carry risk, including potential loss of principal. Securities mentioned may be volatile. Price targets and ratings are subject to change without notice.' },
+      { title: 'Forward-Looking Statements', text: 'This report may contain forward-looking statements that are inherently uncertain. Actual results may differ materially from forecasts.' },
+      { title: 'Data Sources', text: `Financial data is sourced from third-party providers. While we endeavor to ensure accuracy, ${firmName} is not responsible for errors in third-party data.` },
+      { title: 'Conflicts of Interest', text: `${firmName} may have business relationships with companies covered. Analysts may hold positions in securities mentioned.` },
+      { title: 'Copyright', text: `© ${new Date().getFullYear()} ${firmName}. All rights reserved. Reproduction without consent is prohibited.` }
+    ];
+    
+    let y = 88;
+    disclosures.forEach(d => {
+      doc.fontSize(8).font('Helvetica-Bold').fillColor('#1a2332').text(`${d.title}: `, 50, y, { continued: true });
+      doc.font('Helvetica').fillColor('#374151').text(d.text, { width: doc.page.width - 100 });
+      y = doc.y + 8;
+    });
+  }
 }
 
 function renderV6Page18(doc, report, h, assets, options) {
