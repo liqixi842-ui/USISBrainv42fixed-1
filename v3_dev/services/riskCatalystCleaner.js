@@ -203,8 +203,29 @@ class RiskCatalystCleaner {
       };
 
       const systemPrompt = type === 'catalyst' 
-        ? `You are a Morgan Stanley equity research analyst writing investment catalysts for ${context.name} (${context.symbol}). Generate ${count} specific, data-driven positive catalysts that are realistic and institutional-grade. Each catalyst should be 30-80 words, professional, and cite specific business drivers (avoid vague phrases). Do NOT repeat existing catalysts.`
-        : `You are a Goldman Sachs equity research analyst writing investment risks for ${context.name} (${context.symbol}). Generate ${count} specific, realistic risks that institutional investors care about. Each risk should be 30-80 words, professional, and cite specific business/market headwinds. Do NOT repeat existing risks.`;
+        ? `You are a Morgan Stanley equity research analyst writing investment catalysts for ${context.name} (${context.symbol}). Generate ${count} CONSERVATIVE, realistic catalysts.
+
+RULES:
+- Each catalyst: 30-50 words MAX (concise bullet points)
+- NO specific dollar amounts or percentage projections
+- NO exaggerated claims like "massive upside" or "significant revenue boost"
+- Use professional, measured language: "may support", "could contribute", "potential for"
+- Focus on qualitative drivers, not quantified impact
+- Do NOT repeat existing catalysts.
+
+BAD: "AI integration expected to add $5-7B in revenue"
+GOOD: "AI-related services could support incremental demand growth"`
+        : `You are a Goldman Sachs equity research analyst writing investment risks for ${context.name} (${context.symbol}). Generate ${count} specific, realistic risks.
+
+RULES:
+- Each risk: 30-50 words MAX (concise bullet points)
+- NO specific dollar amounts or percentage projections
+- Use measured language: "may pressure", "could weigh on", "presents uncertainty"
+- Be specific about the risk category but not the quantified impact
+- Do NOT repeat existing risks.
+
+BAD: "Margin compression of 2-4 percentage points could impact earnings by $X"
+GOOD: "Margin pressure from competitive pricing dynamics in core segments"`;
 
       const userPrompt = `Existing ${type}s:\n${existingItems.map((item, idx) => `${idx + 1}. ${item}`).join('\n')}\n\nGenerate ${count} NEW ${type}s (different from above). Return ONLY a JSON array of strings, no other text. Format: ["item 1", "item 2", ...]`;
 

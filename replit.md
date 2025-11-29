@@ -1,7 +1,15 @@
 # Overview
 USIS Brain v7.3 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
 
-# Recent Changes (v7.3 - November 2025)
+# Recent Changes (v7.4 - November 2025)
+- **Report Quality Improvements**: Major text quality enhancements addressing AI-generated content issues
+- **textCleanerEngine v2.0**: Enhanced duplicate word detection, 20+ AI cliché removals, paragraph length control (max 180 words), cross-paragraph deduplication
+- **Concise Prompts**: Thesis reduced from 900-1000 to 600-700 words, valuation from 700 to 450-500 words, with strict anti-duplication rules
+- **Cross-Field Deduplication**: New function prevents same content appearing in multiple report sections (thesis, valuation, macro)
+- **Improved Catalysts/Risks**: Prompts now prohibit dollar amounts/percentage projections, shorter bullet points (30-50 words)
+- **Sell-Side Style Rules**: Enforced professional tone, limited analyst mentions (max 3), prohibited filler phrases
+
+# Previous Changes (v7.3 - November 2025)
 - **Puppeteer PDF Renderer**: New `services/puppeteerPdfRenderer.js` replaces DocRaptor for watermark-free PDF generation
 - **V3_dev HTML Template Integration**: Uses v3_dev's `buildResearchReport` + `buildHtmlFromReport` for complete 20-page institutional layout
 - **Dynamic Chromium Detection**: `findChromiumPath()` auto-detects Chromium via PATH, env var, or Nix store fallback

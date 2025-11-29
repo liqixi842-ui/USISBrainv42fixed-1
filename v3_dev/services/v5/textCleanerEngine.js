@@ -1,29 +1,37 @@
 /**
- * Text Cleaner Engine v1.0
- * 修复 AI 生成的常见问题：重复单词、口癖等
+ * Text Cleaner Engine v2.0
+ * 修复 AI 生成的常见问题：重复单词、口癖、冗长段落等
+ * 专门针对机构研报的专业化文本清理
  */
 
 /**
  * 去除连续重复的单词
- * 例如: "organic organic organic growth" → "organic growth"
- * 修复版：一次性处理所有连续重复
+ * 例如: "organic organic growth trajectory trajectory" → "organic growth trajectory"
+ * 增强版：处理更复杂的重复模式
  */
 function removeDuplicateWords(text) {
   if (!text) return text;
   
-  // 改进的正则：匹配一个单词后跟一个或多个相同单词
-  // \b(\w+)(\s+\1\b)+ 会匹配 "word word word" 并替换为 "word"
-  const pattern = /\b(\w+)(\s+\1\b)+/gi;
+  let cleaned = text;
   
-  // 一次性替换所有连续重复
-  const cleaned = text.replace(pattern, '$1');
+  // Pattern 1: 直接连续重复 "word word word" → "word"
+  cleaned = cleaned.replace(/\b(\w+)(\s+\1\b)+/gi, '$1');
+  
+  // Pattern 2: 隔词重复 "addressable addressable market opportunity opportunity"
+  // 先处理一次，然后再处理一次以防嵌套
+  for (let i = 0; i < 2; i++) {
+    cleaned = cleaned.replace(/\b(\w+)\s+\1\b/gi, '$1');
+  }
+  
+  // Pattern 3: 短语重复 "growth trajectory growth trajectory" → "growth trajectory"
+  cleaned = cleaned.replace(/\b((\w+\s+){1,3})(\1)+/gi, '$1');
   
   return cleaned;
 }
 
 /**
  * 去除常见 AI 口癖短语
- * 修复版：保留完整短语，只替换形容词
+ * v2.0 增强版：包含更多叙事转折词和不专业表达
  */
 function removeAICliches(text) {
   if (!text) return text;
@@ -35,32 +43,66 @@ function removeAICliches(text) {
     /It'?s worth noting that /gi,
     /It'?s important to note that /gi,
     /It should be noted that /gi,
-    /Notably, /gi,
-    /Importantly, /gi,
-    /Interestingly, /gi,
-    /Remarkably, /gi,
+    /Notably,?\s*/gi,
+    /Importantly,?\s*/gi,
+    /Interestingly,?\s*/gi,
+    /Remarkably,?\s*/gi,
+    /With this in mind,?\s*/gi,
+    /Considering these factors,?\s*/gi,
+    /Given this backdrop,?\s*/gi,
+    /In this context,?\s*/gi,
+    /Against this backdrop,?\s*/gi,
+    /Looking ahead,?\s*/gi,
+    /Moving forward,?\s*/gi,
+    /That being said,?\s*/gi,
+    /Having said that,?\s*/gi,
+    /It goes without saying that /gi,
+    /Needless to say,?\s*/gi,
+    /As we can see,?\s*/gi,
+    /As mentioned (earlier|above|previously),?\s*/gi,
+    /To put it simply,?\s*/gi,
+    /In essence,?\s*/gi,
+    /At the end of the day,?\s*/gi,
+    /When all is said and done,?\s*/gi,
   ];
   
   leadInCliches.forEach(cliche => {
     cleaned = cleaned.replace(cliche, '');
   });
   
-  // 阶段 2: 替换形容词短语（保留完整上下文）
+  // 阶段 2: 替换不专业形容词（保留完整上下文）
   const adjectiveReplacements = [
-    { pattern: /\b(E|e)xciting\b/g, replacement: 'compelling' },
+    { pattern: /\b(E|e)xciting\b/g, replacement: 'notable' },
     { pattern: /\b(A|a)mazing\b/g, replacement: 'strong' },
-    { pattern: /\b(I|i)ncredible\b/g, replacement: 'exceptional' },
+    { pattern: /\b(I|i)ncredible\b/g, replacement: 'substantial' },
     { pattern: /\b(F|f)antastic\b/g, replacement: 'solid' },
     { pattern: /\b(T|t)remendous\b/g, replacement: 'significant' },
+    { pattern: /\b(G|g)ame[- ]?changing\b/g, replacement: 'transformative' },
+    { pattern: /\b(R|r)evolutionary\b/g, replacement: 'innovative' },
+    { pattern: /\b(U|u)nprecedented\b/g, replacement: 'notable' },
+    { pattern: /\b(M|m)assive\b/g, replacement: 'substantial' },
+    { pattern: /\b(H|h)uge\b/g, replacement: 'significant' },
+    { pattern: /\b(A|a)wesome\b/g, replacement: 'favorable' },
+    { pattern: /\b(W|w)onderful\b/g, replacement: 'positive' },
   ];
   
   adjectiveReplacements.forEach(({ pattern, replacement }) => {
     cleaned = cleaned.replace(pattern, (match) => {
-      // 保留原始大小写：如果第一个字母大写，替换词也大写
       return match[0] === match[0].toUpperCase() 
         ? replacement.charAt(0).toUpperCase() + replacement.slice(1)
         : replacement;
     });
+  });
+  
+  // 阶段 3: 删除夸张的量化表达
+  const exaggeratedPatterns = [
+    /\b(potentially|possibly)\s+add(ing|s)?\s+\$?\d+[\.\d]*\s*[BMT]?\s*(in\s+)?(revenue|value|market\s+cap)/gi,
+    /\b(could|may|might)\s+increase\s+\$?\d+[\.\d]*[-–]\d+[\.\d]*%?\s*(in\s+)?(revenue|value)/gi,
+    /\bupwards\s+of\s+\$\d+[\.\d]*\s*[BMT]/gi,
+  ];
+  
+  exaggeratedPatterns.forEach(pattern => {
+    cleaned = cleaned.replace(pattern, '');
   });
   
   // 清理多余空格
@@ -96,10 +138,141 @@ function fixFormatting(text) {
 }
 
 /**
- * 主清理函数：组合所有清理步骤
+ * 控制段落长度 - 确保符合投行报告风格
+ * 每段不超过5-6行（约150-200词）
  */
-function cleanText(text) {
+function controlParagraphLength(text, maxWordsPerParagraph = 180) {
+  if (!text) return text;
+  
+  const paragraphs = text.split(/\n\n+/);
+  const processedParagraphs = [];
+  
+  for (const para of paragraphs) {
+    const words = para.split(/\s+/);
+    
+    if (words.length <= maxWordsPerParagraph) {
+      processedParagraphs.push(para);
+    } else {
+      // 按句子分割过长段落
+      const sentences = para.match(/[^.!?]+[.!?]+/g) || [para];
+      let currentChunk = [];
+      let currentWordCount = 0;
+      
+      for (const sentence of sentences) {
+        const sentenceWords = sentence.trim().split(/\s+/).length;
+        
+        if (currentWordCount + sentenceWords > maxWordsPerParagraph && currentChunk.length > 0) {
+          processedParagraphs.push(currentChunk.join(' '));
+          currentChunk = [sentence.trim()];
+          currentWordCount = sentenceWords;
+        } else {
+          currentChunk.push(sentence.trim());
+          currentWordCount += sentenceWords;
+        }
+      }
+      
+      if (currentChunk.length > 0) {
+        processedParagraphs.push(currentChunk.join(' '));
+      }
+    }
+  }
+  
+  return processedParagraphs.join('\n\n');
+}
+
+/**
+ * 检测并去除重复段落（完全或高度相似）
+ * 解决 Valuation Framework 等内容被复制粘贴两次的问题
+ */
+function deduplicateParagraphs(text, similarityThreshold = 0.85) {
+  if (!text) return text;
+  
+  const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 50);
+  const uniqueParagraphs = [];
+  const seenSignatures = new Set();
+  
+  for (const para of paragraphs) {
+    // 创建段落签名：取前50个字符 + 词数
+    const normalized = para.toLowerCase().replace(/\s+/g, ' ').trim();
+    const signature = normalized.substring(0, 80) + '_' + normalized.length;
+    
+    // 检查是否已存在高度相似的段落
+    let isDuplicate = false;
+    
+    // 完全匹配检查
+    if (seenSignatures.has(signature)) {
+      isDuplicate = true;
+    } else {
+      // 部分匹配检查：如果前80个字符相同，视为重复
+      for (const seen of seenSignatures) {
+        const seenPrefix = seen.split('_')[0];
+        const currentPrefix = signature.split('_')[0];
+        if (seenPrefix === currentPrefix && seenPrefix.length > 60) {
+          isDuplicate = true;
+          break;
+        }
+      }
+    }
+    
+    if (!isDuplicate) {
+      uniqueParagraphs.push(para);
+      seenSignatures.add(signature);
+    }
+  }
+  
+  return uniqueParagraphs.join('\n\n');
+}
+
+/**
+ * 精简过度的分析师引用
+ * 避免过多 "John Smith argues that..." 的叙事风格
+ */
+function reduceAnalystMentions(text, maxMentions = 4) {
+  if (!text) return text;
+  
+  // 匹配分析师名字引用模式（假设分析师名是大写开头的两个词）
+  const analystPattern = /(?:In\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)'?s?\s+(view|opinion|analysis|assessment|perspective|argues?|notes?|observes?|believes?|highlights?|emphasizes?|points?\s+out)/gi;
+  
+  let count = 0;
+  const cleaned = text.replace(analystPattern, (match, name, verb) => {
+    count++;
+    if (count <= maxMentions) {
+      return match; // 保留前几次
+    }
+    // 替换为更简洁的表达
+    const simplifiedVerbs = {
+      'view': 'Our view',
+      'opinion': 'We believe',
+      'analysis': 'Our analysis',
+      'argues': 'We argue',
+      'notes': 'We note',
+      'observes': 'We observe',
+      'believes': 'We believe',
+      'highlights': 'We highlight',
+      'emphasizes': 'We emphasize',
+      'points out': 'We note'
+    };
+    const verbLower = verb.toLowerCase().replace(/s$/, '');
+    return simplifiedVerbs[verbLower] || 'We note';
+  });
+  
+  return cleaned;
+}
+
+/**
+ * 主清理函数：组合所有清理步骤
+ * v2.0 增强版：包含段落控制和去重
+ */
+function cleanText(text, options = {}) {
   if (!text || typeof text !== 'string') return text;
+  
+  const {
+    deduplicateParagraphsEnabled = true,
+    controlParagraphLengthEnabled = true,
+    reduceAnalystMentionsEnabled = true,
+    maxWordsPerParagraph = 180,
+    maxAnalystMentions = 4
+  } = options;
   
   let cleaned = text;
   
@@ -109,7 +282,37 @@ function cleanText(text) {
   // 步骤2：去除AI口癖
   cleaned = removeAICliches(cleaned);
   
-  // 步骤3：修复格式问题
+  // 步骤3：去重段落（解决内容复制粘贴问题）
+  if (deduplicateParagraphsEnabled) {
+    cleaned = deduplicateParagraphs(cleaned);
+  }
+  
+  // 步骤4：控制段落长度
+  if (controlParagraphLengthEnabled) {
+    cleaned = controlParagraphLength(cleaned, maxWordsPerParagraph);
+  }
+  
+  // 步骤5：精简分析师引用
+  if (reduceAnalystMentionsEnabled) {
+    cleaned = reduceAnalystMentions(cleaned, maxAnalystMentions);
+  }
+  
+  // 步骤6：修复格式问题
+  cleaned = fixFormatting(cleaned);
+  
+  return cleaned;
+}
+
+/**
+ * 轻量版清理：仅处理重复和格式
+ * 用于不需要段落控制的场景
+ */
+function cleanTextLight(text) {
+  if (!text || typeof text !== 'string') return text;
+  
+  let cleaned = text;
+  cleaned = removeDuplicateWords(cleaned);
+  cleaned = removeAICliches(cleaned);
   cleaned = fixFormatting(cleaned);
   
   return cleaned;
@@ -117,7 +320,11 @@ function cleanText(text) {
 
 module.exports = {
   cleanText,
+  cleanTextLight,
   removeDuplicateWords,
   removeAICliches,
-  fixFormatting
+  fixFormatting,
+  controlParagraphLength,
+  deduplicateParagraphs,
+  reduceAnalystMentions
 };

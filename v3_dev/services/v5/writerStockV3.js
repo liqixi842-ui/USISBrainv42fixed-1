@@ -46,32 +46,34 @@ Price: $${report.price?.last || 'N/A'}
 Target: $${report.targets?.base?.price || 'N/A'} (${report.targets?.base?.upside_pct || 'N/A'}% upside)
 Rating: ${report.rating || 'N/A'}${industryNote}
 
-Financial / Network Data (if applicable):
+Financial Data:
 - Revenue: ${report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A'}
 - EPS: $${report.fundamentals?.eps || 'N/A'}
 - ROE: ${report.fundamentals?.roe || 'N/A'}%
 - PE: ${report.valuation?.pe_ttm || 'N/A'}x
 - Margin: ${report.fundamentals?.profit_margin || 'N/A'}%
 
-Write a 900-1000 word institutional investment thesis with **ANALYST VOICE**:
+Write a CONCISE 600-700 word institutional investment thesis:
 
-**CRITICAL - Analyst Voice Requirements:**
-- Include AT LEAST 3 explicit analyst references using ${analyst}'s name:
-  * "In ${analyst}'s view, ..."
-  * "${analyst} argues that ..."
-  * "According to ${analyst}, ..."
-- Make it feel like ${analyst} is personally presenting this analysis
-- Use a mix of "we" (research team) and direct analyst attribution
+**SELL-SIDE STYLE REQUIREMENTS:**
+- Write like Morgan Stanley/Goldman Sachs research notes
+- Each paragraph: 3-5 sentences MAX (no long blocks of text)
+- Use short, punchy sentences with specific data
+- Include 2-3 analyst attributions (not more): "${analyst} notes...", "We believe..."
+- Every claim must cite a specific number from the data above
 
-**Structure:**
-1. Core Investment Rationale (250-300 words)
-2. Competitive / Strategic Position (350 words)
-3. Financial / Network Framework (300-350 words)
+**Structure (3 sections, each ~200 words):**
+1. **Investment Rationale** - Why buy/hold/sell NOW? Key thesis in 3-4 sentences, then 2-3 supporting points
+2. **Competitive Position** - Market share, moat, key differentiators (cite margins, growth vs peers)
+3. **Financial Framework** - Valuation support, earnings trajectory, capital allocation
 
-**Requirements:**
-- Mix "we" with explicit ${analyst} attributions
-- **PROHIBITED WORDS**: exciting, amazing, well-positioned, compelling, attractive, robust
-- **MINIMUM LENGTH**: 900 words${focus.length > 0 ? `\n- MUST address: ${focus.join(', ')}` : ''}
+**STRICT PROHIBITIONS:**
+- NO filler phrases: "with this in mind", "considering these factors", "given this backdrop"
+- NO repetitive words: ensure each word appears only once in close proximity
+- NO excessive analyst mentions (max 3 total)
+- NO marketing language: exciting, amazing, unprecedented, game-changing, revolutionary
+- NO paragraphs longer than 5 sentences
+${focus.length > 0 ? `\n- MUST address: ${focus.join(', ')}` : ''}
 
 Thesis:`,
 
@@ -85,37 +87,37 @@ Precio: $${report.price?.last || 'N/A'}
 Precio objetivo: $${report.targets?.base?.price || 'N/A'} (${report.targets?.base?.upside_pct || 'N/A'}% potencial)
 Recomendación: ${report.rating || 'N/A'}${industryNote}
 
-Datos financieros / de red (si aplica):
+Datos financieros:
 - Ingresos: ${report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A'}
 - BPA: $${report.fundamentals?.eps || 'N/A'}
 - ROE: ${report.fundamentals?.roe || 'N/A'}%
 - PER: ${report.valuation?.pe_ttm || 'N/A'}x
 - Margen: ${report.fundamentals?.profit_margin || 'N/A'}%
 
-Escribe una tesis de inversión institucional de 900-1000 palabras con **VOZ DEL ANALISTA**:
+Escribe una tesis CONCISA de 600-700 palabras:
 
-**CRÍTICO - Requisitos de voz del analista:**
-- Incluye AL MENOS 3 referencias explícitas usando el nombre ${analyst}:
-  * "En opinión de ${analyst}, ..."
-  * "${analyst} considera que ..."
-  * "Según ${analyst}, ..."
-- Haz que parezca que ${analyst} está presentando personalmente el análisis
-- Mezcla "nosotros" (equipo) con atribuciones directas al analista
+**ESTILO SELL-SIDE:**
+- Escribe como Morgan Stanley/Goldman Sachs
+- Cada párrafo: 3-5 oraciones MÁXIMO
+- Incluye 2-3 menciones del analista (no más)
+- Cada afirmación debe citar un dato específico
 
-**Estructura:**
-1. Tesis central de inversión (250-300 palabras)
-2. Posicionamiento competitivo / estratégico (350 palabras)
-3. Marco financiero o de red (300-350 palabras)
+**Estructura (3 secciones, ~200 palabras cada una):**
+1. **Fundamento** - ¿Por qué comprar/mantener/vender AHORA?
+2. **Posición Competitiva** - Cuota de mercado, diferenciadores
+3. **Marco Financiero** - Valoración, trayectoria de beneficios
 
-**Requisitos:**
-- Mezcla "nosotros" con atribuciones a ${analyst}
-- **PALABRAS PROHIBIDAS**: emocionante, increíble, líder, de vanguardia
-- **LONGITUD MÍNIMA**: 900 palabras${focus.length > 0 ? `\n- DEBE abordar: ${focus.join(', ')}` : ''}
+**PROHIBIDO:**
+- Frases de relleno: "con esto en mente", "considerando estos factores"
+- Palabras repetitivas en proximidad
+- Más de 3 menciones del analista
+- Lenguaje de marketing: emocionante, increíble, revolucionario
+${focus.length > 0 ? `\n- DEBE abordar: ${focus.join(', ')}` : ''}
 
 Tesis:`,
 
     // ZH
-    `你现在以 ${firm} 首席分析师 ${analyst} 的身份，为标的 ${subjectName}（${subjectLabel}）撰写一篇 900-1000 字的机构级《投资逻辑》。
+    `你现在以 ${firm} 首席分析师 ${analyst} 的身份，为标的 ${subjectName}（${subjectLabel}）撰写一篇机构级《投资逻辑》。
 
 标的: ${subjectName}
 资产类型: ${assetType.toUpperCase()}
@@ -124,32 +126,32 @@ Tesis:`,
 目标价: $${report.targets?.base?.price || 'N/A'}（预期涨跌幅 ${report.targets?.base?.upside_pct || 'N/A'}%）
 评级: ${report.rating || 'N/A'}${industryNote}
 
-财务/网络数据（如适用）：
+财务数据：
 - 营收: ${report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A'}
 - EPS: $${report.fundamentals?.eps || 'N/A'}
 - ROE: ${report.fundamentals?.roe || 'N/A'}%
 - PE: ${report.valuation?.pe_ttm || 'N/A'}x
 - 利润率: ${report.fundamentals?.profit_margin || 'N/A'}%
 
-写作要求（必须满足）：
+撰写一篇简洁的 600-700 字投资逻辑：
 
-**关键 - 分析师发言要求:**
-- 必须包含至少 3 次明确使用 ${analyst} 名字的陈述:
-  * "在 ${analyst} 看来，……"
-  * "${analyst} 认为……"
-  * "据 ${analyst} 分析，……"
-- 让读者感觉 ${analyst} 在亲自呈现分析
-- 结合"我们（研究团队）"与 ${analyst} 个人归因
+**卖方风格要求：**
+- 参照摩根士丹利/高盛研报风格
+- 每段落 3-5 句话，不超过 6 句
+- 分析师引用 2-3 次（不超过 3 次）
+- 每个论点必须引用具体数据
 
-**结构:**
-1. 核心投资逻辑（250-300 字）
-2. 竞争格局与优势（约 350 字）
-3. 财务/网络框架（约 300-350 字）
+**结构（3 部分，每部分约 200 字）：**
+1. **投资理由** - 为什么现在买入/持有/卖出？
+2. **竞争地位** - 市场份额、护城河、核心优势
+3. **财务框架** - 估值支撑、盈利趋势
 
-**要求:**
-- 混合使用"我们"和对 ${analyst} 的明确归因
-- **禁用词汇**: 激动人心、爆发式、完美、绝佳机会
-- **最低长度**: 900 字${focus.length > 0 ? `\n- 必须涵盖: ${focus.join(', ')}` : ''}
+**禁止内容：**
+- 过渡性套话："综上所述"、"考虑到这些因素"、"在此背景下"
+- 相邻词语重复
+- 超过 3 次分析师引用
+- 营销语言：激动人心、爆发式、史无前例
+${focus.length > 0 ? `\n- 必须涵盖: ${focus.join(', ')}` : ''}
 
 投资逻辑:`
   );
@@ -157,8 +159,8 @@ Tesis:`,
   try {
     let thesis = '';
     let attempts = 0;
-    const MIN_WORD_COUNT = 900; // 🔧 Architect fix: Match prompt requirement (900-1000 words)
-    const ABSOLUTE_MIN = 600; // Fallback threshold
+    const MIN_WORD_COUNT = 600; // 🔧 v7.4: Reduced to match new concise prompt (600-700 words)
+    const ABSOLUTE_MIN = 450; // Fallback threshold for concise reports
     
     // 🆕 v5.2: Asset-type and language-aware system prompt
     let roleDesc;
@@ -578,35 +580,25 @@ Current Valuation:
 Peers:
 ${report.peers && report.peers.length > 0 ? report.peers.slice(0, 3).map(p => `${p.symbol}: PE ${p.pe_forward}x, P/S ${p.ps_ttm}x`).join(', ') : 'Peer data pending'}
 
-Write 700 word valuation analysis:
+Write a CONCISE 450-500 word valuation analysis:
 
-**Structure:**
-1. Valuation Framework (250 words)
-   - Multiple-based approach (PE, EV/EBITDA, P/S)
-   - DCF summary
-   - Relative to peers
+**Structure (3 short sections):**
+1. **Valuation Framework** (150 words) - PE/EV/EBITDA multiples vs peers, one-line DCF note
+2. **Target Derivation** (150 words) - Base case, key drivers, WACC/sensitivity in 2-3 sentences
+3. **Scenario Analysis** (150 words) - Bull/Base/Bear with specific targets and probabilities
 
-2. Target Price Derivation (250 words)
-   - Base case assumptions
-   - Key value drivers
-   - Sensitivities
+**STYLE RULES:**
+- Each paragraph: 3-4 sentences MAX
+- Use sell-side phrasing: "We value at", "Our target implies", "Trading at Xth percentile"
+- Every sentence must cite a specific number
+- NO duplication - each concept mentioned ONCE only
+- NO filler: remove "given this", "with this in mind", "considering"
+- NEVER repeat the same valuation framework explanation
 
-3. Scenario Analysis (200 words)
-   - Bull case (assumptions + target)
-   - Bear case (assumptions + target)
-   - Probability weighting
-
-**Requirements:**
-- Institutional sell-side language: "We value the stock at", "Our target implies", "We derive"
-- Cite specific numbers, multiples, and percentile ranks
-- Compare to peer median/quartiles with exact figures
-- **PROHIBITED PHRASES** (use alternatives):
-  * ❌ "constructive" → ✅ "fair value $X represents Y% upside"
-  * ❌ "supportive" → ✅ "trades at Z% discount to peers"
-  * ❌ "attractive" → ✅ "valuation at Xth percentile"
-  * ❌ "compelling" → ✅ "implies X% IRR vs. Y% WACC"
-  * ❌ "well-positioned" → ✅ "commands premium given [specific reason]"
-- Every valuation claim must cite a specific multiple or calculation
+**PROHIBITED:**
+- constructive, supportive, attractive, compelling, well-positioned
+- Paragraphs longer than 4 sentences
+- Repeating PE/EV multiples more than once each
 
 Valuation:`;
 

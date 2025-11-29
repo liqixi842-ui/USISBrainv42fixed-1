@@ -364,18 +364,73 @@ async function refineNarrativeText(report) {
   let refinedAction = applyTasteCorrection(applyTruthCorrection(originalTexts.action));
   refinedAction = deduplicate(refinedAction);
   
-  console.log(`✅ [v4.0 Taste + Truth] Professional correction complete`);
+  // ══════════════════════════════════════════════════════════════
+  // CROSS-FIELD DEDUPLICATION: Prevent same content in multiple sections
+  // ══════════════════════════════════════════════════════════════
+  const crossFieldDedup = (fields) => {
+    const seenParagraphs = new Set();
+    const result = {};
+    
+    // Process fields in priority order (earlier fields keep content)
+    const fieldOrder = ['summary_text', 'thesis_text', 'valuation_text', 'segment_text', 'macro_text', 'tech_view_text', 'action_text'];
+    
+    for (const fieldName of fieldOrder) {
+      if (!fields[fieldName]) {
+        result[fieldName] = fields[fieldName];
+        continue;
+      }
+      
+      const paragraphs = fields[fieldName].split(/\n\n+/);
+      const uniqueParagraphs = [];
+      
+      for (const para of paragraphs) {
+        const normalized = para.toLowerCase().replace(/\s+/g, ' ').trim();
+        const signature = normalized.substring(0, 100);
+        
+        // Check if this paragraph (or very similar) was seen in earlier fields
+        let isDuplicate = false;
+        for (const seen of seenParagraphs) {
+          if (calculateSimilarity(signature, seen) > 0.7) {
+            isDuplicate = true;
+            console.log(`⚠️  [CrossDedup] Removed duplicate paragraph from ${fieldName}`);
+            break;
+          }
+        }
+        
+        if (!isDuplicate && para.trim().length > 20) {
+          uniqueParagraphs.push(para);
+          seenParagraphs.add(signature);
+        }
+      }
+      
+      result[fieldName] = uniqueParagraphs.join('\n\n');
+    }
+    
+    return result;
+  };
   
-  return {
+  const dedupedFields = crossFieldDedup({
     summary_text: refinedSummary,
     thesis_text: refinedThesis,
     valuation_text: refinedValuation,
     segment_text: refinedSegments,
     macro_text: refinedMacro,
-    catalysts_text: refinedCatalysts,
-    risks_text: refinedRisks,
     tech_view_text: refinedTechnical,
     action_text: refinedAction
+  });
+  
+  console.log(`✅ [v4.0 Taste + Truth] Professional correction complete`);
+  
+  return {
+    summary_text: dedupedFields.summary_text,
+    thesis_text: dedupedFields.thesis_text,
+    valuation_text: dedupedFields.valuation_text,
+    segment_text: dedupedFields.segment_text,
+    macro_text: dedupedFields.macro_text,
+    catalysts_text: refinedCatalysts,
+    risks_text: refinedRisks,
+    tech_view_text: dedupedFields.tech_view_text,
+    action_text: dedupedFields.action_text
   };
 }
 
@@ -2326,7 +2381,22 @@ HARD RULES:
 4. ZERO MENTIONS of failed/missing specialists - write as if all data came from raw inputs
 5. EMBED all key numbers (price, PE, margins, targets)
 6. Make it read like a SINGLE unified research report
-7. Ensure catalysts_text and risks_text each have exactly 8 items (extract from any available field name)`;
+7. Ensure catalysts_text and risks_text each have exactly 8 items (extract from any available field name)
+
+**CRITICAL - CONTENT DEDUPLICATION RULES:**
+8. NEVER repeat the same valuation framework in multiple sections
+9. valuation_text should contain ONLY valuation analysis - no thesis, no macro
+10. thesis_text should contain ONLY investment thesis - no valuation multiples discussion
+11. Each section must have UNIQUE content - check that no paragraph appears in multiple fields
+12. If DeepSeek valuation content was used in one field, DO NOT copy it to another
+13. Each text field should be SHORT: thesis_text ~150 words, valuation_text ~120 words, macro_text ~100 words
+
+**STYLE RULES - PROFESSIONAL SELL-SIDE TONE:**
+14. NO filler phrases: "with this in mind", "considering these factors", "given this backdrop"
+15. NO repetitive words in same sentence (e.g., "organic organic", "growth trajectory trajectory")
+16. Keep paragraphs SHORT: 3-5 sentences each, never more than 6 sentences
+17. Use direct language: "We rate BUY", "Our target is $X", "Trading at Xth percentile"
+18. Limit analyst name mentions to 2-3 total across all sections`;
 
   let finalNarrative;
   try {
