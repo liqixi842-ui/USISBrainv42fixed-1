@@ -15,6 +15,7 @@ const languageNormalizer = require('./languageNormalizer');
 const qaChecker = require('./qaChecker');
 const llmPromptTemplate = require('./llmPromptTemplate');
 const healthMonitor = require('./healthMonitor');
+const institutionalEnhancements = require('./institutionalEnhancements');
 
 module.exports = {
   execute: (symbol, options) => pipelineOrchestrator.execute(symbol, options),
@@ -28,6 +29,7 @@ module.exports = {
   qa: qaChecker,
   promptTemplate: llmPromptTemplate,
   health: healthMonitor,
+  enhancements: institutionalEnhancements,
 
   async generateReport(symbol, options = {}) {
     const result = await pipelineOrchestrator.execute(symbol, options);

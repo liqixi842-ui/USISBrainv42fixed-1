@@ -34,12 +34,13 @@ const chartEngine = require('./chartEngine');
 const languageNormalizer = require('./languageNormalizer');
 const qaChecker = require('./qaChecker');
 const llmPromptTemplate = require('./llmPromptTemplate');
+const institutionalEnhancements = require('./institutionalEnhancements');
 
 class PipelineOrchestrator {
   constructor() {
     this.stages = [
       'fetch', 'validate', 'collect_charts', 'generate_charts', 
-      'normalize', 'render', 'qa_check'
+      'render', 'enhance', 'normalize', 'qa_check'
     ];
   }
 
@@ -67,13 +68,13 @@ class PipelineOrchestrator {
     };
 
     try {
-      console.log(`\n[Stage 1/7] DataFetcher`);
+      console.log(`\n[Stage 1/8] DataFetcher`);
       const fetchStart = Date.now();
       const rawData = await dataFetcher.fetch(symbol);
       result._meta.timing.fetch = Date.now() - fetchStart;
       result._meta.stages_completed.push('fetch');
       
-      console.log(`\n[Stage 2/7] DataValidator`);
+      console.log(`\n[Stage 2/8] DataValidator`);
       const validateStart = Date.now();
       const validatedData = dataValidator.validate(rawData);
       result._meta.timing.validate = Date.now() - validateStart;
@@ -93,13 +94,13 @@ class PipelineOrchestrator {
         result.errors.push(...validatedData.warnings);
       }
 
-      console.log(`\n[Stage 3/7] ChartDataCollector`);
+      console.log(`\n[Stage 3/8] ChartDataCollector`);
       const collectStart = Date.now();
       const chartData = chartDataCollector.collect(validatedData);
       result._meta.timing.collect_charts = Date.now() - collectStart;
       result._meta.stages_completed.push('collect_charts');
 
-      console.log(`\n[Stage 4/7] ChartEngine`);
+      console.log(`\n[Stage 4/8] ChartEngine`);
       const chartStart = Date.now();
       const chartsResult = await chartEngine.generate(chartData);
       result._meta.timing.generate_charts = Date.now() - chartStart;
@@ -107,19 +108,28 @@ class PipelineOrchestrator {
       
       result.charts = chartsResult.charts;
 
-      console.log(`\n[Stage 5/7] ReportRenderer`);
+      console.log(`\n[Stage 5/8] ReportRenderer`);
       const renderStart = Date.now();
       const rawReport = this._buildReportObject(validatedData.data, chartsResult, options);
       result._meta.timing.render = Date.now() - renderStart;
       result._meta.stages_completed.push('render');
 
-      console.log(`\n[Stage 6/7] LanguageNormalizer`);
+      console.log(`\n[Stage 6/8] InstitutionalEnhancements`);
+      const enhanceStart = Date.now();
+      const enhancedReport = institutionalEnhancements.enhance(rawReport, {
+        priceData: rawData.prices || [],
+        macroData: options.macroData || {}
+      });
+      result._meta.timing.enhance = Date.now() - enhanceStart;
+      result._meta.stages_completed.push('enhance');
+
+      console.log(`\n[Stage 7/8] LanguageNormalizer`);
       const normalizeStart = Date.now();
-      result.report = this._normalizeReportText(rawReport);
+      result.report = this._normalizeReportText(enhancedReport);
       result._meta.timing.normalize = Date.now() - normalizeStart;
       result._meta.stages_completed.push('normalize');
 
-      console.log(`\n[Stage 7/7] QA/Check`);
+      console.log(`\n[Stage 8/8] QA/Check`);
       const qaStart = Date.now();
       const qaResult = qaChecker.check(result.report);
       result._meta.timing.qa_check = Date.now() - qaStart;
@@ -462,10 +472,54 @@ class PipelineOrchestrator {
       }
     }
 
+    if (normalizedReport.thesis_enhanced) {
+      if (normalizedReport.thesis_enhanced.moat) {
+        normalizedReport.thesis_enhanced.moat = languageNormalizer.cleanTextLight(normalizedReport.thesis_enhanced.moat);
+      }
+      if (normalizedReport.thesis_enhanced.growth_drivers) {
+        normalizedReport.thesis_enhanced.growth_drivers = languageNormalizer.cleanTextLight(normalizedReport.thesis_enhanced.growth_drivers);
+      }
+      if (normalizedReport.thesis_enhanced.margin_strength) {
+        normalizedReport.thesis_enhanced.margin_strength = languageNormalizer.cleanTextLight(normalizedReport.thesis_enhanced.margin_strength);
+      }
+    }
+
     if (normalizedReport.industry_macro?.key_trends) {
       normalizedReport.industry_macro.key_trends = normalizedReport.industry_macro.key_trends.map(trend => 
         languageNormalizer.cleanTextLight(trend)
       );
+    }
+
+    if (normalizedReport.industry_macro_enhanced?.key_trends) {
+      normalizedReport.industry_macro_enhanced.key_trends = normalizedReport.industry_macro_enhanced.key_trends.map(trend => 
+        languageNormalizer.cleanTextLight(trend)
+      );
+    }
+
+    if (normalizedReport.catalysts_enhanced) {
+      normalizedReport.catalysts_enhanced = normalizedReport.catalysts_enhanced.map(cat => ({
+        ...cat,
+        description: languageNormalizer.cleanTextLight(cat.description || '')
+      }));
+    }
+
+    if (normalizedReport.risks_enhanced) {
+      normalizedReport.risks_enhanced = normalizedReport.risks_enhanced.map(risk => ({
+        ...risk,
+        description: languageNormalizer.cleanTextLight(risk.description || '')
+      }));
+    }
+
+    if (normalizedReport.technicals_enhanced?.narrative) {
+      normalizedReport.technicals_enhanced.narrative = languageNormalizer.cleanTextLight(normalizedReport.technicals_enhanced.narrative);
+    }
+
+    if (normalizedReport.action_recommendations_enhanced?.justification) {
+      normalizedReport.action_recommendations_enhanced.justification = languageNormalizer.cleanTextLight(normalizedReport.action_recommendations_enhanced.justification);
+    }
+
+    if (normalizedReport.final_recommendation_enhanced?.summary) {
+      normalizedReport.final_recommendation_enhanced.summary = languageNormalizer.cleanTextLight(normalizedReport.final_recommendation_enhanced.summary);
     }
 
     console.log(`[LanguageNormalizer] Applied normalization to report sections`);
