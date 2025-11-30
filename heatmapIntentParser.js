@@ -517,6 +517,43 @@ async function extractHeatmapQuery(text, debugMode = false) {
 function buildTradingViewURL(query) {
   const { index, locale, sector } = query;
   
+  // 🆕 TradingView 数据集映射表 - 将内部索引名转换为TV识别的数据集名
+  const TRADINGVIEW_DATASET_MAP = {
+    // 美股
+    'SPX500': 'SPX500',
+    'NASDAQ100': 'NASDAQ100',
+    'NAS100': 'NASDAQ100',
+    'DJ30': 'DJ30',
+    'DJI': 'DJ30',
+    'RUT': 'RUT',
+    
+    // 加拿大
+    'TSX': 'TSX60',
+    
+    // 欧洲
+    'DAX': 'DAX40',
+    'DAX40': 'DAX40',
+    'CAC40': 'CAC40',
+    'FTSE': 'FTSE100',
+    'FTSE100': 'FTSE100',
+    'IBEX35': 'IBEX35',
+    'EURO50': 'EURO50',
+    
+    // 亚太
+    'HSI': 'HSI',
+    'CSI300': 'CSI300',
+    'SSE50': 'SSE50',
+    'KOSPI': 'KOSPI',
+    'AS51': 'AS51',
+    'AS200': 'AS200',
+    'TWII': 'TWII',
+    'NIFTY': 'NIFTY50',
+    'NIFTY50': 'NIFTY50',
+    
+    // 其他
+    'IBOV': 'IBOV'
+  };
+  
   // 🆕 加密货币热力图 - 使用不同的URL结构
   if (index === 'CRYPTO') {
     console.log('🪙 使用加密货币热力图');
@@ -542,11 +579,15 @@ function buildTradingViewURL(query) {
     return url;
   }
   
+  // 🆕 使用映射表获取正确的TradingView数据集名称
+  const tvDataset = TRADINGVIEW_DATASET_MAP[index] || index;
+  console.log(`🎯 [Dataset Mapping] ${index} → ${tvDataset}`);
+  
   // 其他市场保持原有逻辑
   const baseUrl = 'https://www.tradingview.com/heatmap/stock/';
   const params = new URLSearchParams({
     color: 'change',
-    dataset: index,
+    dataset: tvDataset,
     group: sector !== 'AUTO' ? 'industry' : 'sector',
     blockSize: 'market_cap_basic',
     blockColor: 'change'
