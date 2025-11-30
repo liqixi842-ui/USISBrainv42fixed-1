@@ -7,6 +7,7 @@ const { handlePublic } = require('./public-bot.js');
 const { handleSupervisor } = require('./supervisor-bot.js');
 const { handleDeepReport } = require('./deep-report-bot.js');
 const { parseResearchReportCommand, parseUserIntent } = require('../semanticIntentAgent');
+const { resolveChineseCompanyName } = require('../symbolResolver');
 
 /**
  * USIS Brain v7.0 - Manager Bot (核心路由器)
@@ -171,9 +172,19 @@ function parseCommand(message) {
         flags: {} 
       };
     } else if (isChineseCompanyName) {
-      // 🧠 中文公司名，需要 AI 翻译
-      console.log(`[PARSER][AI-ROUTE] 中文公司名 "${symbolCandidate}"，转交 AI 语义理解`);
-      return { cmd: 'public', args: [cleanText], flags: {} };
+      // 🧠 中文公司名，尝试本地映射解析
+      const resolvedSymbol = resolveChineseCompanyName(symbolCandidate);
+      if (resolvedSymbol && resolvedSymbol !== symbolCandidate) {
+        console.log(`[PARSER][CHINESE-MAP] 中文公司名解析: "${symbolCandidate}" → ${resolvedSymbol}`);
+        return { 
+          cmd: 'ticket', 
+          args: [resolvedSymbol, modeCandidate],
+          flags: {} 
+        };
+      }
+      // 未找到映射，返回 fallback
+      console.log(`[PARSER][CHINESE-UNKNOWN] 未知中文公司名 "${symbolCandidate}"，请使用股票代码`);
+      return { cmd: 'public', args: [cleanText], flags: { unknownChinese: symbolCandidate } };
     }
     
     // 🆕 v7.1 STEP 1.5: 检测交易所前缀 + 股票代码的组合
@@ -232,10 +243,15 @@ function parseCommand(message) {
       // 跳过模式关键词
       if (MODE_KEYWORDS.includes(target)) continue;
       
-      // 中文 → AI 翻译
+      // 中文 → 尝试本地映射解析
       if (/^[\u4e00-\u9fa5]+$/.test(target)) {
-        console.log(`[PARSER][NL-AI] 自然语言中文 "${target}"，转交 AI`);
-        return { cmd: 'public', args: [cleanText], flags: {} };
+        const resolvedSymbol = resolveChineseCompanyName(target);
+        if (resolvedSymbol && resolvedSymbol !== target) {
+          console.log(`[PARSER][NL-CHINESE] 自然语言中文解析: "${target}" → ${resolvedSymbol}`);
+          return { cmd: 'ticket', args: [resolvedSymbol], flags: {} };
+        }
+        console.log(`[PARSER][NL-UNKNOWN] 未知中文公司名 "${target}"，请使用股票代码`);
+        return { cmd: 'public', args: [cleanText], flags: { unknownChinese: target } };
       }
       
       // 英文股票代码 → 直接 ticket

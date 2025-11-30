@@ -1017,6 +1017,7 @@ function levenshteinDistance(str1, str2) {
 }
 
 module.exports = {
+  resolveChineseCompanyName,
   resolveSymbols,
   lookupSymbol,
   lookupSymbolFromTwelveData,
