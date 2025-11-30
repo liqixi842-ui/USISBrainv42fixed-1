@@ -65,6 +65,12 @@ function mapParsedHeatmapQueryToArgs(parsed) {
       case 'ES': market = 'spain'; break;
       case 'DE': market = 'germany'; break;
       case 'UK': market = 'uk'; break;
+      case 'CA': market = 'canada'; break;
+      case 'JP': market = 'japan'; break;
+      case 'FR': market = 'france'; break;
+      case 'AU': market = 'australia'; break;
+      case 'KR': market = 'korea'; break;
+      case 'CRYPTO': market = 'crypto'; break;
       default: break;
     }
   }
@@ -137,6 +143,46 @@ async function handleHeatmap(args, chatId, bot, message) {
       else if (/币圈|虚拟货币|加密货币|数字货币|crypto|btc|eth|比特币|以太坊/i.test(text)) {
         shortcircuitMatch = { index: 'CRYPTO', region: 'CRYPTO', keyword: '加密货币' };
         args = ['crypto'];
+      }
+      // 🆕 加拿大/TSX 关键词
+      else if (/加拿大|canada|tsx|多伦多/i.test(text)) {
+        shortcircuitMatch = { index: 'TSX', region: 'CA', keyword: '加拿大' };
+        args = ['canada'];
+      }
+      // 🆕 德国/DAX 关键词
+      else if (/德国|germany|dax|法兰克福/i.test(text)) {
+        shortcircuitMatch = { index: 'DAX', region: 'DE', keyword: '德国' };
+        args = ['germany'];
+      }
+      // 🆕 英国/FTSE 关键词
+      else if (/英国|uk|ftse|伦敦|富时/i.test(text)) {
+        shortcircuitMatch = { index: 'FTSE', region: 'UK', keyword: '英国' };
+        args = ['uk'];
+      }
+      // 🆕 日本/日经 关键词
+      else if (/日本|japan|nikkei|东京|日经/i.test(text)) {
+        shortcircuitMatch = { index: 'NIKKEI225', region: 'JP', keyword: '日本' };
+        args = ['japan'];
+      }
+      // 🆕 中国/A股 关键词
+      else if (/中国|a股|沪深|上证|深证|大陆/i.test(text)) {
+        shortcircuitMatch = { index: 'CSI300', region: 'CN', keyword: '中国A股' };
+        args = ['china'];
+      }
+      // 🆕 法国/CAC 关键词
+      else if (/法国|france|cac|巴黎/i.test(text)) {
+        shortcircuitMatch = { index: 'CAC40', region: 'FR', keyword: '法国' };
+        args = ['france'];
+      }
+      // 🆕 澳大利亚 关键词
+      else if (/澳大利亚|澳洲|australia|asx|悉尼/i.test(text)) {
+        shortcircuitMatch = { index: 'AS200', region: 'AU', keyword: '澳大利亚' };
+        args = ['australia'];
+      }
+      // 🆕 韩国/KOSPI 关键词
+      else if (/韩国|korea|kospi|首尔/i.test(text)) {
+        shortcircuitMatch = { index: 'KOSPI', region: 'KR', keyword: '韩国' };
+        args = ['korea'];
       }
       
       if (shortcircuitMatch) {
@@ -385,9 +431,32 @@ function normalizeMarketQuery(input) {
     'dax': 'germany 热力图',
     '德国': 'germany 热力图',
     
+    'canada': 'canada 热力图',
+    'ca': 'canada 热力图',
+    'tsx': 'canada 热力图',
+    '加拿大': 'canada 热力图',
+    '多伦多': 'canada 热力图',
+    
     'uk': 'uk 热力图',
     'ftse': 'uk 热力图',
     '英国': 'uk 热力图',
+    '伦敦': 'uk 热力图',
+    
+    'france': 'france 热力图',
+    'fr': 'france 热力图',
+    'cac': 'france 热力图',
+    '法国': 'france 热力图',
+    
+    'australia': 'australia 热力图',
+    'au': 'australia 热力图',
+    'asx': 'australia 热力图',
+    '澳大利亚': 'australia 热力图',
+    '澳洲': 'australia 热力图',
+    
+    'korea': 'korea 热力图',
+    'kr': 'korea 热力图',
+    'kospi': 'korea 热力图',
+    '韩国': 'korea 热力图',
     
     'hk': 'hk 热力图',
     'hsi': 'hk 热力图',
@@ -427,6 +496,10 @@ function getMarketDisplayName(query) {
   if (lowerQuery.includes('germany')) return 'Germany DAX';
   if (lowerQuery.includes('uk')) return 'UK FTSE 100';
   if (lowerQuery.includes('hk') || lowerQuery.includes('hong kong')) return 'Hong Kong HSI';
+  if (lowerQuery.includes('canada') || lowerQuery.includes('tsx')) return 'Canada TSX';
+  if (lowerQuery.includes('france') || lowerQuery.includes('cac')) return 'France CAC 40';
+  if (lowerQuery.includes('australia') || lowerQuery.includes('asx')) return 'Australia ASX';
+  if (lowerQuery.includes('korea') || lowerQuery.includes('kospi')) return 'Korea KOSPI';
   
   return query.replace('热力图', '').trim() || 'Market';
 }

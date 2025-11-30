@@ -23,7 +23,9 @@ async function generateMarketAnalysis(marketIndex, userQuery) {
       'SPX500': '标普500', 'NASDAQ100': '纳斯达克100', 'DJ30': '道琼斯30',
       'NIKKEI225': '日经225', 'IBEX35': 'IBEX35', 'DAX40': 'DAX40',
       'CAC40': 'CAC40', 'FTSE100': '富时100', 'EURO50': '欧洲斯托克50',
-      'HSI': '恒生指数', 'CSI300': '沪深300', 'NIFTY50': 'Nifty 50'
+      'HSI': '恒生指数', 'CSI300': '沪深300', 'NIFTY50': 'Nifty 50',
+      'TSX': '加拿大TSX', 'AS200': '澳洲ASX200', 'KOSPI': '韩国KOSPI',
+      'CRYPTO': '加密货币', 'FTSE': '英国富时', 'DAX': '德国DAX'
     };
     
     const indexName = indexNames[marketIndex] || marketIndex;

@@ -582,16 +582,28 @@ function generateHeatmapSummary(query) {
     'SPX500': { zh: '标普500', en: 'S&P 500' },
     'NASDAQ100': { zh: '纳斯达克100', en: 'NASDAQ 100' },
     'DJ30': { zh: '道琼斯30', en: 'Dow Jones 30' },
+    'DJI': { zh: '道琼斯30', en: 'Dow Jones 30' },
     'NIKKEI225': { zh: '日经225', en: 'Nikkei 225' },
     'IBEX35': { zh: 'IBEX35', en: 'IBEX 35' },
     'DAX40': { zh: 'DAX40', en: 'DAX 40' },
+    'DAX': { zh: '德国DAX', en: 'German DAX' },
     'CAC40': { zh: 'CAC40', en: 'CAC 40' },
     'FTSE100': { zh: '富时100', en: 'FTSE 100' },
+    'FTSE': { zh: '英国富时', en: 'UK FTSE' },
     'EURO50': { zh: '欧洲斯托克50', en: 'Euro Stoxx 50' },
     'HSI': { zh: '恒生指数', en: 'Hang Seng Index' },
     'CSI300': { zh: '沪深300', en: 'CSI 300' },
+    'SSE50': { zh: '上证50', en: 'SSE 50' },
     'NIFTY50': { zh: 'Nifty 50', en: 'Nifty 50' },
-    'CRYPTO': { zh: '加密货币', en: 'Cryptocurrency' }
+    'NIFTY': { zh: '印度Nifty', en: 'India Nifty' },
+    'CRYPTO': { zh: '加密货币', en: 'Cryptocurrency' },
+    'TSX': { zh: '加拿大TSX', en: 'Canada TSX' },
+    'AS51': { zh: '澳洲ASX', en: 'Australia ASX' },
+    'AS200': { zh: '澳洲ASX200', en: 'Australia ASX 200' },
+    'KOSPI': { zh: '韩国KOSPI', en: 'Korea KOSPI' },
+    'TWII': { zh: '台湾加权', en: 'Taiwan TWII' },
+    'IBOV': { zh: '巴西IBOV', en: 'Brazil IBOV' },
+    'RUT': { zh: '罗素2000', en: 'Russell 2000' }
   };
   
   const isChinese = locale === 'zh-CN' || locale === 'auto';
