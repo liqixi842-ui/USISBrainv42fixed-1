@@ -105,6 +105,7 @@ const { handleHeatmap } = require('./bots/heatmap-bot.js');
 const { handleBrief } = require('./bots/brief-bot.js');
 const { handleDeepReport } = require('./bots/deep-report-bot.js');
 const { parseUserIntent } = require('./semanticIntentAgent');
+const { getScheduler } = require('./scheduler/newsScheduler');
 
 const { parseCommand, handleManagerBot } = managerBot;
 
@@ -144,6 +145,33 @@ console.log(`✅ Telegram Bot initialized (polling mode)`);
 console.log(`   ├─ Token: ${TOKEN.substring(0, 10)}...`);
 console.log(`   ├─ Owner ID: ${OWNER_ID || 'Not set'}`);
 console.log(`   └─ Polling interval: 300ms\n`);
+
+// ═══════════════════════════════════════════════════════════════
+// News Scheduler 初始化（自动推送）
+// ═══════════════════════════════════════════════════════════════
+
+const NEWS_CHANNEL_ID = process.env.NEWS_CHANNEL_ID;
+const ENABLE_NEWS_SYSTEM = process.env.ENABLE_NEWS_SYSTEM === 'true';
+
+if (ENABLE_NEWS_SYSTEM && NEWS_CHANNEL_ID) {
+  const newsScheduler = getScheduler({
+    enabled: true,
+    telegramToken: TOKEN,
+    newsChannelId: NEWS_CHANNEL_ID
+  });
+  
+  newsScheduler.start().then(() => {
+    console.log(`✅ News Scheduler started`);
+    console.log(`   ├─ Channel: ${NEWS_CHANNEL_ID}`);
+    console.log(`   └─ Schedule: Every 2 hours (even hours)\n`);
+  }).catch(err => {
+    console.error(`⚠️  News Scheduler failed to start: ${err.message}`);
+  });
+} else {
+  console.log(`ℹ️  News Scheduler disabled`);
+  console.log(`   ├─ ENABLE_NEWS_SYSTEM: ${ENABLE_NEWS_SYSTEM}`);
+  console.log(`   └─ NEWS_CHANNEL_ID: ${NEWS_CHANNEL_ID ? 'Set' : 'Not set'}\n`);
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Bot 模块注册表
