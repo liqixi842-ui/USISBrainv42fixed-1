@@ -28,18 +28,8 @@ const TRANSITIONS = [
   'Critically'
 ];
 
-const SELL_SIDE_VOCABULARY = {
-  'decrease': 'compression',
-  'increase': 'expansion',
-  'risk': 'execution risk',
-  'spending': 'capital allocation',
-  'profit': 'margin profile',
-  'growth': 'organic growth trajectory',
-  'market': 'addressable market opportunity',
-  'advantage': 'competitive moat',
-  'problem': 'headwind',
-  'opportunity': 'tailwind'
-};
+// 🔧 v7.7: Vocabulary replacement disabled - caused duplicate word issues like "organic organic"
+// The AI models already produce institutional-grade language without risky auto-replacement
 
 function applyStyle(text) {
   if (!text || typeof text !== 'string') return text;
@@ -66,15 +56,10 @@ function applyStyle(text) {
   
   styled = styledParagraphs.join('\n\n');
   
-  // Inject sell-side vocabulary
-  Object.entries(SELL_SIDE_VOCABULARY).forEach(([simple, professional]) => {
-    const regex = new RegExp(`\\b${simple}\\b`, 'gi');
-    let count = 0;
-    styled = styled.replace(regex, (match) => {
-      count++;
-      return count % 3 === 0 ? professional : match;
-    });
-  });
+  // 🔧 v7.7 FIX: Skip vocabulary injection entirely to prevent duplicate word issues
+  // The AI models already produce institutional-grade language, and replacing
+  // common words like "growth" → "organic growth trajectory" caused "organic organic"
+  // when the LLM already used "organic growth". Removing this risky auto-replacement.
   
   // Add transitions between sections
   const sections = styled.split(/\n\n/);

@@ -3,6 +3,7 @@ const riskCatalystEngine = require('./riskCatalystEngine');
 const styleEngine = require('./styleEngine');
 const sentenceEngine = require('./sentenceEngine');
 const coherenceEngine = require('./coherenceEngine');
+const { removeDuplicateWords } = require('./textCleanerEngine');
 
 /**
  * Main entry: build stock report with v5 enhancements
@@ -59,6 +60,16 @@ async function buildStockReport(report, v5Options = {}) {
     report.valuation_text = styleEngine.applyStyle(report.valuation_text);
     report.industry_text = styleEngine.applyStyle(report.industry_text);
     report.macro_text = styleEngine.applyStyle(report.macro_text);
+    
+    // 🔧 v7.7: Final duplicate cleanup pass
+    // Catches duplicates from ALL content paths (risk/catalyst, fallbacks, AI, etc.)
+    // removeDuplicateWords only targets consecutive identical words - safe for legitimate text
+    console.log('\n[SAFETY GATE] Final duplicate token cleanup...');
+    report.investment_thesis = removeDuplicateWords(report.investment_thesis);
+    report.company_overview = removeDuplicateWords(report.company_overview);
+    report.valuation_text = removeDuplicateWords(report.valuation_text);
+    report.industry_text = removeDuplicateWords(report.industry_text);
+    report.macro_text = removeDuplicateWords(report.macro_text);
     
     // FINAL OVERRIDE: Lock all rendering fields (v5 protected)
     console.log('\n[FINAL OVERRIDE] Locking v5-enhanced fields');

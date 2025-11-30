@@ -4328,7 +4328,7 @@ function renderPage8(report, h) {
   const companyPE = report.valuation.pe_forward;
   
   const peerAnalysis = validPeers.length > 0
-    ? `${report.meta.symbol} trades at ${h.fmt(companyPE, 1, 'x')} forward PE vs peer average of ${avgPeerPE}x. ${companyPE > avgPeerPE ? 'Premium valuation reflects stronger growth profile.' : 'Discount valuation presents potential value opportunity.'}`
+    ? `${report.symbol || report.meta?.symbol || 'The company'} trades at ${h.fmt(companyPE, 1, 'x')} forward PE vs peer average of ${avgPeerPE}x. ${companyPE > avgPeerPE ? 'Premium valuation reflects stronger growth profile.' : 'Discount valuation presents potential value opportunity.'}`
     : 'Peer comparison data unavailable for comprehensive relative analysis.';
 
   return `
