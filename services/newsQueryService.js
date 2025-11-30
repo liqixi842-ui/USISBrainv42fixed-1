@@ -134,16 +134,16 @@ async function fetchAndScoreNews(symbol, options = {}) {
   const scored = await scoreArticles(relevant);
   
   // 🔧 v7.7: Two-pass filtering with strict relevance threshold
-  // Pass 1: Filter out zero/negative relevance articles
-  const MIN_RELEVANCE_THRESHOLD = 3; // Minimum score to be considered relevant
+  // Pass 1: Filter out low-relevance articles
+  // Threshold 4 requires at least: ticker in metadata (3) + one textual mention
+  // Or: company name in headline (8) alone, or symbol in headline (10) alone
+  const MIN_RELEVANCE_THRESHOLD = 4;
   const relevantArticles = scored.filter(a => (a._relevanceScore || 0) >= MIN_RELEVANCE_THRESHOLD);
   
   console.log(`🎯 [NewsQuery] Relevance gate: ${scored.length} → ${relevantArticles.length} articles (threshold: ${MIN_RELEVANCE_THRESHOLD})`);
   
-  // Fallback: if too few articles pass threshold, lower it
-  const articlesToSort = relevantArticles.length >= limit 
-    ? relevantArticles 
-    : scored.filter(a => (a._relevanceScore || 0) > 0);
+  // No fallback - strictly enforce relevance requirement
+  const articlesToSort = relevantArticles;
   
   // Pass 2: Hybrid sort combining relevance and impact
   // Formula: hybrid = (normalized_relevance * 0.4) + (impact * 0.6)

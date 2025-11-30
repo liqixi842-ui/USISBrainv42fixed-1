@@ -27,7 +27,13 @@ The v6.0 pipeline processes user input via language detection, semantic intent p
 - **Multilingual Intelligence**: Automatic language detection, Google Translate integration, and specialized Chinese financial analysis via DeepSeek.
 - **API Timeout Protection**: Implements AbortController for OpenAI (15s) and Finnhub (10s) APIs, and enhanced error catching for Telegram.
 - **Ticket Formatter**: Unified output formatting layer for "解票" feature with standard (CN/EN) and human voice modes, supporting bilingual and complete output combinations.
-- **News System Architecture**: Provides institutional-grade news aggregation with distributed processing, automated translation, and AI commentary. Uses an "Eyes & Brain" architecture where N8N handles lightweight RSS collection, and USIS Brain performs heavy computation including translation, AI commentary generation, ImpactRank 2.0 scoring, deduplication, routing, and push notifications.
+- **News System Architecture (v7.7)**: Provides institutional-grade news aggregation with strict relevance gating and hybrid scoring. Key improvements:
+  - **Relevance Scoring**: Weighted signals (symbol in headline +10, company name in headline +8, in summary +4, ticker list +3, generic penalty -5)
+  - **Strict Threshold**: MIN_RELEVANCE_THRESHOLD=4 requires textual mention, not just metadata
+  - **Hybrid Scoring**: `hybrid = (normalizedRelevance * 0.4) + (cappedImpact * 0.6)` with impact capped by relevance factor
+  - **AI Summaries**: Enabled with Chinese language support (`generateSummaries: true`, `language: 'zh'`)
+  - **Chinese Localization**: `translateImpactReason()` translates impact reasons with Chinese punctuation (顿号)
+  - Uses Finnhub → Alpha Vantage cascade with Phase 2 adapter normalization and ImpactRank 2.0 scoring.
 - **PDF Renderer**: Uses `services/puppeteerPdfRenderer.js` for watermark-free PDF generation with `v3_dev`'s `buildResearchReport` + `buildHtmlFromReport` for a complete 20-page institutional layout. Includes dynamic Chromium detection and fallback safety to PDFKit.
 - **V6 Renderer Refactor**: New modular `services/v6Renderer.js` with 20 dedicated page renderers matching v3_dev structure and a `buildV6ReportData` schema for data normalization. Implements an exact V6 20-page layout with specific page components like an 8-Card KPI Grid and Valuation Framework Waterfall.
 - **Multi-Language Output System**: Supports Spanish, Chinese, and English language formatting with flexible language mode parsing and automatic exchange detection. AI-first architecture with structured command parsing and AI semantic understanding as fallback.
