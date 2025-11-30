@@ -17,6 +17,8 @@
  * 6. Supervisor Bot - 系统管理
  */
 
+require('dotenv').config();
+
 const TelegramBot = require('node-telegram-bot-api');
 const http = require('http');
 
