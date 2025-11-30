@@ -49,9 +49,9 @@ Rating: ${report.rating || 'N/A'}${industryNote}
 Financial Data:
 - Revenue: ${report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A'}
 - EPS: $${report.fundamentals?.eps || 'N/A'}
-- ROE: ${report.fundamentals?.roe || 'N/A'}%
-- PE: ${report.valuation?.pe_ttm || 'N/A'}x
-- Margin: ${report.fundamentals?.profit_margin || 'N/A'}%
+- ROE: ${report.fundamentals?.roe ? report.fundamentals.roe.toFixed(1) : 'N/A'}%
+- PE: ${report.valuation?.pe_ttm ? report.valuation.pe_ttm.toFixed(1) : 'N/A'}x
+- Margin: ${report.fundamentals?.profit_margin ? report.fundamentals.profit_margin.toFixed(1) : 'N/A'}%
 
 Write a CONCISE 400-500 word investment thesis in MORGAN STANLEY BULLET FORMAT:
 
@@ -103,9 +103,9 @@ Recomendación: ${report.rating || 'N/A'}${industryNote}
 Datos financieros:
 - Ingresos: ${report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A'}
 - BPA: $${report.fundamentals?.eps || 'N/A'}
-- ROE: ${report.fundamentals?.roe || 'N/A'}%
-- PER: ${report.valuation?.pe_ttm || 'N/A'}x
-- Margen: ${report.fundamentals?.profit_margin || 'N/A'}%
+- ROE: ${report.fundamentals?.roe ? report.fundamentals.roe.toFixed(1) : 'N/A'}%
+- PER: ${report.valuation?.pe_ttm ? report.valuation.pe_ttm.toFixed(1) : 'N/A'}x
+- Margen: ${report.fundamentals?.profit_margin ? report.fundamentals.profit_margin.toFixed(1) : 'N/A'}%
 
 Escribe una tesis CONCISA de 400-500 palabras en FORMATO BULLET MORGAN STANLEY:
 
