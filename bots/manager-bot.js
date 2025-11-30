@@ -41,6 +41,7 @@ const CASUAL_PATTERNS = {
   // 能力询问
   capability: [
     /^(你能做什么|你会什么|你有什么功能|功能|能力|你可以做什么)$/i,
+    /^(你可以干嘛|你能干嘛|你干嘛的|干嘛|干啥|能干啥)$/i,
     /^(帮助|帮忙|help|menu|菜单|指令|命令)$/i,
     /^(怎么用|如何使用|使用说明|教程)$/i,
     /^(what can you do|what do you do|how to use)$/i,
