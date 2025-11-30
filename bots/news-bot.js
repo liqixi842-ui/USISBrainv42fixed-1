@@ -82,10 +82,12 @@ async function handleNews(args, chatId, bot, message) {
     console.log(`📊 [v7.2-news] Fetching and scoring news with Phase 2 adapters...`);
     const fetchStartTime = Date.now();
     
+    // 🔧 v7.7: Enable AI summaries for better quality output
     const scoredNews = await fetchAndScoreNews(symbol, {
       limit: limit,
       days: 7,
-      generateSummaries: false // Phase 2 uses provider summaries + padding
+      generateSummaries: true, // v7.7: Enable AI-powered summaries
+      language: 'zh' // Default to Chinese for Chinese users
     });
     
     const fetchDuration = Date.now() - fetchStartTime;
@@ -146,8 +148,8 @@ async function handleNews(args, chatId, bot, message) {
     console.log(`📦 [NEWS] Formatting articles with Phase 2 schema...`);
     const formatStartTime = Date.now();
     
-    // Use newsOutputFormatter to get Phase 2 unified schema
-    const formattedNews = formatBatchArticles(scoredNews, 'en');
+    // 🔧 v7.7: Use Chinese for formatting (matches generateSummaries language)
+    const formattedNews = formatBatchArticles(scoredNews, 'zh');
     
     const formatDuration = Date.now() - formatStartTime;
     console.log(`✅ [NEWS] Phase 2 formatting completed in ${formatDuration} ms`);
@@ -291,14 +293,16 @@ function normalizeSymbol(rawSymbol) {
  * @param {string} symbol - 股票代码
  * @param {Array} news - Phase 2 格式化的新闻数组
  * @returns {Array<string>} 消息数组
+ * 
+ * 🔧 v7.7: 优化中文输出
  */
 function formatNewsMessages(symbol, news) {
   const messages = [];
   
-  // Header message - Phase 2 format
+  // Header message - 中文版
   let header = `📰 *${symbol} 最新新闻简报*\n\n`;
-  header += `🔍 共 ${news.length} 条新闻 | Phase 2 统一输出\n`;
-  header += `⚡ ImpactRank 2.0 评分 + 智能摘要\n`;
+  header += `🔍 共 ${news.length} 条新闻 | AI智能分析\n`;
+  header += `⚡ ImpactRank 2.0 影响评分 + AI摘要翻译\n`;
   header += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
   
   messages.push(header);
@@ -313,57 +317,106 @@ function formatNewsMessages(symbol, news) {
 }
 
 /**
- * 格式化单条新闻 - Phase 2 Format
+ * 🔧 v7.7: 翻译影响原因到中文
+ * 处理逗号分隔的多个原因，完整翻译每个部分
+ */
+function translateImpactReason(reason) {
+  if (!reason) return '一般市场新闻';
+  
+  // 完整的翻译映射
+  const translations = {
+    'breaking news': '突发新闻',
+    'recent update': '近期动态',
+    'critical market event': '重大市场事件',
+    'significant development': '重要进展',
+    'premium source': '权威来源',
+    'general market news': '一般市场新闻',
+    'high relevance': '高度相关',
+    'earnings related': '财报相关',
+    'analyst upgrade': '分析师上调评级',
+    'analyst downgrade': '分析师下调评级',
+    'price target change': '目标价变动',
+    'merger acquisition': '并购相关',
+    'product launch': '产品发布',
+    'regulatory': '监管相关',
+    'lawsuit': '诉讼相关',
+    'default scoring': '默认评分',
+    'error in impactrank': '评分系统异常',
+    'no reason provided': '暂无分析'
+  };
+  
+  // 分割逗号分隔的原因并逐个翻译
+  const parts = reason.split(',').map(part => part.trim().toLowerCase());
+  const translatedParts = parts.map(part => {
+    // 查找完整匹配
+    if (translations[part]) {
+      return translations[part];
+    }
+    
+    // 查找部分匹配
+    for (const [en, zh] of Object.entries(translations)) {
+      if (part.includes(en)) {
+        return zh;
+      }
+    }
+    
+    // 无匹配则返回简化的中文描述
+    return '市场动态';
+  });
+  
+  // 用中文顿号连接
+  return translatedParts.join('、');
+}
+
+/**
+ * 格式化单条新闻 - Phase 2 Format (中文优化)
  * @param {Object} article - Phase 2 格式化的新闻文章
  * @param {number} index - 序号
  * @returns {string} 格式化的消息文本
  * 
- * Phase 2 Schema:
- * {
- *   headline: string,
- *   summaryShort: string (100-150 words),
- *   summaryLong: string (300-500 words),
- *   impact: { score, label, emoji, reason },
- *   source: string,
- *   publishedAt: string (ISO8601),
- *   publishedAgo: string,
- *   url: string,
- *   language: string
- * }
+ * 🔧 v7.7: 优化中文输出格式
  */
 function formatSingleArticle(article, index) {
   // Phase 2: impact object with emoji, score, label, reason
   const { impact } = article;
   const impactEmoji = impact.emoji || '⚪';
   const impactScore = impact.score || 0;
-  const impactLabel = impact.label || 'Unknown';
-  const impactReason = impact.reason || 'No reason provided';
+  const impactReason = translateImpactReason(impact.reason) || '一般市场新闻';
+  
+  // 中文影响等级映射
+  const impactLabelCN = {
+    'High': '高',
+    'Medium': '中',
+    'Low': '低'
+  };
+  const impactLabel = impactLabelCN[impact.label] || impact.label || '未知';
   
   // Phase 2 format: emoji + score + headline
   let text = `${impactEmoji} *${impactScore.toFixed(1)}/10* ${escapeMarkdown(article.headline)}\n\n`;
   
-  // Impact assessment
-  text += `📊 *Impact:* ${impactLabel} ${impactEmoji}\n`;
-  text += `💡 *Reason:* ${escapeMarkdown(impactReason)}\n\n`;
+  // Impact assessment (中文)
+  text += `📊 *影响程度:* ${impactLabel} ${impactEmoji}\n`;
+  text += `💡 *分析:* ${escapeMarkdown(impactReason)}\n\n`;
   
-  // Short summary (100-150 words)
-  text += `📰 *Quick Summary:*\n`;
+  // Short summary (AI 生成的中文摘要)
+  text += `📰 *快讯摘要:*\n`;
   text += `${escapeMarkdown(article.summaryShort)}\n\n`;
   
   // Source and time
-  text += `🔗 *Source:* ${escapeMarkdown(article.source)}\n`;
-  text += `⏰ *Published:* ${article.publishedAgo}\n`;
+  text += `🔗 *来源:* ${escapeMarkdown(article.source)}\n`;
+  text += `⏰ *发布时间:* ${article.publishedAgo}\n`;
   
   // Link to original article
   if (article.url) {
-    text += `\n[📄 Read Full Article](${article.url})`;
+    text += `\n[📄 阅读原文](${article.url})`;
   }
   
   return text;
 }
 
 /**
- * Escape markdown special characters
+ * 🔧 v7.7: Simplified Markdown escape for Telegram
+ * Only escape characters that cause parsing issues in Markdown mode (not MarkdownV2)
  * @param {string} text - Input text
  * @returns {string} Escaped text
  */
@@ -372,24 +425,14 @@ function escapeMarkdown(text) {
     return '';
   }
   
-  // Escape Telegram MarkdownV2 special characters
-  // Keep basic markdown (* _ `) but escape problematic ones
+  // For Telegram Markdown (not MarkdownV2), only escape: * _ ` [ ]
+  // Don't escape common punctuation that doesn't cause issues
   return text
-    .replace(/\[/g, '\\[')
-    .replace(/\]/g, '\\]')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)')
-    .replace(/\~/g, '\\~')
-    .replace(/\>/g, '\\>')
-    .replace(/\#/g, '\\#')
-    .replace(/\+/g, '\\+')
-    .replace(/\-/g, '\\-')
-    .replace(/\=/g, '\\=')
-    .replace(/\|/g, '\\|')
-    .replace(/\{/g, '\\{')
-    .replace(/\}/g, '\\}')
-    .replace(/\./g, '\\.')
-    .replace(/\!/g, '\\!');
+    .replace(/\*/g, '\\*')  // Bold marker
+    .replace(/_/g, '\\_')    // Italic marker
+    .replace(/`/g, '\\`')    // Code marker
+    .replace(/\[/g, '\\[')   // Link start
+    .replace(/\]/g, '\\]');  // Link end
 }
 
 /**
