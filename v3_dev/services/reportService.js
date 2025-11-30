@@ -451,6 +451,7 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
   const analyst = brandOptions.analyst || 'System (USIS Brain)';
   const language = brandOptions.language || 'en';
   const symbolMetadata = brandOptions.symbolMetadata || {};
+  const systemBrand = brandOptions.systemBrand || null; // 🆕 v7.7: 自定义系统版本名称
   
   // 🆕 v5.1: Industry Classification
   const { classifyIndustry } = require('./industryClassifier');
@@ -741,14 +742,15 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
       // ═══ Metadata ═══
       meta: {
         generated_at: new Date().toISOString(),
-        model: 'v3.2-multi-model',
+        model: systemBrand || 'v3.2-multi-model', // 🆕 v7.7: 支持自定义系统版本
         models_used: multiModelResult.meta.models_used,
-        version: "v3-dev-v3.2",
+        version: systemBrand || "v3-dev-v3.2", // 🆕 v7.7: 支持自定义系统版本
         latency_ms: Date.now() - startTime,
         ai_latency_ms: multiModelResult.meta.total_latency_ms,
         brand: brand,
         firm: firm,
-        analyst: analyst
+        analyst: analyst,
+        systemBrand: systemBrand // 🆕 v7.7: 记录自定义系统版本
       }
     };
     
@@ -777,8 +779,13 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
     // v5 sets v5_protected = true, so TasteTruthLayer will skip these fields
     console.log(`\n✅ v5.0 Pipeline Complete - All institutional enhancements applied`);
     
-    // Update version metadata
-    report.meta.version = "v3-dev-v5.0-ALL-IN";
+    // 🆕 v7.7: Update version metadata (use systemBrand if provided)
+    if (systemBrand) {
+      report.meta.version = systemBrand;
+      report.meta.model = systemBrand;
+    } else {
+      report.meta.version = "v3-dev-v5.0-ALL-IN";
+    }
     
     // ═════════════════════════════════════════════════════════════
     // DEBUG: Phase 3 Output Diagnostics

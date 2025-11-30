@@ -495,6 +495,7 @@ function parseResearchReportCommand(userText) {
   const firm = (parts[1] || 'USIS Research Division').trim();
   const analyst = (parts[2] || 'System (USIS Brain)').trim();
   const langRaw = (parts[3] || '英文').toLowerCase().trim();
+  const systemBrand = (parts[4] || '').trim(); // 🆕 v7.7: 自定义系统版本名称
   
   // 🆕 v5.1: 解析符号描述
   const symbolInfo = parseSymbolDescription(symbolInput);
@@ -512,7 +513,8 @@ function parseResearchReportCommand(userText) {
     firm,
     analyst,
     lang,
-    symbolInfo
+    symbolInfo,
+    systemBrand // 🆕 v7.7: 传递自定义系统品牌名称
   };
   
   console.log(`✅ [Parse Report Command] 解析成功:`);
@@ -522,6 +524,7 @@ function parseResearchReportCommand(userText) {
   console.log(`   机构: ${firm}`);
   console.log(`   分析师: ${analyst}`);
   console.log(`   语言: ${lang} (原始: ${langRaw})`);
+  if (systemBrand) console.log(`   系统版本: ${systemBrand}`);
   
   return result;
 }

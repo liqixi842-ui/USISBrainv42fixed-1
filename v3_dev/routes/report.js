@@ -76,7 +76,8 @@ router.get('/:symbol', async (req, res) => {
     lang = 'en',
     exchange = null,
     country = null,
-    display_name = null
+    display_name = null,
+    systemBrand = null // 🆕 v7.7: 自定义系统版本名称
   } = req.query;
   
   console.log(`\n📊 [v3/report] GET /${symbol}?format=${format}&asset_type=${asset_type}`);
@@ -84,6 +85,7 @@ router.get('/:symbol', async (req, res) => {
   console.log(`   ├─ Firm: ${firm}`);
   console.log(`   ├─ Analyst: ${analyst}`);
   console.log(`   ├─ Language: ${lang}`);
+  if (systemBrand) console.log(`   ├─ System Brand: ${systemBrand}`);
   if (exchange) console.log(`   ├─ Exchange: ${exchange}`);
   if (country) console.log(`   ├─ Country: ${country}`);
   if (display_name) console.log(`   └─ Display Name: ${display_name}`);
@@ -131,6 +133,7 @@ router.get('/:symbol', async (req, res) => {
       firm, 
       analyst, 
       language: lang,
+      systemBrand, // 🆕 v7.7: 自定义系统版本名称
       // 🆕 v5.1: Symbol metadata for industry routing
       symbolMetadata: {
         exchange,

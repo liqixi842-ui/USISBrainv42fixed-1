@@ -70,13 +70,14 @@ const VALID_COMMANDS = ['/test', '/status', '/v3', '/help', '/report', '研报',
  * @param {string} params.firm - Institution name
  * @param {string} params.analyst - Analyst name
  * @param {string} params.brand - Brand name (optional, for structured commands)
+ * @param {string} params.systemBrand - Custom system version/brand (e.g., "北极光量化v7")
  * @param {string} params.lang - Language code (optional)
  * @param {number} params.chatId - Telegram chat ID
  * @param {Function} params.telegramAPI - Telegram API function
  * @param {string} params.botToken - Bot token
  * @param {string} params.commandType - Command type: 'natural' or 'structured'
  */
-async function generateReport({ symbol, firm, analyst, brand, lang, chatId, telegramAPI, botToken, commandType = 'structured' }) {
+async function generateReport({ symbol, firm, analyst, brand, systemBrand, lang, chatId, telegramAPI, botToken, commandType = 'structured' }) {
   let statusMsg = null;
   let t0 = null;
   
@@ -88,6 +89,7 @@ async function generateReport({ symbol, firm, analyst, brand, lang, chatId, tele
   console.log(`   ├─ Firm: ${firm}`);
   console.log(`   ├─ Analyst: ${analyst}`);
   if (brand) console.log(`   ├─ Brand: ${brand}`);
+  if (systemBrand) console.log(`   ├─ System Version: ${systemBrand}`);
   if (lang) console.log(`   ├─ Language: ${lang}`);
   console.log(`   └─ API URL: ${REPLIT_API_URL}`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
@@ -110,6 +112,11 @@ async function generateReport({ symbol, firm, analyst, brand, lang, chatId, tele
     // Add brand parameter if provided (for structured commands)
     if (brand) {
       params.append('brand', brand);
+    }
+    
+    // 🆕 v7.7: Add systemBrand parameter for custom version/model naming
+    if (systemBrand) {
+      params.append('systemBrand', systemBrand);
     }
     
     // Add language parameter if provided (for natural language commands)
@@ -471,7 +478,7 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
       if (!reportParams) {
         await telegramAPI('sendMessage', {
           chat_id: chatId,
-          text: '❌ 研报命令格式错误\n\n正确格式：\n研报, 股票代码, 机构名字, 分析师名字, 语言\n\n示例：\n研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文\n\n或使用结构化命令：\n/report NVDA brand=VADA firm=Aberdeen Investments analyst=Anthony Venn Dutton'
+          text: '❌ 研报命令格式错误\n\n正确格式：\n研报, 股票代码, 机构名字, 分析师名字, 语言, 系统版本\n\n示例：\n研报, NVDA, Aberdeen Investments, Anthony Venn Dutton, 英文\n研报, NVDA, 北极光资本, 张明, 中文, 北极光量化v7\n\n或使用结构化命令：\n/report NVDA brand=VADA firm=Aberdeen Investments analyst=Anthony Venn Dutton'
         });
         return;
       }
@@ -482,6 +489,7 @@ async function handleDevBotMessage(message, telegramAPI, botToken) {
         firm: reportParams.firm,
         analyst: reportParams.analyst,
         lang: reportParams.lang,
+        systemBrand: reportParams.systemBrand, // 🆕 v7.7: 自定义系统版本
         chatId,
         telegramAPI,
         botToken,
