@@ -155,30 +155,32 @@ async function handleAIChat(chatId, bot, userMessage, username) {
     ];
     
     const response = await aiProvider.generate('gpt-4o-mini', messages, {
-      max_tokens: 500,
+      maxTokens: 500,
       temperature: 0.7
     });
     
-    if (response && response.content) {
-      await bot.sendMessage(chatId, response.content, { parse_mode: 'Markdown' });
-      console.log(`✅ [AI-CHAT] 回复成功 (${response.content.length} 字符)`);
-      return { type: 'ai_chat', success: true };
+    // 注意：generate 返回的是 { success, text, model, ... }
+    if (response && response.success && response.text) {
+      await bot.sendMessage(chatId, response.text, { parse_mode: 'Markdown' });
+      console.log(`✅ [AI-CHAT] 回复成功 (${response.text.length} 字符, 模型: ${response.model})`);
+      return { type: 'ai_chat', success: true, model: response.model };
     } else {
-      throw new Error('AI 返回空响应');
+      throw new Error(response?.error || 'AI 返回空响应');
     }
   } catch (error) {
     console.error(`❌ [AI-CHAT] 错误: ${error.message}`);
+    console.error(error.stack);
     
     // 降级到简单回复
     await bot.sendMessage(chatId, 
-      `抱歉，我暂时无法回答这个问题。\n\n` +
+      `抱歉，AI 暂时无法回答。\n\n` +
       `你可以试试：\n` +
       `• \`解票 苹果\` - 分析股票\n` +
       `• \`新闻 AAPL\` - 查看新闻\n` +
       `• \`帮助\` - 查看功能菜单`,
       { parse_mode: 'Markdown' }
     );
-    return { type: 'ai_chat', success: false };
+    return { type: 'ai_chat', success: false, error: error.message };
   }
 }
 
