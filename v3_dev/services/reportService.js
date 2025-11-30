@@ -451,7 +451,8 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
   const analyst = brandOptions.analyst || 'System (USIS Brain)';
   const language = brandOptions.language || 'en';
   const symbolMetadata = brandOptions.symbolMetadata || {};
-  const systemBrand = brandOptions.systemBrand || null; // 🆕 v7.7: 自定义系统版本名称
+  const modelName = brandOptions.modelName || null;       // 🆕 v7.7: 自定义模型名称 (e.g., 北极光量化)
+  const versionNumber = brandOptions.versionNumber || null; // 🆕 v7.7: 自定义版本号 (e.g., v7)
   
   // 🆕 v5.1: Industry Classification
   const { classifyIndustry } = require('./industryClassifier');
@@ -742,15 +743,16 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
       // ═══ Metadata ═══
       meta: {
         generated_at: new Date().toISOString(),
-        model: systemBrand || 'v3.2-multi-model', // 🆕 v7.7: 支持自定义系统版本
+        model: modelName || 'v3.2-multi-model',       // 🆕 v7.7: 自定义模型名称
         models_used: multiModelResult.meta.models_used,
-        version: systemBrand || "v3-dev-v3.2", // 🆕 v7.7: 支持自定义系统版本
+        version: versionNumber || "v3-dev-v3.2",       // 🆕 v7.7: 自定义版本号
         latency_ms: Date.now() - startTime,
         ai_latency_ms: multiModelResult.meta.total_latency_ms,
         brand: brand,
         firm: firm,
         analyst: analyst,
-        systemBrand: systemBrand // 🆕 v7.7: 记录自定义系统版本
+        modelName: modelName,         // 🆕 v7.7: 记录自定义模型名称
+        versionNumber: versionNumber  // 🆕 v7.7: 记录自定义版本号
       }
     };
     
@@ -779,11 +781,14 @@ async function buildResearchReport(symbol, assetType = "equity", brandOptions = 
     // v5 sets v5_protected = true, so TasteTruthLayer will skip these fields
     console.log(`\n✅ v5.0 Pipeline Complete - All institutional enhancements applied`);
     
-    // 🆕 v7.7: Update version metadata (use systemBrand if provided)
-    if (systemBrand) {
-      report.meta.version = systemBrand;
-      report.meta.model = systemBrand;
-    } else {
+    // 🆕 v7.7: Update version metadata (use custom modelName/versionNumber if provided)
+    if (modelName) {
+      report.meta.model = modelName;
+    }
+    if (versionNumber) {
+      report.meta.version = versionNumber;
+    } else if (!modelName) {
+      // Only use default if no custom branding at all
       report.meta.version = "v3-dev-v5.0-ALL-IN";
     }
     
