@@ -110,6 +110,79 @@ const { getScheduler } = require('./scheduler/newsScheduler');
 const { parseCommand, handleManagerBot } = managerBot;
 
 // ═══════════════════════════════════════════════════════════════
+// 🆕 v7.7 闲聊回复系统 (Casual Conversation Responses)
+// ═══════════════════════════════════════════════════════════════
+
+const CASUAL_RESPONSES = {
+  greeting: [
+    '你好！我是 USIS Brain，你的专业金融分析助手 📈\n\n' +
+    '我能做的事情：\n' +
+    '📊 **股票分析** - `解票 苹果` 或 `TSLA怎么样`\n' +
+    '📰 **新闻查询** - `新闻 AAPL` 或 `重大新闻`\n' +
+    '📋 **研究报告** - `研报 NVDA`\n' +
+    '🗺️ **热力图** - `热力图` 或 `港股热力图`\n\n' +
+    '试试直接说：**看看苹果** 或 **特斯拉怎么样**',
+  ],
+  identity: [
+    '🤖 我是 **USIS Brain v7.7**\n\n' +
+    '一个机构级多AI金融分析系统，集成6个顶尖AI模型：\n' +
+    '• GPT-4o (通用分析)\n' +
+    '• Claude 3.5 (深度研究)\n' +
+    '• Gemini 2.5 (快速摘要)\n' +
+    '• DeepSeek V3 (中文专家)\n' +
+    '• Mistral Large (多语言)\n' +
+    '• Perplexity Sonar (实时新闻)\n\n' +
+    '支持全球30+交易所：美股、港股、A股、加拿大、欧洲等！\n\n' +
+    '想分析哪只股票？直接告诉我公司名或代码即可 🎯',
+  ],
+  capability: [
+    '📋 **USIS Brain 功能菜单**\n\n' +
+    '🎫 **股票分析**\n' +
+    '• `解票 苹果` - 分析苹果公司\n' +
+    '• `TSLA怎么样` - 自然语言查询\n' +
+    '• `解票 NVDA 双语` - 中英双语分析\n\n' +
+    '📰 **新闻查询**\n' +
+    '• `新闻 AAPL` - 获取股票新闻\n' +
+    '• `重大新闻` - 今日重要财经消息\n\n' +
+    '📊 **研究报告**\n' +
+    '• `研报 TSLA` - 生成研究报告\n' +
+    '• `研报PDF NVDA` - PDF版报告\n\n' +
+    '🗺️ **市场热力图**\n' +
+    '• `热力图` - 美股热力图\n' +
+    '• `港股热力图` - 港股市场\n\n' +
+    '💡 **支持中文公司名**：苹果、特斯拉、英伟达、腾讯、阿里巴巴...\n\n' +
+    '直接说 **看看特斯拉** 我就能帮你分析！',
+  ],
+  smalltalk: [
+    '哈哈，闲聊不是我的强项 😅\n\n' +
+    '但说到股票和投资，我可是专业的！💪\n\n' +
+    '想了解哪只股票？告诉我公司名或代码即可！\n' +
+    '例如：`看看苹果` 或 `NVDA怎么样`',
+  ],
+  thanks: [
+    '不客气！随时为您服务 🙌\n\n有任何股票问题，随时问我！',
+    '😊 很高兴能帮到你！下次想分析股票时，直接发消息给我~',
+  ],
+  status: [
+    '我很好，系统运行正常！✅\n\n' +
+    '24小时在线，随时准备分析股票 📈\n\n' +
+    '你想了解哪只股票？',
+  ],
+};
+
+/**
+ * 处理闲聊回复
+ */
+async function handleCasualResponse(chatId, bot, type, flags) {
+  const responses = CASUAL_RESPONSES[type] || CASUAL_RESPONSES.greeting;
+  const response = responses[Math.floor(Math.random() * responses.length)];
+  
+  await bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+  console.log(`✅ [CASUAL] 已回复: ${type}`);
+  return { type: 'casual', subtype: type };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // 环境变量和配置
 // ═══════════════════════════════════════════════════════════════
 
@@ -310,6 +383,13 @@ bot.on('message', async (message) => {
         targetModule = 'Deep Report Bot (Institutional)';
         console.log(`🏛️  [ROUTER] → ${targetModule}`);
         result = await handleDeepReport(args, chatId, bot, message);
+        break;
+      
+      case 'casual':
+        // 🆕 v7.7 闲聊处理 - 直接回复，不走 AI
+        targetModule = `Casual Bot (${args[0] || 'greeting'})`;
+        console.log(`💬 [ROUTER] → ${targetModule}`);
+        result = await handleCasualResponse(chatId, bot, args[0], flags);
         break;
         
       case 'public':
