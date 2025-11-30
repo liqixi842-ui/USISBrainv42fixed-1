@@ -149,9 +149,9 @@ Tesis:`,
 财务数据：
 - 营收: ${report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : 'N/A'}
 - EPS: $${report.fundamentals?.eps || 'N/A'}
-- ROE: ${report.fundamentals?.roe || 'N/A'}%
-- PE: ${report.valuation?.pe_ttm || 'N/A'}x
-- 利润率: ${report.fundamentals?.profit_margin || 'N/A'}%
+- ROE: ${report.fundamentals?.roe ? report.fundamentals.roe.toFixed(1) : 'N/A'}%
+- PE: ${report.valuation?.pe_ttm ? report.valuation.pe_ttm.toFixed(1) : 'N/A'}x
+- 利润率: ${report.fundamentals?.profit_margin ? report.fundamentals.profit_margin.toFixed(1) : 'N/A'}%
 
 撰写一篇简洁的 400-500 字投资逻辑，使用摩根士丹利要点格式：
 
@@ -294,10 +294,10 @@ ${focus.length > 0 ? `\n- 必须涵盖: ${focus.join(', ')}` : ''}
     if (assetType === 'equity') {
       // 🔧 v7.5 FIX: Bullet-point format with minimal analyst mentions (max 2)
       const revenueVal = report.fundamentals?.revenue ? `$${(report.fundamentals.revenue / 1e9).toFixed(1)}B` : null;
-      const marginVal = report.fundamentals?.ebitda_margin || margin;
-      const roeVal = report.fundamentals?.roe || roe;
+      const marginVal = report.fundamentals?.ebitda_margin ? report.fundamentals.ebitda_margin.toFixed(1) : (margin ? margin.toFixed(1) : null);
+      const roeVal = report.fundamentals?.roe ? report.fundamentals.roe.toFixed(1) : (roe ? roe.toFixed(1) : null);
       
-      fallback = `We rate ${subjectName} ${rating} with a ${targetPrice ? `$${targetPrice} price target` : 'constructive view'} based on competitive positioning, execution track record, and valuation framework.
+      fallback = `We rate ${subjectName} ${rating} with a ${targetPrice ? `$${targetPrice}` : ''} price target based on competitive positioning, execution track record, and valuation framework.
 
 **Investment Case:**
 • Market position: ${subjectName} maintains leadership through scale advantages, technology differentiation, and customer switching costs
