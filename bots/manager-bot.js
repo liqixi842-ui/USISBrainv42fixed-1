@@ -22,6 +22,116 @@ const { resolveChineseCompanyName } = require('../symbolResolver');
  * Manager Bot → [Ticket Bot, Report Bot, News Bot, Heatmap Bot, Public Bot, Supervisor Bot]
  */
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🆕 v7.7 闲聊系统 (Casual Conversation System)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CASUAL_PATTERNS = {
+  // 问候语
+  greeting: [
+    /^(你好|您好|嗨|哈喽|早上好|下午好|晚上好|hi|hello|hey|morning|afternoon|evening)$/i,
+    /^(在吗|在不在|有人吗)$/i,
+  ],
+  // 身份询问
+  identity: [
+    /^(你是谁|你叫什么|你是什么|介绍一下自己|自我介绍)$/i,
+    /^(who are you|what are you|introduce yourself)$/i,
+    /^(你是机器人吗|你是ai吗|你是人工智能吗)$/i,
+  ],
+  // 能力询问
+  capability: [
+    /^(你能做什么|你会什么|你有什么功能|功能|能力|你可以做什么)$/i,
+    /^(帮助|帮忙|help|menu|菜单|指令|命令)$/i,
+    /^(怎么用|如何使用|使用说明|教程)$/i,
+    /^(what can you do|what do you do|how to use)$/i,
+  ],
+  // 闲聊请求
+  smalltalk: [
+    /^(闲聊|聊聊天|聊天|随便聊聊|我们聊聊)$/i,
+    /^(无聊|好无聊|陪我聊天)$/i,
+    /^(chat|let's chat|talk to me)$/i,
+  ],
+  // 感谢/告别
+  thanks: [
+    /^(谢谢|感谢|多谢|thanks|thank you|thx)$/i,
+    /^(再见|拜拜|bye|goodbye|see you)$/i,
+    /^(好的|收到|明白|ok|okay|got it)$/i,
+  ],
+  // 状态询问
+  status: [
+    /^(你好吗|你怎么样|最近怎么样)$/i,
+    /^(how are you|how's it going)$/i,
+  ],
+};
+
+const CASUAL_RESPONSES = {
+  greeting: [
+    '你好！我是 USIS Brain，你的专业金融分析助手 📈\n\n输入 **帮助** 查看我能为你做什么！',
+    '嗨！欢迎使用 USIS Brain 金融分析系统！\n\n想分析哪只股票？直接发送股票代码或公司名即可。',
+    '您好！我随时准备为您分析全球股市 🌍\n\n试试：`解票 苹果` 或 `TSLA怎么样`',
+  ],
+  identity: [
+    '🤖 我是 **USIS Brain v7.7**\n\n一个机构级多AI金融分析系统，集成了6个顶尖AI模型：\n• GPT-4o (通用分析)\n• Claude 3.5 (深度研究)\n• Gemini 2.5 (快速摘要)\n• DeepSeek V3 (中文专家)\n• Mistral Large (多语言)\n• Perplexity Sonar (实时新闻)\n\n我支持全球30+交易所，包括美股、港股、A股、加拿大等市场！',
+    '我是 USIS Brain，你的AI金融分析师 🧠\n\n由6个AI模型驱动，专注于提供专业的投资分析和市场洞察。\n\n想知道我能做什么？输入 **帮助**',
+  ],
+  capability: [
+    '📋 **USIS Brain 功能菜单**\n\n🎫 **股票分析**\n• `解票 苹果` - 分析苹果公司\n• `TSLA怎么样` - 自然语言查询\n• `解票 NVDA 双语` - 中英双语分析\n\n📰 **新闻查询**\n• `新闻 AAPL` - 获取股票新闻\n• `重大新闻` - 今日重要消息\n\n📊 **研究报告**\n• `研报 TSLA` - 生成研究报告\n• `研报PDF NVDA` - PDF版报告\n\n🗺️ **市场热力图**\n• `热力图` - 美股热力图\n• `港股热力图` - 港股市场\n\n💬 **支持中文公司名**\n苹果、特斯拉、英伟达、腾讯、阿里巴巴...',
+    '🚀 **我能为你做什么？**\n\n1️⃣ **股票分析** - 发送 `解票 股票代码`\n2️⃣ **新闻查询** - 发送 `新闻 股票代码`\n3️⃣ **研究报告** - 发送 `研报 股票代码`\n4️⃣ **市场热力图** - 发送 `热力图`\n5️⃣ **自然语言** - 直接说 `苹果怎么样`\n\n💡 试试：`看看特斯拉` 或 `微软走势`',
+  ],
+  smalltalk: [
+    '哈哈，我其实不太会闲聊 😅\n\n不过说到股票和投资，我可是专业的！\n\n想分析哪只股票？告诉我公司名或代码即可！',
+    '虽然闲聊不是我的强项，但金融分析我很在行！📊\n\n有什么股票想了解的吗？',
+    '我的专长是分析股票，不是讲笑话 😄\n\n但如果你想知道某只股票的走势，我绝对是你需要的AI！',
+  ],
+  thanks: [
+    '不客气！随时为您服务 🙌\n\n有任何股票问题，随时问我！',
+    '😊 很高兴能帮到你！\n\n下次想分析股票时，直接发消息给我~',
+    '好的，再见！期待下次为您服务 👋',
+  ],
+  status: [
+    '我很好，谢谢关心！作为AI，我24小时在线，随时准备分析股票 📈\n\n你想了解哪只股票？',
+    '状态良好，系统运行正常！✅\n\n有什么我可以帮你分析的吗？',
+  ],
+};
+
+/**
+ * 检测闲聊意图
+ * @param {string} text - 用户输入
+ * @returns {Object|null} - 返回闲聊命令对象或 null
+ */
+function detectCasualConversation(text) {
+  const cleanText = text.trim();
+  
+  for (const [type, patterns] of Object.entries(CASUAL_PATTERNS)) {
+    for (const pattern of patterns) {
+      if (pattern.test(cleanText)) {
+        console.log(`[CASUAL] 检测到闲聊类型: ${type}, 输入: "${cleanText}"`);
+        return {
+          cmd: 'casual',
+          args: [type],
+          flags: { originalText: cleanText }
+        };
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * 处理闲聊消息
+ * @param {Object} ctx - Telegram context
+ * @param {string} type - 闲聊类型
+ * @returns {Promise<void>}
+ */
+async function handleCasual(ctx, type) {
+  const responses = CASUAL_RESPONSES[type] || CASUAL_RESPONSES.greeting;
+  const response = responses[Math.floor(Math.random() * responses.length)];
+  
+  await ctx.reply(response, { parse_mode: 'Markdown' });
+  console.log(`[CASUAL] 已回复闲聊类型: ${type}`);
+}
+
 /**
  * 解析用户消息，提取命令和参数
  * @param {Object} message - Telegram 消息对象
@@ -101,6 +211,12 @@ function parseCommand(message) {
   
   if (!text) {
     return { cmd: null, args: [], flags: {} };
+  }
+  
+  // 🆕 v7.7: 闲聊检测（Casual Conversation Detection）
+  const casualResult = detectCasualConversation(text);
+  if (casualResult) {
+    return casualResult;
   }
   
   // Remove bot username suffix if present (e.g., /ticket@botname → /ticket)
@@ -612,6 +728,11 @@ async function handleManagerBot(message, chatId, bot) {
       case 'deepreport':
         console.log(`🏛️  [ROUTER] → deep-report-bot.js (institutional)`);
         result = await handleDeepReport(args, chatId, bot, message);
+        break;
+      
+      case 'casual':
+        console.log(`💬 [ROUTER] → casual conversation (${args[0]})`);
+        result = await handleCasual({ reply: (text, opts) => bot.sendMessage(chatId, text, opts) }, args[0]);
         break;
         
       case 'public':
