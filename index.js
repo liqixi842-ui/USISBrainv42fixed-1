@@ -108,6 +108,79 @@ const { parseUserIntent } = require('./semanticIntentAgent');
 const { getScheduler } = require('./scheduler/newsScheduler');
 
 const { parseCommand, handleManagerBot } = managerBot;
+const { getMultiAIProvider } = require('./multiAiProvider');
+
+// ═══════════════════════════════════════════════════════════════
+// 🆕 v7.7 AI 智能对话系统 (AI-Powered Conversation)
+// ═══════════════════════════════════════════════════════════════
+
+const SYSTEM_CONTEXT = `你是 USIS Brain v7.7，一个机构级多AI金融分析系统。
+
+【你的核心能力】
+1. 股票分析：解票分析（技术面+基本面）
+2. 研究报告：生成机构级研报（支持PDF）
+3. 新闻查询：实时财经新闻聚合
+4. 市场热力图：可视化市场涨跌
+
+【技术架构】
+- 6个AI模型：GPT-4o、Claude 3.5、Gemini 2.5、DeepSeek V3、Mistral Large、Perplexity Sonar
+- 数据源：Finnhub（主）、Twelve Data（全球）、Alpha Vantage（备用）
+- 支持交易所：美股、港股、A股、加拿大、欧洲等30+交易所
+- 付费API：OpenAI、Anthropic、Google AI、Finnhub、Twelve Data
+
+【使用方式】
+- 解票 苹果 / 解票 AAPL → 股票分析
+- 研报 NVDA → 研究报告
+- 新闻 TSLA → 新闻查询
+- 热力图 → 市场热力图
+
+【回答原则】
+- 用简洁友好的中文回答
+- 如果用户问金融相关问题，可以引导他们使用对应功能
+- 对于技术问题，诚实回答系统架构
+- 回答控制在200字以内`;
+
+/**
+ * AI 智能对话 - 使用 GPT 回答一般性问题
+ */
+async function handleAIChat(chatId, bot, userMessage, username) {
+  console.log(`🤖 [AI-CHAT] 开始智能对话: "${userMessage.substring(0, 50)}..."`);
+  
+  try {
+    const aiProvider = getMultiAIProvider();
+    
+    const messages = [
+      { role: 'system', content: SYSTEM_CONTEXT },
+      { role: 'user', content: userMessage }
+    ];
+    
+    const response = await aiProvider.generate('gpt-4o-mini', messages, {
+      max_tokens: 500,
+      temperature: 0.7
+    });
+    
+    if (response && response.content) {
+      await bot.sendMessage(chatId, response.content, { parse_mode: 'Markdown' });
+      console.log(`✅ [AI-CHAT] 回复成功 (${response.content.length} 字符)`);
+      return { type: 'ai_chat', success: true };
+    } else {
+      throw new Error('AI 返回空响应');
+    }
+  } catch (error) {
+    console.error(`❌ [AI-CHAT] 错误: ${error.message}`);
+    
+    // 降级到简单回复
+    await bot.sendMessage(chatId, 
+      `抱歉，我暂时无法回答这个问题。\n\n` +
+      `你可以试试：\n` +
+      `• \`解票 苹果\` - 分析股票\n` +
+      `• \`新闻 AAPL\` - 查看新闻\n` +
+      `• \`帮助\` - 查看功能菜单`,
+      { parse_mode: 'Markdown' }
+    );
+    return { type: 'ai_chat', success: false };
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // 🆕 v7.7 闲聊回复系统 (Casual Conversation Responses)
@@ -445,10 +518,10 @@ bot.on('message', async (message) => {
           console.warn(`⚠️  [AI] 语义理解失败: ${aiError.message}`);
         }
         
-        // AI 也无法理解，使用 Public Bot
-        targetModule = 'Public Bot (Default)';
-        console.log(`🎯 [ROUTER] → ${targetModule}`);
-        result = await handlePublic(message, chatId, bot);
+        // 🆕 v7.7: 使用 AI 智能对话回答一般性问题
+        targetModule = 'AI Chat (Smart Response)';
+        console.log(`🤖 [ROUTER] → ${targetModule}`);
+        result = await handleAIChat(chatId, bot, text, username);
         break;
     }
     
