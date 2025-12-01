@@ -381,29 +381,42 @@ async function captureInternationalHeatmap(marketIndex) {
     return null;
   }
 
-  // TradingView 国家专用 URL 映射（关键修复：必须直接访问国家URL，不能用hash）
-  const countryUrls = {
-    'TSX': { url: 'https://www.tradingview.com/heatmap/stock/?dataSource=SPTSX&color=change&size=market_cap_basic', dataSource: 'SPTSX', name: '加拿大 TSX' },
-    'DAX': { url: 'https://www.tradingview.com/heatmap/stock/?dataSource=DAX&color=change&size=market_cap_basic', dataSource: 'DAX', name: '德国 DAX' },
-    'DAX40': { url: 'https://www.tradingview.com/heatmap/stock/?dataSource=DAX&color=change&size=market_cap_basic', dataSource: 'DAX', name: '德国 DAX40' },
-    'FTSE': { url: 'https://www.tradingview.com/heatmap/stock/?dataSource=FTSE100&color=change&size=market_cap_basic', dataSource: 'FTSE100', name: '英国 FTSE' },
-    'FTSE100': { url: 'https://www.tradingview.com/heatmap/stock/?dataSource=FTSE100&color=change&size=market_cap_basic', dataSource: 'FTSE100', name: '英国 FTSE100' },
-    'CAC40': { url: 'https://www.tradingview.com/heatmap/stock/?dataSource=CAC40&color=change&size=market_cap_basic', dataSource: 'CAC40', name: '法国 CAC40' },
-    'AS51': { url: 'https://www.tradingview.com/heatmap/stock/?dataSource=ASX200&color=change&size=market_cap_basic', dataSource: 'ASX200', name: '澳洲 ASX' },
-    'AS200': { url: 'https://www.tradingview.com/heatmap/stock/?dataSource=ASX200&color=change&size=market_cap_basic', dataSource: 'ASX200', name: '澳洲 ASX200' },
-    'KOSPI': { url: 'https://www.tradingview.com/heatmap/stock/?dataSource=KOSPI&color=change&size=market_cap_basic', dataSource: 'KOSPI', name: '韩国 KOSPI' },
-    'NIKKEI225': { url: 'https://www.tradingview.com/heatmap/stock/?dataSource=NIKKEI225&color=change&size=market_cap_basic', dataSource: 'NIKKEI225', name: '日本 NIKKEI225' },
-    'IBEX35': { url: 'https://www.tradingview.com/heatmap/stock/?dataSource=IBEX35&color=change&size=market_cap_basic', dataSource: 'IBEX35', name: '西班牙 IBEX35' }
+  // TradingView 热力图配置（使用用户验证的正确格式）
+  // 关键：必须用 hash fragment (#)，不能用 query parameter (?)
+  // 关键：dataSource 必须用正确的值（TSX 不是 SPTSX）
+  const marketConfigs = {
+    'TSX': { dataSource: 'TSX', name: '加拿大 TSX' },
+    'DAX': { dataSource: 'DAX', name: '德国 DAX' },
+    'DAX40': { dataSource: 'DAX', name: '德国 DAX40' },
+    'FTSE': { dataSource: 'FTSE100', name: '英国 FTSE' },
+    'FTSE100': { dataSource: 'FTSE100', name: '英国 FTSE100' },
+    'CAC40': { dataSource: 'CAC40', name: '法国 CAC40' },
+    'AS51': { dataSource: 'ASX200', name: '澳洲 ASX' },
+    'AS200': { dataSource: 'ASX200', name: '澳洲 ASX200' },
+    'KOSPI': { dataSource: 'KOSPI', name: '韩国 KOSPI' },
+    'NIKKEI225': { dataSource: 'NIKKEI225', name: '日本 NIKKEI225' },
+    'IBEX35': { dataSource: 'IBEX35', name: '西班牙 IBEX35' }
   };
 
-  const config = countryUrls[marketIndex];
+  const config = marketConfigs[marketIndex];
   if (!config) {
     console.log(`⚠️  [国际热力图] 未知市场 ${marketIndex}`);
     return null;
   }
 
+  // 使用用户验证的 URL 格式：hash fragment with JSON config
+  const hashConfig = {
+    dataSource: config.dataSource,
+    blockColor: "change",
+    blockSize: "market_cap_basic",
+    grouping: "sector"
+  };
+  const hashFragment = encodeURIComponent(JSON.stringify(hashConfig));
+  const targetUrl = `https://www.tradingview.com/heatmap/stock/#${hashFragment}`;
+
   console.log(`\n📸 [Browserless] 开始截图: ${config.name}`);
-  console.log(`🔗 [直接URL] ${config.url}`);
+  console.log(`🔗 [Hash URL] ${targetUrl}`);
+  console.log(`📊 [dataSource] ${config.dataSource}`);
 
   // 准备 TradingView Cookie
   let cookieString = process.env.TRADINGVIEW_COOKIE || '';
@@ -412,12 +425,20 @@ async function captureInternationalHeatmap(marketIndex) {
   }
 
   try {
-    // Browserless /function API - 使用直接 URL 访问（不用 hash）
+    // Browserless /function API - 使用 hash URL 直接访问
     const puppeteerCode = `
 export default async function ({ page }) {
-  const targetUrl = ${JSON.stringify(config.url)};
+  const targetUrl = ${JSON.stringify(targetUrl)};
   const expectedDataSource = ${JSON.stringify(config.dataSource)};
   const cookieStr = ${JSON.stringify(cookieString)};
+  
+  // 清除 localStorage/sessionStorage 防止缓存干扰
+  await page.evaluateOnNewDocument(() => {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch(e) {}
+  });
   
   // 设置 cookies（如果有）
   if (cookieStr) {
@@ -433,26 +454,46 @@ export default async function ({ page }) {
   // 设置视口
   await page.setViewport({ width: 1920, height: 1080 });
   
-  // 直接访问国家专用 URL（关键：不用 hash，直接在 URL 中指定 dataSource）
+  // 直接访问完整 hash URL（关键：一次性加载正确市场）
   await page.goto(targetUrl, { 
     waitUntil: 'networkidle2', 
-    timeout: 45000 
+    timeout: 60000 
   });
   
   // 等待页面初始化
-  await new Promise(r => setTimeout(r, 3000));
+  await new Promise(r => setTimeout(r, 4000));
+  
+  // 验证数据源
+  const actualDataSource = await page.evaluate(() => {
+    const hash = window.location.hash;
+    if (hash) {
+      try {
+        return JSON.parse(decodeURIComponent(hash.slice(1))).dataSource || 'unknown';
+      } catch(e) {}
+    }
+    return 'unknown';
+  });
+  console.log('验证 dataSource:', actualDataSource, '期望:', expectedDataSource);
+  
+  // 如果数据源不匹配，强制设置 hash 并刷新
+  if (actualDataSource !== expectedDataSource) {
+    console.log('数据源不匹配，强制设置 hash...');
+    await page.evaluate((ds) => {
+      const config = {dataSource: ds, blockColor: "change", blockSize: "market_cap_basic", grouping: "sector"};
+      window.location.hash = encodeURIComponent(JSON.stringify(config));
+    }, expectedDataSource);
+    await new Promise(r => setTimeout(r, 3000));
+  }
   
   // 关闭所有弹窗
   for (let i = 0; i < 3; i++) {
     await page.evaluate(() => {
-      // 点击所有关闭按钮
       document.querySelectorAll('button').forEach(btn => {
         const text = btn.textContent || '';
         if (text.includes('Decline') || text.includes('Close') || text.includes('No thanks') || text.includes('Later')) {
           try { btn.click(); } catch(e) {}
         }
       });
-      // 强制移除弹窗 DOM
       document.querySelectorAll('[class*="dialog"], [class*="modal"], [class*="popup"], [role="dialog"], [class*="overlay"]').forEach(el => {
         try { el.remove(); } catch(e) {}
       });
@@ -463,23 +504,6 @@ export default async function ({ page }) {
   // 等待热力图渲染
   await page.waitForSelector('rect, canvas, [class*="block"]', { timeout: 20000 }).catch(() => {});
   await new Promise(r => setTimeout(r, 5000));
-  
-  // 验证数据源（防止回退到 S&P 500）
-  const actualDataSource = await page.evaluate(() => {
-    // 检查 URL hash 或页面状态
-    const hash = window.location.hash;
-    if (hash) {
-      try {
-        const config = JSON.parse(decodeURIComponent(hash.slice(1)));
-        return config.dataSource || 'unknown';
-      } catch(e) {}
-    }
-    // 检查页面标题或其他指示器
-    const title = document.title || '';
-    return title.includes('Canada') ? 'SPTSX' : (title.includes('Germany') ? 'DAX' : 'unknown');
-  });
-  
-  console.log('验证 dataSource:', actualDataSource, '期望:', expectedDataSource);
   
   // 隐藏顶部导航和广告
   await page.evaluate(() => {
