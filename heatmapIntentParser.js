@@ -647,104 +647,56 @@ function buildTradingViewURL(query) {
     return url;
   }
   
-  // 🆕 加拿大市场使用hash格式
+  // 🆕 加拿大市场 - 使用TradingView专用路径
   if (index === 'TSX') {
-    console.log('🍁 使用加拿大市场专用参数');
-    
-    const canadaParams = {
-      dataSource: "TSX60",
-      blockColor: "change",
-      blockSize: "market_cap_basic", 
-      grouping: "sector"
-    };
-    
-    const hashParams = encodeURIComponent(JSON.stringify(canadaParams));
-    const url = `https://www.tradingview.com/heatmap/stock/#${hashParams}`;
+    console.log('🍁 使用加拿大市场专用路径');
+    const cacheBuster = Date.now();
+    const url = `https://www.tradingview.com/heatmap/stock/canada/?v=${cacheBuster}`;
     console.log(`🔗 [TradingView URL - Canada] ${url}`);
     return url;
   }
   
-  // 🆕 德国DAX市场使用hash格式
+  // 🆕 德国DAX市场 - 使用专用路径
   if (index === 'DAX' || index === 'DAX40') {
-    console.log('🇩🇪 使用德国市场专用参数');
-    
-    const germanyParams = {
-      dataSource: "DAX40",
-      blockColor: "change",
-      blockSize: "market_cap_basic", 
-      grouping: "sector"
-    };
-    
-    const hashParams = encodeURIComponent(JSON.stringify(germanyParams));
-    const url = `https://www.tradingview.com/heatmap/stock/#${hashParams}`;
+    console.log('🇩🇪 使用德国市场专用路径');
+    const cacheBuster = Date.now();
+    const url = `https://www.tradingview.com/heatmap/stock/germany/?v=${cacheBuster}`;
     console.log(`🔗 [TradingView URL - Germany] ${url}`);
     return url;
   }
   
-  // 🆕 英国FTSE市场使用hash格式
+  // 🆕 英国FTSE市场 - 使用专用路径
   if (index === 'FTSE' || index === 'FTSE100') {
-    console.log('🇬🇧 使用英国市场专用参数');
-    
-    const ukParams = {
-      dataSource: "FTSE100",
-      blockColor: "change",
-      blockSize: "market_cap_basic", 
-      grouping: "sector"
-    };
-    
-    const hashParams = encodeURIComponent(JSON.stringify(ukParams));
-    const url = `https://www.tradingview.com/heatmap/stock/#${hashParams}`;
+    console.log('🇬🇧 使用英国市场专用路径');
+    const cacheBuster = Date.now();
+    const url = `https://www.tradingview.com/heatmap/stock/uk/?v=${cacheBuster}`;
     console.log(`🔗 [TradingView URL - UK] ${url}`);
     return url;
   }
   
-  // 🆕 法国CAC市场使用hash格式
+  // 🆕 法国CAC市场 - 使用专用路径
   if (index === 'CAC40') {
-    console.log('🇫🇷 使用法国市场专用参数');
-    
-    const franceParams = {
-      dataSource: "CAC40",
-      blockColor: "change",
-      blockSize: "market_cap_basic", 
-      grouping: "sector"
-    };
-    
-    const hashParams = encodeURIComponent(JSON.stringify(franceParams));
-    const url = `https://www.tradingview.com/heatmap/stock/#${hashParams}`;
+    console.log('🇫🇷 使用法国市场专用路径');
+    const cacheBuster = Date.now();
+    const url = `https://www.tradingview.com/heatmap/stock/france/?v=${cacheBuster}`;
     console.log(`🔗 [TradingView URL - France] ${url}`);
     return url;
   }
   
-  // 🆕 澳大利亚市场使用hash格式
+  // 🆕 澳大利亚市场 - 使用专用路径
   if (index === 'AS51' || index === 'AS200') {
-    console.log('🇦🇺 使用澳大利亚市场专用参数');
-    
-    const ausParams = {
-      dataSource: "AS51",
-      blockColor: "change",
-      blockSize: "market_cap_basic", 
-      grouping: "sector"
-    };
-    
-    const hashParams = encodeURIComponent(JSON.stringify(ausParams));
-    const url = `https://www.tradingview.com/heatmap/stock/#${hashParams}`;
+    console.log('🇦🇺 使用澳大利亚市场专用路径');
+    const cacheBuster = Date.now();
+    const url = `https://www.tradingview.com/heatmap/stock/australia/?v=${cacheBuster}`;
     console.log(`🔗 [TradingView URL - Australia] ${url}`);
     return url;
   }
   
-  // 🆕 韩国KOSPI市场使用hash格式
+  // 🆕 韩国KOSPI市场 - 使用专用路径
   if (index === 'KOSPI') {
-    console.log('🇰🇷 使用韩国市场专用参数');
-    
-    const koreaParams = {
-      dataSource: "KOSPI",
-      blockColor: "change",
-      blockSize: "market_cap_basic", 
-      grouping: "sector"
-    };
-    
-    const hashParams = encodeURIComponent(JSON.stringify(koreaParams));
-    const url = `https://www.tradingview.com/heatmap/stock/#${hashParams}`;
+    console.log('🇰🇷 使用韩国市场专用路径');
+    const cacheBuster = Date.now();
+    const url = `https://www.tradingview.com/heatmap/stock/south-korea/?v=${cacheBuster}`;
     console.log(`🔗 [TradingView URL - Korea] ${url}`);
     return url;
   }

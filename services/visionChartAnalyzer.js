@@ -63,8 +63,23 @@ async function analyzeChartImage(imageBuffer, userContext = '') {
   } catch (error) {
     console.error(`❌ [Vision Chart Analyzer] 分析失败: ${error.message}`);
     
+    // 详细记录错误信息
+    if (error.response) {
+      console.error(`   ├─ HTTP Status: ${error.response.status}`);
+      console.error(`   ├─ Response Data:`, JSON.stringify(error.response.data || {}).substring(0, 500));
+    }
+    if (error.code) {
+      console.error(`   └─ Error Code: ${error.code}`);
+    }
+    
     if (error.response?.status === 429) {
       throw new Error('AI 服务繁忙，请稍后重试');
+    }
+    if (error.response?.status === 401) {
+      throw new Error('API 认证失败，请检查配置');
+    }
+    if (error.response?.status === 400) {
+      throw new Error('请求格式错误，请重试');
     }
     if (error.code === 'ECONNABORTED') {
       throw new Error('分析超时，请稍后重试');
