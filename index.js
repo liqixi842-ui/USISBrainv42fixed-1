@@ -385,15 +385,123 @@ bot.on('message', async (message) => {
   const text = message.text || '';
   const username = message.from?.username || message.from?.first_name || 'unknown';
   
+  // ═══════════════════════════════════════════════════════════════
+  // 🆕 v7.7.1 系统消息过滤 - 不回复进群/退群等系统消息
+  // ═══════════════════════════════════════════════════════════════
+  
+  // 跳过新成员加入消息（避免欢迎语刷屏）
+  if (message.new_chat_members && message.new_chat_members.length > 0) {
+    console.log(`⏭️  [SKIP] 新成员加入消息，不回复`);
+    return;
+  }
+  
+  // 跳过成员离开消息
+  if (message.left_chat_member) {
+    console.log(`⏭️  [SKIP] 成员离开消息，不回复`);
+    return;
+  }
+  
+  // 跳过群组创建/标题变更等系统消息
+  if (message.new_chat_title || message.new_chat_photo || message.delete_chat_photo ||
+      message.group_chat_created || message.supergroup_chat_created || message.channel_chat_created ||
+      message.migrate_to_chat_id || message.migrate_from_chat_id || message.pinned_message) {
+    console.log(`⏭️  [SKIP] 系统消息，不回复`);
+    return;
+  }
+  
+  // 跳过空消息（无文本、无图片、无文档）
+  if (!message.text && !message.photo && !message.document && !message.caption) {
+    console.log(`⏭️  [SKIP] 空消息或不支持的消息类型`);
+    return;
+  }
+  
   console.log(`\n┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓`);
   console.log(`┃  📨 NEW MESSAGE RECEIVED                       ┃`);
   console.log(`┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫`);
   console.log(`┃  Chat ID: ${chatId}`);
   console.log(`┃  User: @${username}`);
   console.log(`┃  Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+  console.log(`┃  Has Photo: ${message.photo ? 'yes' : 'no'}`);
   console.log(`┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n`);
   
   try {
+    // ═══════════════════════════════════════════════════════════════
+    // 🆕 v7.7.1 图片分析处理 - 用户发送图表图片
+    // ═══════════════════════════════════════════════════════════════
+    
+    if (message.photo && message.photo.length > 0) {
+      console.log(`📷 [PHOTO] 检测到图片消息`);
+      const caption = message.caption || '';
+      
+      // 检查是否请求分析
+      const analysisKeywords = ['分析', '解读', '看看', '怎么样', '走势', '操作', '建议', 'analyze', 'analysis'];
+      const wantsAnalysis = analysisKeywords.some(kw => caption.toLowerCase().includes(kw));
+      
+      if (wantsAnalysis || caption.trim().length > 0) {
+        console.log(`📊 [PHOTO] 用户请求图片分析: "${caption}"`);
+        
+        try {
+          // 发送处理中提示
+          const processingMsg = await bot.sendMessage(chatId, 
+            `🔍 正在分析图表...\n\n_使用 Vision AI 识别图表形态和走势_`,
+            { parse_mode: 'Markdown' }
+          );
+          
+          // 获取最大尺寸的图片
+          const photo = message.photo[message.photo.length - 1];
+          const fileInfo = await bot.getFile(photo.file_id);
+          const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN_DEV}/${fileInfo.file_path}`;
+          
+          // 下载图片
+          const fetch = require('node-fetch');
+          const imageResponse = await fetch(fileUrl);
+          const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+          
+          console.log(`📷 [PHOTO] 图片下载成功: ${(imageBuffer.length / 1024).toFixed(2)} KB`);
+          
+          // 使用 Vision AI 分析
+          const { analyzeChartImage } = require('./services/visionChartAnalyzer');
+          const analysis = await analyzeChartImage(imageBuffer, caption);
+          
+          // 删除处理中消息
+          try { await bot.deleteMessage(chatId, processingMsg.message_id); } catch (e) {}
+          
+          // 发送分析结果
+          await bot.sendMessage(chatId, analysis, { parse_mode: 'Markdown' });
+          console.log(`✅ [PHOTO] 图片分析完成`);
+          return;
+          
+        } catch (photoError) {
+          console.error(`❌ [PHOTO] 图片分析失败: ${photoError.message}`);
+          await bot.sendMessage(chatId, 
+            `❌ 图片分析失败\n\n` +
+            `可能原因：\n` +
+            `• 图片格式不支持\n` +
+            `• 图片过大或过小\n` +
+            `• 服务暂时繁忙\n\n` +
+            `建议：请发送股票代码，我来帮你获取最新K线图分析\n` +
+            `例如：\`解票 NVDA\` 或 \`TSLA怎么样\``,
+            { parse_mode: 'Markdown' }
+          );
+          return;
+        }
+      } else {
+        // 有图片但没有说明文字
+        await bot.sendMessage(chatId, 
+          `📷 收到图片！\n\n` +
+          `请在发送图片时附带说明，例如：\n` +
+          `• "分析这张K线图"\n` +
+          `• "MP 后续操作建议"\n` +
+          `• "看看这个走势"\n\n` +
+          `或者直接发送股票代码获取实时分析：\n` +
+          `• \`解票 NVDA\`\n` +
+          `• \`TSLA怎么样\``,
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+    }
+    
     // ═══ STEP 1: 解析命令 ═══
     const { cmd, args, flags } = parseCommand(message);
     

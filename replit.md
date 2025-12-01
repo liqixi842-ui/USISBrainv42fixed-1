@@ -1,5 +1,5 @@
 # Overview
-USIS Brain v7.7 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
+USIS Brain v7.7.1 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
 
 # User Preferences
 Preferred communication style: Simple, everyday language.
@@ -21,7 +21,8 @@ The v6.0 pipeline processes user input via language detection, semantic intent p
 - **Multi-Dimensional Data Broker with 3-Tier API Cascade**: Utilizes Finnhub (primary US) → Twelve Data (global) → Alpha Vantage (backup) with provider-specific symbol formatting, intelligent failover, and capability caching for over 30 exchanges.
 - **ImpactRank Algorithm**: Proprietary 4-dimensional news scoring (urgency × relevance × authority × freshness).
 - **Institutional Analysis Framework**: Follows a 5-section report structure with mandatory data citations, authoritative language, and specific price targets.
-- **Vision AI Integration**: Analyzes chart patterns and integrates with fundamental data.
+- **Vision AI Integration**: Analyzes chart patterns and integrates with fundamental data. v7.7.1 adds user-uploaded image analysis via `services/visionChartAnalyzer.js`.
+- **Telegram Message Filtering (v7.7.1)**: Skips system messages (new member joins, member leaves, group title changes, etc.) to prevent welcome message spam in group chats.
 - **Anti-Hallucination System**: Multi-layer system for data validation, forced citations, and compliance checks.
 - **Cost Tracking**: Monitors costs, response times, and model usage using PostgreSQL.
 - **Multilingual Intelligence**: Automatic language detection, Google Translate integration, and specialized Chinese financial analysis via DeepSeek.
