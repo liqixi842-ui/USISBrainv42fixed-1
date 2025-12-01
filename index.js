@@ -129,6 +129,28 @@ const httpServer = http.createServer(async (req, res) => {
     return;
   }
   
+  // 🆕 Manual digest push trigger
+  if (url === '/api/news/push-now' && req.method === 'POST') {
+    try {
+      const { getScheduler } = require('./scheduler/newsScheduler');
+      const scheduler = getScheduler();
+      if (scheduler && scheduler.sendDigest) {
+        console.log('📤 [API] Manual digest push triggered');
+        await scheduler.sendDigest('digest_2h');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, message: 'Digest push triggered' }));
+      } else {
+        res.writeHead(503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Scheduler not ready' }));
+      }
+    } catch (error) {
+      console.error('❌ [API] Push error:', error.message);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: error.message }));
+    }
+    return;
+  }
+  
   // 404 for other routes
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
