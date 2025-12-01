@@ -391,7 +391,8 @@ function createFallbackIntent(userText) {
 
 /**
  * 🆕 v5.1: 解析符号描述（支持完整格式）
- * 格式: "Inmobiliaria Colonial (BME:COL, Spain)"
+ * 🆕 v7.7.2: 集成公司名 → 股票代码解析
+ * 格式: "Inmobiliaria Colonial (BME:COL, Spain)" 或 "apple" → "AAPL"
  * @param {string} symbolInput - 符号描述字符串
  * @returns {Object} - { displayName, symbol, exchange, country, industry }
  */
@@ -427,7 +428,29 @@ function parseSymbolDescription(symbolInput) {
     };
   }
   
-  // 简单格式：NVDA
+  // 🆕 v7.7.2: 尝试从公司名解析股票代码
+  // 使用 symbolResolver 的静态映射表
+  try {
+    const { resolveChineseCompanyName } = require('./symbolResolver');
+    const resolvedSymbol = resolveChineseCompanyName(input);
+    
+    if (resolvedSymbol) {
+      console.log(`   ✅ [parseSymbolDescription] 公司名解析: "${input}" → "${resolvedSymbol}"`);
+      return {
+        displayName: input,
+        symbol: resolvedSymbol,
+        exchange: null,
+        country: null,
+        rawSymbol: resolvedSymbol,
+        isFullFormat: false,
+        isCompanyNameResolved: true
+      };
+    }
+  } catch (err) {
+    console.log(`   ⚠️  [parseSymbolDescription] 公司名解析失败: ${err.message}`);
+  }
+  
+  // 简单格式：NVDA（已经是股票代码）
   return {
     displayName: input.toUpperCase(),
     symbol: input.toUpperCase(),
@@ -479,50 +502,107 @@ function parseResearchReportCommand(userText) {
   // 去除开头的逗号或空格
   text = text.replace(/^[,，\s]+/, '');
   
-  // 按逗号分割（支持中英文逗号）
-  const parts = text.split(/[,，]/).map(p => p.trim()).filter(p => p.length > 0);
+  // 🆕 v7.7.2: 双路径解析器 - 逗号模式 vs 简单模式
+  const MODIFIERS = ['pdf', 'pro', 'premium', 'basic', 'text', 'txt'];
+  const LANG_MAP = {
+    'en': 'en', 'zh': 'zh', 'es': 'es', 'fr': 'fr', 'de': 'de', 'ja': 'ja', 'ko': 'ko',
+    '中文': 'zh', '英文': 'en', '西班牙语': 'es', 'chinese': 'zh', 'english': 'en', 'spanish': 'es'
+  };
   
-  console.log(`   解析字段数: ${parts.length}`, parts);
+  let symbolInput = '';
+  let firm = 'USIS Research Division';
+  let analyst = 'System (USIS Brain)';
+  let langRaw = 'en';
+  let modelName = '';
+  let versionNumber = '';
   
-  // 至少需要股票代码
-  if (parts.length === 0) {
-    console.log(`   ❌ 缺少股票代码`);
+  const hasComma = text.includes(',') || text.includes('，');
+  
+  if (hasComma) {
+    // ═══ 正式模式 (Formal Mode): 逗号分隔 ═══
+    // 格式: symbol, firm, analyst, language, modelName, versionNumber
+    // 或者: PDF, symbol, firm, analyst (第一个字段可能是修饰符)
+    console.log(`   📝 正式模式 (逗号分隔)`);
+    
+    const parts = text.split(/[,，]/).map(p => p.trim()).filter(p => p.length > 0);
+    console.log(`   解析字段数: ${parts.length}`, parts);
+    
+    // 🆕 v7.7.2: 遍历所有 parts 寻找第一个有效的股票代码
+    let symbolPartIndex = -1;
+    
+    for (let i = 0; i < parts.length && !symbolInput; i++) {
+      const partTokens = parts[i].split(/\s+/).filter(t => t.length > 0);
+      
+      for (const token of partTokens) {
+        const tokenLower = token.toLowerCase();
+        if (!MODIFIERS.includes(tokenLower)) {
+          symbolInput = token;
+          symbolPartIndex = i;
+          console.log(`   ✅ 股票代码/公司名: ${token} (位置 ${i})`);
+          break;
+        } else {
+          console.log(`   ⚠️  跳过修饰符: ${token}`);
+        }
+      }
+    }
+    
+    // 根据 symbol 所在位置，映射后续字段
+    // 如果 symbol 在 parts[0]，则 firm=parts[1], analyst=parts[2], lang=parts[3]
+    // 如果 symbol 在 parts[1]（第一个是 PDF），则 firm=parts[2], analyst=parts[3], lang=parts[4]
+    const offset = symbolPartIndex >= 0 ? symbolPartIndex : 0;
+    
+    if (parts.length > offset + 1) firm = parts[offset + 1].trim() || firm;
+    if (parts.length > offset + 2) analyst = parts[offset + 2].trim() || analyst;
+    if (parts.length > offset + 3) {
+      const langToken = parts[offset + 3].trim().toLowerCase();
+      langRaw = LANG_MAP[langToken] || langToken || 'en';
+    }
+    if (parts.length > offset + 4) modelName = parts[offset + 4].trim();
+    if (parts.length > offset + 5) versionNumber = parts[offset + 5].trim();
+    
+  } else {
+    // ═══ 简单模式 (Simple Mode): 空格分隔 ═══
+    // 格式: symbol [language]
+    console.log(`   📝 简单模式 (空格分隔)`);
+    
+    const tokens = text.split(/\s+/).filter(t => t.length > 0);
+    console.log(`   解析 tokens: ${tokens.length}`, tokens);
+    
+    let detectedLang = null;
+    
+    for (const token of tokens) {
+      const tokenLower = token.toLowerCase();
+      
+      // 跳过命令修饰符
+      if (MODIFIERS.includes(tokenLower)) {
+        console.log(`   ⚠️  跳过修饰符: ${token}`);
+        continue;
+      }
+      
+      // 检测语言
+      if (LANG_MAP[tokenLower]) {
+        detectedLang = LANG_MAP[tokenLower];
+        console.log(`   🌐 语言: ${token} → ${detectedLang}`);
+        continue;
+      }
+      
+      // 第一个有效 token 作为股票代码
+      if (!symbolInput) {
+        symbolInput = token;
+        console.log(`   ✅ 股票代码/公司名: ${token}`);
+      }
+    }
+    
+    if (detectedLang) langRaw = detectedLang;
+  }
+  
+  // 如果没找到 symbol
+  if (!symbolInput) {
+    console.log(`   ❌ 未找到有效股票代码`);
     return null;
   }
   
-  // 🆕 v7.7.2: 智能提取股票代码 - 跳过无效值如 "PDF", "pro" 等命令修饰符
-  const INVALID_SYMBOLS = ['pdf', 'pro', 'premium', 'basic', 'text', 'txt'];
-  
-  // 从 parts 中找到第一个有效的股票代码
-  let symbolIndex = 0;
-  let symbolInput = '';
-  
-  for (let i = 0; i < parts.length; i++) {
-    const partLower = parts[i].toLowerCase();
-    if (!INVALID_SYMBOLS.includes(partLower) && /^[A-Z0-9.:]{1,15}$/i.test(parts[i])) {
-      symbolInput = parts[i];
-      symbolIndex = i;
-      console.log(`   ✅ 找到有效股票代码: ${parts[i]} (位置 ${i})`);
-      break;
-    } else if (INVALID_SYMBOLS.includes(partLower)) {
-      console.log(`   ⚠️  跳过无效值: ${parts[i]}`);
-    }
-  }
-  
-  // 如果没找到，使用第一个部分
-  if (!symbolInput) {
-    symbolInput = parts[0] || '';
-    console.log(`   ⚠️  未找到有效股票代码，使用默认: ${symbolInput}`);
-  }
-  
-  // 根据 symbolIndex 调整后续参数的索引
-  // adjustedParts[0] = symbol, adjustedParts[1] = firm, adjustedParts[2] = analyst, etc.
-  const adjustedParts = parts.slice(symbolIndex);
-  const firm = (adjustedParts[1] || 'USIS Research Division').trim();
-  const analyst = (adjustedParts[2] || 'System (USIS Brain)').trim();
-  const langRaw = (adjustedParts[3] || '英文').toLowerCase().trim();
-  const modelName = (adjustedParts[4] || '').trim(); // 🆕 v7.7: 自定义模型名称 (e.g., 北极光量化)
-  const versionNumber = (adjustedParts[5] || '').trim(); // 🆕 v7.7: 自定义版本号 (e.g., v7)
+  console.log(`   📋 解析结果: symbol=${symbolInput}, firm=${firm}, analyst=${analyst}, lang=${langRaw}`);
   
   // 🆕 v5.1: 解析符号描述
   const symbolInfo = parseSymbolDescription(symbolInput);

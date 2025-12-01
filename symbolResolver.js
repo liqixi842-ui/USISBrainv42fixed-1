@@ -15,10 +15,45 @@ const {
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
 const TWELVE_DATA_KEY = process.env.TWELVE_DATA_API_KEY;
 
-// 🆕 v7.0: 中文公司名 → 股票代码映射（常用公司）
+// 🆕 v7.0: 公司名 → 股票代码映射（常用公司，支持中英文）
+// 🆕 v7.7.2: 扩展英文公司名支持
 const CHINESE_COMPANY_MAP = {
-  // 美股科技巨头
+  // 美股科技巨头（中英文）
   '苹果': 'AAPL',
+  'apple': 'AAPL',
+  'microsoft': 'MSFT',
+  'google': 'GOOGL',
+  'alphabet': 'GOOGL',
+  'amazon': 'AMZN',
+  'tesla': 'TSLA',
+  'nvidia': 'NVDA',
+  'facebook': 'META',
+  'netflix': 'NFLX',
+  'intel': 'INTC',
+  'amd': 'AMD',
+  'qualcomm': 'QCOM',
+  'broadcom': 'AVGO',
+  'cisco': 'CSCO',
+  'oracle': 'ORCL',
+  'ibm': 'IBM',
+  'disney': 'DIS',
+  'nike': 'NKE',
+  'starbucks': 'SBUX',
+  'mcdonalds': 'MCD',
+  'walmart': 'WMT',
+  'costco': 'COST',
+  'boeing': 'BA',
+  'jpmorgan': 'JPM',
+  'goldman': 'GS',
+  'berkshire': 'BRK.B',
+  'blackrock': 'BLK',
+  'coca-cola': 'KO',
+  'cocacola': 'KO',
+  'pepsi': 'PEP',
+  'pfizer': 'PFE',
+  'johnson': 'JNJ',
+  'exxon': 'XOM',
+  'chevron': 'CVX',
   '微软': 'MSFT',
   '谷歌': 'GOOGL',
   '亚马逊': 'AMZN',

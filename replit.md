@@ -4,8 +4,12 @@ USIS Brain v7.7.2 is an institutional-grade Multi-AI Financial Analysis System d
 **v7.7.2 HDA v2 Upgrade**: Human Desk Assistant v2 for the "解票" feature with Quick Take / Deep Take dual modes, natural human-like language output, and Telegram inline button callbacks.
 
 **v7.7.2 研报命令修复**:
-- **智能符号解析**: `parseResearchReportCommand` 和 `handleReportPdf` 现在自动跳过无效值（PDF、pro、premium等），正确提取股票代码
-- **逗号格式支持**: `研报 PDF, AAPL, Aberdeen Investments, John Smith` 正确解析为 symbol=AAPL, firm=Aberdeen Investments
+- **智能符号解析**: `parseResearchReportCommand` 和 `handleReportPdf` 使用双路径解析器，自动跳过无效值（PDF、pro、premium等）
+- **公司名解析**: `parseSymbolDescription` 现在集成 `resolveChineseCompanyName`，支持 "apple" → "AAPL" 自动转换
+- **英文公司名支持**: `symbolResolver.js` 扩展 CHINESE_COMPANY_MAP，添加常用英文公司名映射
+- **双路径解析器**: 
+  - **正式模式** (逗号分隔): `研报 PDF, AAPL, Aberdeen, John` → symbol=AAPL, firm=Aberdeen, analyst=John
+  - **简单模式** (空格分隔): `研报 NVDA zh` → symbol=NVDA, lang=zh
 - **Claude 模型更新**: 从 claude-3-5-sonnet-20241022 升级到 claude-sonnet-4-20250514
 - **PDF默认输出**: `研报 AAPL` 命令现默认生成 PDF 而非文本
 
