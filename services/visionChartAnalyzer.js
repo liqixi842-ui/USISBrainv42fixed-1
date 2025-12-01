@@ -16,24 +16,36 @@ async function analyzeChartImage(imageBuffer, userContext = '') {
   console.log(`   ├─ 图片大小: ${(imageBuffer.length / 1024).toFixed(2)} KB`);
   console.log(`   └─ 用户上下文: "${userContext || '无'}"`);
   
+  // 验证 buffer 有效性
+  if (!imageBuffer || imageBuffer.length < 100) {
+    throw new Error(`图片数据无效 (size: ${imageBuffer?.length || 0} bytes)`);
+  }
+  
   const openaiApiKey = process.env.OPENAI_API_KEY;
   if (!openaiApiKey) {
     throw new Error('OpenAI API Key 未配置');
   }
   
   try {
-    const base64Image = imageBuffer.toString('base64');
-    
-    // 自动检测图片 MIME 类型
+    // 自动检测图片 MIME 类型（通过文件头魔数）
     let mimeType = 'image/jpeg'; // 默认 JPEG（Telegram 最常见）
-    if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50) {
+    const header = imageBuffer.slice(0, 8);
+    
+    if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4E && header[3] === 0x47) {
       mimeType = 'image/png';
-    } else if (imageBuffer[0] === 0x47 && imageBuffer[1] === 0x49) {
+    } else if (header[0] === 0xFF && header[1] === 0xD8 && header[2] === 0xFF) {
+      mimeType = 'image/jpeg';
+    } else if (header[0] === 0x47 && header[1] === 0x49 && header[2] === 0x46) {
       mimeType = 'image/gif';
-    } else if (imageBuffer[0] === 0x52 && imageBuffer[1] === 0x49) {
+    } else if (header[0] === 0x52 && header[1] === 0x49 && header[2] === 0x46 && header[3] === 0x46) {
       mimeType = 'image/webp';
     }
+    
+    console.log(`   ├─ 文件头: [${Array.from(header.slice(0, 4)).map(b => '0x' + b.toString(16).toUpperCase()).join(', ')}]`);
     console.log(`   ├─ MIME 类型: ${mimeType}`);
+    
+    const base64Image = imageBuffer.toString('base64');
+    console.log(`   ├─ Base64 长度: ${base64Image.length} 字符`);
     
     // 构建分析提示词
     const systemPrompt = buildChartAnalysisPrompt(userContext);
