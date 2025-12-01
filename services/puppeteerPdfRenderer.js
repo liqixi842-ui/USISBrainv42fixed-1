@@ -10,25 +10,61 @@ const { execSync } = require('child_process');
 
 /**
  * Dynamically find Chromium executable path
+ * Supports: Replit (Nix), CentOS/RHEL, Ubuntu/Debian, macOS
  * @returns {string} Path to Chromium executable
  */
 function findChromiumPath() {
+  // 1. Environment variable override (highest priority)
   if (process.env.CHROMIUM_PATH) {
+    console.log(`📍 [Puppeteer] Using CHROMIUM_PATH env: ${process.env.CHROMIUM_PATH}`);
     return process.env.CHROMIUM_PATH;
   }
   
+  const fs = require('fs');
+  
+  // 2. Common Chromium paths to check (in order of priority)
+  const commonPaths = [
+    // Linux package manager installations
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    // Snap/Flatpak installations
+    '/snap/bin/chromium',
+    '/var/lib/flatpak/exports/bin/org.chromium.Chromium',
+    // macOS
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    // Replit/Nix (fallback)
+    '/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium'
+  ];
+  
+  // Check each path
+  for (const chromePath of commonPaths) {
+    try {
+      if (fs.existsSync(chromePath)) {
+        console.log(`📍 [Puppeteer] Found Chromium at: ${chromePath}`);
+        return chromePath;
+      }
+    } catch (e) {
+      // Continue checking other paths
+    }
+  }
+  
+  // 3. Try 'which' command as last resort
   try {
-    const path = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null', { encoding: 'utf-8' }).trim();
+    const path = execSync('which chromium 2>/dev/null || which chromium-browser 2>/dev/null || which google-chrome 2>/dev/null', { encoding: 'utf-8' }).trim();
     if (path) {
-      console.log(`📍 [Puppeteer] Found Chromium at: ${path}`);
+      console.log(`📍 [Puppeteer] Found Chromium via which: ${path}`);
       return path;
     }
   } catch (e) {
+    // Ignore errors
   }
   
-  const defaultPath = '/nix/store/qa9cnw4v5xkxyip6mb9kxqfq1z4x2dx1-chromium-138.0.7204.100/bin/chromium';
-  console.log(`📍 [Puppeteer] Using default Chromium path: ${defaultPath}`);
-  return defaultPath;
+  // 4. Final fallback - will likely fail but provides clear error
+  console.warn(`⚠️ [Puppeteer] No Chromium found! Install with: yum install chromium OR apt install chromium-browser`);
+  return '/usr/bin/chromium';
 }
 
 /**
