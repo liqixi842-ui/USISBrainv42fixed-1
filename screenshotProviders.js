@@ -9,7 +9,14 @@ const sharp = require('sharp');
 
 async function captureHeatmapSmart({ tradingViewUrl, timeoutMs = 45000, maxRetries = 2 }) {
   const start = Date.now();
-  console.log(`\n📸 [N8n] 调用截图服务 (超时: ${timeoutMs}ms, 最大重试: ${maxRetries}次)`);
+  
+  // MarketScreener 页面较重，需要更长超时
+  if (tradingViewUrl.includes('marketscreener.com')) {
+    timeoutMs = Math.max(timeoutMs, 60000);
+    console.log(`\n📸 [N8n] 调用截图服务 - MarketScreener (超时: ${timeoutMs}ms, 最大重试: ${maxRetries}次)`);
+  } else {
+    console.log(`\n📸 [N8n] 调用截图服务 (超时: ${timeoutMs}ms, 最大重试: ${maxRetries}次)`);
+  }
   
   let lastError;
   
@@ -22,10 +29,19 @@ async function captureHeatmapSmart({ tradingViewUrl, timeoutMs = 45000, maxRetri
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       
+      // 构建请求体，添加延迟参数让页面完全加载
+      const requestBody = { 
+        url: tradingViewUrl,
+        delay: tradingViewUrl.includes('marketscreener.com') ? 5000 : 2000,  // MarketScreener需要更长加载时间
+        fullPage: false  // 只截取可见区域
+      };
+      
+      console.log(`🔗 [Webhook URL] ${tradingViewUrl.substring(0, 60)}...`);
+      
       const response = await fetch(n8nWebhook, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: tradingViewUrl }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal
       });
       
