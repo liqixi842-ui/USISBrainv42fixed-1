@@ -57,10 +57,35 @@ async function captureHeatmapSmart({ tradingViewUrl, timeoutMs = 45000, maxRetri
         throw new Error(`下载失败 ${imgRes.status}`);
       }
       
-      const buffer = Buffer.from(await imgRes.arrayBuffer());
+      let buffer = Buffer.from(await imgRes.arrayBuffer());
       const elapsed = Date.now() - start;
       
       console.log(`✅ 截图成功 (尝试 ${attempt}/${maxRetries}, 耗时 ${elapsed}ms, ${(buffer.length / 1024).toFixed(2)} KB)`);
+      
+      // 检查是否需要裁剪（MarketScreener 等网页需要裁剪掉头部广告）
+      if (tradingViewUrl.includes('marketscreener.com')) {
+        console.log(`✂️  [裁剪] MarketScreener 截图 - 裁剪头部广告区域`);
+        try {
+          const metadata = await sharp(buffer).metadata();
+          // 裁剪掉顶部 350px（广告区域）和右侧 300px（侧边栏）
+          const cropTop = 350;
+          const cropRight = 300;
+          const newWidth = Math.max(metadata.width - cropRight, 800);
+          const newHeight = Math.max(metadata.height - cropTop, 400);
+          
+          buffer = await sharp(buffer)
+            .extract({
+              left: 0,
+              top: cropTop,
+              width: newWidth,
+              height: newHeight
+            })
+            .toBuffer();
+          console.log(`   └─ 裁剪后: ${(buffer.length / 1024).toFixed(2)} KB`);
+        } catch (cropError) {
+          console.warn(`⚠️  裁剪失败，使用原图: ${cropError.message}`);
+        }
+      }
       
       return {
         success: true,

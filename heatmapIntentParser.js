@@ -647,13 +647,12 @@ function buildTradingViewURL(query) {
     return url;
   }
   
-  // 🆕 加拿大市场 - 使用 Finviz 世界地图（按国家分组，包含加拿大公司）
+  // 🆕 加拿大市场 - 使用 MarketScreener TSX 热力图（截图后裁剪广告）
   if (index === 'TSX') {
-    console.log('🍁 使用加拿大市场 - Finviz World Map');
+    console.log('🍁 使用加拿大市场 - MarketScreener TSX (带裁剪)');
     const cacheBuster = Date.now();
-    // Finviz 世界地图按国家分组显示
-    const url = `https://finviz.com/map.ashx?t=geo&st=w1&v=${cacheBuster}`;
-    console.log(`🔗 [Finviz World Map URL] ${url}`);
+    const url = `https://ca.marketscreener.com/quote/index/TSX-COMPOSITE-7454/heatmap/?v=${cacheBuster}`;
+    console.log(`🔗 [MarketScreener URL - TSX] ${url}`);
     return url;
   }
   
