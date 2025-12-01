@@ -30,7 +30,7 @@ class VisionAnalyzer {
           ]
         }],
         max_tokens: 2000,
-        temperature: 0.1
+        temperature: 0.4  // 🔧 v7.7.3: 从0.1提高到0.4，生成更自然具体的分析
       }, {
         headers: {
           'Authorization': `Bearer ${this.openaiApiKey}`,
@@ -61,48 +61,57 @@ class VisionAnalyzer {
 
   buildVisionPrompt(marketContext) {
     const isSectorFocused = marketContext.sectorName || marketContext.dataset;
+    const marketName = this.getMarketDisplayName(marketContext.index);
     const contextInfo = isSectorFocused 
-      ? `${marketContext.sectorName || marketContext.index}板块热力图` 
-      : `${marketContext.index}市场热力图`;
+      ? `${marketContext.sectorName || marketName}板块热力图` 
+      : `${marketName}市场热力图`;
     
-    return `作为Morgan Stanley/Goldman Sachs首席策略分析师，对${contextInfo}进行机构级深度解读。
+    return `【重要】你正在分析的是 **${marketName}** 热力图，不是其他市场！
 
-## 结构性市场分析框架
+仔细观察这张${contextInfo}，报告你在图像中【实际看到的】内容：
 
-### I. 价格动能分布特征
-- 动量集中度：具体个股及其涨跌幅（如JPM +2.3%、BAC +1.8%）
-- 离散度分析：波动幅度差异的统计特征（标准差、极值比）
-- 市值分层表现：超大市值/中型股/小型股的分化程度
+## 必须报告的具体内容（从图像中读取）
 
-### II. 板块内部结构分析${isSectorFocused ? `（${marketContext.sectorName}专项）` : ''}
-- 子行业轮动：识别板块内细分领域的相对强弱
-- 龙头vs跟随者：领先公司与二线公司的表现差异
-- 相关性矩阵：个股间联动性（高相关/低相关集群）
+### 1. 涨幅最大的股票（红/绿色最深的方块）
+- 列出你在图中看到的【具体股票代码】和【具体涨跌幅数字】
+- 例如：RY +2.1%, TD +1.8%, ENB -0.5%（这是示例，请看实际图像）
 
-### III. 资金流向深度解析
-- 净流入/流出方向：识别资金迁移路径
-- 机构调仓迹象：尾盘大宗交易、异常成交量信号
-- 做空压力监测：空头仓位变化、卖空量异常
+### 2. 板块表现分布
+- 哪些板块整体偏绿（上涨）？列出具体板块名称
+- 哪些板块整体偏红（下跌）？列出具体板块名称
+- 板块内部是否有明显分化？
 
-### IV. 基本面驱动因素${isSectorFocused ? '（板块特定）' : ''}
-${this.getSectorSpecificDrivers(marketContext)}
+### 3. 市场整体情绪
+- 绿色方块占比大约多少？红色占比多少？
+- 大市值股票（大方块）表现如何？
+- 是普涨、普跌、还是分化行情？
 
-### V. 技术分析要素
-- 关键价格水平：阻力位/支撑位（具体价格）
-- 技术形态识别：突破/回调/盘整状态
-- 成交量验证：价格突破是否伴随量能配合
+### 4. 交易建议
+- 基于你观察到的实际数据，给出具体操作建议
+- 提供具体的关注标的（必须是图中出现的股票代码）
 
-### VI. 风险评估矩阵
-- 系统性风险：宏观环境、政策风险
-- 板块特有风险：行业周期、监管变化
-- 仓位风险：市场情绪过热/过冷指标
+【禁止事项】
+❌ 不要编造你没有在图中看到的股票代码
+❌ 不要使用通用模板语言（如"趋势明确"、"关注轮动"）
+❌ 不要提及其他市场的股票（这是${marketName}，不是标普500）
+❌ 不要说"如果显示..."这类假设性语言
 
 【输出要求】
-1. 标准Markdown格式（## ### -）无星号强调
-2. 每个观点必须有数据支撑（具体个股代码+涨跌幅）
-3. 使用机构术语（避免颜色描述）
-4. 提供量化评分（如风险等级1-5、情绪强度1-10）
-5. 给出可执行的交易启示和价格目标`;
+- 使用简洁中文，控制在300字以内
+- 必须引用具体股票代码和数字
+- 直接说你看到了什么，不要绕弯`;
+  }
+
+  getMarketDisplayName(index) {
+    const names = {
+      'SPX500': '标普500', 'NASDAQ100': '纳斯达克100', 'DJ30': '道琼斯30',
+      'NIKKEI225': '日经225', 'IBEX35': '西班牙IBEX35', 'DAX40': '德国DAX40',
+      'CAC40': '法国CAC40', 'FTSE100': '英国富时100', 'EURO50': '欧洲斯托克50',
+      'HSI': '香港恒生指数', 'CSI300': '沪深300', 'NIFTY50': '印度Nifty50',
+      'TSX': '加拿大TSX', 'AS200': '澳洲ASX200', 'KOSPI': '韩国KOSPI',
+      'CRYPTO': '加密货币', 'FTSE': '英国富时', 'DAX': '德国DAX'
+    };
+    return names[index] || index;
   }
 
   getSectorSpecificDrivers(marketContext) {
