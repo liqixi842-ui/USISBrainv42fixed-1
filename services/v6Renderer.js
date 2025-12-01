@@ -44,7 +44,7 @@ function buildV6ReportData(premiumContent, options = {}) {
     meta: {
       brand: options.firmName || meta.brand || 'USIS Research',
       firm: options.firmName || meta.firm || 'USIS Research',
-      analyst: options.analystName || meta.analyst || 'USIS Brain v7.0',
+      analyst: options.analystName || meta.analyst || 'USIS Brain v7.7',
       generated_at: meta.generated_at || new Date().toISOString(),
       version: meta.version || 'V6.0',
       model: meta.model || 'Multi-AI System',

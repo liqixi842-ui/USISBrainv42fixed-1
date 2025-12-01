@@ -104,7 +104,7 @@ async function htmlToPdfWithPuppeteer(htmlContent, options = {}) {
 async function generateV6PdfWithPuppeteer(symbol, language = 'en', options = {}) {
   const {
     firmName = 'USIS Research',
-    analystName = 'USIS Brain v7.0 Multi-AI System',
+    analystName = 'USIS Brain v7.7 Multi-AI System',
     assetType = 'equity'
   } = options;
   

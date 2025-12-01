@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * USIS Brain v7.0 - Report PDF Service
+ * USIS Brain v7.7 - Report PDF Service
  * ═══════════════════════════════════════════════════════════════
  * 
  * 功能：生成机构级 PDF 研报
@@ -101,7 +101,7 @@ async function renderPdfFromReport(report) {
         },
         info: {
           Title: `${report.symbol} · Equity Research Report`,
-          Author: 'USIS Brain v7.0 Multi-AI Research System',
+          Author: 'USIS Brain v7.7 Multi-AI Research System',
           Subject: `Institutional research report for ${report.symbol}`,
           Keywords: 'research, equity, analysis, institutional',
           CreationDate: new Date()
@@ -189,7 +189,7 @@ function renderCoverPage(doc, report) {
   // USIS Brain 标识
   setFont(doc, 'bold', 16);
   doc.fillColor('#000000')
-     .text('USIS Brain v7.0', { align: 'center', width: pageWidth });
+     .text('USIS Brain v7.7', { align: 'center', width: pageWidth });
   
   doc.moveDown(0.3);
   setFont(doc, 'regular', 12);
@@ -404,19 +404,19 @@ function getDisclaimerText(language) {
     en: 
       'This report is for informational purposes only and does not constitute investment advice, a recommendation, ' +
       'or a solicitation to buy or sell any securities. The information contained herein is believed to be reliable ' +
-      'but is not guaranteed as to accuracy or completeness. USIS Brain v7.0 is an AI-powered research system and ' +
+      'but is not guaranteed as to accuracy or completeness. USIS Brain v7.7 is an AI-powered research system and ' +
       'all analysis is generated algorithmically. Past performance is not indicative of future results. Investors ' +
       'should conduct their own research and consult with a qualified financial advisor before making any investment decisions.',
     
     zh:
       '本报告仅供参考，不构成投资建议、推荐或买卖任何证券的招揽。报告中包含的信息被认为是可靠的，但不保证其准确性或完整性。' +
-      'USIS Brain v7.0 是一个 AI 驱动的研究系统，所有分析均由算法生成。过往表现不代表未来结果。投资者在做出任何投资决策之前，' +
+      'USIS Brain v7.7 是一个 AI 驱动的研究系统，所有分析均由算法生成。过往表现不代表未来结果。投资者在做出任何投资决策之前，' +
       '应进行自己的研究并咨询合格的财务顾问。',
     
     es:
       'Este informe es solo con fines informativos y no constituye asesoramiento de inversión, una recomendación ' +
       'o una solicitud para comprar o vender valores. La información contenida en este documento se considera confiable, ' +
-      'pero no se garantiza su exactitud o integridad. USIS Brain v7.0 es un sistema de investigación impulsado por IA ' +
+      'pero no se garantiza su exactitud o integridad. USIS Brain v7.7 es un sistema de investigación impulsado por IA ' +
       'y todos los análisis se generan algorítmicamente. El rendimiento pasado no es indicativo de resultados futuros. ' +
       'Los inversores deben realizar su propia investigación y consultar con un asesor financiero calificado antes de tomar decisiones de inversión.'
   };

@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * USIS Brain v7.0 - News Query Service (On-Demand News Fetching)
+ * USIS Brain v7.7 - News Query Service (On-Demand News Fetching)
  * ═══════════════════════════════════════════════════════════════
  * 
  * Purpose: Fetch and score news for real-time bot queries

@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * USIS Brain v7.0 - News Auto Summarizer
+ * USIS Brain v7.7 - News Auto Summarizer
  * ═══════════════════════════════════════════════════════════════
  * 
  * Purpose: Generate dual-format summaries for news articles

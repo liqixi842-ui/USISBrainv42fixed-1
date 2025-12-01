@@ -135,7 +135,7 @@ async function generateEnhancedPdf(symbol, language = 'en', options = {}) {
   console.log(`   ├─ Charts: ${includeCharts}`);
   console.log(`   ├─ Consensus: ${includeConsensus}`);
   console.log(`   ├─ 🏢 Firm: ${firmName || 'USIS Research (default)'}`);
-  console.log(`   └─ 👤 Analyst: ${analystName || 'USIS Brain v7.0 (default)'}\n`);
+  console.log(`   └─ 👤 Analyst: ${analystName || 'USIS Brain v7.7 (default)'}\n`);
   
   const startTime = Date.now();
   
@@ -257,7 +257,7 @@ async function generateEnhancedPdf(symbol, language = 'en', options = {}) {
  */
 async function renderEnhancedPdf(symbol, language, assets, options) {
   const firmName = options.firm || options.firmName || 'USIS Research';
-  const analystName = options.analyst || options.analystName || 'USIS Brain v7.0 Multi-AI System';
+  const analystName = options.analyst || options.analystName || 'USIS Brain v7.7 Multi-AI System';
   
   console.log(`\n📄 [Phase6Enhancer] Using V6 Puppeteer HTML-to-PDF renderer...`);
   console.log(`   ├─ Firm: ${firmName}`);
@@ -331,7 +331,7 @@ async function renderEnhancedPdfLegacy(symbol, language, assets, options) {
         margins: { top: 50, bottom: 50, left: 60, right: 60 },
         info: {
           Title: `${symbol} · V6 Institutional Equity Research Report`,
-          Author: 'USIS Brain v7.0 Multi-AI Research System',
+          Author: 'USIS Brain v7.7 Multi-AI Research System',
           Subject: `Institutional research report for ${symbol}`,
           Keywords: 'research, equity, analysis, institutional, V6',
           CreationDate: new Date()

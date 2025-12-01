@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- * USIS Brain v7.0 - Premium Report PDF Service (Phase 5)
+ * USIS Brain v7.7 - Premium Report PDF Service (Phase 5)
  * ═══════════════════════════════════════════════════════════════
  * 
  * 功能：包装 v3_dev 机构级研报引擎，提供"Premium"模式
@@ -99,7 +99,7 @@ async function generatePremiumPdf(symbol, language = 'en', options = {}) {
     const brandOptions = {
       brand: options.brand || 'USIS Research',
       firm: options.firm || 'USIS Research Division',
-      analyst: options.analyst || 'USIS Brain v7.0 Multi-AI System',
+      analyst: options.analyst || 'USIS Brain v7.7 Multi-AI System',
       lang: language
     };
     

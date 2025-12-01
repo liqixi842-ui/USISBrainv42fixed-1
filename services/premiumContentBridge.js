@@ -22,7 +22,7 @@ const { buildResearchReport } = require('../v3_dev/services/reportService.js');
 async function getPremiumContent(symbol, language = 'en', options = {}) {
   const {
     assetType = 'equity',
-    brand = 'USIS Brain v7.0',
+    brand = 'USIS Brain v7.7',
     firm = 'USIS Research Division',
     analyst = 'Multi-AI System',
     symbolMetadata = {}
