@@ -280,7 +280,7 @@ class MultiAIProvider {
     const userMessages = messages.filter(msg => msg.role !== 'system');
 
     const requestBody = {
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: options.maxTokens || 4096,
       temperature: options.temperature || 0.7,
       messages: userMessages.map(msg => ({

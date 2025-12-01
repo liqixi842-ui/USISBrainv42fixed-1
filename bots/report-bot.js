@@ -438,14 +438,44 @@ async function handleReportPdf(args, chatId, bot, message, flags = {}) {
   
   try {
     // ═══ STEP 1: 参数解析 ═══
-    // ✅ 优先使用 flags 中的明确值，避免 symbol 被错误解析
-    let symbol = flags.symbol || (args.length > 0 ? args[0] : null);
-    let language = flags.language || (args.length > 1 ? args[1] : 'en');
+    // 🆕 v7.7.2: 智能参数解析 - 过滤掉无效值如 "PDF", "pro", 语言代码等
+    const INVALID_SYMBOLS = ['pdf', 'pro', 'premium', 'basic', 'en', 'zh', 'es', 'chinese', 'english', 'spanish'];
+    const VALID_LANGUAGES = ['en', 'zh', 'es'];
+    
+    // 从 args 中找到第一个有效的股票代码
+    let symbol = flags.symbol || null;
+    let language = flags.language || 'en';
+    
+    if (!symbol && args.length > 0) {
+      // 遍历 args，找到第一个看起来像股票代码的参数
+      for (const arg of args) {
+        const argLower = arg.toLowerCase();
+        
+        // 跳过无效值
+        if (INVALID_SYMBOLS.includes(argLower)) {
+          console.log(`[DEBUG report-bot] Skipping invalid symbol: ${arg}`);
+          continue;
+        }
+        
+        // 检查是否是语言代码
+        if (VALID_LANGUAGES.includes(argLower)) {
+          language = argLower;
+          continue;
+        }
+        
+        // 找到第一个有效的股票代码
+        if (!symbol && /^[A-Z0-9.:]{1,15}$/i.test(arg)) {
+          symbol = arg.toUpperCase();
+          console.log(`[DEBUG report-bot] Found valid symbol: ${symbol}`);
+        }
+      }
+    }
     
     console.log(`[DEBUG report-bot] BEFORE validation:`);
     console.log(`   - symbol = ${symbol}`);
     console.log(`   - language = ${language}`);
     console.log(`   - flags = ${JSON.stringify(flags)}`);
+    console.log(`   - raw args = ${JSON.stringify(args)}`);
     
     // 检查 symbol 是否存在
     if (!symbol) {

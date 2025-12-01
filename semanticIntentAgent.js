@@ -490,13 +490,39 @@ function parseResearchReportCommand(userText) {
     return null;
   }
   
-  // 提取参数（带默认值）
-  const symbolInput = parts[0] || '';
-  const firm = (parts[1] || 'USIS Research Division').trim();
-  const analyst = (parts[2] || 'System (USIS Brain)').trim();
-  const langRaw = (parts[3] || '英文').toLowerCase().trim();
-  const modelName = (parts[4] || '').trim(); // 🆕 v7.7: 自定义模型名称 (e.g., 北极光量化)
-  const versionNumber = (parts[5] || '').trim(); // 🆕 v7.7: 自定义版本号 (e.g., v7)
+  // 🆕 v7.7.2: 智能提取股票代码 - 跳过无效值如 "PDF", "pro" 等命令修饰符
+  const INVALID_SYMBOLS = ['pdf', 'pro', 'premium', 'basic', 'text', 'txt'];
+  
+  // 从 parts 中找到第一个有效的股票代码
+  let symbolIndex = 0;
+  let symbolInput = '';
+  
+  for (let i = 0; i < parts.length; i++) {
+    const partLower = parts[i].toLowerCase();
+    if (!INVALID_SYMBOLS.includes(partLower) && /^[A-Z0-9.:]{1,15}$/i.test(parts[i])) {
+      symbolInput = parts[i];
+      symbolIndex = i;
+      console.log(`   ✅ 找到有效股票代码: ${parts[i]} (位置 ${i})`);
+      break;
+    } else if (INVALID_SYMBOLS.includes(partLower)) {
+      console.log(`   ⚠️  跳过无效值: ${parts[i]}`);
+    }
+  }
+  
+  // 如果没找到，使用第一个部分
+  if (!symbolInput) {
+    symbolInput = parts[0] || '';
+    console.log(`   ⚠️  未找到有效股票代码，使用默认: ${symbolInput}`);
+  }
+  
+  // 根据 symbolIndex 调整后续参数的索引
+  // adjustedParts[0] = symbol, adjustedParts[1] = firm, adjustedParts[2] = analyst, etc.
+  const adjustedParts = parts.slice(symbolIndex);
+  const firm = (adjustedParts[1] || 'USIS Research Division').trim();
+  const analyst = (adjustedParts[2] || 'System (USIS Brain)').trim();
+  const langRaw = (adjustedParts[3] || '英文').toLowerCase().trim();
+  const modelName = (adjustedParts[4] || '').trim(); // 🆕 v7.7: 自定义模型名称 (e.g., 北极光量化)
+  const versionNumber = (adjustedParts[5] || '').trim(); // 🆕 v7.7: 自定义版本号 (e.g., v7)
   
   // 🆕 v5.1: 解析符号描述
   const symbolInfo = parseSymbolDescription(symbolInput);
