@@ -223,12 +223,13 @@ function buildStockChartURL(symbol, options = {}) {
           normalizedSymbol = `${normalizedSymbol}.HK`;
           console.log(`🎯 [Symbol Policy] region=HK, using suffix format, input=${symbol}`);
           console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
-          console.log(`📊 [final_symbol_for_tv] "${normalizedSymbol}" → TradingView`);
+          console.log(`📊 [final_symbol_for_tv] "HKEX:${normalizedSymbol.replace('.HK', '')}" → TradingView`);
           
-          // 🆕 v7.0: 香港股票使用 symbols 页面
-          const symbolsUrl = `https://www.tradingview.com/symbols/HKEX-${normalizedSymbol.replace('.HK', '')}/`;
-          console.log(`🔗 [TradingView URL - HK Symbols] ${symbolsUrl}`);
-          return symbolsUrl;
+          // 🆕 v7.7.2: 香港股票使用 chart embed 页面（K线蜡烛图）
+          const hkSymbol = `HKEX:${normalizedSymbol.replace('.HK', '')}`;
+          const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(hkSymbol)}&feature=chart_embed`;
+          console.log(`🔗 [TradingView URL - HK Chart] ${chartUrl}`);
+          return chartUrl;
         }
         // 中国交易所（使用后缀格式）
         else if (hasToken(['cn', 'china', 'shanghai', 'shenzhen', 'sse', 'szse'])) {
@@ -236,12 +237,13 @@ function buildStockChartURL(symbol, options = {}) {
           normalizedSymbol = `${normalizedSymbol}.SS`;
           console.log(`🎯 [Symbol Policy] region=CN, using suffix format, input=${symbol}`);
           console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
-          console.log(`📊 [final_symbol_for_tv] "${normalizedSymbol}" → TradingView`);
+          console.log(`📊 [final_symbol_for_tv] "SSE:${normalizedSymbol.replace('.SS', '')}" → TradingView`);
           
-          // 🆕 v7.0: 中国股票使用 symbols 页面
-          const symbolsUrl = `https://www.tradingview.com/symbols/SSE-${normalizedSymbol.replace('.SS', '')}/`;
-          console.log(`🔗 [TradingView URL - CN Symbols] ${symbolsUrl}`);
-          return symbolsUrl;
+          // 🆕 v7.7.2: 中国股票使用 chart embed 页面（K线蜡烛图）
+          const cnSymbol = `SSE:${normalizedSymbol.replace('.SS', '')}`;
+          const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(cnSymbol)}&feature=chart_embed`;
+          console.log(`🔗 [TradingView URL - CN Chart] ${chartUrl}`);
+          return chartUrl;
         }
         // 美国（明确允许）
         else if (hasToken(['us', 'usa', 'united', 'states', 'nasdaq', 'nyse'])) {
@@ -265,14 +267,13 @@ function buildStockChartURL(symbol, options = {}) {
   // 📊 ChatGPT建议：记录final_symbol_for_tv
   console.log(`📊 [final_symbol_for_tv] "${normalizedSymbol}" → TradingView`);
   
-  // 🆕 v7.0: 使用 symbols 页面格式，显示完整界面（含侧边栏）
-  // 格式: https://www.tradingview.com/symbols/EXCHANGE-SYMBOL/
-  // 例如: BME:COL → EXCHANGE=BME, SYMBOL=COL → /symbols/BME-COL/
-  const [exchange, ticker] = normalizedSymbol.split(':');
-  const symbolsUrl = `https://www.tradingview.com/symbols/${exchange}-${ticker}/`;
+  // 🆕 v7.7.2: 使用 chart embed 页面，显示K线蜡烛图（而非 symbols 页面的线图）
+  // 格式: https://www.tradingview.com/chart/?symbol=EXCHANGE:TICKER&feature=chart_embed
+  // 例如: NASDAQ:IREN → /chart/?symbol=NASDAQ%3AIREN&feature=chart_embed
+  const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(normalizedSymbol)}&feature=chart_embed`;
   
-  console.log(`🔗 [TradingView URL - Symbols Page] ${symbolsUrl}`);
-  return symbolsUrl;
+  console.log(`🔗 [TradingView URL - Chart Embed] ${chartUrl}`);
+  return chartUrl;
 }
 
 /**
