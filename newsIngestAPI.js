@@ -74,6 +74,18 @@ class NewsIngestAPI {
 
       // 3. Save to database
       const newsItemId = await this.saveNewsItem(article, source, tier);
+      
+      // Handle URL conflict (article already exists in DB but not in dedupe cache)
+      if (!newsItemId) {
+        console.log(`⏭️  [Ingest] Skipped - already exists in database`);
+        return {
+          ok: true,
+          action: 'skipped',
+          reason: 'url_exists_in_db',
+          elapsed_ms: Date.now() - startTime
+        };
+      }
+      
       article.id = newsItemId;
 
       // 4. Score the article
@@ -305,11 +317,13 @@ class NewsIngestAPI {
     );
     const sourceId = sourceResult.rows[0].id;
 
-    // Insert news item
+    // Insert news item (with ON CONFLICT to handle race conditions and re-ingestion)
     const newsId = `news_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    await safeQuery(
+    const insertResult = await safeQuery(
       `INSERT INTO news_items (id, source_id, external_id, title, summary, url, published_at, symbols, entities)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (url) DO NOTHING
+       RETURNING id`,
       [
         newsId,
         sourceId,
@@ -322,6 +336,11 @@ class NewsIngestAPI {
         JSON.stringify(article.entities)
       ]
     );
+
+    // If conflict, return null to indicate skip
+    if (insertResult.rows.length === 0) {
+      return null;
+    }
 
     return newsId;
   }
