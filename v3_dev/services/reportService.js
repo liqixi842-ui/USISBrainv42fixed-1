@@ -1987,9 +1987,9 @@ DATA PROVIDED:
 - Symbol: ${reportBaseData.symbol}
 - Price: $${reportBaseData.price?.last}
 - PE TTM: ${reportBaseData.valuation?.pe_ttm}
-- Gross Margin: ${reportBaseData.fundamentals?.gross_margin}%
-- Operating Margin: ${reportBaseData.fundamentals?.operating_margin}%
-- ROE: ${reportBaseData.fundamentals?.roe}%
+- Gross Margin: ${reportBaseData.fundamentals?.gross_margin ? reportBaseData.fundamentals.gross_margin.toFixed(1) : 'N/A'}%
+- Operating Margin: ${reportBaseData.fundamentals?.operating_margin ? reportBaseData.fundamentals.operating_margin.toFixed(1) : 'N/A'}%
+- ROE: ${reportBaseData.fundamentals?.roe ? reportBaseData.fundamentals.roe.toFixed(1) : 'N/A'}%
 - Peers: ${reportBaseData.peers?.map(p => p.symbol).join(', ')}
 
 REQUIRED SECTIONS (return as JSON):
