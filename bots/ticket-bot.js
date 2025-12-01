@@ -283,12 +283,20 @@ async function handleTicket(args, chatId, bot, message, options = {}) {
   let statusMsg = null;
   const exchangeHint = options.exchangeHint || null;
   
+  // 🆕 v7.7.3: 智能时间范围检测
+  // - 默认短期（1个月）
+  // - 如果用户说"长线/中长期/长期/long term" → 3个月
+  const messageText = (message.text || '').toLowerCase();
+  const isLongTerm = /长线|中长期|长期|long\s*term|中线|波段/.test(messageText);
+  const chartRange = isLongTerm ? '3M' : '1M';
+  
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   console.log(`🎯 [TICKET] Ticket analysis request`);
   console.log(`   ├─ Args: [${args.join(', ')}]`);
   console.log(`   ├─ Chat ID: ${chatId}`);
   console.log(`   ├─ User: ${message.from?.username || 'unknown'}`);
-  console.log(`   └─ 🌍 Exchange Hint: ${exchangeHint || '(none - default to US)'}`);
+  console.log(`   ├─ 🌍 Exchange Hint: ${exchangeHint || '(none - default to US)'}`);
+  console.log(`   └─ 📅 Chart Range: ${chartRange} (${isLongTerm ? '长线模式' : '短期模式'})`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
   
   try {
@@ -341,7 +349,8 @@ async function handleTicket(args, chatId, bot, message, options = {}) {
     try {
       chartResult = await generateStockChart(symbol, {
         includeVisionAnalysis: true,
-        chartStyle: '1'  // Candlestick chart
+        chartStyle: '1',  // Candlestick chart
+        chartRange: chartRange  // 🆕 v7.7.3: 智能时间范围（1M/3M）
       });
     } catch (chartError) {
       console.error(`❌ [TICKET] Chart generation failed: ${chartError.message}`);

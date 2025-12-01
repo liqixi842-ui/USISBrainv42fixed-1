@@ -149,7 +149,8 @@ function buildStockChartURL(symbol, options = {}) {
     studies = 'BB@tv-basicstudies,MACD@tv-basicstudies', // 布林带+MACD
     locale = 'en',
     exchangeInfo = null,   // 🆕 智能分析师：使用API查询的真实交易所信息
-    exchangePreference = null  // 🆕 v6.2: 交易所偏好（用于降级模式）
+    exchangePreference = null,  // 🆕 v6.2: 交易所偏好（用于降级模式）
+    chartRange = '1M'      // 🆕 v7.7.3: 图表时间范围（1M=1个月短期, 3M=3个月中期）
   } = options;
   
   // 标准化symbol格式
@@ -225,10 +226,10 @@ function buildStockChartURL(symbol, options = {}) {
           console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
           console.log(`📊 [final_symbol_for_tv] "HKEX:${normalizedSymbol.replace('.HK', '')}" → TradingView`);
           
-          // 🆕 v7.7.3: 香港股票使用 chart embed 页面（K线蜡烛图，3个月短期）
+          // 🆕 v7.7.3: 香港股票使用 chart embed 页面（K线蜡烛图）
           const hkSymbol = `HKEX:${normalizedSymbol.replace('.HK', '')}`;
-          const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(hkSymbol)}&interval=D&range=3M`;
-          console.log(`🔗 [TradingView URL - HK Chart 3M] ${chartUrl}`);
+          const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(hkSymbol)}&interval=D&range=${chartRange}`;
+          console.log(`🔗 [TradingView URL - HK Chart ${chartRange}] ${chartUrl}`);
           return chartUrl;
         }
         // 中国交易所（使用后缀格式）
@@ -239,10 +240,10 @@ function buildStockChartURL(symbol, options = {}) {
           console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
           console.log(`📊 [final_symbol_for_tv] "SSE:${normalizedSymbol.replace('.SS', '')}" → TradingView`);
           
-          // 🆕 v7.7.3: 中国股票使用 chart embed 页面（K线蜡烛图，3个月短期）
+          // 🆕 v7.7.3: 中国股票使用 chart embed 页面（K线蜡烛图）
           const cnSymbol = `SSE:${normalizedSymbol.replace('.SS', '')}`;
-          const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(cnSymbol)}&interval=D&range=3M`;
-          console.log(`🔗 [TradingView URL - CN Chart 3M] ${chartUrl}`);
+          const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(cnSymbol)}&interval=D&range=${chartRange}`;
+          console.log(`🔗 [TradingView URL - CN Chart ${chartRange}] ${chartUrl}`);
           return chartUrl;
         }
         // 美国（明确允许）
@@ -267,13 +268,12 @@ function buildStockChartURL(symbol, options = {}) {
   // 📊 ChatGPT建议：记录final_symbol_for_tv
   console.log(`📊 [final_symbol_for_tv] "${normalizedSymbol}" → TradingView`);
   
-  // 🆕 v7.7.3: 使用 chart embed 页面，显示K线蜡烛图（3个月短期视图）
-  // 格式: https://www.tradingview.com/chart/?symbol=EXCHANGE:TICKER&interval=D&range=3M
-  // 例如: NASDAQ:IREN → /chart/?symbol=NASDAQ%3AIREN&interval=D&range=3M
-  // range=3M 只显示最近3个月数据，更聚焦短期走势
-  const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(normalizedSymbol)}&interval=D&range=3M`;
+  // 🆕 v7.7.3: 使用 chart embed 页面，显示K线蜡烛图
+  // 格式: https://www.tradingview.com/chart/?symbol=EXCHANGE:TICKER&interval=D&range=1M/3M
+  // 默认1M（短期），用户说"长线"时使用3M
+  const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(normalizedSymbol)}&interval=D&range=${chartRange}`;
   
-  console.log(`🔗 [TradingView URL - Chart 3M] ${chartUrl}`);
+  console.log(`🔗 [TradingView URL - Chart ${chartRange}] ${chartUrl}`);
   return chartUrl;
 }
 
