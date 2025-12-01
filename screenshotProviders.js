@@ -370,7 +370,7 @@ async function captureWithBrowserlessTv(symbolForTv) {
 
 /**
  * 🆕 国际市场热力图专用 Browserless 截图
- * 使用 Puppeteer 渲染 TradingView，注入 hash 配置
+ * 使用 TradingView 嵌入式小部件（setContent API）直接渲染
  * @param {string} marketIndex - 市场指数代码 (TSX, DAX, FTSE, CAC40, AS51, KOSPI 等)
  * @returns {Promise<Object>} 截图结果
  */
@@ -381,193 +381,86 @@ async function captureInternationalHeatmap(marketIndex) {
     return null;
   }
 
-  // TradingView 热力图 hash 配置（每个市场的参数）
-  const marketConfigs = {
-    'TSX': {
-      dataSource: 'TSX60',
-      grouping: 'sector',
-      blockSize: 'market_cap_basic',
-      blockColor: 'change',
-      locale: 'en',
-      symbolUrl: '',
-      colorTheme: 'dark',
-      hasTopBar: false,
-      isDataSet498: false,
-      isZoomEnabled: true,
-      hasSymbolTooltip: true,
-      isMonoSize: false
-    },
-    'DAX': {
-      dataSource: 'DAX40',
-      grouping: 'sector',
-      blockSize: 'market_cap_basic',
-      blockColor: 'change',
-      locale: 'en',
-      symbolUrl: '',
-      colorTheme: 'dark',
-      hasTopBar: false,
-      isDataSetEnabled: false,
-      isZoomEnabled: true,
-      hasSymbolTooltip: true,
-      isMonoSize: false
-    },
-    'DAX40': { /* 同 DAX */ },
-    'FTSE': {
-      dataSource: 'FTSE100',
-      grouping: 'sector',
-      blockSize: 'market_cap_basic',
-      blockColor: 'change',
-      locale: 'en',
-      symbolUrl: '',
-      colorTheme: 'dark',
-      hasTopBar: false,
-      isDataSetEnabled: false,
-      isZoomEnabled: true,
-      hasSymbolTooltip: true,
-      isMonoSize: false
-    },
-    'FTSE100': { /* 同 FTSE */ },
-    'CAC40': {
-      dataSource: 'CAC40',
-      grouping: 'sector',
-      blockSize: 'market_cap_basic',
-      blockColor: 'change',
-      locale: 'en',
-      symbolUrl: '',
-      colorTheme: 'dark',
-      hasTopBar: false,
-      isDataSetEnabled: false,
-      isZoomEnabled: true,
-      hasSymbolTooltip: true,
-      isMonoSize: false
-    },
-    'AS51': {
-      dataSource: 'ASX200',
-      grouping: 'sector',
-      blockSize: 'market_cap_basic',
-      blockColor: 'change',
-      locale: 'en',
-      symbolUrl: '',
-      colorTheme: 'dark',
-      hasTopBar: false,
-      isDataSetEnabled: false,
-      isZoomEnabled: true,
-      hasSymbolTooltip: true,
-      isMonoSize: false
-    },
-    'AS200': { /* 同 AS51 */ },
-    'KOSPI': {
-      dataSource: 'KOSPI',
-      grouping: 'sector',
-      blockSize: 'market_cap_basic',
-      blockColor: 'change',
-      locale: 'en',
-      symbolUrl: '',
-      colorTheme: 'dark',
-      hasTopBar: false,
-      isDataSetEnabled: false,
-      isZoomEnabled: true,
-      hasSymbolTooltip: true,
-      isMonoSize: false
-    },
-    'NIKKEI225': {
-      dataSource: 'NI225',
-      grouping: 'sector',
-      blockSize: 'market_cap_basic',
-      blockColor: 'change',
-      locale: 'en',
-      symbolUrl: '',
-      colorTheme: 'dark',
-      hasTopBar: false,
-      isDataSetEnabled: false,
-      isZoomEnabled: true,
-      hasSymbolTooltip: true,
-      isMonoSize: false
-    },
-    'IBEX35': {
-      dataSource: 'IBEX35',
-      grouping: 'sector',
-      blockSize: 'market_cap_basic',
-      blockColor: 'change',
-      locale: 'en',
-      symbolUrl: '',
-      colorTheme: 'dark',
-      hasTopBar: false,
-      isDataSetEnabled: false,
-      isZoomEnabled: true,
-      hasSymbolTooltip: true,
-      isMonoSize: false
-    }
+  // TradingView 小部件 dataSource 映射
+  const datasetMap = {
+    'TSX': 'TSX60',         // 加拿大 TSX 60
+    'DAX': 'DAX',           // 德国 DAX
+    'DAX40': 'DAX',
+    'FTSE': 'FTSE100',      // 英国富时100
+    'FTSE100': 'FTSE100',
+    'CAC40': 'CAC40',       // 法国 CAC40
+    'AS51': 'ASX200',       // 澳洲 ASX200
+    'AS200': 'ASX200',
+    'KOSPI': 'KOSPI',       // 韩国 KOSPI
+    'NIKKEI225': 'NIKKEI225', // 日经225
+    'IBEX35': 'IBEX35'      // 西班牙 IBEX35
   };
 
-  // 复制别名
-  marketConfigs['DAX40'] = marketConfigs['DAX'];
-  marketConfigs['FTSE100'] = marketConfigs['FTSE'];
-  marketConfigs['AS200'] = marketConfigs['AS51'];
-
-  const config = marketConfigs[marketIndex];
-  if (!config) {
+  const dataset = datasetMap[marketIndex];
+  if (!dataset) {
     console.log(`⚠️  [国际热力图] 未知市场 ${marketIndex}，使用默认配置`);
     return null;
   }
 
-  const hashConfig = encodeURIComponent(JSON.stringify(config));
-  const targetUrl = `https://www.tradingview.com/heatmap/stock/#${hashConfig}`;
-  
-  console.log(`\n📸 [Browserless 国际热力图] 开始截图: ${marketIndex}`);
-  console.log(`🔗 [目标URL] ${targetUrl.substring(0, 100)}...`);
+  console.log(`\n📸 [Browserless Widget] 开始渲染国际热力图: ${marketIndex} → ${dataset}`);
+
+  // 构建 TradingView 嵌入式小部件 HTML
+  const widgetHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1e222d; }
+    .tradingview-widget-container { width: 100vw; height: 100vh; }
+    .tradingview-widget-container__widget { width: 100%; height: 100%; }
+    .tradingview-widget-copyright { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="tradingview-widget-container">
+    <div class="tradingview-widget-container__widget"></div>
+    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js" async>
+    {
+      "exchanges": [],
+      "dataSource": "${dataset}",
+      "grouping": "sector",
+      "blockSize": "market_cap_basic",
+      "blockColor": "change",
+      "locale": "en",
+      "symbolUrl": "",
+      "colorTheme": "dark",
+      "hasTopBar": true,
+      "isDataSetEnabled": false,
+      "isZoomEnabled": true,
+      "hasSymbolTooltip": true,
+      "width": "100%",
+      "height": "100%"
+    }
+    </script>
+  </div>
+</body>
+</html>`;
 
   try {
-    // Browserless /screenshot API with JavaScript execution
+    // Browserless /screenshot API with setContent (直接渲染 HTML)
     const payload = {
-      url: 'https://www.tradingview.com/heatmap/stock/',
+      html: widgetHtml,
       options: { 
         fullPage: false, 
-        type: 'png',
-        clip: {
-          x: 0,
-          y: 0,
-          width: 1920,
-          height: 1080
-        }
+        type: 'png'
       },
       viewport: {
-        width: 1920,
-        height: 1080,
+        width: 1600,
+        height: 900,
         deviceScaleFactor: 1
       },
       gotoOptions: { 
-        waitUntil: 'networkidle0', 
-        timeout: 30000 
+        waitUntil: 'networkidle0',  // 等待所有网络请求完成
+        timeout: 45000 
       },
-      // 关键：在页面加载后注入 hash 并等待热力图渲染
-      addScriptTag: [{
-        content: `
-          // 设置 hash 参数
-          window.location.hash = '${hashConfig}';
-          
-          // 等待热力图容器出现
-          function waitForHeatmap() {
-            return new Promise((resolve) => {
-              const checkInterval = setInterval(() => {
-                const heatmap = document.querySelector('.tv-heatmap, [class*="heatmap"], canvas');
-                if (heatmap) {
-                  clearInterval(checkInterval);
-                  // 额外等待渲染完成
-                  setTimeout(resolve, 2000);
-                }
-              }, 500);
-              // 最多等待 15 秒
-              setTimeout(() => {
-                clearInterval(checkInterval);
-                resolve();
-              }, 15000);
-            });
-          }
-          waitForHeatmap();
-        `
-      }],
-      waitForTimeout: 8000  // 额外等待确保渲染完成
+      waitForTimeout: 8000  // 额外等待小部件渲染完成
     };
 
     const startTime = Date.now();
@@ -576,7 +469,7 @@ async function captureInternationalHeatmap(marketIndex) {
       payload,
       { 
         responseType: 'arraybuffer', 
-        timeout: 60000,
+        timeout: 70000,
         headers: { 'Content-Type': 'application/json' }
       }
     );
@@ -584,21 +477,20 @@ async function captureInternationalHeatmap(marketIndex) {
     const buffer = Buffer.from(res.data);
     const elapsed = Date.now() - startTime;
     
-    console.log(`✅ [Browserless 国际热力图] 截图成功: ${marketIndex} (${(buffer.length / 1024).toFixed(2)} KB, ${elapsed}ms)`);
+    console.log(`✅ [Browserless Widget] 截图成功: ${marketIndex} (${(buffer.length / 1024).toFixed(2)} KB, ${elapsed}ms)`);
 
     return {
       success: true,
       buffer: buffer,
-      provider: 'browserless-intl-heatmap',
+      provider: 'browserless-widget-heatmap',
       validation: 'browserless',
       market: marketIndex,
       elapsed_ms: elapsed
     };
 
   } catch (error) {
-    console.error(`❌ [Browserless 国际热力图] 截图失败: ${error.message}`);
+    console.error(`❌ [Browserless Widget] 截图失败: ${error.message}`);
     
-    // 详细错误日志
     if (error.response) {
       console.error(`   HTTP ${error.response.status}: ${error.response.statusText}`);
       if (error.response.data) {
