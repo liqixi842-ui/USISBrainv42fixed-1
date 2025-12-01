@@ -24,6 +24,17 @@ async function analyzeChartImage(imageBuffer, userContext = '') {
   try {
     const base64Image = imageBuffer.toString('base64');
     
+    // 自动检测图片 MIME 类型
+    let mimeType = 'image/jpeg'; // 默认 JPEG（Telegram 最常见）
+    if (imageBuffer[0] === 0x89 && imageBuffer[1] === 0x50) {
+      mimeType = 'image/png';
+    } else if (imageBuffer[0] === 0x47 && imageBuffer[1] === 0x49) {
+      mimeType = 'image/gif';
+    } else if (imageBuffer[0] === 0x52 && imageBuffer[1] === 0x49) {
+      mimeType = 'image/webp';
+    }
+    console.log(`   ├─ MIME 类型: ${mimeType}`);
+    
     // 构建分析提示词
     const systemPrompt = buildChartAnalysisPrompt(userContext);
     
@@ -39,7 +50,7 @@ async function analyzeChartImage(imageBuffer, userContext = '') {
           {
             type: 'image_url',
             image_url: {
-              url: `data:image/png;base64,${base64Image}`,
+              url: `data:${mimeType};base64,${base64Image}`,
               detail: 'high'
             }
           }
