@@ -225,10 +225,10 @@ function buildStockChartURL(symbol, options = {}) {
           console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
           console.log(`📊 [final_symbol_for_tv] "HKEX:${normalizedSymbol.replace('.HK', '')}" → TradingView`);
           
-          // 🆕 v7.7.2: 香港股票使用 chart embed 页面（K线蜡烛图）
+          // 🆕 v7.7.3: 香港股票使用 chart embed 页面（K线蜡烛图，3个月短期）
           const hkSymbol = `HKEX:${normalizedSymbol.replace('.HK', '')}`;
-          const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(hkSymbol)}&feature=chart_embed`;
-          console.log(`🔗 [TradingView URL - HK Chart] ${chartUrl}`);
+          const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(hkSymbol)}&interval=D&range=3M`;
+          console.log(`🔗 [TradingView URL - HK Chart 3M] ${chartUrl}`);
           return chartUrl;
         }
         // 中国交易所（使用后缀格式）
@@ -239,10 +239,10 @@ function buildStockChartURL(symbol, options = {}) {
           console.log(`   ⚠️  [降级模式] ${symbol} → ${normalizedSymbol} (未查询API)`);
           console.log(`📊 [final_symbol_for_tv] "SSE:${normalizedSymbol.replace('.SS', '')}" → TradingView`);
           
-          // 🆕 v7.7.2: 中国股票使用 chart embed 页面（K线蜡烛图）
+          // 🆕 v7.7.3: 中国股票使用 chart embed 页面（K线蜡烛图，3个月短期）
           const cnSymbol = `SSE:${normalizedSymbol.replace('.SS', '')}`;
-          const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(cnSymbol)}&feature=chart_embed`;
-          console.log(`🔗 [TradingView URL - CN Chart] ${chartUrl}`);
+          const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(cnSymbol)}&interval=D&range=3M`;
+          console.log(`🔗 [TradingView URL - CN Chart 3M] ${chartUrl}`);
           return chartUrl;
         }
         // 美国（明确允许）
@@ -267,12 +267,13 @@ function buildStockChartURL(symbol, options = {}) {
   // 📊 ChatGPT建议：记录final_symbol_for_tv
   console.log(`📊 [final_symbol_for_tv] "${normalizedSymbol}" → TradingView`);
   
-  // 🆕 v7.7.2: 使用 chart embed 页面，显示K线蜡烛图（而非 symbols 页面的线图）
-  // 格式: https://www.tradingview.com/chart/?symbol=EXCHANGE:TICKER&feature=chart_embed
-  // 例如: NASDAQ:IREN → /chart/?symbol=NASDAQ%3AIREN&feature=chart_embed
-  const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(normalizedSymbol)}&feature=chart_embed`;
+  // 🆕 v7.7.3: 使用 chart embed 页面，显示K线蜡烛图（3个月短期视图）
+  // 格式: https://www.tradingview.com/chart/?symbol=EXCHANGE:TICKER&interval=D&range=3M
+  // 例如: NASDAQ:IREN → /chart/?symbol=NASDAQ%3AIREN&interval=D&range=3M
+  // range=3M 只显示最近3个月数据，更聚焦短期走势
+  const chartUrl = `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(normalizedSymbol)}&interval=D&range=3M`;
   
-  console.log(`🔗 [TradingView URL - Chart Embed] ${chartUrl}`);
+  console.log(`🔗 [TradingView URL - Chart 3M] ${chartUrl}`);
   return chartUrl;
 }
 
