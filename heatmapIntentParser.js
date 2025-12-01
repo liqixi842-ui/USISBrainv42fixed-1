@@ -647,32 +647,22 @@ function buildTradingViewURL(query) {
     return url;
   }
   
-  // 🆕 加拿大市场 - 暂时使用 TradingView 默认页面（国际市场截图支持开发中）
-  if (index === 'TSX') {
-    console.log('🍁 使用加拿大市场 - TradingView (默认视图)');
-    // 注：TradingView hash参数在截图服务中不生效，暂时显示默认热力图
-    // 未来需要配置N8N支持JavaScript渲染
-    const url = 'https://www.tradingview.com/heatmap/stock/';
-    console.log(`🔗 [TradingView URL - Default] ${url}`);
-    console.log(`⚠️  [注意] 加拿大TSX热力图暂不支持，显示默认美股热力图`);
-    return url;
-  }
-  
-  // 🆕 德国/英国/法国/澳洲/韩国市场 - 暂时使用 TradingView 默认页面
-  // 注：国际市场截图需要N8N配置JavaScript渲染支持
-  const intlMarkets = ['DAX', 'DAX40', 'FTSE', 'FTSE100', 'CAC40', 'AS51', 'AS200', 'KOSPI'];
+  // 🆕 国际市场 - 由 Browserless 智能路由处理
+  // screenshotProviders.js 中的 captureHeatmapRouter 会根据 marketIndex 选择正确的渲染方式
+  const intlMarkets = ['TSX', 'DAX', 'DAX40', 'FTSE', 'FTSE100', 'CAC40', 'AS51', 'AS200', 'KOSPI'];
   if (intlMarkets.includes(index)) {
     const marketLabels = {
+      'TSX': '🍁 加拿大TSX',
       'DAX': '🇩🇪 德国DAX', 'DAX40': '🇩🇪 德国DAX',
       'FTSE': '🇬🇧 英国FTSE', 'FTSE100': '🇬🇧 英国FTSE',
       'CAC40': '🇫🇷 法国CAC', 
       'AS51': '🇦🇺 澳洲ASX', 'AS200': '🇦🇺 澳洲ASX',
       'KOSPI': '🇰🇷 韩国KOSPI'
     };
-    console.log(`${marketLabels[index] || index} - 使用 TradingView 默认视图`);
-    console.log(`⚠️  [注意] ${index}专属热力图暂不支持，显示默认美股热力图`);
+    console.log(`${marketLabels[index] || index} - 使用 Browserless 渲染通道`);
+    // 返回基础 URL，实际渲染由 captureHeatmapRouter 通过 Browserless + hash 注入完成
     const url = 'https://www.tradingview.com/heatmap/stock/';
-    console.log(`🔗 [TradingView URL - Default] ${url}`);
+    console.log(`🔗 [TradingView URL] ${url} (Browserless 将注入 ${index} 配置)`);
     return url;
   }
   
@@ -749,24 +739,15 @@ function generateHeatmapSummary(query) {
   
   let summary = '';
   
-  // 国际市场暂不支持的提示
-  const unsupportedMarkets = ['TSX', 'DAX', 'DAX40', 'FTSE', 'FTSE100', 'CAC40', 'AS51', 'AS200', 'KOSPI'];
-  const isUnsupportedMarket = unsupportedMarkets.includes(index);
-  
   if (isChinese) {
     summary = `📊 ${indexName} 实时热力图\n\n`;
-    
-    // 国际市场提示
-    if (isUnsupportedMarket) {
-      summary += `⚠️ 注意：${indexName}专属热力图暂不支持，当前显示标普500热力图作为参考。\n\n`;
-    }
     
     if (sector && sector !== 'AUTO') {
       const sectorName = SECTOR_CN_NAMES[sector] || sector;
       summary += `🎯 聚焦板块：${sectorName}\n`;
-      summary += `当前热力图展示了${isUnsupportedMarket ? '标普500' : indexName}成分股的实时表现，其中${sectorName}板块的相对强弱值得关注。\n\n`;
+      summary += `当前热力图展示了${indexName}成分股的实时表现，其中${sectorName}板块的相对强弱值得关注。\n\n`;
     } else {
-      summary += `当前热力图展示了${isUnsupportedMarket ? '标普500' : indexName}所有成分股的实时表现，可直观观察各板块涨跌分布。\n\n`;
+      summary += `当前热力图展示了${indexName}所有成分股的实时表现，可直观观察各板块涨跌分布。\n\n`;
     }
     
     summary += `💡 使用提示：\n`;

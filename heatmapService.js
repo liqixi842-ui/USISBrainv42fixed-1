@@ -3,7 +3,7 @@
 // 新增：GPT-4o视觉分析 + 增强数据经纪人 + 专业报告生成
 
 const { extractHeatmapQueryRulesOnly, buildTradingViewURL, generateHeatmapSummary, generateCaption } = require("./heatmapIntentParser");
-const { captureHeatmapSmart } = require('./screenshotProviders');
+const { captureHeatmapSmart, captureHeatmapRouter } = require('./screenshotProviders');
 const { generateWithGPT5 } = require('./gpt5Brain');
 const VisionAnalyzer = require('./visionAnalyzer');
 const EnhancedDataBroker = require('./enhancedDataBroker');
@@ -98,20 +98,29 @@ async function generateSmartHeatmap(userText) {
       throw new Error(`防串台失败：西班牙地区必须使用IBEX35，当前为${query.index}`);
     }
     
-    // 2️⃣ 使用可插拔Provider系统截图（n8n → Browserless）
+    // 2️⃣ 使用可插拔Provider系统截图（美国→N8N，国际→Browserless）
     try {
-      // 创建超时Promise（35秒，略长于Provider的30秒）
+      // 国际市场需要更长超时（Browserless 渲染 + JavaScript 执行）
+      const intlMarkets = ['TSX', 'DAX', 'DAX40', 'FTSE', 'FTSE100', 'CAC40', 'AS51', 'AS200', 'KOSPI', 'NIKKEI225', 'IBEX35'];
+      const isIntlMarket = intlMarkets.includes(query.index);
+      const timeoutDuration = isIntlMarket ? 65000 : 35000;  // 国际65秒，美国35秒
+      
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('热力图生成超时，请稍后重试')), 35000);
+        setTimeout(() => reject(new Error('热力图生成超时，请稍后重试')), timeoutDuration);
       });
       
-      // 创建截图Promise（优先使用精确板块数据集）
-      const screenshotPromise = captureHeatmapSmart({
+      if (isIntlMarket) {
+        console.log(`🌍 [国际市场] ${query.index} - 使用 Browserless 渲染 (超时 ${timeoutDuration/1000}s)`);
+      }
+      
+      // 创建截图Promise（使用智能路由：美国→N8N，国际→Browserless）
+      const screenshotPromise = captureHeatmapRouter({
         tradingViewUrl,
-        dataset: query.dataset || query.index, // 精确板块优先
+        marketIndex: query.index,  // 🆕 传递市场指数用于路由判断
+        dataset: query.dataset || query.index,
         region: query.region,
         sector: query.sector !== 'AUTO' ? query.sector : undefined,
-        sectorName: query.sectorName // 传递板块名称
+        sectorName: query.sectorName
       });
       
       // 使用Promise.race竞争，哪个先完成用哪个

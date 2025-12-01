@@ -368,8 +368,294 @@ async function captureWithBrowserlessTv(symbolForTv) {
   }
 }
 
+/**
+ * 🆕 国际市场热力图专用 Browserless 截图
+ * 使用 Puppeteer 渲染 TradingView，注入 hash 配置
+ * @param {string} marketIndex - 市场指数代码 (TSX, DAX, FTSE, CAC40, AS51, KOSPI 等)
+ * @returns {Promise<Object>} 截图结果
+ */
+async function captureInternationalHeatmap(marketIndex) {
+  const token = process.env.BROWSERLESS_TOKEN;
+  if (!token) {
+    console.error('❌ [国际热力图] BROWSERLESS_TOKEN 未设置，回退到默认美股热力图');
+    return null;
+  }
+
+  // TradingView 热力图 hash 配置（每个市场的参数）
+  const marketConfigs = {
+    'TSX': {
+      dataSource: 'TSX60',
+      grouping: 'sector',
+      blockSize: 'market_cap_basic',
+      blockColor: 'change',
+      locale: 'en',
+      symbolUrl: '',
+      colorTheme: 'dark',
+      hasTopBar: false,
+      isDataSet498: false,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true,
+      isMonoSize: false
+    },
+    'DAX': {
+      dataSource: 'DAX40',
+      grouping: 'sector',
+      blockSize: 'market_cap_basic',
+      blockColor: 'change',
+      locale: 'en',
+      symbolUrl: '',
+      colorTheme: 'dark',
+      hasTopBar: false,
+      isDataSetEnabled: false,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true,
+      isMonoSize: false
+    },
+    'DAX40': { /* 同 DAX */ },
+    'FTSE': {
+      dataSource: 'FTSE100',
+      grouping: 'sector',
+      blockSize: 'market_cap_basic',
+      blockColor: 'change',
+      locale: 'en',
+      symbolUrl: '',
+      colorTheme: 'dark',
+      hasTopBar: false,
+      isDataSetEnabled: false,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true,
+      isMonoSize: false
+    },
+    'FTSE100': { /* 同 FTSE */ },
+    'CAC40': {
+      dataSource: 'CAC40',
+      grouping: 'sector',
+      blockSize: 'market_cap_basic',
+      blockColor: 'change',
+      locale: 'en',
+      symbolUrl: '',
+      colorTheme: 'dark',
+      hasTopBar: false,
+      isDataSetEnabled: false,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true,
+      isMonoSize: false
+    },
+    'AS51': {
+      dataSource: 'ASX200',
+      grouping: 'sector',
+      blockSize: 'market_cap_basic',
+      blockColor: 'change',
+      locale: 'en',
+      symbolUrl: '',
+      colorTheme: 'dark',
+      hasTopBar: false,
+      isDataSetEnabled: false,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true,
+      isMonoSize: false
+    },
+    'AS200': { /* 同 AS51 */ },
+    'KOSPI': {
+      dataSource: 'KOSPI',
+      grouping: 'sector',
+      blockSize: 'market_cap_basic',
+      blockColor: 'change',
+      locale: 'en',
+      symbolUrl: '',
+      colorTheme: 'dark',
+      hasTopBar: false,
+      isDataSetEnabled: false,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true,
+      isMonoSize: false
+    },
+    'NIKKEI225': {
+      dataSource: 'NI225',
+      grouping: 'sector',
+      blockSize: 'market_cap_basic',
+      blockColor: 'change',
+      locale: 'en',
+      symbolUrl: '',
+      colorTheme: 'dark',
+      hasTopBar: false,
+      isDataSetEnabled: false,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true,
+      isMonoSize: false
+    },
+    'IBEX35': {
+      dataSource: 'IBEX35',
+      grouping: 'sector',
+      blockSize: 'market_cap_basic',
+      blockColor: 'change',
+      locale: 'en',
+      symbolUrl: '',
+      colorTheme: 'dark',
+      hasTopBar: false,
+      isDataSetEnabled: false,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true,
+      isMonoSize: false
+    }
+  };
+
+  // 复制别名
+  marketConfigs['DAX40'] = marketConfigs['DAX'];
+  marketConfigs['FTSE100'] = marketConfigs['FTSE'];
+  marketConfigs['AS200'] = marketConfigs['AS51'];
+
+  const config = marketConfigs[marketIndex];
+  if (!config) {
+    console.log(`⚠️  [国际热力图] 未知市场 ${marketIndex}，使用默认配置`);
+    return null;
+  }
+
+  const hashConfig = encodeURIComponent(JSON.stringify(config));
+  const targetUrl = `https://www.tradingview.com/heatmap/stock/#${hashConfig}`;
+  
+  console.log(`\n📸 [Browserless 国际热力图] 开始截图: ${marketIndex}`);
+  console.log(`🔗 [目标URL] ${targetUrl.substring(0, 100)}...`);
+
+  try {
+    // Browserless /screenshot API with JavaScript execution
+    const payload = {
+      url: 'https://www.tradingview.com/heatmap/stock/',
+      options: { 
+        fullPage: false, 
+        type: 'png',
+        clip: {
+          x: 0,
+          y: 0,
+          width: 1920,
+          height: 1080
+        }
+      },
+      viewport: {
+        width: 1920,
+        height: 1080,
+        deviceScaleFactor: 1
+      },
+      gotoOptions: { 
+        waitUntil: 'networkidle0', 
+        timeout: 30000 
+      },
+      // 关键：在页面加载后注入 hash 并等待热力图渲染
+      addScriptTag: [{
+        content: `
+          // 设置 hash 参数
+          window.location.hash = '${hashConfig}';
+          
+          // 等待热力图容器出现
+          function waitForHeatmap() {
+            return new Promise((resolve) => {
+              const checkInterval = setInterval(() => {
+                const heatmap = document.querySelector('.tv-heatmap, [class*="heatmap"], canvas');
+                if (heatmap) {
+                  clearInterval(checkInterval);
+                  // 额外等待渲染完成
+                  setTimeout(resolve, 2000);
+                }
+              }, 500);
+              // 最多等待 15 秒
+              setTimeout(() => {
+                clearInterval(checkInterval);
+                resolve();
+              }, 15000);
+            });
+          }
+          waitForHeatmap();
+        `
+      }],
+      waitForTimeout: 8000  // 额外等待确保渲染完成
+    };
+
+    const startTime = Date.now();
+    const res = await axios.post(
+      `https://production-sfo.browserless.io/screenshot?token=${token}`,
+      payload,
+      { 
+        responseType: 'arraybuffer', 
+        timeout: 60000,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+
+    const buffer = Buffer.from(res.data);
+    const elapsed = Date.now() - startTime;
+    
+    console.log(`✅ [Browserless 国际热力图] 截图成功: ${marketIndex} (${(buffer.length / 1024).toFixed(2)} KB, ${elapsed}ms)`);
+
+    return {
+      success: true,
+      buffer: buffer,
+      provider: 'browserless-intl-heatmap',
+      validation: 'browserless',
+      market: marketIndex,
+      elapsed_ms: elapsed
+    };
+
+  } catch (error) {
+    console.error(`❌ [Browserless 国际热力图] 截图失败: ${error.message}`);
+    
+    // 详细错误日志
+    if (error.response) {
+      console.error(`   HTTP ${error.response.status}: ${error.response.statusText}`);
+      if (error.response.data) {
+        const errText = Buffer.isBuffer(error.response.data) 
+          ? error.response.data.toString('utf8').substring(0, 200)
+          : JSON.stringify(error.response.data).substring(0, 200);
+        console.error(`   响应: ${errText}`);
+      }
+    }
+    
+    return null;
+  }
+}
+
+/**
+ * 🆕 智能热力图截图路由
+ * 根据市场类型选择最佳截图方法
+ * @param {string} tradingViewUrl - 热力图URL
+ * @param {string} marketIndex - 市场指数代码
+ * @param {Object} options - 选项
+ * @returns {Promise<Object>} 截图结果
+ */
+async function captureHeatmapRouter({ tradingViewUrl, marketIndex, timeoutMs = 45000, maxRetries = 2 }) {
+  // 美国市场 - 使用 N8N 快速通道
+  const usMarkets = ['SPX500', 'NASDAQ100', 'DJ30', 'DJI', 'RUT'];
+  
+  if (usMarkets.includes(marketIndex)) {
+    console.log(`🇺🇸 [热力图路由] 美国市场 ${marketIndex} → N8N 通道`);
+    return captureHeatmapSmart({ tradingViewUrl, timeoutMs, maxRetries });
+  }
+  
+  // 国际市场 - 使用 Browserless 渲染通道
+  const intlMarkets = ['TSX', 'DAX', 'DAX40', 'FTSE', 'FTSE100', 'CAC40', 'AS51', 'AS200', 'KOSPI', 'NIKKEI225', 'IBEX35'];
+  
+  if (intlMarkets.includes(marketIndex)) {
+    console.log(`🌍 [热力图路由] 国际市场 ${marketIndex} → Browserless 通道`);
+    
+    const result = await captureInternationalHeatmap(marketIndex);
+    
+    if (result && result.success) {
+      return result;
+    }
+    
+    // Browserless 失败，回退到 N8N（会显示默认美股）
+    console.log(`⚠️  [热力图路由] Browserless 失败，回退 N8N`);
+    return captureHeatmapSmart({ tradingViewUrl, timeoutMs, maxRetries });
+  }
+  
+  // 其他市场 - 默认 N8N
+  console.log(`📊 [热力图路由] 其他市场 ${marketIndex} → N8N 通道`);
+  return captureHeatmapSmart({ tradingViewUrl, timeoutMs, maxRetries });
+}
+
 module.exports = {
   captureHeatmapSmart,
   captureStockChartSmart,
-  captureWithBrowserlessTv
+  captureWithBrowserlessTv,
+  captureInternationalHeatmap,
+  captureHeatmapRouter
 };
