@@ -418,84 +418,83 @@ async function captureInternationalHeatmap(marketIndex) {
   }
 
   try {
-    // Browserless /function API - 执行完整 Puppeteer 脚本
+    // Browserless /function API - 使用 ESM 语法
     const puppeteerCode = `
-      module.exports = async ({ page }) => {
-        const hashConfig = ${JSON.stringify(hashFragment)};
-        const cookieStr = ${JSON.stringify(cookieString)};
-        
-        // 设置 cookies（如果有）
-        if (cookieStr) {
-          const cookies = cookieStr.split(';').map(pair => {
-            const [name, ...rest] = pair.trim().split('=');
-            return { name: name.trim(), value: rest.join('=').trim(), domain: '.tradingview.com' };
-          }).filter(c => c.name && c.value);
-          if (cookies.length > 0) {
-            await page.setCookie(...cookies);
-          }
-        }
-        
-        // 设置视口
-        await page.setViewport({ width: 1920, height: 1080 });
-        
-        // 先访问基础页面（无 hash）
-        await page.goto('https://www.tradingview.com/heatmap/stock/', { 
-          waitUntil: 'networkidle2', 
-          timeout: 30000 
-        });
-        
-        // 等待页面完全加载后设置 hash
-        await page.evaluate((hash) => {
-          window.location.hash = hash;
-        }, hashConfig);
-        
-        // 等待热力图重新加载
-        await new Promise(r => setTimeout(r, 3000));
-        
-        // 等待并关闭任何弹窗
-        try {
-          await page.evaluate(() => {
-            const closeButtons = document.querySelectorAll('.tv-dialog__close, [data-name="close"], button[aria-label="Close"]');
-            closeButtons.forEach(btn => btn.click());
-            // 隐藏弹窗
-            document.querySelectorAll('.tv-dialog, [class*="modal"], [class*="popup"]').forEach(el => {
-              el.style.display = 'none';
-            });
-          });
-        } catch (e) {}
-        
-        // 等待热力图数据加载
-        await page.waitForSelector('.tv-screener-table__result-row, [class*="block-"], canvas, rect', { timeout: 15000 }).catch(() => {});
-        
-        // 额外等待确保渲染完成
-        await new Promise(r => setTimeout(r, 5000));
-        
-        // 隐藏顶部导航栏和广告
-        await page.evaluate(() => {
-          const header = document.querySelector('header, .tv-header, [class*="header"]');
-          if (header) header.style.display = 'none';
-          document.querySelectorAll('[class*="promo"], [class*="banner"], [class*="ad"]').forEach(el => {
-            el.style.display = 'none';
-          });
-        });
-        
-        // 截图热力图区域
-        const screenshot = await page.screenshot({
-          type: 'png',
-          clip: { x: 0, y: 50, width: 1920, height: 950 }
-        });
-        
-        return { data: screenshot.toString('base64'), type: 'screenshot' };
-      };
+export default async function ({ page }) {
+  const hashConfig = ${JSON.stringify(hashFragment)};
+  const cookieStr = ${JSON.stringify(cookieString)};
+  
+  // 设置 cookies（如果有）
+  if (cookieStr) {
+    const cookies = cookieStr.split(';').map(pair => {
+      const [name, ...rest] = pair.trim().split('=');
+      return { name: name.trim(), value: rest.join('=').trim(), domain: '.tradingview.com' };
+    }).filter(c => c.name && c.value);
+    if (cookies.length > 0) {
+      await page.setCookie(...cookies);
+    }
+  }
+  
+  // 设置视口
+  await page.setViewport({ width: 1920, height: 1080 });
+  
+  // 先访问基础页面（无 hash）
+  await page.goto('https://www.tradingview.com/heatmap/stock/', { 
+    waitUntil: 'networkidle2', 
+    timeout: 30000 
+  });
+  
+  // 等待页面完全加载后设置 hash
+  await page.evaluate((hash) => {
+    window.location.hash = hash;
+  }, hashConfig);
+  
+  // 等待热力图重新加载
+  await new Promise(r => setTimeout(r, 3000));
+  
+  // 等待并关闭任何弹窗
+  try {
+    await page.evaluate(() => {
+      const closeButtons = document.querySelectorAll('.tv-dialog__close, [data-name="close"], button[aria-label="Close"]');
+      closeButtons.forEach(btn => btn.click());
+      document.querySelectorAll('.tv-dialog, [class*="modal"], [class*="popup"]').forEach(el => {
+        el.style.display = 'none';
+      });
+    });
+  } catch (e) {}
+  
+  // 等待热力图数据加载
+  await page.waitForSelector('.tv-screener-table__result-row, [class*="block-"], canvas, rect', { timeout: 15000 }).catch(() => {});
+  
+  // 额外等待确保渲染完成
+  await new Promise(r => setTimeout(r, 5000));
+  
+  // 隐藏顶部导航栏和广告
+  await page.evaluate(() => {
+    const header = document.querySelector('header, .tv-header, [class*="header"]');
+    if (header) header.style.display = 'none';
+    document.querySelectorAll('[class*="promo"], [class*="banner"], [class*="ad"]').forEach(el => {
+      el.style.display = 'none';
+    });
+  });
+  
+  // 截图热力图区域
+  const screenshot = await page.screenshot({
+    type: 'png',
+    clip: { x: 0, y: 50, width: 1920, height: 950 }
+  });
+  
+  return { data: screenshot.toString('base64'), type: 'image/png' };
+}
     `;
 
     const startTime = Date.now();
     const res = await axios.post(
       `https://production-sfo.browserless.io/function?token=${token}`,
-      { code: puppeteerCode },
+      puppeteerCode,  // 直接发送代码字符串
       { 
         timeout: 90000,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/javascript' }  // 使用 JavaScript 内容类型
       }
     );
 
@@ -558,15 +557,25 @@ async function captureHeatmapRouter({ tradingViewUrl, marketIndex, timeoutMs = 4
   
   if (intlMarkets.includes(marketIndex)) {
     console.log(`🌍 [热力图路由] 国际市场 ${marketIndex} → Browserless 通道`);
+    console.log(`🔍 [DEBUG] 调用 captureInternationalHeatmap('${marketIndex}')`);
     
-    const result = await captureInternationalHeatmap(marketIndex);
-    
-    if (result && result.success) {
-      return result;
+    try {
+      const result = await captureInternationalHeatmap(marketIndex);
+      
+      console.log(`🔍 [DEBUG] captureInternationalHeatmap 返回:`, result ? `成功 (${result.buffer?.length} bytes)` : 'null');
+      
+      if (result && result.success) {
+        console.log(`✅ [热力图路由] Browserless 成功: ${marketIndex}`);
+        return result;
+      }
+      
+      // Browserless 失败，回退到 N8N（会显示默认美股）
+      console.log(`⚠️  [热力图路由] Browserless 返回 null/失败，回退 N8N`);
+    } catch (browserlessError) {
+      console.error(`❌ [热力图路由] Browserless 异常:`, browserlessError.message);
+      console.log(`⚠️  [热力图路由] 异常后回退 N8N`);
     }
     
-    // Browserless 失败，回退到 N8N（会显示默认美股）
-    console.log(`⚠️  [热力图路由] Browserless 失败，回退 N8N`);
     return captureHeatmapSmart({ tradingViewUrl, timeoutMs, maxRetries });
   }
   
