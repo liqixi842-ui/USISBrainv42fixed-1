@@ -1,47 +1,51 @@
-const { N8NClient } = require('./n8nClient');
+const axios = require('axios');
 
-async function main() {
-  const client = new N8NClient();
+async function checkExecutions() {
+  const apiKey = process.env.N8N_API_KEY;
+  const baseUrl = process.env.N8N_BASE_URL;
+  const workflowId = 'ddvIQQUO4YfR1rAx'; // News RSS Collector v4.0
   
-  console.log('🔍 查询最近的 workflow 执行记录...\n');
-  
-  const workflowId = 'mXF5LoFSPFXzmHft';
+  console.log('🔍 检查 USIS News RSS Collector v4.0 执行历史...\n');
   
   try {
-    const response = await require('node-fetch')(`${client.baseURL}/api/v1/executions?workflowId=${workflowId}&limit=5`, {
-      headers: client.headers
+    // 获取最近的执行记录
+    const res = await axios.get(`${baseUrl}/api/v1/executions`, {
+      headers: { 'X-N8N-API-KEY': apiKey },
+      params: { 
+        workflowId: workflowId,
+        limit: 10
+      },
+      timeout: 15000
     });
     
-    if (!response.ok) {
-      console.error('❌ API 调用失败:', response.status, response.statusText);
-      return;
+    const executions = res.data.data || [];
+    console.log(`📊 最近 ${executions.length} 次执行:\n`);
+    
+    for (const exec of executions) {
+      const status = exec.status === 'success' ? '✅' : (exec.status === 'error' ? '❌' : '⏳');
+      const date = new Date(exec.startedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+      console.log(`${status} ${date} - ${exec.status}`);
+      
+      if (exec.status === 'error' && exec.stoppedAt) {
+        console.log(`   错误: ${exec.data?.resultData?.error?.message || '未知错误'}`);
+      }
     }
     
-    const result = await response.json();
-    const executions = result.data || [];
-    
-    console.log(`📊 找到 ${executions.length} 条执行记录:\n`);
-    
-    executions.forEach((exec, i) => {
-      console.log(`${i + 1}. 执行 ID: ${exec.id}`);
-      console.log(`   ├─ 状态: ${exec.finished ? '✅ 完成' : '❌ 失败'}`);
-      console.log(`   ├─ 模式: ${exec.mode}`);
-      console.log(`   ├─ 开始时间: ${exec.startedAt}`);
-      console.log(`   ├─ 停止时间: ${exec.stoppedAt || 'N/A'}`);
-      
-      if (exec.data) {
-        console.log(`   └─ 节点执行:`);
-        Object.keys(exec.data.resultData || {}).forEach(nodeName => {
-          const nodeData = exec.data.resultData[nodeName];
-          console.log(`       • ${nodeName}: ${nodeData ? nodeData.length + ' 项' : '无数据'}`);
-        });
-      }
-      console.log('');
-    });
+    // 检查最后一次成功执行的时间
+    const lastSuccess = executions.find(e => e.status === 'success');
+    if (lastSuccess) {
+      const lastDate = new Date(lastSuccess.startedAt);
+      const now = new Date();
+      const hoursSince = Math.round((now - lastDate) / (1000 * 60 * 60));
+      console.log(`\n⏰ 距离上次成功执行: ${hoursSince} 小时`);
+    }
     
   } catch (error) {
-    console.error('❌ 查询失败:', error.message);
+    console.error('❌ 错误:', error.message);
+    if (error.response) {
+      console.error('   响应:', JSON.stringify(error.response.data).substring(0, 300));
+    }
   }
 }
 
-main();
+checkExecutions();
