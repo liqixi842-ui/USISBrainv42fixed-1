@@ -647,28 +647,13 @@ function buildTradingViewURL(query) {
     return url;
   }
   
-  // 🆕 加拿大市场 - 使用 TradingView 嵌入式小部件（纯热力图，无广告）
+  // 🆕 加拿大市场 - 使用 Finviz 世界地图（按国家分组，包含加拿大公司）
   if (index === 'TSX') {
-    console.log('🍁 使用加拿大市场 - TradingView Widget');
-    const widgetConfig = {
-      exchanges: [],
-      dataSource: "TSX60",
-      grouping: "sector",
-      blockSize: "market_cap_basic",
-      blockColor: "change",
-      locale: "en",
-      symbolUrl: "",
-      colorTheme: "dark",
-      hasTopBar: false,
-      isDataSetEnabled: false,
-      isZoomEnabled: true,
-      hasSymbolTooltip: true,
-      width: "100%",
-      height: "100%"
-    };
-    const encodedConfig = encodeURIComponent(JSON.stringify(widgetConfig));
-    const url = `https://s.tradingview.com/embed-widget/stock-heatmap/?locale=en#${encodedConfig}`;
-    console.log(`🔗 [TradingView Widget URL - TSX] ${url.substring(0, 80)}...`);
+    console.log('🍁 使用加拿大市场 - Finviz World Map');
+    const cacheBuster = Date.now();
+    // Finviz 世界地图按国家分组显示
+    const url = `https://finviz.com/map.ashx?t=geo&st=w1&v=${cacheBuster}`;
+    console.log(`🔗 [Finviz World Map URL] ${url}`);
     return url;
   }
   
