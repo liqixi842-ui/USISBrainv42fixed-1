@@ -452,16 +452,44 @@ export default async function ({ page }) {
   // 等待热力图重新加载
   await new Promise(r => setTimeout(r, 3000));
   
-  // 等待并关闭任何弹窗
-  try {
-    await page.evaluate(() => {
-      const closeButtons = document.querySelectorAll('.tv-dialog__close, [data-name="close"], button[aria-label="Close"]');
-      closeButtons.forEach(btn => btn.click());
-      document.querySelectorAll('.tv-dialog, [class*="modal"], [class*="popup"]').forEach(el => {
-        el.style.display = 'none';
+  // 等待并关闭任何弹窗（包括促销弹窗）
+  for (let i = 0; i < 3; i++) {
+    try {
+      await page.evaluate(() => {
+        // 关闭所有可能的弹窗按钮
+        const closeSelectors = [
+          '.tv-dialog__close',
+          '[data-name="close"]', 
+          'button[aria-label="Close"]',
+          '.js-dialog__close',
+          '[class*="close-button"]',
+          '[class*="closeBtn"]',
+          'button:has-text("Decline")',
+          'button:has-text("Close")',
+          'button:has-text("No thanks")',
+          '[class*="dialog"] button[class*="secondary"]'
+        ];
+        closeSelectors.forEach(sel => {
+          document.querySelectorAll(sel).forEach(btn => {
+            try { btn.click(); } catch(e) {}
+          });
+        });
+        // 点击 "Decline offer" 按钮
+        document.querySelectorAll('button').forEach(btn => {
+          if (btn.textContent && (btn.textContent.includes('Decline') || btn.textContent.includes('No') || btn.textContent.includes('Close'))) {
+            try { btn.click(); } catch(e) {}
+          }
+        });
+        // 强制隐藏所有弹窗/对话框
+        document.querySelectorAll('.tv-dialog, [class*="modal"], [class*="popup"], [class*="dialog"], [class*="overlay"], [role="dialog"]').forEach(el => {
+          el.style.display = 'none';
+          el.style.visibility = 'hidden';
+          el.remove();
+        });
       });
-    });
-  } catch (e) {}
+      await new Promise(r => setTimeout(r, 500));
+    } catch (e) {}
+  }
   
   // 等待热力图数据加载
   await page.waitForSelector('.tv-screener-table__result-row, [class*="block-"], canvas, rect', { timeout: 15000 }).catch(() => {});
