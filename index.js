@@ -23,18 +23,41 @@ const TelegramBot = require('node-telegram-bot-api');
 const http = require('http');
 
 // ═══════════════════════════════════════════════════════════════
-// HTTP Server for Health Check & Status API
+// HTTP Server for Health Check, Status API & News Ingestion
 // ═══════════════════════════════════════════════════════════════
 
 const HTTP_PORT = process.env.PORT || 5000;
 const startTime = Date.now();
 
-const httpServer = http.createServer((req, res) => {
+// Initialize NewsIngestAPI for N8N webhook
+const { NewsIngestAPI } = require('./newsIngestAPI');
+const newsIngestAPI = new NewsIngestAPI(
+  process.env.TELEGRAM_BOT_TOKEN_DEV,
+  process.env.NEWS_CHANNEL_ID || '-1002292498522'
+);
+
+// Helper to parse JSON body from request
+function parseBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch (e) {
+        reject(new Error('Invalid JSON'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+const httpServer = http.createServer(async (req, res) => {
   const url = req.url;
   
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
   if (req.method === 'OPTIONS') {
@@ -48,7 +71,7 @@ const httpServer = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'healthy',
-      service: 'USIS Brain v7.0',
+      service: 'USIS Brain v7.7',
       timestamp: new Date().toISOString(),
       uptime_seconds: Math.floor((Date.now() - startTime) / 1000)
     }));
@@ -60,7 +83,7 @@ const httpServer = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'running',
-      version: '7.0.0',
+      version: '7.7.2',
       service: 'USIS Brain - Multi-AI Financial Analysis System',
       telegram_bot: 'active',
       modules: {
@@ -71,7 +94,8 @@ const httpServer = http.createServer((req, res) => {
         brief_bot: 'ready',
         deep_report_bot: 'ready',
         supervisor_bot: 'ready',
-        public_bot: 'ready'
+        public_bot: 'ready',
+        news_ingest: 'ready'
       },
       supported_markets: ['US', 'Spain', 'HK', 'UK', 'Germany', 'France', 'Japan', 'Canada', 'Australia'],
       supported_languages: ['en', 'zh', 'es'],
@@ -82,18 +106,42 @@ const httpServer = http.createServer((req, res) => {
     return;
   }
   
+  // 🆕 News Ingestion API - receives news from N8N
+  if (url === '/api/news/ingest' && req.method === 'POST') {
+    try {
+      const newsData = await parseBody(req);
+      console.log(`📰 [API] News ingest request received: ${newsData.title?.substring(0, 50) || 'unknown'}...`);
+      
+      const result = await newsIngestAPI.processNews(newsData);
+      
+      const httpStatus = result.httpStatus || (result.ok ? 200 : 400);
+      res.writeHead(httpStatus, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (error) {
+      console.error('❌ [API] News ingest error:', error.message);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: false,
+        error: error.message,
+        stage: 'api_handler'
+      }));
+    }
+    return;
+  }
+  
   // 404 for other routes
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     error: 'Not Found',
-    available_endpoints: ['/health', '/api/status']
+    available_endpoints: ['/health', '/api/status', '/api/news/ingest (POST)']
   }));
 });
 
 httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
   console.log(`\n🌐 HTTP Server started on port ${HTTP_PORT}`);
   console.log(`   ├─ Health: http://0.0.0.0:${HTTP_PORT}/health`);
-  console.log(`   └─ Status: http://0.0.0.0:${HTTP_PORT}/api/status\n`);
+  console.log(`   ├─ Status: http://0.0.0.0:${HTTP_PORT}/api/status`);
+  console.log(`   └─ News:   http://0.0.0.0:${HTTP_PORT}/api/news/ingest (POST)\n`);
 });
 
 // 导入所有 v7 bot 模块（CommonJS 语法）
