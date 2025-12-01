@@ -201,6 +201,7 @@ ${this.getSectorSpecificDrivers(marketContext)}
       const base64Image = imageBuffer.toString('base64');
       
       // 🔧 P0 FIX: 30秒超时保护，防止长时间等待
+      // 🆕 v7.7.2: 提高temperature避免模板化回复
       const response = await axios.post('https://api.openai.com/v1/chat/completions', {
         model: 'gpt-4o',
         messages: [{
@@ -220,7 +221,7 @@ ${this.getSectorSpecificDrivers(marketContext)}
           ]
         }],
         max_tokens: 2000,
-        temperature: 0.1
+        temperature: 0.4  // 🔧 v7.7.2: 从0.1提高到0.4，生成更自然多样的分析
       }, {
         headers: {
           'Authorization': `Bearer ${this.openaiApiKey}`,
@@ -262,7 +263,15 @@ ${this.getSectorSpecificDrivers(marketContext)}
     const changePercent = marketContext.changePercent || 0;
     const positionContext = marketContext.positionContext || null;
     
-    let prompt = `作为专业技术分析师，对${symbol}的K线图进行深度技术分析。
+    // 🆕 v7.7.2: 增强提示词，强调分析实际图表特征
+    let prompt = `作为专业技术分析师，仔细观察并分析${symbol}的K线图。
+
+⚠️ **核心要求：必须基于图表的实际视觉特征进行分析**
+- 仔细观察K线的形态、颜色、大小
+- 识别图表中的均线走势和交叉点
+- 读取图表显示的实际价格区间
+- 分析成交量柱状图的高低变化
+- 识别任何可见的技术指标数值
 
 ## 当前市场状态
 
@@ -342,14 +351,14 @@ ${this.getSectorSpecificDrivers(marketContext)}
 • 止损位建议
 
 ⚠️ 【重要格式要求】
-1. **支撑/压力位必须给出具体数字**（如$260.00, $270.50），不要用"当前价附近"或"前高"等模糊描述
-2. 如果从图表难以识别精确价格，基于可见的K线高低点估算并说明"约在$XX"
+1. **支撑/压力位必须给出具体数字**（如$260.00, $270.50），基于图表可见的高低点读取
+2. **描述图表中实际看到的内容**，例如："图表显示近5根K线连续收阳"、"MACD柱状图由负转正"
 3. 使用中文符号格式：标题用【】包裹，列表用•开头
 4. 不要使用Markdown符号（如##, ###, **, -, *）
-5. 每个观点必须引用图表具体特征
-6. 提供量化评分和具体价格位
-7. 保持简洁专业的表达，避免模糊表述
-8. 给出明确判断和具体建议`;
+5. **每个观点必须引用图表具体特征**，不能使用通用描述
+6. 不要使用"趋势明确"、"关注趋势延续"等空洞语言，要具体说明看到了什么
+7. 如果图表显示了布林带/MACD/RSI等指标，必须读取并引用其数值
+8. 给出明确判断和具体建议，包含实际价格目标`;
     
     return prompt;
   }
