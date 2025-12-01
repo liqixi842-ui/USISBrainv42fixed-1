@@ -33,7 +33,7 @@ const startTime = Date.now();
 const { NewsIngestAPI } = require('./newsIngestAPI');
 const newsIngestAPI = new NewsIngestAPI(
   process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN_DEV,
-  process.env.NEWS_CHANNEL_ID || '-1002498144498'
+  process.env.NEWS_CHANNEL_ID || '-4997808098'
 );
 
 // Helper to parse JSON body from request
