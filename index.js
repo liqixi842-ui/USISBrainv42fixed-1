@@ -168,7 +168,7 @@ httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
 
 // 导入所有 v7 bot 模块（CommonJS 语法）
 const managerBot = require('./bots/manager-bot.js');
-const { handleTicket } = require('./bots/ticket-bot.js');
+const { handleTicket, handleDeepCallback } = require('./bots/ticket-bot.js');
 const { handleReport, handleReportPdf } = require('./bots/report-bot.js');
 const { handlePublic } = require('./bots/public-bot.js');
 const { handleSupervisor } = require('./bots/supervisor-bot.js');
@@ -736,6 +736,45 @@ bot.on('message', async (message) => {
       );
     } catch (sendError) {
       console.error(`❌ [ENTRY ERROR] Failed to send error message to user:`, sendError.message);
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// 🆕 HDA v2: Callback Query 处理器（深度分析按钮）
+// ═══════════════════════════════════════════════════════════════
+
+bot.on('callback_query', async (query) => {
+  const chatId = query.message?.chat?.id;
+  const data = query.data;
+  
+  console.log(`\n🔘 [CALLBACK] Received callback query`);
+  console.log(`   ├─ Data: ${data}`);
+  console.log(`   ├─ Chat ID: ${chatId}`);
+  console.log(`   └─ User: ${query.from?.username || 'unknown'}`);
+  
+  try {
+    // 检查是否是深度分析回调
+    if (data && data.startsWith('deep_')) {
+      const ticker = data.replace('deep_', '').toUpperCase();
+      console.log(`🔍 [HDA v2] Deep analysis callback for ${ticker}`);
+      
+      await handleDeepCallback(ticker, chatId, bot, query);
+    } else {
+      // 未知回调，简单应答
+      await bot.answerCallbackQuery(query.id, {
+        text: '未知操作'
+      });
+    }
+  } catch (error) {
+    console.error(`❌ [CALLBACK] Error handling callback query: ${error.message}`);
+    
+    try {
+      await bot.answerCallbackQuery(query.id, {
+        text: '操作失败，请重试'
+      });
+    } catch (e) {
+      // Ignore
     }
   }
 });

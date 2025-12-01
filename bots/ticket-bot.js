@@ -22,6 +22,16 @@ const dataBroker = require('../dataBroker');
 const { STATIC_SYMBOL_MAP, lookupSymbol, lookupSymbolFromTwelveData, selectBestMatch } = require('../symbolResolver');
 const fetch = require('node-fetch');
 
+// 🆕 HDA v2: Human Desk Assistant 核心模块
+const {
+  createAnalysisPayload,
+  generateHDAOutput,
+  createDeepAnalysisButton,
+  generateQuickTake,
+  generateDeepTake,
+  formatBilingualOutput
+} = require('../services/hdaV2Core');
+
 // 🆕 v7.0: AI 符号解析缓存（避免重复调用 API）
 const AI_SYMBOL_CACHE = new Map();
 const AI_CACHE_TTL = 24 * 60 * 60 * 1000; // 24小时
@@ -270,12 +280,12 @@ async function resolveTicketSymbol(input, exchangeHint = null) {
 }
 
 /**
- * 解票主处理函数
+ * 解票主处理函数 (HDA v2 升级版)
  * @param {Array} args - 用户输入参数 [symbol, mode]
  * @param {number} chatId - Telegram 聊天室 ID
  * @param {Object} bot - Telegram Bot 实例
  * @param {Object} message - 原始 Telegram 消息对象
- * @param {Object} options - 可选参数 { exchangeHint: string }
+ * @param {Object} options - 可选参数 { exchangeHint: string, hdaMode: 'quick'|'deep' }
  * @returns {Promise<Object>} 解票结果对象
  */
 async function handleTicket(args, chatId, bot, message, options = {}) {
@@ -283,19 +293,26 @@ async function handleTicket(args, chatId, bot, message, options = {}) {
   let statusMsg = null;
   const exchangeHint = options.exchangeHint || null;
   
+  // 🆕 HDA v2: Quick/Deep 模式
+  // - quick: 轻图 + 自然人话 + 深度按钮（默认）
+  // - deep: 深图 + 详细 tape 分析
+  const hdaMode = options.hdaMode || 'quick';
+  
   // 🆕 v7.7.3: 智能时间范围检测
   // - 默认短期（1个月）
   // - 如果用户说"长线/中长期/长期/long term" → 3个月
+  // - Deep 模式使用 3 个月
   const messageText = (message.text || '').toLowerCase();
   const isLongTerm = /长线|中长期|长期|long\s*term|中线|波段/.test(messageText);
-  const chartRange = isLongTerm ? '3M' : '1M';
+  const chartRange = hdaMode === 'deep' ? '3M' : (isLongTerm ? '3M' : '1M');
   
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  console.log(`🎯 [TICKET] Ticket analysis request`);
+  console.log(`🎯 [TICKET] Ticket analysis request (HDA v2)`);
   console.log(`   ├─ Args: [${args.join(', ')}]`);
   console.log(`   ├─ Chat ID: ${chatId}`);
   console.log(`   ├─ User: ${message.from?.username || 'unknown'}`);
   console.log(`   ├─ 🌍 Exchange Hint: ${exchangeHint || '(none - default to US)'}`);
+  console.log(`   ├─ 🎭 HDA Mode: ${hdaMode.toUpperCase()}`);
   console.log(`   └─ 📅 Chart Range: ${chartRange} (${isLongTerm ? '长线模式' : '短期模式'})`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
   
@@ -438,25 +455,61 @@ async function handleTicket(args, chatId, bot, message, options = {}) {
       console.log(`⚠️  [TICKET] Chart was not sent to user`);
     }
     
-    // ═══ STEP 7: 格式化文字分析 ═══
-    // 🔧 关键修复：使用正确的字段名 chartAnalysis（不是 analysis）
-    const ticketData = {
-      symbol: chartResult.symbol || symbol,
-      analysis: chartResult.chartAnalysis || '',  // 🔧 修复：chartAnalysis 不是 analysis
-      price: chartResult.stockData?.currentPrice || chartResult.price,
+    // ═══ STEP 7: HDA v2 分析负载生成 ═══
+    console.log(`🎭 [TICKET] Generating HDA v2 output (${hdaMode} mode)...`);
+    
+    const stockData = {
+      currentPrice: chartResult.stockData?.currentPrice || chartResult.price,
       change: chartResult.stockData?.change || chartResult.change,
       changePercent: chartResult.stockData?.changePercent || chartResult.changePercent
     };
     
-    console.log(`📝 [TICKET] Analysis preview: ${(ticketData.analysis || '').substring(0, 200)}...`);
+    // 准备 legacy 格式数据（用于降级或特定模式）
+    const ticketData = {
+      symbol: chartResult.symbol || symbol,
+      analysis: chartResult.chartAnalysis || '',
+      price: stockData.currentPrice,
+      change: stockData.change,
+      changePercent: stockData.changePercent
+    };
     
-    // 🔍 DEBUG: 追踪双语输出问题
-    console.log(`🔍 [TICKET] Mode before formatTicketMessages: "${mode}"`);
+    let messages = [];
+    let analysisPayload = null;
     
-    const messages = formatTicketMessages(ticketData, mode);
-    
-    console.log(`✅ [TICKET] Generated ${messages.length} message(s) for mode "${mode}"`);
-    console.log(`   └─ Message lengths: ${messages.map(m => m.length).join(', ')} chars`);
+    // 🔧 兼容旧格式（如果用户指定了特定模式）
+    if (mode && mode !== '标准版' && mode !== 'quick' && mode !== 'deep') {
+      // 用户指定了特定输出模式，使用旧格式器
+      messages = formatTicketMessages(ticketData, mode);
+      console.log(`📝 [TICKET] Using legacy formatter for mode "${mode}"`);
+    } else {
+      // 尝试使用 HDA v2 格式
+      try {
+        // 创建分析负载
+        analysisPayload = createAnalysisPayload(symbol, hdaMode, chartResult, stockData);
+        
+        // 🆕 HDA v2: 如果有 Vision AI 分析，使用它增强输出
+        if (chartResult.chartAnalysis) {
+          analysisPayload.vision_analysis = chartResult.chartAnalysis;
+        }
+        
+        // 生成 HDA 自然语言输出
+        const hdaOutput = generateHDAOutput(analysisPayload);
+        
+        console.log(`✅ [TICKET] HDA v2 output generated`);
+        console.log(`   ├─ Mode: ${hdaMode}`);
+        console.log(`   ├─ ZH length: ${hdaOutput.payload.final_output_zh.length} chars`);
+        console.log(`   └─ EN length: ${hdaOutput.payload.final_output_en.length} chars`);
+        
+        messages = [hdaOutput.message];
+        analysisPayload = hdaOutput.payload;
+        console.log(`📝 [TICKET] Using HDA v2 natural language format`);
+      } catch (hdaError) {
+        // HDA 生成失败，降级到 legacy 格式
+        console.error(`⚠️ [TICKET] HDA v2 generation failed, falling back to legacy: ${hdaError.message}`);
+        messages = formatTicketMessages(ticketData, '标准版');
+        console.log(`📝 [TICKET] Fallback to legacy formatter`);
+      }
+    }
     
     // ═══ STEP 8: 发送文字分析 ═══
     for (let i = 0; i < messages.length; i++) {
@@ -464,7 +517,16 @@ async function handleTicket(args, chatId, bot, message, options = {}) {
       console.log(`📤 [TICKET] Sending message ${i + 1}/${messages.length} (${msg.length} chars)`);
       
       try {
-        await bot.sendMessage(chatId, msg);
+        // 🆕 HDA v2: Quick 模式添加深度分析按钮
+        if (hdaMode === 'quick' && i === messages.length - 1) {
+          const inlineKeyboard = createDeepAnalysisButton(symbol);
+          await bot.sendMessage(chatId, msg, {
+            reply_markup: inlineKeyboard
+          });
+          console.log(`🔘 [TICKET] Added inline button for deep analysis`);
+        } else {
+          await bot.sendMessage(chatId, msg);
+        }
         
         // Rate limit protection
         if (i < messages.length - 1) {
@@ -480,7 +542,8 @@ async function handleTicket(args, chatId, bot, message, options = {}) {
     
     console.log(`\n✅ [TICKET] Ticket analysis completed in ${totalDuration} ms`);
     console.log(`   ├─ Symbol: ${symbol}`);
-    console.log(`   ├─ Mode: ${mode}`);
+    console.log(`   ├─ HDA Mode: ${hdaMode.toUpperCase()}`);
+    console.log(`   ├─ Output Mode: ${mode}`);
     console.log(`   ├─ Chart generation: ${chartDuration} ms`);
     console.log(`   ├─ Messages sent: ${messages.length}`);
     console.log(`   └─ Total time: ${totalDuration} ms`);
@@ -489,8 +552,10 @@ async function handleTicket(args, chatId, bot, message, options = {}) {
     return {
       type: 'ticket_result',
       symbol: symbol,
+      hdaMode: hdaMode,
       chartUrl: chartResult.chartUrl,
-      aiText: chartResult.chartAnalysis,  // 🔧 修复字段名
+      aiText: chartResult.chartAnalysis,
+      hdaPayload: analysisPayload || null,  // 🆕 HDA v2: 返回结构化负载（可能为 null）
       sentiment: chartResult.sentiment || null,
       quote: {
         price: chartResult.stockData?.currentPrice || chartResult.price,
@@ -690,9 +755,97 @@ function sleep(ms) {
 }
 
 /**
+ * 🆕 HDA v2: 深度分析回调处理器
+ * @param {string} ticker - 股票代码
+ * @param {number} chatId - 聊天室 ID
+ * @param {Object} bot - Telegram Bot 实例
+ * @param {Object} query - Callback query 对象
+ * @returns {Promise<Object>} 深度分析结果
+ */
+async function handleDeepCallback(ticker, chatId, bot, query) {
+  console.log(`\n🔍 [HDA v2] Deep callback triggered for ${ticker}`);
+  
+  // 安全检查
+  if (!chatId) {
+    console.error(`❌ [HDA v2] No chatId available for deep callback`);
+    try {
+      await bot.answerCallbackQuery(query.id, {
+        text: '无法处理请求',
+        show_alert: true
+      });
+    } catch (e) { /* ignore */ }
+    return { type: 'deep_callback_error', success: false };
+  }
+  
+  let statusMsg = null;
+  
+  try {
+    // 立即应答回调查询（避免 loading 状态卡住）
+    await bot.answerCallbackQuery(query.id, {
+      text: '🔍 正在生成深度分析...'
+    });
+    
+    // 发送处理中状态
+    statusMsg = await bot.sendMessage(chatId, `🔍 正在深入分析 ${ticker}，请稍候...`);
+    
+    // 构建消息对象（用于 handleTicket）
+    const fakeMessage = {
+      text: `解票 ${ticker} deep`,
+      from: query.from,
+      chat: query.message?.chat || { id: chatId }
+    };
+    
+    // 调用 handleTicket 使用 deep 模式
+    const result = await handleTicket([ticker], chatId, bot, fakeMessage, {
+      hdaMode: 'deep'
+    });
+    
+    // 删除状态消息
+    if (statusMsg) {
+      try {
+        await bot.deleteMessage(chatId, statusMsg.message_id);
+      } catch (e) {
+        // Ignore delete errors
+      }
+    }
+    
+    console.log(`✅ [HDA v2] Deep analysis completed for ${ticker}`);
+    
+    return result;
+  } catch (error) {
+    console.error(`❌ [HDA v2] Deep callback error: ${error.message}`);
+    
+    // 删除状态消息
+    if (statusMsg) {
+      try {
+        await bot.deleteMessage(chatId, statusMsg.message_id);
+      } catch (e) { /* ignore */ }
+    }
+    
+    // 发送错误消息
+    try {
+      await bot.sendMessage(chatId, 
+        `❌ 深度分析失败\n\n` +
+        `标的: ${ticker}\n` +
+        `原因: ${error.message}\n\n` +
+        `请稍后重试或直接输入: 解票 ${ticker}`
+      );
+    } catch (e) { /* ignore */ }
+    
+    return {
+      type: 'deep_callback_error',
+      ticker: ticker,
+      error: error.message,
+      success: false
+    };
+  }
+}
+
+/**
  * 默认导出
  */
 module.exports = {
-  handleTicket
+  handleTicket,
+  handleDeepCallback  // 🆕 HDA v2: 深度分析回调
 };
 

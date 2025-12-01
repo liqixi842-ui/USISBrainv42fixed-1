@@ -1,5 +1,7 @@
 # Overview
-USIS Brain v7.7.1 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
+USIS Brain v7.7.2 is an institutional-grade Multi-AI Financial Analysis System designed for professional investment research. It integrates six AI models with real-time financial data to provide authoritative, data-backed investment recommendations. Key capabilities include semantic intent parsing, global stock discovery, anti-hallucination data validation, intelligent model routing, Vision AI chart analysis, and automated workflow management. The system aims to provide institutional-grade analysis with multilingual support and cost optimization.
+
+**v7.7.2 HDA v2 Upgrade**: Human Desk Assistant v2 for the "解票" feature with Quick Take / Deep Take dual modes, natural human-like language output, and Telegram inline button callbacks.
 
 # User Preferences
 Preferred communication style: Simple, everyday language.
@@ -27,7 +29,15 @@ The v6.0 pipeline processes user input via language detection, semantic intent p
 - **Cost Tracking**: Monitors costs, response times, and model usage using PostgreSQL.
 - **Multilingual Intelligence**: Automatic language detection, Google Translate integration, and specialized Chinese financial analysis via DeepSeek.
 - **API Timeout Protection**: Implements AbortController for OpenAI (15s) and Finnhub (10s) APIs, and enhanced error catching for Telegram.
-- **Ticket Formatter**: Unified output formatting layer for "解票" feature with standard (CN/EN) and human voice modes, supporting bilingual and complete output combinations.
+- **Ticket Formatter + HDA v2 (v7.7.2)**: Upgraded "解票" feature with Human Desk Assistant v2 architecture:
+  - **Quick Take (Default)**: Light chart + natural conversational analysis + inline button for deep dive
+  - **Deep Take (Button Callback)**: Extended chart + detailed tape reading + structural analysis
+  - **Tone Framework**: Randomized expressions, sentence structures, and word choices for natural language
+  - **Bilingual Output**: Chinese paragraph → blank line → English paragraph (no mixing)
+  - **Inline Button Callback**: `deep_TICKER` callback triggers Deep Take analysis
+  - **Structured JSON Backend**: `analysisPayload` with bias, tempo, support/resistance, tape behavior
+  - **Legacy Compatibility**: Falls back to lightweightTicketFormatter for specific output modes
+  - Core files: `services/hdaV2Core.js` (tone framework), `bots/ticket-bot.js` (handlers), `index.js` (callback_query)
 - **News System Architecture (v7.7)**: Provides institutional-grade news aggregation with strict relevance gating and hybrid scoring. Key improvements:
   - **Relevance Scoring**: Weighted signals (symbol in headline +10, company name in headline +8, in summary +4, ticker list +3, generic penalty -5)
   - **Strict Threshold**: MIN_RELEVANCE_THRESHOLD=4 requires textual mention, not just metadata
