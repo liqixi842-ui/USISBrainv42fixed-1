@@ -150,8 +150,8 @@ async function generateSmartHeatmap(userText) {
         components: query.components || [] // 主要成分股
       };
       
-      // 判断是否使用增强分析（重要市场）
-      const importantMarkets = ['NIKKEI225', 'SPX500', 'NASDAQ100', 'HSI', 'DAX40', 'IBEX35', 'CRYPTO'];
+      // 判断是否使用增强分析（重要市场 + 所有国际市场）
+      const importantMarkets = ['NIKKEI225', 'SPX500', 'NASDAQ100', 'HSI', 'DAX40', 'IBEX35', 'CRYPTO', 'TSX', 'DAX', 'FTSE', 'FTSE100', 'CAC40', 'AS51', 'AS200', 'KOSPI'];
       const useEnhancedAnalysis = importantMarkets.includes(query.index);
       
       if (useEnhancedAnalysis) {
