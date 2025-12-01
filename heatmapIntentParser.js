@@ -647,57 +647,58 @@ function buildTradingViewURL(query) {
     return url;
   }
   
-  // 🆕 加拿大市场 - 使用TradingView专用路径
+  // 🆕 加拿大市场 - 使用 MarketScreener TSX 热力图
   if (index === 'TSX') {
-    console.log('🍁 使用加拿大市场专用路径');
+    console.log('🍁 使用加拿大市场 - MarketScreener TSX');
     const cacheBuster = Date.now();
-    const url = `https://www.tradingview.com/heatmap/stock/canada/?v=${cacheBuster}`;
-    console.log(`🔗 [TradingView URL - Canada] ${url}`);
+    // MarketScreener 有直接的 TSX Composite 热力图页面
+    const url = `https://ca.marketscreener.com/quote/index/TSX-COMPOSITE-7454/heatmap/?v=${cacheBuster}`;
+    console.log(`🔗 [MarketScreener URL - TSX] ${url}`);
     return url;
   }
   
-  // 🆕 德国DAX市场 - 使用专用路径
+  // 🆕 德国DAX市场 - 使用 MarketScreener
   if (index === 'DAX' || index === 'DAX40') {
-    console.log('🇩🇪 使用德国市场专用路径');
+    console.log('🇩🇪 使用德国市场 - MarketScreener DAX');
     const cacheBuster = Date.now();
-    const url = `https://www.tradingview.com/heatmap/stock/germany/?v=${cacheBuster}`;
-    console.log(`🔗 [TradingView URL - Germany] ${url}`);
+    const url = `https://www.marketscreener.com/quote/index/DAX-6455680/heatmap/?v=${cacheBuster}`;
+    console.log(`🔗 [MarketScreener URL - DAX] ${url}`);
     return url;
   }
   
-  // 🆕 英国FTSE市场 - 使用专用路径
+  // 🆕 英国FTSE市场 - 使用 MarketScreener
   if (index === 'FTSE' || index === 'FTSE100') {
-    console.log('🇬🇧 使用英国市场专用路径');
+    console.log('🇬🇧 使用英国市场 - MarketScreener FTSE');
     const cacheBuster = Date.now();
-    const url = `https://www.tradingview.com/heatmap/stock/uk/?v=${cacheBuster}`;
-    console.log(`🔗 [TradingView URL - UK] ${url}`);
+    const url = `https://www.marketscreener.com/quote/index/FTSE-100-26/heatmap/?v=${cacheBuster}`;
+    console.log(`🔗 [MarketScreener URL - FTSE] ${url}`);
     return url;
   }
   
-  // 🆕 法国CAC市场 - 使用专用路径
+  // 🆕 法国CAC市场 - 使用 MarketScreener
   if (index === 'CAC40') {
-    console.log('🇫🇷 使用法国市场专用路径');
+    console.log('🇫🇷 使用法国市场 - MarketScreener CAC');
     const cacheBuster = Date.now();
-    const url = `https://www.tradingview.com/heatmap/stock/france/?v=${cacheBuster}`;
-    console.log(`🔗 [TradingView URL - France] ${url}`);
+    const url = `https://www.marketscreener.com/quote/index/CAC-40-4941/heatmap/?v=${cacheBuster}`;
+    console.log(`🔗 [MarketScreener URL - CAC] ${url}`);
     return url;
   }
   
-  // 🆕 澳大利亚市场 - 使用专用路径
+  // 🆕 澳大利亚市场 - 使用 MarketScreener
   if (index === 'AS51' || index === 'AS200') {
-    console.log('🇦🇺 使用澳大利亚市场专用路径');
+    console.log('🇦🇺 使用澳大利亚市场 - MarketScreener ASX');
     const cacheBuster = Date.now();
-    const url = `https://www.tradingview.com/heatmap/stock/australia/?v=${cacheBuster}`;
-    console.log(`🔗 [TradingView URL - Australia] ${url}`);
+    const url = `https://www.marketscreener.com/quote/index/S-P-ASX-200-4899/heatmap/?v=${cacheBuster}`;
+    console.log(`🔗 [MarketScreener URL - ASX] ${url}`);
     return url;
   }
   
-  // 🆕 韩国KOSPI市场 - 使用专用路径
+  // 🆕 韩国KOSPI市场 - 使用 MarketScreener
   if (index === 'KOSPI') {
-    console.log('🇰🇷 使用韩国市场专用路径');
+    console.log('🇰🇷 使用韩国市场 - MarketScreener KOSPI');
     const cacheBuster = Date.now();
-    const url = `https://www.tradingview.com/heatmap/stock/south-korea/?v=${cacheBuster}`;
-    console.log(`🔗 [TradingView URL - Korea] ${url}`);
+    const url = `https://www.marketscreener.com/quote/index/KOSPI-INDEX-7467/heatmap/?v=${cacheBuster}`;
+    console.log(`🔗 [MarketScreener URL - KOSPI] ${url}`);
     return url;
   }
   
