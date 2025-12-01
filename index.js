@@ -292,8 +292,8 @@ const CASUAL_RESPONSES = {
     '• `新闻 AAPL` - 获取股票新闻\n' +
     '• `重大新闻` - 今日重要财经消息\n\n' +
     '📊 **研究报告**\n' +
-    '• `研报 TSLA` - 生成研究报告\n' +
-    '• `研报PDF NVDA` - PDF版报告\n\n' +
+    '• `研报 TSLA` - 生成 PDF 研究报告\n' +
+    '• `研报 NVDA pro` - 机构级 PDF 报告\n\n' +
     '🗺️ **市场热力图**\n' +
     '• `热力图` - 美股热力图\n' +
     '• `港股热力图` - 港股市场\n\n' +
@@ -623,9 +623,10 @@ bot.on('message', async (message) => {
         break;
         
       case 'report':
-        targetModule = 'Report Bot (Text)';
-        console.log(`📊 [ROUTER] → ${targetModule}`);
-        result = await handleReport(args, chatId, bot, message);
+        // 🆕 v7.7.2: 研报命令默认生成 PDF
+        targetModule = 'Report Bot (PDF Default)';
+        console.log(`📄 [ROUTER] → ${targetModule}`);
+        result = await handleReportPdf(args, chatId, bot, message, flags);
         break;
         
       case 'reportpdf':
@@ -683,9 +684,10 @@ bot.on('message', async (message) => {
             } else if (intent.intentType === 'RESEARCH_REPORT_V5') {
               const symbol = intent.entities?.find(e => e.type === 'symbol')?.value;
               if (symbol) {
-                targetModule = 'Report Bot (via AI)';
+                // 🆕 v7.7.2: AI 路由也默认生成 PDF
+                targetModule = 'Report Bot PDF (via AI)';
                 console.log(`🎯 [ROUTER] AI 路由 → ${targetModule}`);
-                result = await handleReport([symbol], chatId, bot, message);
+                result = await handleReportPdf([symbol], chatId, bot, message, {});
                 break;
               }
             } else if (intent.intentType === 'INSTITUTIONAL_DEEP_REPORT') {
