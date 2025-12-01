@@ -647,13 +647,28 @@ function buildTradingViewURL(query) {
     return url;
   }
   
-  // 🆕 加拿大市场 - 使用 MarketScreener TSX 热力图
+  // 🆕 加拿大市场 - 使用 TradingView 嵌入式小部件（纯热力图，无广告）
   if (index === 'TSX') {
-    console.log('🍁 使用加拿大市场 - MarketScreener TSX');
-    const cacheBuster = Date.now();
-    // MarketScreener 有直接的 TSX Composite 热力图页面
-    const url = `https://ca.marketscreener.com/quote/index/TSX-COMPOSITE-7454/heatmap/?v=${cacheBuster}`;
-    console.log(`🔗 [MarketScreener URL - TSX] ${url}`);
+    console.log('🍁 使用加拿大市场 - TradingView Widget');
+    const widgetConfig = {
+      exchanges: [],
+      dataSource: "TSX60",
+      grouping: "sector",
+      blockSize: "market_cap_basic",
+      blockColor: "change",
+      locale: "en",
+      symbolUrl: "",
+      colorTheme: "dark",
+      hasTopBar: false,
+      isDataSetEnabled: false,
+      isZoomEnabled: true,
+      hasSymbolTooltip: true,
+      width: "100%",
+      height: "100%"
+    };
+    const encodedConfig = encodeURIComponent(JSON.stringify(widgetConfig));
+    const url = `https://s.tradingview.com/embed-widget/stock-heatmap/?locale=en#${encodedConfig}`;
+    console.log(`🔗 [TradingView Widget URL - TSX] ${url.substring(0, 80)}...`);
     return url;
   }
   

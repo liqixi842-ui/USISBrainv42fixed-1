@@ -50,7 +50,8 @@ async function analyzeChartImage(imageBuffer, userContext = '') {
     // 构建分析提示词
     const systemPrompt = buildChartAnalysisPrompt(userContext);
     
-    const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+    // 构建请求体
+    const requestBody = {
       model: 'gpt-4o',
       messages: [{
         role: 'user',
@@ -70,16 +71,28 @@ async function analyzeChartImage(imageBuffer, userContext = '') {
       }],
       max_tokens: 2000,
       temperature: 0.3
-    }, {
+    };
+    
+    console.log(`   ├─ 模型: gpt-4o`);
+    console.log(`   ├─ 提示词长度: ${systemPrompt.length} 字符`);
+    console.log(`   └─ 正在调用 OpenAI Vision API...`);
+    
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', requestBody, {
       headers: {
         'Authorization': `Bearer ${openaiApiKey}`,
         'Content-Type': 'application/json'
       },
-      timeout: 45000
+      timeout: 60000  // 增加到60秒
     });
     
     const analysis = response.data.choices[0].message.content;
     console.log(`✅ [Vision Chart Analyzer] 分析完成 (${analysis.length} 字符)`);
+    
+    // 检查是否是拒绝回复
+    if (analysis.length < 100 && (analysis.includes('无法') || analysis.includes('抱歉') || analysis.includes('cannot'))) {
+      console.warn(`⚠️  [Vision Chart Analyzer] 检测到可能的拒绝回复: "${analysis.substring(0, 100)}"`);
+      console.log(`   └─ 完整响应:`, JSON.stringify(response.data, null, 2).substring(0, 500));
+    }
     
     return formatAnalysisOutput(analysis, userContext);
     
