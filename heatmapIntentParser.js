@@ -54,7 +54,7 @@ const SECTOR_CN_NAMES = {
 };
 
 /**
- * 🔍 轻量级解析（仅规则，不调用LLM）- v5.0 完整映射体系
+ * 🔍 轻量级解析（仅规则，不调用LLM）- v5.1 智能市场+板块解析
  * @param {string} text - 用户输入文本
  * @returns {Object} 解析结果
  */
@@ -63,45 +63,108 @@ function extractHeatmapQueryRulesOnly(text) {
   const norm = raw.normalize("NFKC");
   const lc = norm.toLowerCase();
   
-  // 1️⃣ 市场映射表（20+全球市场）
-  const marketMap = {
-    // 美洲
-    'us|美股|美国|spx|sp500|标普': { index: 'SPX500', name: '标普500', region: 'US' },
-    'nasdaq|纳斯达克|纳指': { index: 'NASDAQ100', name: '纳斯达克100', region: 'US' },
-    'dow|道指|道琼斯': { index: 'DJI', name: '道琼斯', region: 'US' },
-    'russell|罗素': { index: 'RUT', name: '罗素2000', region: 'US' },
-    'tsx|加拿大': { index: 'TSX', name: '加拿大TSX', region: 'CA' },
-    'brazil|巴西': { index: 'IBOV', name: '巴西IBOV', region: 'BR' },
-    'mexico|墨西哥': { index: 'MEXBOL', name: '墨西哥MEXBOL', region: 'MX' },
+  console.log(`\n🧠 [热力图解析器 v5.1] 输入: "${raw}"`);
+  
+  // 1️⃣ 市场关键词映射表（优先级排序）
+  const marketKeywords = [
+    // 美国市场（多个入口）
+    { keywords: ['纳斯达克', '纳指', 'nasdaq', 'qqq', 'ndx'], index: 'NASDAQ100', name: '纳斯达克100', region: 'US' },
+    { keywords: ['道指', '道琼斯', 'dow', 'djia', 'dji'], index: 'DJI', name: '道琼斯', region: 'US' },
+    { keywords: ['罗素', 'russell', 'rut'], index: 'RUT', name: '罗素2000', region: 'US' },
+    { keywords: ['标普', 'sp500', 'spx', 's&p'], index: 'SPX500', name: '标普500', region: 'US' },
+    { keywords: ['美股', '美国', 'us market', 'usa'], index: 'SPX500', name: '标普500', region: 'US' },
     
-    // 欧洲
-    'spain|西班牙|ibex': { index: 'IBEX35', name: '西班牙IBEX35', region: 'ES' },
-    'germany|德国|dax': { index: 'DAX', name: '德国DAX', region: 'DE' },
-    'france|法国|cac': { index: 'CAC40', name: '法国CAC40', region: 'FR' },
-    'uk|英国|ftse|富时': { index: 'FTSE', name: '英国富时', region: 'UK' },
-    'italy|意大利': { index: 'FTSEMIB', name: '意大利FTSEMIB', region: 'IT' },
-    'netherlands|荷兰': { index: 'AEX', name: '荷兰AEX', region: 'NL' },
-    'switzerland|瑞士': { index: 'SMI', name: '瑞士SMI', region: 'CH' },
+    // 加拿大市场（重点优化）
+    { keywords: ['加拿大', '加股', 'tsx', 'canada', 'canadian'], index: 'TSX', name: '加拿大TSX', region: 'CA' },
     
-    // 亚洲
-    'japan|日本|nikkei|日経': { index: 'NIKKEI225', name: '日经225', region: 'JP' },
-    'hk|香港|恒生|hang seng|hsi': { index: 'HSI', name: '恒生指数', region: 'HK' },
-    'china|中国|上证': { index: 'SSE50', name: '上证50', region: 'CN' },
-    'shenzhen|深圳|深证': { index: 'SZI', name: '深证成指', region: 'CN' },
-    'korea|韩国|kospi': { index: 'KOSPI', name: '韩国KOSPI', region: 'KR' },
-    'taiwan|台湾|twii': { index: 'TWII', name: '台湾加权', region: 'TW' },
-    'india|印度|nifty': { index: 'NIFTY', name: '印度NIFTY', region: 'IN' },
-    'australia|澳洲|澳大利亚': { index: 'AS51', name: '澳洲AS51', region: 'AU' },
+    // 拉美市场
+    { keywords: ['巴西', 'brazil', 'ibov', 'bovespa'], index: 'IBOV', name: '巴西IBOV', region: 'BR' },
+    { keywords: ['墨西哥', 'mexico', 'mexbol'], index: 'MEXBOL', name: '墨西哥MEXBOL', region: 'MX' },
+    
+    // 欧洲市场
+    { keywords: ['西班牙', 'spain', 'ibex'], index: 'IBEX35', name: '西班牙IBEX35', region: 'ES' },
+    { keywords: ['德国', 'germany', 'dax'], index: 'DAX', name: '德国DAX', region: 'DE' },
+    { keywords: ['法国', 'france', 'cac'], index: 'CAC40', name: '法国CAC40', region: 'FR' },
+    { keywords: ['英国', 'uk', 'ftse', '富时', 'london'], index: 'FTSE', name: '英国富时', region: 'UK' },
+    { keywords: ['意大利', 'italy', 'ftsemib'], index: 'FTSEMIB', name: '意大利FTSEMIB', region: 'IT' },
+    { keywords: ['荷兰', 'netherlands', 'aex'], index: 'AEX', name: '荷兰AEX', region: 'NL' },
+    { keywords: ['瑞士', 'switzerland', 'smi'], index: 'SMI', name: '瑞士SMI', region: 'CH' },
+    { keywords: ['欧洲', 'europe', 'euro50', 'stoxx'], index: 'EURO50', name: '欧洲斯托克50', region: 'EU' },
+    
+    // 亚洲市场
+    { keywords: ['日本', 'japan', 'nikkei', '日経', '日经'], index: 'NIKKEI225', name: '日经225', region: 'JP' },
+    { keywords: ['香港', 'hk', '恒生', 'hang seng', 'hsi', '港股'], index: 'HSI', name: '恒生指数', region: 'HK' },
+    { keywords: ['上证', 'sse', '沪市'], index: 'SSE50', name: '上证50', region: 'CN' },
+    { keywords: ['深圳', '深证', 'shenzhen', 'szse'], index: 'SZI', name: '深证成指', region: 'CN' },
+    { keywords: ['a股', '中国股市', 'china a'], index: 'SSE50', name: '上证50', region: 'CN' },
+    { keywords: ['韩国', 'korea', 'kospi'], index: 'KOSPI', name: '韩国KOSPI', region: 'KR' },
+    { keywords: ['台湾', 'taiwan', 'twii', '台股'], index: 'TWII', name: '台湾加权', region: 'TW' },
+    { keywords: ['印度', 'india', 'nifty'], index: 'NIFTY', name: '印度NIFTY', region: 'IN' },
+    { keywords: ['澳洲', '澳大利亚', 'australia', 'asx'], index: 'AS51', name: '澳洲AS51', region: 'AU' },
+    { keywords: ['新加坡', 'singapore', 'sti'], index: 'STI', name: '新加坡STI', region: 'SG' },
     
     // 其他
-    'russia|俄罗斯': { index: 'IMOEX', name: '俄罗斯IMOEX', region: 'RU' },
-    'singapore|新加坡': { index: 'STI', name: '新加坡STI', region: 'SG' },
+    { keywords: ['俄罗斯', 'russia', 'imoex'], index: 'IMOEX', name: '俄罗斯IMOEX', region: 'RU' },
     
-    // 🆕 加密货币
-    'crypto|虚拟货币|加密货币|数字货币|币圈|比特币|btc|eth|币': { index: 'CRYPTO', name: '加密货币', region: 'CRYPTO' }
-  };
+    // 加密货币
+    { keywords: ['加密货币', '虚拟货币', '数字货币', '币圈', '比特币', 'btc', 'eth', 'crypto'], index: 'CRYPTO', name: '加密货币', region: 'CRYPTO' }
+  ];
   
-  // 2️⃣ 板块映射表（10+行业）
+  // 2️⃣ 板块关键词映射表（支持更多变体）
+  const sectorKeywords = [
+    { keywords: ['科技股', '科技', '技术', 'technology', 'tech', '高科技', '互联网'], sector: 'technology', name: '科技' },
+    { keywords: ['银行股', '银行', '金融股', '金融', 'finance', 'financials', 'bank', '保险'], sector: 'financial', name: '金融' },
+    { keywords: ['医疗股', '医疗', '医药', '保健', 'healthcare', 'health', '生物'], sector: 'healthcare', name: '医疗' },
+    { keywords: ['能源股', '能源', '石油', 'energy', 'oil', '天然气'], sector: 'energy', name: '能源' },
+    { keywords: ['原材料', '材料', 'materials', '矿业'], sector: 'basic_materials', name: '材料' },
+    { keywords: ['工业股', '工业', '制造', 'industrials', '制造业'], sector: 'industrials', name: '工业' },
+    { keywords: ['消费股', '消费', '零售', 'consumer', '可选消费'], sector: 'consumer_cyclical', name: '消费' },
+    { keywords: ['必需消费', '日用', 'defensive', 'staples'], sector: 'consumer_defensive', name: '必需消费' },
+    { keywords: ['公用事业', '公用', 'utilities', '电力', '水务'], sector: 'utilities', name: '公用事业' },
+    { keywords: ['房地产', '地产', 'real estate', 'reit'], sector: 'real_estate', name: '房地产' },
+    { keywords: ['通信', '电信', 'telecom', 'communication'], sector: 'telecommunications', name: '通信' }
+  ];
+  
+  // 3️⃣ "大盘"关键词 = 全市场（所有板块）
+  const mainMarketKeywords = ['大盘', '股市', '市场', '整体', 'market', 'index', '指数'];
+  
+  // 🔄 解析市场
+  let matchedMarket = null;
+  for (const market of marketKeywords) {
+    for (const keyword of market.keywords) {
+      if (lc.includes(keyword) || norm.includes(keyword)) {
+        matchedMarket = market;
+        console.log(`✅ [市场匹配] "${keyword}" → ${market.name} (${market.index})`);
+        break;
+      }
+    }
+    if (matchedMarket) break;
+  }
+  
+  // 🔄 解析板块
+  let matchedSector = null;
+  for (const sector of sectorKeywords) {
+    for (const keyword of sector.keywords) {
+      if (lc.includes(keyword) || norm.includes(keyword)) {
+        matchedSector = sector;
+        console.log(`✅ [板块匹配] "${keyword}" → ${sector.name} (${sector.sector})`);
+        break;
+      }
+    }
+    if (matchedSector) break;
+  }
+  
+  // 🔄 检测"大盘"意图（全市场）
+  let isMainMarket = false;
+  for (const keyword of mainMarketKeywords) {
+    if (lc.includes(keyword) || norm.includes(keyword)) {
+      isMainMarket = true;
+      console.log(`✅ [大盘意图] "${keyword}" → 全市场模式`);
+      break;
+    }
+  }
+  
+  // 兼容旧 sectorMap 格式
   const sectorMap = {
     '科技|技术|technology|tech': 'technology',
     '金融|financials|finance|银行': 'financial',
@@ -180,89 +243,94 @@ function extractHeatmapQueryRulesOnly(text) {
     components: [],
     confidence: 0.6,
     rules_fired: [],
-    rationale: '规则引擎v5.0完整映射'
+    rationale: '规则引擎v5.1智能解析'
   };
   
-  // 4️⃣ 精确板块数据集匹配（优先级最高）
+  // 4️⃣ 精确板块数据集匹配（优先级最高 - 仅美股）
   for (const [pattern, config] of Object.entries(sectorDatasetMap)) {
     const regex = new RegExp(pattern, 'i');
     if (regex.test(lc)) {
       parsed.dataset = config.dataset;
       parsed.sectorName = config.name;
       parsed.components = config.components;
-      parsed.index = 'SPX500'; // 基础指数
+      parsed.index = 'SPX500';
       parsed.region = 'US';
-      parsed.sector = config.dataset.split('-')[1]; // 提取GICS代码
+      parsed.sector = config.dataset.split('-')[1];
       parsed.confidence = 0.95;
       parsed.rules_fired.push(`精确板块匹配: ${config.name} (${config.dataset})`);
       parsed.rationale = `精确匹配到${config.name}，使用TradingView数据集${config.dataset}`;
-      return parsed; // 立即返回，优先级最高
+      console.log(`🎯 [精确板块] ${config.name} → ${config.dataset}`);
+      return parsed;
     }
   }
   
-  // 5️⃣ 智能市场匹配
-  for (const [pattern, data] of Object.entries(marketMap)) {
-    const regex = new RegExp(pattern, 'iu');
-    if (regex.test(norm)) {
-      parsed.index = data.index;
-      parsed.region = data.region;
-      parsed.confidence = 0.85;
-      parsed.rules_fired.push(`match_market_${data.index}`);
-      parsed.rationale = `检测到${data.name}关键词`;
-      console.log(`🎯 [市场匹配] ${pattern} → ${data.name} (${data.index})`);
-      break;
-    }
+  // 5️⃣ 使用新的智能匹配结果
+  if (matchedMarket) {
+    parsed.index = matchedMarket.index;
+    parsed.region = matchedMarket.region;
+    parsed.confidence = 0.85;
+    parsed.rules_fired.push(`market_${matchedMarket.index}`);
+    parsed.rationale = `检测到${matchedMarket.name}关键词`;
   }
   
-  // 4️⃣ 智能板块匹配
-  for (const [pattern, sector] of Object.entries(sectorMap)) {
-    const regex = new RegExp(pattern, 'iu');
-    if (regex.test(norm)) {
-      parsed.sector = sector;
-      parsed.rules_fired.push(`match_sector_${sector}`);
-      console.log(`🎯 [板块匹配] ${pattern} → ${sector}`);
-      break;
-    }
+  if (matchedSector) {
+    parsed.sector = matchedSector.sector;
+    parsed.sectorName = matchedSector.name;
+    parsed.rules_fired.push(`sector_${matchedSector.sector}`);
   }
   
-  // 5️⃣ 特殊组合逻辑
-  // 纳斯达克+科技股优化
-  if ((parsed.sector === 'technology' || /科技/.test(norm)) && parsed.index === 'SPX500') {
+  // 6️⃣ 智能组合逻辑
+  // 美国+科技股 → NASDAQ100（更合适）
+  if (parsed.region === 'US' && parsed.sector === 'technology' && parsed.index === 'SPX500') {
     parsed.index = 'NASDAQ100';
-    parsed.region = 'US';
-    parsed.rules_fired.push('optimize_tech_to_nasdaq');
-    console.log(`💡 [智能优化] 科技板块 → NAS100`);
+    parsed.rules_fired.push('optimize_us_tech_to_nasdaq');
+    console.log(`💡 [智能优化] 美国科技 → NASDAQ100`);
+  }
+  
+  // "大盘"意图 + 有市场匹配 → 清除板块筛选（显示全市场）
+  if (isMainMarket && matchedMarket && !matchedSector) {
+    parsed.sector = 'AUTO';
+    parsed.rules_fired.push('main_market_all_sectors');
+    console.log(`💡 [大盘模式] ${matchedMarket.name} → 全板块`);
   }
   
   // A股特定逻辑
-  if (/a股|沪深/.test(norm)) {
-    parsed.index = /深圳|深证/.test(norm) ? 'SZI' : 'SSE50';
+  if (/a股|沪深/.test(lc)) {
+    parsed.index = /深圳|深证/.test(lc) ? 'SZI' : 'SSE50';
     parsed.region = 'CN';
     parsed.rules_fired.push('detect_china_a_shares');
   }
   
-  // 6️⃣ 回退规则
+  // 7️⃣ 回退规则（只有在没有任何匹配时才使用美股默认）
   if (parsed.index === 'AUTO') {
     parsed.index = 'SPX500';
     parsed.region = 'US';
     parsed.rules_fired.push('fallback_to_spx500');
   }
   
-  // 7️⃣ 🔒 西班牙防串台校验（最高优先级）
+  // 8️⃣ 🔒 西班牙防串台校验（最高优先级）
   if (parsed.region === 'ES' && parsed.index !== 'IBEX35') {
     parsed.index = 'IBEX35';
     parsed.rules_fired.push('region_guard_ES_to_IBEX35');
     console.log(`🚨 [防串台] ES地区强制 → IBEX35`);
   }
   
+  // 🎯 最终解析结果日志
+  console.log(`\n📊 [热力图解析结果]`);
+  console.log(`   输入: "${raw}"`);
+  console.log(`   市场: ${parsed.index} (${parsed.region})`);
+  console.log(`   板块: ${parsed.sector}${parsed.sectorName ? ` (${parsed.sectorName})` : ''}`);
+  console.log(`   规则: ${parsed.rules_fired.join(', ')}`);
+  console.log(`   置信度: ${parsed.confidence}`);
+  
   return {
     text: raw,
     region: parsed.region,
     index: parsed.index,
     sector: parsed.sector,
-    dataset: parsed.dataset, // 精确板块数据集
-    sectorName: parsed.sectorName, // 板块中文名称
-    components: parsed.components, // 主要成分股
+    dataset: parsed.dataset,
+    sectorName: parsed.sectorName,
+    components: parsed.components,
     confidence: parsed.confidence,
     rules_fired: parsed.rules_fired,
     rationale: parsed.rationale
@@ -315,11 +383,11 @@ async function extractHeatmapQuery(text, debugMode = false) {
 如果无法判断 region，默认 "region": "US"。
 
 映射规则：
-- 地区词汇：美股/美/美国→US，日本/日股→JP，西班牙→ES，德国→DE，法国→FR，英国→UK，欧洲→EU，香港→HK，中国/A股→CN，印度→IN
-- 指数词汇：标普/标普500/SP500/SPX→SPX500，纳指/纳斯达克/纳斯达克100/NDX/QQQ/NASDAQ→NASDAQ100，道指/DJIA/DJ→DJ30，日经225→NIKKEI225，IBEX35→IBEX35，DAX40→DAX40，CAC40→CAC40，FTSE100→FTSE100，Euro Stoxx 50→EURO50，恒生/HSI→HK50，沪深300/CSI300→CSI300，Nifty 50→NIFTY50
-- 行业词汇：科技/技术→technology，金融→financials，医疗/保健→healthcare，工业/制造→industrials，能源/石油→energy，材料/原材料→materials，可选消费/零售→consumer_discretionary，必需消费/日用品→consumer_staples，通信/电信→communication_services，公用事业→utilities，房地产/地产→real_estate，所有/全部/大盘→all
+- 地区词汇：美股/美/美国→US，加拿大/加股→CA，日本/日股→JP，西班牙→ES，德国→DE，法国→FR，英国→UK，欧洲→EU，香港/港股→HK，中国/A股→CN，印度→IN，巴西→BR，墨西哥→MX，澳洲/澳大利亚→AU，韩国→KR，台湾/台股→TW，新加坡→SG
+- 指数词汇：标普/标普500/SP500/SPX→SPX500，纳指/纳斯达克/纳斯达克100/NDX/QQQ/NASDAQ→NASDAQ100，道指/DJIA/DJ→DJ30，罗素/Russell→RUT，TSX/加拿大→TSX，日经225→NIKKEI225，IBEX35→IBEX35，DAX40/德国DAX→DAX40，CAC40→CAC40，FTSE100/富时→FTSE100，Euro Stoxx 50→EURO50，恒生/HSI→HSI，上证50→SSE50，深证成指→SZI，沪深300/CSI300→CSI300，Nifty 50/印度→NIFTY50，IBOV/巴西→IBOV，KOSPI/韩国→KOSPI，ASX/澳洲→AS51，台湾加权/TWII→TWII
+- 行业词汇：科技/技术/科技股→technology，金融/银行/银行股/金融股→financials，医疗/保健/医药→healthcare，工业/制造→industrials，能源/石油/能源股→energy，材料/原材料→materials，可选消费/零售/消费股→consumer_discretionary，必需消费/日用品→consumer_staples，通信/电信→communication_services，公用事业→utilities，房地产/地产→real_estate，所有/全部/大盘/股市/市场/整体→all
 - 语言：若提及"西语/español"→es-ES，"日语/日本語"→ja-JP，"德语/Deutsch"→de-DE，"法语/français"→fr-FR，否则auto
-- 没提指数但提地区时：US默认SPX500，JP默认NIKKEI225，ES默认IBEX35，DE默认DAX40，FR默认CAC40，UK默认FTSE100，EU默认EURO50，HK默认HK50，CN默认CSI300，IN默认NIFTY50
+- 没提指数但提地区时：US默认SPX500，CA默认TSX，JP默认NIKKEI225，ES默认IBEX35，DE默认DAX40，FR默认CAC40，UK默认FTSE100，EU默认EURO50，HK默认HSI，CN默认SSE50，IN默认NIFTY50，BR默认IBOV，AU默认AS51，KR默认KOSPI，TW默认TWII
 - 都没提时：region=AUTO, index=AUTO, sector=all
 
 示例JSON输出：
@@ -695,10 +763,15 @@ function generateCaption(query) {
   const { index, sector, locale } = query;
   
   const indexNames = {
-    'SPX500': '标普500', 'NASDAQ100': '纳斯达克100', 'DJ30': '道琼斯30',
-    'NIKKEI225': '日经225', 'IBEX35': 'IBEX35', 'DAX40': 'DAX40',
-    'CAC40': 'CAC40', 'FTSE100': '富时100', 'EURO50': '欧洲斯托克50',
-    'HSI': '恒生指数', 'CSI300': '沪深300', 'NIFTY50': 'Nifty 50'
+    'SPX500': '标普500', 'NASDAQ100': '纳斯达克100', 'DJ30': '道琼斯30', 'DJI': '道琼斯30',
+    'NIKKEI225': '日经225', 'IBEX35': 'IBEX35', 'DAX40': 'DAX40', 'DAX': '德国DAX',
+    'CAC40': 'CAC40', 'FTSE100': '富时100', 'FTSE': '英国富时', 'EURO50': '欧洲斯托克50',
+    'HSI': '恒生指数', 'CSI300': '沪深300', 'SSE50': '上证50', 'SZI': '深证成指',
+    'NIFTY50': 'Nifty 50', 'NIFTY': '印度Nifty',
+    'TSX': '加拿大TSX', 'IBOV': '巴西IBOV', 'MEXBOL': '墨西哥MEXBOL',
+    'AS51': '澳洲ASX', 'KOSPI': '韩国KOSPI', 'TWII': '台湾加权',
+    'RUT': '罗素2000', 'CRYPTO': '加密货币',
+    'STI': '新加坡STI', 'IMOEX': '俄罗斯IMOEX', 'AEX': '荷兰AEX', 'SMI': '瑞士SMI'
   };
   
   const indexName = indexNames[index] || index;
