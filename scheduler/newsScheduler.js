@@ -1,21 +1,21 @@
 /**
- * USIS News v2.0 - News Scheduler (N8N-Optimized)
+ * USIS News v2.1 - Self-Contained News Scheduler
  * 
- * Simplified scheduler for digest delivery and cleanup.
- * News ingestion is handled by N8N workflows (see n8n-workflows/news-rss-collector.json)
+ * Complete news pipeline with built-in RSS collection (no N8N dependency).
  * 
  * Schedules:
- * - 2h Digest: Every 2 hours
- * - 4h Digest: Every 4 hours
+ * - RSS Collection: Every 30 minutes (on-demand)
+ * - 2h Digest: Every 2 hours (even hours: 00:00, 02:00, ...)
  * - Cache Cleanup: Every 6 hours
  * 
- * Note: Fastlane push is handled by newsIngestAPI.js immediately upon ingestion
+ * Note: RSS collection runs 15 minutes before digest push to ensure fresh content
  */
 
 const { getDeduplicator } = require('../newsDeduplication');
 const { getRouter } = require('../newsRouter');
 const NewsPushService = require('../newsPushService');
 const { safeQuery } = require('../dbUtils');
+const RSSCollector = require('../rssCollector');
 
 class NewsScheduler {
   constructor(config = {}) {
@@ -23,14 +23,15 @@ class NewsScheduler {
     this.telegramToken = config.telegramToken;
     this.newsChannelId = config.newsChannelId;
     
-    // Simplified: Only need dedupe, router, and push service
-    // Ingestion is handled by N8N → newsIngestAPI.js
+    // Self-contained: RSS collector + dedupe + router + push
+    this.rssCollector = new RSSCollector();
     this.deduplicator = getDeduplicator();
     this.router = getRouter();
     this.pushService = null;
     
     this.intervals = [];
     this.isRunning = false;
+    this.isCollecting = false; // Prevent overlapping collection runs
   }
 
   /**
@@ -74,7 +75,7 @@ class NewsScheduler {
       return;
     }
 
-    console.log('🚀 [NewsScheduler] Starting (N8N-optimized mode)...');
+    console.log('🚀 [NewsScheduler] Starting (self-contained mode)...');
 
     // Health check: Verify database schema
     await this.checkDatabaseSchema();
@@ -84,12 +85,22 @@ class NewsScheduler {
     await this.router.initialize();
     console.log('✅ [NewsScheduler] Router initialized');
 
+    // Schedule RSS collection (runs every 30 minutes)
+    this.scheduleRSSCollection();
+    console.log('✅ [NewsScheduler] RSS collection scheduled');
+
+    // Run initial RSS collection on startup
+    console.log('📡 [NewsScheduler] Running initial RSS collection...');
+    this.collectRSS().catch(err => {
+      console.error(`⚠️  [NewsScheduler] Initial RSS collection failed: ${err.message}`);
+    });
+
     // Initialize push service if credentials available
     if (this.telegramToken && this.newsChannelId) {
       this.pushService = new NewsPushService(this.telegramToken, this.newsChannelId);
       console.log('✅ [NewsScheduler] Telegram push service initialized');
       
-      // Schedule delivery tasks (2h/4h digests)
+      // Schedule delivery tasks (2h digests)
       this.scheduleDelivery();
       console.log('✅ [NewsScheduler] Digest delivery scheduled');
     } else {
@@ -102,13 +113,59 @@ class NewsScheduler {
     console.log('✅ [NewsScheduler] Cache cleanup scheduled');
 
     this.isRunning = true;
-    console.log('✅ [NewsScheduler] Scheduler ready (N8N-optimized mode)');
-    console.log('ℹ️  [NewsScheduler] News ingestion handled by N8N workflows');
+    console.log('✅ [NewsScheduler] Scheduler ready (self-contained mode)');
+    console.log('ℹ️  [NewsScheduler] Built-in RSS collection replaces N8N dependency');
   }
 
-  // Note: Ingestion, scoring, routing, and Fastlane push are now handled by:
-  // N8N → /api/news/ingest → newsIngestAPI.js
-  // This scheduler only handles digest delivery and cleanup
+  /**
+   * Schedule RSS collection (every 30 minutes)
+   * Runs 15 minutes before each 2-hour digest to ensure fresh content
+   */
+  scheduleRSSCollection() {
+    // Run RSS collection every 30 minutes
+    const collectionInterval = setInterval(() => {
+      const now = new Date();
+      const minute = now.getMinutes();
+      
+      // Collect at :15 and :45 (before 2h digest at :00)
+      if (minute === 15 || minute === 45) {
+        console.log(`📡 [NewsScheduler] Scheduled RSS collection at ${now.toLocaleTimeString()}`);
+        this.collectRSS().catch(err => {
+          console.error(`❌ [NewsScheduler] RSS collection failed: ${err.message}`);
+        });
+      }
+    }, 60 * 1000); // Check every minute
+
+    this.intervals.push(collectionInterval);
+    console.log('⏰ [NewsScheduler] RSS collection scheduled (every 30min at :15 and :45)');
+  }
+
+  /**
+   * Run RSS collection
+   */
+  async collectRSS() {
+    if (this.isCollecting) {
+      console.log('⏳ [NewsScheduler] RSS collection already in progress, skipping...');
+      return;
+    }
+
+    this.isCollecting = true;
+    
+    try {
+      console.log('\n📡 [NewsScheduler] Starting RSS collection...');
+      const result = await this.rssCollector.run();
+      
+      if (result.success) {
+        console.log(`✅ [NewsScheduler] RSS collection complete: ${result.processed} new, ${result.skipped} skipped`);
+      } else {
+        console.error(`❌ [NewsScheduler] RSS collection failed: ${result.error}`);
+      }
+      
+      return result;
+    } finally {
+      this.isCollecting = false;
+    }
+  }
 
   /**
    * Schedule digest delivery (v2.0 Fixed Schedule)
@@ -350,14 +407,23 @@ class NewsScheduler {
       running: this.isRunning,
       enabled: this.enabled,
       push_enabled: !!this.pushService,
+      rss_collecting: this.isCollecting,
       active_intervals: this.intervals.length,
-      mode: 'n8n-optimized',
-      note: 'News ingestion handled by N8N workflows',
+      mode: 'self-contained',
+      note: 'Built-in RSS collection (no N8N dependency)',
+      rss_sources: this.rssCollector?.sources?.filter(s => s.enabled).length || 0,
       stats: {
         routing: routerStats,
         push: pushStats
       }
     };
+  }
+
+  /**
+   * Manually trigger RSS collection (for API endpoint)
+   */
+  async triggerCollection() {
+    return this.collectRSS();
   }
 }
 

@@ -117,8 +117,9 @@ class RSSCollector {
    */
   async sendToAPI(item) {
     try {
+      const port = process.env.PORT || 5000;
       const response = await axios.post(
-        'http://localhost:8080/api/news/ingest',
+        `http://localhost:${port}/api/news/ingest`,
         {
           ...item,
           dryRun: false
